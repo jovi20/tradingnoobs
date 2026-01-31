@@ -1,0 +1,140 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 15, 23, 42;
+  --background-start-rgb: 241, 245, 249;
+  --background-end-rgb: 226, 232, 240;
+}
+
+.dark {
+  --foreground-rgb: 241, 245, 249;
+  --background-start-rgb: 15, 23, 42;
+  --background-end-rgb: 30, 41, 59;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+    135deg,
+    rgb(var(--background-start-rgb)),
+    rgb(var(--background-end-rgb))
+  );
+  min-height: 100vh;
+}
+
+/* Glass morphism effects */
+.glass {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.dark .glass {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Card styles */
+.card {
+  @apply rounded-2xl bg-white dark:bg-slate-800 shadow-lg shadow-slate-200/50 dark:shadow-slate-900/50;
+  @apply border border-slate-100 dark:border-slate-700;
+  @apply transition-all duration-300;
+}
+
+.card:hover {
+  @apply shadow-xl shadow-slate-200/70 dark:shadow-slate-900/70;
+  @apply -translate-y-0.5;
+}
+
+/* Button styles */
+.btn {
+  @apply px-4 py-2 rounded-xl font-medium transition-all duration-200;
+  @apply focus:outline-none focus:ring-2 focus:ring-offset-2;
+}
+
+.btn-primary {
+  @apply bg-gradient-to-r from-primary-500 to-primary-600;
+  @apply hover:from-primary-600 hover:to-primary-700;
+  @apply text-white shadow-lg shadow-primary-500/30;
+  @apply focus:ring-primary-500;
+}
+
+.btn-secondary {
+  @apply bg-slate-100 dark:bg-slate-700;
+  @apply hover:bg-slate-200 dark:hover:bg-slate-600;
+  @apply text-slate-700 dark:text-slate-200;
+  @apply focus:ring-slate-500;
+}
+
+.btn-danger {
+  @apply bg-gradient-to-r from-red-500 to-red-600;
+  @apply hover:from-red-600 hover:to-red-700;
+  @apply text-white shadow-lg shadow-red-500/30;
+  @apply focus:ring-red-500;
+}
+
+/* Input styles */
+.input {
+  @apply w-full px-4 py-3 rounded-xl;
+  @apply bg-slate-50 dark:bg-slate-700/50;
+  @apply border border-slate-200 dark:border-slate-600;
+  @apply focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent;
+  @apply placeholder:text-slate-400 dark:placeholder:text-slate-500;
+  @apply transition-all duration-200;
+}
+
+/* Gradient text */
+.gradient-text {
+  @apply bg-gradient-to-r from-primary-500 via-accent-500 to-primary-500;
+  @apply bg-clip-text text-transparent;
+  background-size: 200% auto;
+  animation: gradient 3s linear infinite;
+}
+
+@keyframes gradient {
+  0% { background-position: 0% center; }
+  50% { background-position: 100% center; }
+  100% { background-position: 0% center; }
+}
+
+/* P&L colors */
+.pnl-positive {
+  @apply text-emerald-500 dark:text-emerald-400;
+}
+
+.pnl-negative {
+  @apply text-red-500 dark:text-red-400;
+}
+
+/* Status badges */
+.badge {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+}
+
+.badge-open {
+  @apply bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400;
+}
+
+.badge-closed {
+  @apply bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-slate-100 dark:bg-slate-800;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-300 dark:bg-slate-600 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-slate-400 dark:bg-slate-500;
+}

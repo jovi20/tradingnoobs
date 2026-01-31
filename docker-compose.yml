@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: tradingnoobs-backend
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/tradingnoobs
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - CORS_ORIGINS=http://localhost:3000,https://${DOMAIN:-localhost}
+    depends_on:
+      - db
+    networks:
+      - tradingnoobs
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: tradingnoobs-frontend
+    restart: unless-stopped
+    environment:
+      - NEXT_PUBLIC_API_URL=https://${DOMAIN:-localhost}/api
+    depends_on:
+      - backend
+    networks:
+      - tradingnoobs
+
+  db:
+    image: postgres:16-alpine
+    container_name: tradingnoobs-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=tradingnoobs
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - tradingnoobs
+
+networks:
+  tradingnoobs:
+    driver: bridge
+
+volumes:
+  postgres_data:
