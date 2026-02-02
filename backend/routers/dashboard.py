@@ -70,12 +70,16 @@ async def get_dashboard_stats(
 
 @router.get("/pnl-history")
 async def get_pnl_history(
-    days: int = Query(30, ge=7, le=365),
+    days: int = Query(30, ge=1),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Get P&L history for chart"""
-    start_date = date.today() - timedelta(days=days)
+    # 如果 days 超过 1000，使用用户注册时间作为起点
+    if days > 1000 and current_user.created_at:
+        start_date = current_user.created_at.date()
+    else:
+        start_date = date.today() - timedelta(days=days)
     
     trades = db.query(Trade).filter(
         Trade.user_id == current_user.id,

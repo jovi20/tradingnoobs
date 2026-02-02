@@ -94,11 +94,22 @@ export default function DailyPage() {
         return days
     }
 
+    // 格式化本地日期为 YYYY-MM-DD
+    const formatLocalDate = (date: Date): string => {
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
+    }
+
     const getTradesForDate = (date: Date): Trade[] => {
-        const dateStr = date.toISOString().split('T')[0]
+        const dateStr = formatLocalDate(date)
         return trades.filter((trade) => {
-            const tradeDate = trade.entry_time.split('T')[0]
-            return tradeDate === dateStr
+            // 已平仓交易：使用平仓日期；持仓中：使用入场日期
+            const tradeDateStr = trade.status === 'CLOSED' && trade.exit_time
+                ? new Date(trade.exit_time).toLocaleDateString('sv-SE')  // sv-SE 格式: YYYY-MM-DD
+                : new Date(trade.entry_time).toLocaleDateString('sv-SE')
+            return tradeDateStr === dateStr
         })
     }
 

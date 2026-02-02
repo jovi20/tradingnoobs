@@ -7,7 +7,10 @@ import {
     TrendingUp,
     TrendingDown,
     Search,
-    Loader2
+    Loader2,
+    ArrowUpDown,
+    ArrowDown,
+    ArrowUp
 } from 'lucide-react'
 import { Trade, tradesAPI } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
@@ -87,13 +90,15 @@ export default function TradesPage() {
     const [error, setError] = useState('')
     const [filter, setFilter] = useState<'all' | 'open' | 'closed'>('all')
     const [search, setSearch] = useState('')
+    const [sortBy, setSortBy] = useState('entry_time')
+    const [order, setOrder] = useState('desc')
 
     useEffect(() => {
         const fetchTrades = async () => {
             if (!token) return
             try {
                 setIsLoading(true)
-                const data = await tradesAPI.list(token)
+                const data = await tradesAPI.list(token, { sort_by: sortBy, order })
                 setTrades(data)
             } catch (err: any) {
                 setError(err.message || '加载失败')
@@ -102,7 +107,7 @@ export default function TradesPage() {
             }
         }
         fetchTrades()
-    }, [token])
+    }, [token, sortBy, order])
 
     const filteredTrades = trades.filter((trade) => {
         if (filter === 'open' && trade.status !== 'OPEN') return false
@@ -158,12 +163,43 @@ export default function TradesPage() {
                 </div>
             </div>
 
-            {/* Error */}
-            {error && (
-                <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600">
-                    {error}
+            {/* Sorting */}
+            <div className="flex items-center justify-end space-x-2 text-sm text-slate-500">
+                <span>排序:</span>
+                <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="select select-sm border-slate-200 dark:border-slate-700 hover:border-slate-300 rounded-lg px-2 py-1 outline-none"
+                >
+                    <option value="entry_time">开仓时间</option>
+                    <option value="symbol">标的 (A-Z)</option>
+                    <option value="status">状态</option>
+                </select>
+                <div className="flex border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                    <button
+                        onClick={() => setOrder('asc')}
+                        className={`p-1.5 ${order === 'asc' ? 'bg-slate-100 dark:bg-slate-700 text-primary-500' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                    >
+                        <ArrowUp className="w-4 h-4" />
+                    </button>
+                    <div className="w-px bg-slate-200 dark:bg-slate-700" />
+                    <button
+                        onClick={() => setOrder('desc')}
+                        className={`p-1.5 ${order === 'desc' ? 'bg-slate-100 dark:bg-slate-700 text-primary-500' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                    >
+                        <ArrowDown className="w-4 h-4" />
+                    </button>
                 </div>
-            )}
+            </div>
+
+            {/* Error */}
+            {
+                error && (
+                    <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600">
+                        {error}
+                    </div>
+                )
+            }
 
             {/* Trade List */}
             <div className="space-y-4">
@@ -181,6 +217,6 @@ export default function TradesPage() {
                     ))
                 )}
             </div>
-        </div>
+        </div >
     )
 }

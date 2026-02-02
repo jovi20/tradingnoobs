@@ -33,10 +33,14 @@ class UserLogin(BaseModel):
     password: str
 
 
-class UserResponse(BaseModel):
+class UserBase(BaseModel):
+    email: EmailStr
+
+
+class UserResponse(UserBase):
     id: int
-    email: str
     is_active: bool
+    role: str
     created_at: datetime
     
     class Config:
@@ -56,14 +60,21 @@ class TokenData(BaseModel):
 
 class TradeCreate(BaseModel):
     symbol: str = Field(..., max_length=50)
-    exchange: str = Field(..., max_length=50)
+    exchange: Optional[str] = Field(None, max_length=50) # Derived from Account if not provided
+    account_id: int = Field(...) # Required now
     entry_price: Decimal = Field(..., gt=0)
     quantity: Decimal = Field(..., gt=0)
     entry_time: datetime
+    status: TradeStatusEnum = TradeStatusEnum.OPEN  # 交易状态：OPEN(持仓中) 或 CLOSED(已平仓)
     strategy_id: Optional[int] = None
     entry_reason: Optional[str] = None
     entry_emotion: Optional[str] = None
     entry_confidence: Optional[int] = Field(None, ge=1, le=5)
+    # 可选的平仓信息（当 status=CLOSED 时使用）
+    exit_price: Optional[Decimal] = Field(None, gt=0)
+    exit_time: Optional[datetime] = None
+    exit_reason: Optional[str] = None
+
 
 
 class TradeClose(BaseModel):
@@ -86,13 +97,14 @@ class TradeUpdate(BaseModel):
 class TradeResponse(BaseModel):
     id: int
     user_id: int
+    account_id: Optional[int]
     strategy_id: Optional[int]
     symbol: str
     exchange: str
     entry_price: Decimal
     quantity: Decimal
     entry_time: datetime
-    current_price: Optional[Decimal]
+    current_price: Optional[float]
     exit_price: Optional[Decimal]
     exit_time: Optional[datetime]
     status: TradeStatusEnum
@@ -240,3 +252,59 @@ class DashboardStats(BaseModel):
     total_trades: int
     open_positions: int
     closed_trades: int
+
+
+# ============== Trading Account Schemas ==============
+
+class TradingAccountCreate(BaseModel):
+    name: str = Field(..., max_length=100)
+    broker: str = Field(..., max_length=50)
+    account_type: Optional[str] = Field(None, max_length=50)
+    currency: str = Field(default="USD", max_length=10)
+    initial_balance: Optional[Decimal] = None
+    description: Optional[str] = None
+
+
+class TradingAccountUpdate(BaseModel):
+    name: Optional[str] = Field(None, max_length=100)
+    broker: Optional[str] = Field(None, max_length=50)
+    account_type: Optional[str] = Field(None, max_length=50)
+    currency: Optional[str] = Field(None, max_length=10)
+    initial_balance: Optional[Decimal] = None
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class TradingAccountResponse(BaseModel):
+    id: int
+    user_id: int
+    name: str
+    broker: str
+    account_type: Optional[str]
+    currency: str
+    initial_balance: Optional[Decimal]
+    description: Optional[str]
+    is_active: bool
+    created_at: datetime
+    updated_at: Optional[datetime]
+    
+    class Config:
+        from_attributes = True
+
+
+# ============== System Settings Schemas ==============
+
+class SystemSettingBase(BaseModel):
+    key: str = Field(..., max_length=50)
+    value: Optional[str] = None
+    description: Optional[str] = None
+
+class SystemSettingUpdate(BaseModel):
+    value: Optional[str] = None
+    description: Optional[str] = None
+
+class SystemSettingResponse(SystemSettingBase):
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

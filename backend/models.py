@@ -29,6 +29,7 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True)
+    role = Column(String, default="user")  # user, admin
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relationships
@@ -37,6 +38,7 @@ class User(Base):
     settings = relationship("UserSettings", back_populates="user", uselist=False)
     daily_summaries = relationship("DailySummary", back_populates="user")
     weekly_reports = relationship("WeeklyReport", back_populates="user")
+    trading_accounts = relationship("TradingAccount", back_populates="user")
 
 
 class Trade(Base):
@@ -44,6 +46,7 @@ class Trade(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    account_id = Column(Integer, ForeignKey("trading_accounts.id"), nullable=True) # New: Link to Account
     strategy_id = Column(Integer, ForeignKey("strategies.id"), nullable=True)
     
     # Basic Info
@@ -81,6 +84,7 @@ class Trade(Base):
     # Relationships
     user = relationship("User", back_populates="trades")
     strategy = relationship("Strategy", back_populates="trades")
+    trading_account = relationship("TradingAccount") # One-to-Many from Account to Trades
     
     @property
     def pnl(self):
@@ -183,3 +187,35 @@ class WeeklyReport(Base):
     
     # Relationships
     user = relationship("User", back_populates="weekly_reports")
+
+
+class TradingAccount(Base):
+    """用户的实盘账户标签"""
+    __tablename__ = "trading_accounts"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    
+    name = Column(String(100), nullable=False)  # 账户名称，如 "IBKR主账户"
+    broker = Column(String(50), nullable=False)  # 券商/交易所，如 "IBKR", "Binance"
+    account_type = Column(String(50), nullable=True)  # 账户类型，如 "现货", "合约", "保证金"
+    currency = Column(String(10), default="USD")  # 账户币种
+    initial_balance = Column(Numeric(20, 2), nullable=True)  # 初始资金
+    description = Column(Text, nullable=True)  # 备注
+    is_active = Column(Boolean, default=True)  # 是否启用
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relationships
+    user = relationship("User", back_populates="trading_accounts")
+
+
+class SystemSetting(Base):
+    """全局系统设置 (Admin Only)"""
+    __tablename__ = "system_settings"
+    
+    key = Column(String(50), primary_key=True)  # 配置键，如 'finnhub_api_key'
+    value = Column(Text, nullable=True)         # 配置值
+    description = Column(String(200), nullable=True) # 描述
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())

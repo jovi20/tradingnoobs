@@ -2,12 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { authAPI } from '@/lib/api'
-
-interface User {
-    id: number
-    email: string
-}
+import { authAPI, User } from '@/lib/api'
 
 interface AuthContextType {
     user: User | null

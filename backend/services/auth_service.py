@@ -71,10 +71,12 @@ async def get_current_user(
     )
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
-        user_id: int = payload.get("sub")
-        if user_id is None:
+        user_id_raw = payload.get("sub")
+        if user_id_raw is None:
             raise credentials_exception
-    except JWTError:
+        # 确保 user_id 是整数类型
+        user_id = int(user_id_raw)
+    except (JWTError, ValueError):
         raise credentials_exception
     
     user = db.query(User).filter(User.id == user_id).first()

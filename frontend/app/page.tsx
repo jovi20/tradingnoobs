@@ -194,7 +194,43 @@ export default function DashboardPage() {
             <div className="grid lg:grid-cols-3 gap-6">
                 {/* P&L Chart */}
                 <div className="lg:col-span-2 card p-6">
-                    <h2 className="text-lg font-semibold mb-4">累计盈亏曲线</h2>
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-lg font-semibold">累计盈亏曲线</h2>
+                        <div className="flex flex-wrap gap-1">
+                            {[
+                                { label: '1周', days: 7 },
+                                { label: '本月', days: -1 },  // MTD
+                                { label: '1月', days: 30 },
+                                { label: '3月', days: 90 },
+                                { label: '本年', days: -2 },  // YTD
+                                { label: '1年', days: 365 },
+                                { label: '全部', days: 9999 },
+                            ].map((option) => (
+                                <button
+                                    key={option.label}
+                                    onClick={async () => {
+                                        if (!token) return
+                                        let days = option.days
+                                        if (days === -1) {
+                                            // MTD: 本月迄今
+                                            const now = new Date()
+                                            days = now.getDate()
+                                        } else if (days === -2) {
+                                            // YTD: 本年迄今
+                                            const now = new Date()
+                                            const startOfYear = new Date(now.getFullYear(), 0, 1)
+                                            days = Math.ceil((now.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24))
+                                        }
+                                        const data = await dashboardAPI.pnlHistory(token, days)
+                                        setPnlHistory(data)
+                                    }}
+                                    className="px-2 py-1 text-xs rounded-md hover:bg-primary-100 dark:hover:bg-primary-900/30 hover:text-primary-600 transition-colors"
+                                >
+                                    {option.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
                     <div className="h-[300px]">
                         {pnlHistory.length > 0 ? (
                             <ResponsiveContainer width="100%" height="100%">
@@ -207,7 +243,7 @@ export default function DashboardPage() {
                                     />
                                     <YAxis
                                         tick={{ fontSize: 12 }}
-                                        tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+                                        tickFormatter={(value) => `$${value.toLocaleString()}`}
                                     />
                                     <Tooltip
                                         formatter={(value: number) => [`$${value.toFixed(2)}`, '盈亏']}

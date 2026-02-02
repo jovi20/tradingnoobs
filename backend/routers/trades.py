@@ -3,14 +3,15 @@ Trading Noobs Backend - Trades Router
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, asc
 from typing import List, Optional
 from datetime import datetime
 
 from database import get_db
-from models import Trade, TradeStatus, User
+from models import Trade, TradeStatus, User, TradingAccount
 from schemas import TradeCreate, TradeClose, TradeUpdate, TradeResponse
 from services.auth_service import get_current_user
+from services.market_data_service import MarketDataService
 
 router = APIRouter(prefix="/api/trades", tags=["Trades"])
 
@@ -22,6 +23,8 @@ async def get_trades(
     exchange: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
+    sort_by: str = Query('entry_time', regex="^(entry_time|symbol|pnl|status)$"),
+    order: str = Query('desc', regex="^(asc|desc)$"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -35,11 +38,40 @@ async def get_trades(
     if exchange:
         query = query.filter(Trade.exchange == exchange)
     
-    trades = query.order_by(desc(Trade.entry_time)).offset(skip).limit(limit).all()
+    # Sorting
+    if sort_by == 'pnl':
+        # PnL is computed, so we might need special handling or just sort by DB column if persisted
+        # For now, let's assume Trade.pnl or Trade.exit_price exists but pnl is @property
+        # If PnL is not a DB column, we can't sort efficiently in SQL easily without expression
+        # Fallback to entry_time if PnL sorting requested but not supported in DB yet
+        # OR: sort in memory if page size is small? No, limit applies first.
+        # Let's use 'entry_time' as fallback for complex calculated fields for now or sort python side if small
+        pass # To be improved if PnL becomes a stored column
+    
+    sort_attr = getattr(Trade, sort_by, Trade.entry_time)
+    if order == 'asc':
+        query = query.order_by(asc(sort_attr))
+    else:
+        query = query.order_by(desc(sort_attr))
+
+    trades = query.offset(skip).limit(limit).all()
+    
+    # Initialize Market Service
+    market_service = MarketDataService(db)
     
     # Add computed properties
     result = []
     for trade in trades:
+        # Fetch real-time price for OPEN positions
+        if trade.status == TradeStatus.OPEN:
+            try:
+                quote = market_service.get_quote(trade.symbol)
+                if quote and 'c' in quote:
+                    trade.current_price = quote['c']
+            except Exception as e:
+                print(f"Failed to fetch price for {trade.symbol}: {e}")
+                # Keep existing current_price or None
+
         trade_dict = TradeResponse.model_validate(trade).model_dump()
         trade_dict["pnl"] = trade.pnl
         trade_dict["pnl_percent"] = trade.pnl_percent
@@ -54,11 +86,24 @@ async def create_trade(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Create a new trade (open position)"""
+    """Create a new trade (open or closed position)"""
+    # Validate Account
+    account = db.query(TradingAccount).filter(
+        TradingAccount.id == trade_data.account_id,
+        TradingAccount.user_id == current_user.id
+    ).first()
+    
+    if not account:
+        raise HTTPException(status_code=400, detail="Invalid Trading Account")
+        
+    # Auto-populate exchange from account
+    exchange_name = account.broker
+    
     trade = Trade(
         user_id=current_user.id,
+        account_id=trade_data.account_id,
         symbol=trade_data.symbol.upper(),
-        exchange=trade_data.exchange,
+        exchange=exchange_name,
         entry_price=trade_data.entry_price,
         quantity=trade_data.quantity,
         entry_time=trade_data.entry_time,
@@ -66,8 +111,15 @@ async def create_trade(
         entry_reason=trade_data.entry_reason,
         entry_emotion=trade_data.entry_emotion,
         entry_confidence=trade_data.entry_confidence,
-        status=TradeStatus.OPEN
+        status=TradeStatus[trade_data.status.value]
     )
+    
+    # 如果是已平仓交易，设置平仓信息
+    if trade_data.status.value == "CLOSED":
+        trade.exit_price = trade_data.exit_price
+        trade.exit_time = trade_data.exit_time or trade_data.entry_time
+        trade.exit_reason = trade_data.exit_reason
+    
     db.add(trade)
     db.commit()
     db.refresh(trade)

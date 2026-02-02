@@ -6,7 +6,7 @@ from typing import Optional, List
 from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
-from models import Trade, TradeStatus, UserSettings, WeeklyReport
+from models import Trade, TradeStatus, UserSettings, WeeklyReport, SystemSetting
 
 
 MUNGER_PROMPT = """你是一位投资分析师，精通查理·芒格的投资哲学。请根据以下一周的交易记录，生成周报总结。
@@ -74,12 +74,16 @@ async def generate_weekly_report(
     week_end: date
 ) -> Optional[WeeklyReport]:
     """Generate weekly report using LLM"""
-    # Get user settings
-    settings = db.query(UserSettings).filter(
-        UserSettings.user_id == user_id
-    ).first()
+    # Get system settings for LLM
+    llm_api_url_setting = db.query(SystemSetting).filter(SystemSetting.key == 'llm_api_url').first()
+    llm_api_key_setting = db.query(SystemSetting).filter(SystemSetting.key == 'llm_api_key').first()
+    llm_model_setting = db.query(SystemSetting).filter(SystemSetting.key == 'llm_model').first()
     
-    if not settings or not settings.llm_api_url or not settings.llm_api_key:
+    llm_api_url = llm_api_url_setting.value if llm_api_url_setting else None
+    llm_api_key = llm_api_key_setting.value if llm_api_key_setting else None
+    llm_model = llm_model_setting.value if llm_model_setting else "gpt-4"
+
+    if not llm_api_url or not llm_api_key:
         return None
     
     # Get trades for the week
@@ -93,17 +97,22 @@ async def generate_weekly_report(
     trades_data = format_trades_for_llm(trades)
     prompt = MUNGER_PROMPT.format(trades_data=trades_data)
     
+    # Construct API endpoint
+    api_endpoint = llm_api_url.strip().rstrip('/')
+    if not api_endpoint.endswith('/chat/completions'):
+        api_endpoint = f"{api_endpoint}/chat/completions"
+
     # Call LLM API (OpenAI format)
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
-                f"{settings.llm_api_url}/chat/completions",
+                api_endpoint,
                 headers={
-                    "Authorization": f"Bearer {settings.llm_api_key}",
+                    "Authorization": f"Bearer {llm_api_key}",
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": settings.llm_model or "gpt-4",
+                    "model": llm_model,
                     "messages": [
                         {"role": "system", "content": "你是一位专业的投资分析师。"},
                         {"role": "user", "content": prompt}

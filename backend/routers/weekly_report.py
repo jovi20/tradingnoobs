@@ -7,7 +7,7 @@ from typing import List
 from datetime import date, timedelta
 
 from database import get_db
-from models import User, WeeklyReport, UserSettings
+from models import User, WeeklyReport, UserSettings, SystemSetting
 from schemas import WeeklyReportCreate, WeeklyReportResponse
 from services.auth_service import get_current_user
 from services.llm_service import generate_weekly_report
@@ -51,15 +51,14 @@ async def generate_report(
     db: Session = Depends(get_db)
 ):
     """Generate a new weekly report using LLM"""
-    # Check if LLM is configured
-    settings = db.query(UserSettings).filter(
-        UserSettings.user_id == current_user.id
-    ).first()
+    # Check if LLM is configured (System Settings)
+    llm_api_url = db.query(SystemSetting).filter(SystemSetting.key == 'llm_api_url').first()
+    llm_api_key = db.query(SystemSetting).filter(SystemSetting.key == 'llm_api_key').first()
     
-    if not settings or not settings.llm_api_url or not settings.llm_api_key:
+    if not llm_api_url or not llm_api_url.value or not llm_api_key or not llm_api_key.value:
         raise HTTPException(
             status_code=400,
-            detail="LLM API not configured. Please configure it in settings."
+            detail="System LLM API not configured. Please contact admin."
         )
     
     # Check if report exists for this week
@@ -108,15 +107,14 @@ async def generate_current_week_report(
     week_start = today - timedelta(days=today.weekday())
     week_end = week_start + timedelta(days=6)
     
-    # Check if LLM is configured
-    settings = db.query(UserSettings).filter(
-        UserSettings.user_id == current_user.id
-    ).first()
+    # Check if LLM is configured (System Settings)
+    llm_api_url = db.query(SystemSetting).filter(SystemSetting.key == 'llm_api_url').first()
+    llm_api_key = db.query(SystemSetting).filter(SystemSetting.key == 'llm_api_key').first()
     
-    if not settings or not settings.llm_api_url or not settings.llm_api_key:
+    if not llm_api_url or not llm_api_url.value or not llm_api_key or not llm_api_key.value:
         raise HTTPException(
             status_code=400,
-            detail="LLM API not configured. Please configure it in settings."
+            detail="System LLM API not configured. Please contact admin."
         )
     
     try:
