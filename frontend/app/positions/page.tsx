@@ -111,7 +111,7 @@ export default function PositionsPage() {
                 <h1 className="text-2xl font-bold">持仓记录</h1>
                 <Link href="/positions/new" className="btn btn-primary">
                     <Plus className="w-4 h-4 mr-1" />
-                    新建仓位
+                    新增交易
                 </Link>
             </div>
 
@@ -131,8 +131,8 @@ export default function PositionsPage() {
                                 router.push(`${url.pathname}${url.search}`)
                             }}
                             className={`pb-3 text-sm font-medium border-b-2 transition-colors ${assetFilter === type
-                                    ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
-                                    : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                                ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                                : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
                                 }`}
                         >
                             {type === 'ALL' ? '全部资产' : type === 'Stock' ? '股票 (Stock)' : '加密货币 (Crypto)'}
@@ -181,7 +181,7 @@ export default function PositionsPage() {
                     <p className="text-slate-500 mb-4">暂无持仓记录</p>
                     <Link href="/positions/new" className="btn btn-primary inline-flex">
                         <Plus className="w-4 h-4 mr-1" />
-                        新建仓位
+                        新增交易
                     </Link>
                 </div>
             ) : (

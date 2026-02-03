@@ -74,3 +74,27 @@ async def detect_asset_type(
         "asset_type": asset_type,
         "provider": service._get_provider_name(asset_type)
     }
+
+
+@router.get("/calendar")
+async def get_market_calendar(
+    market: str = Query("CN", description="Market: CN (A股), US (美股), HK (港股)"),
+    year: int = Query(..., ge=2020, le=2030),
+    month: int = Query(..., ge=1, le=12),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    获取市场日历
+    返回指定市场、年月的交易日和节假日
+    """
+    from services.market_calendar import MarketCalendarService
+    from models import UserSettings
+    
+    # 获取用户的 Finnhub API Key
+    settings = db.query(UserSettings).filter(UserSettings.user_id == current_user.id).first()
+    finnhub_key = settings.finnhub_api_key if settings else None
+    
+    service = MarketCalendarService(finnhub_api_key=finnhub_key)
+    return service.get_calendar(market, year, month)
+

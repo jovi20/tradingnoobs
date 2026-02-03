@@ -5,7 +5,7 @@ Run: python create_admin.py
 import sys
 import os
 
-# Suppress passlib warnings
+# Suppress warnings
 os.environ['PASSLIB_BUILTIN_BCRYPT'] = 'enabled'
 import warnings
 warnings.filterwarnings('ignore')
@@ -15,12 +15,11 @@ sys.path.insert(0, '.')
 from database import SessionLocal, engine, Base
 from models import User, UserSettings
 
-# Use the same password hashing as auth_service
-from passlib.context import CryptContext
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Use bcrypt directly to avoid passlib compatibility issues
+import bcrypt
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
 # Create tables if not exist
 Base.metadata.create_all(bind=engine)
@@ -41,7 +40,8 @@ def create_admin():
         admin = User(
             email="admin@tradingnoobs.com",
             hashed_password=get_password_hash("admin123"),
-            is_active=True
+            is_active=True,
+            role="admin"
         )
         db.add(admin)
         db.commit()

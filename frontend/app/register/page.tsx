@@ -69,7 +69,7 @@ export default function RegisterPage() {
                                     type="email"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    className="input pl-12"
+                                    className="input pl-14"
                                     placeholder="your@email.com"
                                     required
                                 />
@@ -84,7 +84,7 @@ export default function RegisterPage() {
                                     type="password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className="input pl-12"
+                                    className="input pl-14"
                                     placeholder="至少6个字符"
                                     required
                                     minLength={6}
@@ -100,7 +100,7 @@ export default function RegisterPage() {
                                     type="password"
                                     value={confirmPassword}
                                     onChange={(e) => setConfirmPassword(e.target.value)}
-                                    className="input pl-12"
+                                    className="input pl-14"
                                     placeholder="再次输入密码"
                                     required
                                 />

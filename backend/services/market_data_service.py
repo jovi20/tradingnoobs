@@ -60,8 +60,12 @@ class MarketDataService:
         if re.match(r'^\d{5}$', symbol_upper):  # 5-digit HK code
             return 'HK_STOCK'
         
-        # Default to US Stock
-        return 'US_STOCK'
+        # US Stock detection (Basic: 1-5 letters, maybe dots for BRK.B)
+        if re.match(r'^[A-Z\.]{1,8}$', symbol_upper):
+            return 'US_STOCK'
+
+        # Default/Unknown
+        return 'UNKNOWN'
 
     def get_quote(self, symbol: str, exchange: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -78,28 +82,67 @@ class MarketDataService:
         elif asset_type == 'HK_STOCK':
             return akshare_provider.get_hk_stock_quote(symbol)
         
-        else:  # US_STOCK
+        elif asset_type == 'US_STOCK':
             return self._get_finnhub_quote(symbol)
+            
+        else:
+            raise ValueError(f"Unknown asset type for symbol: {symbol}")
 
     def _get_finnhub_quote(self, symbol: str) -> Dict[str, Any]:
-        """Get quote from Finnhub (US stocks)"""
-        client = self._get_finnhub_client()
-        if not client:
-            raise Exception("Finnhub API key not configured")
-        
+        """
+        Get quote from Finnhub (US stocks) with fallback to YFinance
+        """
+        # 1. Try Finnhub first
         try:
-            data = client.quote(symbol.upper())
-            return {
-                'c': data.get('c'),   # current price
-                'pc': data.get('pc'), # previous close
-                'h': data.get('h'),   # high
-                'l': data.get('l'),   # low
-                'o': data.get('o'),   # open
-                'd': data.get('d'),   # change
-                'dp': data.get('dp')  # change percent
-            }
+            client = self._get_finnhub_client()
+            if client:
+                data = client.quote(symbol.upper())
+                # Check if data is valid (Finnhub sometimes returns 0s for invalid symbols, but usually c=0)
+                # But for valid symbol c should be > 0 ideally, or at least pc
+                if data.get('c') == 0 and data.get('pc') == 0:
+                     raise ValueError("Finnhub returned empty data")
+                     
+                return {
+                    'c': data.get('c'),   # current price
+                    'pc': data.get('pc'), # previous close
+                    'h': data.get('h'),   # high
+                    'l': data.get('l'),   # low
+                    'o': data.get('o'),   # open
+                    'd': data.get('d'),   # change
+                    'dp': data.get('dp'), # change percent
+                    'name': symbol.upper() # Finnhub quote doesn't return name, use symbol
+                }
         except Exception as e:
-            raise Exception(f"Finnhub API error: {str(e)}")
+            print(f"Finnhub error for {symbol}: {e}")
+            # Continue to fallback
+            
+        # 2. Fallback to Yahoo Finance
+        try:
+            import yfinance as yf
+            ticker = yf.Ticker(symbol.upper())
+            info = ticker.fast_info
+            
+            if not info.last_price:
+                 raise ValueError("Yahoo Finance returned empty data")
+
+            previous_close = info.previous_close
+            current_price = info.last_price
+            change_percent = 0
+            if previous_close:
+                change_percent = ((current_price - previous_close) / previous_close) * 100
+
+            return {
+                'c': current_price,
+                'pc': previous_close,
+                'h': info.day_high,
+                'l': info.day_low,
+                'o': info.open,
+                'd': current_price - previous_close,
+                'dp': change_percent,
+                'name': symbol.upper()
+            }
+        except Exception as yf_error:
+            raise Exception(f"Market data failed. Finnhub & YFinance both failed for {symbol}: {str(yf_error)}")
 
     def validate_symbol(self, symbol: str, exchange: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -117,10 +160,25 @@ class MarketDataService:
                 'provider': self._get_provider_name(asset_type)
             }
         except Exception as e:
+            # Generate candidates on failure
+            candidates = []
+            symbol_upper = symbol.upper()
+            
+            # Crypto Smart Suggestions
+            # If 3-5 letters and not purely numeric, suggest adding USDT
+            # (e.g. BTC -> BTCUSDT)
+            if re.match(r'^[A-Z]{3,5}$', symbol_upper):
+                 candidates.append({
+                     'symbol': f"{symbol_upper}USDT",
+                     'asset_type': 'CRYPTO',
+                     'reason': '推荐: Binance 交易对'
+                 })
+            
             return {
                 'valid': False,
                 'symbol': symbol.upper(),
-                'error': str(e)
+                'error': str(e),
+                'candidates': candidates
             }
 
     def _get_provider_name(self, asset_type: str) -> str:

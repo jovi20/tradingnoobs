@@ -41,15 +41,10 @@ def get_crypto_price_simple(symbol: str) -> float:
     获取加密货币简单价格
     """
     try:
-        client = Spot()
-        clean_symbol = symbol.upper().replace('-', '').replace('/', '')
-        if not clean_symbol.endswith(('USDT', 'BUSD', 'BTC', 'ETH')):
-            clean_symbol = clean_symbol + 'USDT'
-        
-        ticker = client.ticker_price(symbol=clean_symbol)
-        return float(ticker['price'])
+        quote = get_crypto_quote(symbol)
+        return float(quote['c'])
     except Exception as e:
-        raise Exception(f"Binance 查询失败: {str(e)}")
+        raise Exception(f"Crypto 查询失败: {str(e)}")
 
 
 def list_crypto_symbols() -> list:

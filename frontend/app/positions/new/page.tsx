@@ -15,7 +15,7 @@ import {
     positionsAPI, accountsAPI, strategiesAPI, marketAPI,
     TradingAccount, Strategy, Position, PositionCreate, BatchCreate, SymbolValidation
 } from '@/lib/api'
-import { detectSymbolType, getAssetTypeColor, SymbolDetection } from '@/lib/symbolUtils'
+import { detectSymbolType, getAssetTypeColor, getAssetTypeLabel, SymbolDetection } from '@/lib/symbolUtils'
 import DateTimePicker from '@/components/DateTimePicker'
 
 export default function NewPositionPage() {
@@ -112,14 +112,19 @@ export default function NewPositionPage() {
             }
 
             // Skip API if format is unknown
-            if (detection.type === 'UNKNOWN') {
-                setSymbolValidation({ valid: false, symbol: form.symbol, error: detection.format })
+            if (detection.type === 'unknown') {
+                setSymbolValidation({
+                    valid: false,
+                    symbol: form.symbol,
+                    error: '未知格式，请检查代码'
+                })
                 return
             }
 
             setIsValidating(true)
             try {
-                const result = await marketAPI.validateSymbol(token, detection.normalized)
+                // Fix: use detection.symbol instead of undefined detection.normalized
+                const result = await marketAPI.validateSymbol(token, detection.symbol)
                 setSymbolValidation(result)
             } catch {
                 setSymbolValidation({ valid: false, symbol: form.symbol, error: '验证失败' })
@@ -213,7 +218,7 @@ export default function NewPositionPage() {
                 <Link href="/positions" className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
                     <ArrowLeft className="w-5 h-5" />
                 </Link>
-                <h1 className="text-2xl font-bold">新建仓位</h1>
+                <h1 className="text-2xl font-bold">新增交易</h1>
             </div>
 
             {/* Error */}
@@ -278,9 +283,10 @@ export default function NewPositionPage() {
                         <div>
                             <label className="block text-sm font-medium mb-2">
                                 标的代码 *
-                                {symbolDetection && symbolDetection.type !== 'UNKNOWN' && (
+                                {symbolDetection && symbolDetection.type !== 'unknown' && (
                                     <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${getAssetTypeColor(symbolDetection.type)}`}>
-                                        {symbolDetection.label}
+                                        {/* Fix 2: Use getAssetTypeLabel or displayName */}
+                                        {getAssetTypeLabel(symbolDetection.type)}
                                     </span>
                                 )}
                             </label>
@@ -303,8 +309,28 @@ export default function NewPositionPage() {
                                     )}
                                 </div>
                             </div>
-                            {/* Format hint or validation result */}
-                            {symbolDetection && symbolDetection.type === 'UNKNOWN' && form.symbol.length > 0 && (
+                            {/* Candidates Selection */}
+                            {symbolValidation?.candidates && symbolValidation.candidates.length > 0 && (
+                                <div className="mt-3">
+                                    <p className="text-xs text-slate-500 mb-2">您是不是想找：</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {symbolValidation.candidates.map((c, idx) => (
+                                            <button
+                                                key={idx}
+                                                type="button"
+                                                onClick={() => setForm({ ...form, symbol: c.symbol })}
+                                                className="px-3 py-1.5 rounded-lg text-sm bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors border border-primary-100 dark:border-primary-800"
+                                            >
+                                                <span className="font-medium">{c.symbol}</span>
+                                                <span className="ml-1.5 text-xs opacity-70">({c.reason})</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Format hint for unknown only if no candidates */}
+                            {symbolDetection && symbolDetection.type === 'unknown' && (!symbolValidation?.candidates || symbolValidation.candidates.length === 0) && form.symbol.length > 0 && (
                                 <p className="text-xs mt-1 text-amber-600">
                                     格式提示: A股(6位数字) | 港股(5位数字) | 美股(字母) | 加密(XXXUSDT)
                                 </p>
@@ -470,7 +496,7 @@ export default function NewPositionPage() {
                     {isSubmitting ? (
                         <Loader2 className="w-5 h-5 animate-spin mx-auto" />
                     ) : (
-                        '创建仓位'
+                        '创建交易'
                     )}
                 </button>
             </form>

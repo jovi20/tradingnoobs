@@ -280,8 +280,16 @@ class DashboardStats(BaseModel):
     open_positions: int
     closed_trades: int
     asset_allocation: List[AssetAllocation] = []
+    account_allocation: List['AccountAllocation'] = []
     top_movers: List[PositionMover] = []
     bottom_movers: List[PositionMover] = []
+
+
+class AccountAllocation(BaseModel):
+    name: str 
+    broker: str
+    value: float
+    percent: float
 
 
 # ============== Trading Account Schemas ==============

@@ -9,13 +9,16 @@ import {
     BarChart3,
     Wallet,
     Activity,
-    Loader2
+    Loader2,
+    Calendar,
+    FileText
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { dashboardAPI, tradesAPI, Trade, DashboardStats, AssetAllocation, PositionMover } from '@/lib/api'
 import { getAssetTypeColor } from '@/lib/symbolUtils'
+import MarketStatus from '@/components/MarketStatus'
 
 function StatCard({
     title,
@@ -31,7 +34,7 @@ function StatCard({
     color: string
 }) {
     return (
-        <div className="card p-6">
+        <div className="card p-4 md:p-6">
             <div className="flex items-center justify-between">
                 <div>
                     <p className="text-sm text-slate-500 dark:text-slate-400">{title}</p>
@@ -200,7 +203,7 @@ function TradeCard({ trade }: { trade: Trade }) {
 export default function DashboardPage() {
     const { token } = useAuth()
     const [stats, setStats] = useState<DashboardStats | null>(null)
-    const [pnlHistory, setPnlHistory] = useState<{ date: string; pnl: number }[]>([])
+    const [pnlHistory, setPnlHistory] = useState<{ date: string; pnl: number; pnl_percent: number }[]>([])
     const [openTrades, setOpenTrades] = useState<Trade[]>([])
     const [isLoading, setIsLoading] = useState(true)
 
@@ -211,7 +214,7 @@ export default function DashboardPage() {
                 setIsLoading(true)
                 const [statsData, historyData, tradesData] = await Promise.all([
                     dashboardAPI.stats(token),
-                    dashboardAPI.pnlHistory(token, 30),
+                    dashboardAPI.pnlHistory(token, 7),
                     tradesAPI.list(token, { status: 'OPEN' }),
                 ])
                 setStats(statsData)
@@ -227,6 +230,7 @@ export default function DashboardPage() {
                     open_positions: 0,
                     closed_trades: 0,
                     asset_allocation: [],
+                    account_allocation: [],
                     top_movers: [],
                     bottom_movers: [],
                 })
@@ -252,6 +256,48 @@ export default function DashboardPage() {
 
     return (
         <div className="space-y-6 pb-20 md:pb-6">
+            {/* Quick Actions & Market Status */}
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4 pb-2">
+                {/* Left: Quick Actions */}
+                <div className="flex gap-4 overflow-x-auto w-full md:w-auto pb-1 no-scrollbar">
+                    <Link href="/positions/new" className="flex items-center gap-2 px-4 py-3 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 hover:border-primary-500 transition-colors min-w-max">
+                        <div className="p-2 bg-primary-50 dark:bg-primary-900/20 text-primary-600 rounded-lg">
+                            <TrendingUp className="w-5 h-5" />
+                        </div>
+                        <span className="font-medium">新增交易</span>
+                    </Link>
+                    <Link href="/strategies" className="flex items-center gap-2 px-4 py-3 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 hover:border-primary-500 transition-colors min-w-max">
+                        <div className="p-2 bg-purple-50 dark:bg-purple-900/20 text-purple-600 rounded-lg">
+                            <BarChart3 className="w-5 h-5" />
+                        </div>
+                        <span className="font-medium">新增策略</span>
+                    </Link>
+                    <Link href="/settings" className="flex items-center gap-2 px-4 py-3 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 hover:border-primary-500 transition-colors min-w-max">
+                        <div className="p-2 bg-amber-50 dark:bg-amber-900/20 text-amber-600 rounded-lg">
+                            <Wallet className="w-5 h-5" />
+                        </div>
+                        <span className="font-medium">新增账户</span>
+                    </Link>
+                    <Link href="/daily" className="flex items-center gap-2 px-4 py-3 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 hover:border-primary-500 transition-colors min-w-max">
+                        <div className="p-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-lg">
+                            <Calendar className="w-5 h-5" />
+                        </div>
+                        <span className="font-medium">交易日历</span>
+                    </Link>
+                    <Link href="/reports" className="flex items-center gap-2 px-4 py-3 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 hover:border-primary-500 transition-colors min-w-max">
+                        <div className="p-2 bg-teal-50 dark:bg-teal-900/20 text-teal-600 rounded-lg">
+                            <FileText className="w-5 h-5" />
+                        </div>
+                        <span className="font-medium">查看周报</span>
+                    </Link>
+                </div>
+
+                {/* Right: Market Status */}
+                <div className="w-full md:w-auto flex justify-start md:justify-end overflow-hidden">
+                    <MarketStatus />
+                </div>
+            </div>
+
             {/* Stats Grid */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard
@@ -283,15 +329,41 @@ export default function DashboardPage() {
 
             {/* Allocation and Movers */}
             <div className="grid lg:grid-cols-3 gap-6">
-                {/* Asset Allocation Pie Chart */}
-                <div className="card p-6 lg:col-span-1">
-                    <h2 className="text-lg font-semibold mb-4">资产分布</h2>
-                    <AllocationPieChart data={stats.asset_allocation} />
+                {/* Asset Allocation Pie Chart & Accounts */}
+                <div className="card p-4 md:p-6 lg:col-span-2 flex flex-col md:flex-row gap-8">
+                    <div className="flex-1 min-w-0">
+                        <h2 className="text-lg font-semibold mb-4">资产分布</h2>
+                        <AllocationPieChart data={stats.asset_allocation} />
+                    </div>
+
+                    {/* Account Allocation List */}
+                    {stats.account_allocation && stats.account_allocation.length > 0 && (
+                        <div className="flex-1 min-w-0 border-t md:border-t-0 md:border-l border-slate-100 dark:border-slate-700 pt-6 md:pt-0 md:pl-8 flex flex-col">
+                            <h3 className="text-sm font-medium text-slate-500 mb-4">账户分布 (Top 5)</h3>
+                            <div className="space-y-3">
+                                {stats.account_allocation.map((acc, idx) => (
+                                    <div key={idx} className="flex items-center justify-between text-sm">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-2 h-2 rounded-full bg-slate-200 dark:bg-slate-700 shrink-0"></div>
+                                            <div className="truncate">
+                                                <span className="font-medium block truncate max-w-[120px]">{acc.name}</span>
+                                                <span className="text-xs text-slate-400 block">{acc.broker}</span>
+                                            </div>
+                                        </div>
+                                        <div className="text-right shrink-0">
+                                            <span className="block font-medium">${acc.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                                            <span className="text-xs text-slate-400">{acc.percent}%</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Movers */}
-                <div className="lg:col-span-2">
-                    <h2 className="text-lg font-semibold mb-4">今日表现 (3天)</h2>
+                <div className="card p-4 md:p-6 lg:col-span-1">
+                    <h2 className="text-lg font-semibold mb-4">历史表现</h2>
                     <PerformanceMovers top={stats.top_movers} bottom={stats.bottom_movers} />
                 </div>
             </div>
@@ -299,9 +371,9 @@ export default function DashboardPage() {
             {/* Chart and Open Positions */}
             <div className="grid lg:grid-cols-3 gap-6">
                 {/* P&L Chart */}
-                <div className="lg:col-span-2 card p-6">
+                <div className="lg:col-span-2 card p-4 md:p-6">
                     <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-lg font-semibold">累计盈亏曲线</h2>
+                        <h2 className="text-lg font-semibold">盈亏曲线</h2>
                         <div className="flex flex-wrap gap-1">
                             {[
                                 { label: '1周', days: 7 },
@@ -337,7 +409,7 @@ export default function DashboardPage() {
                             ))}
                         </div>
                     </div>
-                    <div className="h-[300px]">
+                    <div className="h-[250px] md:h-[300px]">
                         {pnlHistory.length > 0 ? (
                             <ResponsiveContainer width="100%" height="100%">
                                 <LineChart data={pnlHistory}>
@@ -349,15 +421,15 @@ export default function DashboardPage() {
                                     />
                                     <YAxis
                                         tick={{ fontSize: 12 }}
-                                        tickFormatter={(value) => `$${value.toLocaleString()}`}
+                                        tickFormatter={(value) => `${value}%`}
                                     />
                                     <Tooltip
-                                        formatter={(value: number) => [`$${value.toFixed(2)}`, '盈亏']}
+                                        formatter={(value: number) => [`${value.toFixed(2)}%`, '盈亏率']}
                                         labelFormatter={(label) => `日期: ${label}`}
                                     />
                                     <Line
                                         type="monotone"
-                                        dataKey="pnl"
+                                        dataKey="pnl_percent"
                                         stroke="#22c55e"
                                         strokeWidth={2}
                                         dot={false}

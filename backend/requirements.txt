@@ -1,23 +1,40 @@
+# Trading Noobs Backend - Python Dependencies
+# Python 3.10+ required
+
+# ============== Core Framework ==============
 fastapi>=0.109.0
 uvicorn[standard]>=0.27.0
-sqlalchemy>=2.0.25
-alembic>=1.13.1
+python-multipart>=0.0.6          # Form data parsing for file uploads
+
+# ============== Database ==============
+sqlalchemy>=2.0.25               # ORM
+alembic>=1.13.1                  # Database migrations
+asyncpg>=0.29.0                  # PostgreSQL async driver
+psycopg2-binary>=2.9.9           # PostgreSQL sync driver
+
+# ============== Data Validation ==============
 pydantic>=2.5.0
-pydantic-settings>=2.1.0
-python-jose[cryptography]>=3.3.0
-passlib[bcrypt]>=1.7.4
-python-multipart>=0.0.6
-httpx>=0.26.0
-asyncpg>=0.29.0
-psycopg2-binary>=2.9.9
-python-dotenv>=1.0.0
+pydantic-settings>=2.1.0         # Settings management
+email-validator>=2.0.0           # Email validation for Pydantic
 
-# Exchange APIs
-ib_insync>=0.9.86
-python-binance>=1.0.19
+# ============== Authentication ==============
+python-jose[cryptography]>=3.3.0 # JWT tokens
+bcrypt>=4.0.0                    # Password hashing (direct, not via passlib)
+passlib[bcrypt]>=1.7.4           # Password hashing utilities (fallback)
 
-# Market Data
-finnhub-python>=2.4.19
+# ============== HTTP Client ==============
+httpx>=0.26.0                    # Async HTTP client for external APIs
+python-dotenv>=1.0.0             # Environment variables
 
-# LLM
-openai>=1.10.0
+# ============== Exchange APIs ==============
+ib_insync>=0.9.86                # Interactive Brokers API
+python-binance>=1.0.19           # Binance API (legacy)
+binance-connector>=3.0.0         # Binance API (official, provides binance.spot)
+
+# ============== Market Data ==============
+finnhub-python>=2.4.19           # US stocks, ETFs, Forex
+akshare>=1.10.0                  # A-shares, HK stocks (Chinese markets)
+yfinance>=0.2.36                 # Yahoo Finance (backup for A-shares)
+
+# ============== LLM Integration ==============
+openai>=1.10.0                   # OpenAI API for weekly reports

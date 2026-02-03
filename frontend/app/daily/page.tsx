@@ -8,10 +8,11 @@ import {
     Calendar,
     TrendingUp,
     TrendingDown,
-    Loader2
+    Loader2,
+    Ban
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { tradesAPI, Trade } from '@/lib/api'
+import { tradesAPI, marketAPI, Trade, MarketCalendar, MarketHoliday } from '@/lib/api'
 
 const weekDays = ['日', '一', '二', '三', '四', '五', '六']
 
@@ -20,12 +21,17 @@ interface DayData {
     trades: Trade[]
     pnl: number
     isCurrentMonth: boolean
+    isHoliday: boolean
+    holidayName?: string
+    isWeekend: boolean
+    isTradingDay: boolean
 }
 
 export default function DailyPage() {
     const { token } = useAuth()
     const [currentDate, setCurrentDate] = useState(new Date())
     const [trades, setTrades] = useState<Trade[]>([])
+    const [calendar, setCalendar] = useState<MarketCalendar | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [selectedDate, setSelectedDate] = useState<Date | null>(null)
 
@@ -33,20 +39,73 @@ export default function DailyPage() {
     const month = currentDate.getMonth()
 
     useEffect(() => {
-        const fetchTrades = async () => {
+        const fetchData = async () => {
             if (!token) return
             try {
                 setIsLoading(true)
-                const data = await tradesAPI.list(token)
-                setTrades(data)
+                const [tradesData, cnCalendar, usCalendar] = await Promise.all([
+                    tradesAPI.list(token),
+                    marketAPI.calendar(token, 'CN', year, month + 1),
+                    marketAPI.calendar(token, 'US', year, month + 1)
+                ])
+                setTrades(tradesData)
+
+                // Merge Calendars
+                const mergedCalendar: MarketCalendar = {
+                    market: 'MERGED',
+                    year,
+                    month,
+                    holidays: [],
+                    trading_days: [],
+                    non_trading_days: []
+                }
+
+                // Merge Trading Days (Union)
+                const tradingDaysSet = new Set([
+                    ...(cnCalendar?.trading_days || []),
+                    ...(usCalendar?.trading_days || [])
+                ])
+                mergedCalendar.trading_days = Array.from(tradingDaysSet)
+
+                // Merge Holidays
+                const holidayMap = new Map<string, string[]>()
+
+                cnCalendar?.holidays?.forEach(h => {
+                    const existing = holidayMap.get(h.date) || []
+                    existing.push(`[A股] ${h.name}`)
+                    holidayMap.set(h.date, existing)
+                })
+
+                usCalendar?.holidays?.forEach(h => {
+                    const existing = holidayMap.get(h.date) || []
+                    existing.push(`[美股] ${h.name}`)
+                    holidayMap.set(h.date, existing)
+                })
+
+                mergedCalendar.holidays = Array.from(holidayMap.entries()).map(([date, names]) => ({
+                    date,
+                    name: names.join(' / '),
+                    is_trading: false // simplified, specialized logic might be needed but good for display
+                }))
+
+                // Non-trading days: Only if NOT in trading set (Intersection of non-trading effectively, or simpler: complement of Union of Trading)
+                // For simplicity just leave empty as we drive logic via trading_days set mostly
+
+                setCalendar(mergedCalendar)
+
             } catch (err) {
                 console.error(err)
+                // Fallback to basic trades data
+                try {
+                    const tradesData = await tradesAPI.list(token)
+                    setTrades(tradesData)
+                } catch { }
             } finally {
                 setIsLoading(false)
             }
         }
-        fetchTrades()
-    }, [token])
+        fetchData()
+    }, [token, year, month])
 
     // 生成日历网格数据
     const generateCalendar = (): DayData[] => {
@@ -55,27 +114,50 @@ export default function DailyPage() {
         const startPadding = firstDay.getDay()
         const totalDays = lastDay.getDate()
 
+        // 创建节假日映射
+        const holidayMap = new Map<string, MarketHoliday>()
+        const tradingDaySet = new Set(calendar?.trading_days || [])
+        const nonTradingDaySet = new Set(calendar?.non_trading_days || [])
+
+        calendar?.holidays?.forEach(h => {
+            holidayMap.set(h.date, h)
+        })
+
         const days: DayData[] = []
 
         // 上月填充
         for (let i = startPadding - 1; i >= 0; i--) {
             const date = new Date(year, month, -i)
+            const dateStr = formatLocalDate(date)
+            const holiday = holidayMap.get(dateStr)
             days.push({
                 date,
                 trades: getTradesForDate(date),
                 pnl: getPnlForDate(date),
                 isCurrentMonth: false,
+                isHoliday: !!holiday,
+                holidayName: holiday?.name,
+                isWeekend: date.getDay() === 0 || date.getDay() === 6,
+                isTradingDay: tradingDaySet.has(dateStr),
             })
         }
 
         // 当月
         for (let i = 1; i <= totalDays; i++) {
             const date = new Date(year, month, i)
+            const dateStr = formatLocalDate(date)
+            const holiday = holidayMap.get(dateStr)
+            const isWeekend = date.getDay() === 0 || date.getDay() === 6
+
             days.push({
                 date,
                 trades: getTradesForDate(date),
                 pnl: getPnlForDate(date),
                 isCurrentMonth: true,
+                isHoliday: !!holiday,
+                holidayName: holiday?.name,
+                isWeekend,
+                isTradingDay: tradingDaySet.has(dateStr),
             })
         }
 
@@ -83,11 +165,17 @@ export default function DailyPage() {
         const remaining = 42 - days.length
         for (let i = 1; i <= remaining; i++) {
             const date = new Date(year, month + 1, i)
+            const dateStr = formatLocalDate(date)
+            const holiday = holidayMap.get(dateStr)
             days.push({
                 date,
                 trades: getTradesForDate(date),
                 pnl: getPnlForDate(date),
                 isCurrentMonth: false,
+                isHoliday: !!holiday,
+                holidayName: holiday?.name,
+                isWeekend: date.getDay() === 0 || date.getDay() === 6,
+                isTradingDay: tradingDaySet.has(dateStr),
             })
         }
 
@@ -147,9 +235,12 @@ export default function DailyPage() {
     return (
         <div className="space-y-6 pb-20 md:pb-6">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-4">
                 <h1 className="text-2xl font-bold">交易日历</h1>
                 <div className="flex items-center space-x-4">
+
+
+                    {/* 月份导航 */}
                     <button
                         onClick={() => navigateMonth('prev')}
                         className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
@@ -168,13 +259,41 @@ export default function DailyPage() {
                 </div>
             </div>
 
+            {/* 图例 */}
+            <div className="flex flex-wrap gap-4 text-sm">
+                <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded bg-emerald-100 dark:bg-emerald-900/30 border border-emerald-300"></div>
+                    <span className="text-slate-600 dark:text-slate-400">盈利日</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded bg-red-100 dark:bg-red-900/30 border border-red-300"></div>
+                    <span className="text-slate-600 dark:text-slate-400">亏损日</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded bg-slate-200 dark:bg-slate-700"></div>
+                    <span className="text-slate-600 dark:text-slate-400">周末</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded bg-orange-100 dark:bg-orange-900/30 border border-orange-300 flex items-center justify-center">
+                        <span className="text-orange-500 text-[8px]">●</span>
+                    </div>
+                    <span className="text-slate-600 dark:text-slate-400">节假日</span>
+                </div>
+            </div>
+
             <div className="grid lg:grid-cols-3 gap-6">
                 {/* Calendar */}
                 <div className="lg:col-span-2 card p-4">
                     {/* Week headers */}
                     <div className="grid grid-cols-7 mb-2">
-                        {weekDays.map((day) => (
-                            <div key={day} className="text-center text-sm font-medium text-slate-500 py-2">
+                        {weekDays.map((day, index) => (
+                            <div
+                                key={day}
+                                className={`text-center text-sm font-medium py-2 ${index === 0 || index === 6
+                                    ? 'text-red-400'
+                                    : 'text-slate-500'
+                                    }`}
+                            >
                                 {day}
                             </div>
                         ))}
@@ -186,23 +305,41 @@ export default function DailyPage() {
                             const hasTrades = day.trades.length > 0
                             const isPositive = day.pnl >= 0
                             const isSelected = selectedDate?.toDateString() === day.date.toDateString()
+                            const isNonTrading = day.isWeekend || day.isHoliday
 
                             return (
                                 <button
                                     key={index}
                                     onClick={() => setSelectedDate(day.date)}
+                                    title={day.holidayName || undefined}
                                     className={`
-                                        aspect-square p-2 rounded-xl text-sm transition-all relative
+                                        aspect-square p-1 md:p-2 rounded-xl text-sm transition-all relative
                                         ${!day.isCurrentMonth ? 'text-slate-300 dark:text-slate-600' : ''}
                                         ${isToday(day.date) ? 'ring-2 ring-primary-500' : ''}
                                         ${isSelected ? 'bg-primary-500 text-white' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}
-                                        ${hasTrades && !isSelected ? (isPositive ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'bg-red-50 dark:bg-red-900/20') : ''}
+                                        ${day.isWeekend && !isSelected ? 'bg-slate-100 dark:bg-slate-800' : ''}
+                                        ${day.isHoliday && !isSelected ? 'bg-orange-50 dark:bg-orange-900/20' : ''}
+                                        ${hasTrades && !isSelected && !isNonTrading ? (isPositive ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'bg-red-50 dark:bg-red-900/20') : ''}
                                     `}
                                 >
                                     <span className="block">{day.date.getDate()}</span>
+
+                                    {/* 节假日标记 */}
+                                    {day.isHoliday && !isSelected && (
+                                        <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-orange-400"></span>
+                                    )}
+
+                                    {/* 盈亏显示 */}
                                     {hasTrades && (
-                                        <span className={`text-xs block ${isSelected ? 'text-white/80' : isPositive ? 'text-emerald-600' : 'text-red-600'}`}>
+                                        <span className={`text-[10px] md:text-xs block truncate ${isSelected ? 'text-white/80' : isPositive ? 'text-emerald-600' : 'text-red-600'}`}>
                                             {isPositive ? '+' : ''}{day.pnl.toFixed(0)}
+                                        </span>
+                                    )}
+
+                                    {/* 节假日名称（手机隐藏） */}
+                                    {day.isHoliday && day.holidayName && !hasTrades && (
+                                        <span className={`hidden md:block text-[9px] truncate ${isSelected ? 'text-white/70' : 'text-orange-500'}`}>
+                                            {day.holidayName}
                                         </span>
                                     )}
                                 </button>
@@ -225,6 +362,34 @@ export default function DailyPage() {
 
                     {selectedDayData ? (
                         <>
+                            {/* 节假日提示 */}
+                            {(() => {
+                                const dateStr = formatLocalDate(selectedDayData.date)
+                                const holiday = calendar?.holidays?.find(h => h.date === dateStr)
+                                const isWeekend = selectedDayData.date.getDay() === 0 || selectedDayData.date.getDay() === 6
+
+                                if (holiday) {
+                                    return (
+                                        <div className="card p-4 bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800">
+                                            <div className="flex items-center gap-2 text-orange-600 dark:text-orange-400">
+                                                <Ban className="w-5 h-5" />
+                                                <span className="font-medium">{holiday.name} - 休市</span>
+                                            </div>
+                                        </div>
+                                    )
+                                } else if (isWeekend) {
+                                    return (
+                                        <div className="card p-4 bg-slate-100 dark:bg-slate-800">
+                                            <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                                                <Ban className="w-5 h-5" />
+                                                <span>周末休市</span>
+                                            </div>
+                                        </div>
+                                    )
+                                }
+                                return null
+                            })()}
+
                             {/* Summary */}
                             <div className="card p-4">
                                 <div className="grid grid-cols-2 gap-4">
