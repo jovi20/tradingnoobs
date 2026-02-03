@@ -21,6 +21,21 @@ class StrategyStatusEnum(str, Enum):
     ARCHIVED = "ARCHIVED"
 
 
+class PositionDirectionEnum(str, Enum):
+    LONG = "LONG"
+    SHORT = "SHORT"
+
+
+class PositionStatusEnum(str, Enum):
+    OPEN = "OPEN"
+    CLOSED = "CLOSED"
+
+
+class BatchTypeEnum(str, Enum):
+    ENTRY = "ENTRY"
+    EXIT = "EXIT"
+
+
 # ============== Auth Schemas ==============
 
 class UserCreate(BaseModel):
@@ -245,6 +260,18 @@ class WeeklyReportResponse(BaseModel):
 
 # ============== Dashboard Schemas ==============
 
+class AssetAllocation(BaseModel):
+    name: str # 'Stocks', 'Crypto', 'Cash'
+    value: float
+    percent: float 
+
+class PositionMover(BaseModel):
+    id: int
+    symbol: str
+    asset_type: Optional[str] = None
+    change_percent: float
+    current_price: float
+
 class DashboardStats(BaseModel):
     total_pnl: float
     win_rate: float
@@ -252,6 +279,9 @@ class DashboardStats(BaseModel):
     total_trades: int
     open_positions: int
     closed_trades: int
+    asset_allocation: List[AssetAllocation] = []
+    top_movers: List[PositionMover] = []
+    bottom_movers: List[PositionMover] = []
 
 
 # ============== Trading Account Schemas ==============
@@ -308,3 +338,100 @@ class SystemSettingResponse(SystemSettingBase):
 
     class Config:
         from_attributes = True
+
+
+# ============== Position & Batch Schemas ==============
+
+class TradeBatchCreate(BaseModel):
+    type: BatchTypeEnum
+    price: Decimal = Field(..., gt=0)
+    quantity: Decimal = Field(..., gt=0)
+    time: datetime
+    reason: Optional[str] = None
+    emotion: Optional[str] = None
+    confidence: Optional[int] = Field(None, ge=1, le=5)
+
+
+class TradeBatchResponse(BaseModel):
+    id: int
+    position_id: int
+    type: BatchTypeEnum
+    price: Decimal
+    quantity: Decimal
+    time: datetime
+    reason: Optional[str]
+    emotion: Optional[str]
+    confidence: Optional[int]
+    pnl: Optional[Decimal]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class PositionCreate(BaseModel):
+    account_id: int
+    symbol: str = Field(..., max_length=50)
+    direction: PositionDirectionEnum
+    strategy_id: Optional[int] = None
+    # First batch info
+    entry_price: Decimal = Field(..., gt=0)
+    quantity: Decimal = Field(..., gt=0)
+    entry_time: datetime
+    entry_reason: Optional[str] = None
+    entry_emotion: Optional[str] = None
+    entry_confidence: Optional[int] = Field(None, ge=1, le=5)
+
+
+class PositionUpdate(BaseModel):
+    strategy_id: Optional[int] = None
+    trade_review: Optional[str] = None
+    screenshots: Optional[List[str]] = None
+    lessons: Optional[List[str]] = None
+    rating: Optional[int] = Field(None, ge=1, le=5)
+
+
+class PositionResponse(BaseModel):
+    id: int
+    user_id: int
+    account_id: Optional[int]
+    strategy_id: Optional[int]
+    symbol: str
+    exchange: str
+    direction: PositionDirectionEnum
+    status: PositionStatusEnum
+    total_quantity: Decimal
+    average_entry_price: Optional[Decimal]
+    realized_pnl: Decimal
+    opened_at: datetime
+    closed_at: Optional[datetime]
+    trade_review: Optional[str]
+    screenshots: List[str]
+    lessons: List[str]
+    rating: Optional[int]
+    created_at: datetime
+    updated_at: Optional[datetime]
+    batches: List[TradeBatchResponse] = []
+
+    class Config:
+        from_attributes = True
+
+
+class PositionListResponse(BaseModel):
+    """Lighter response for list view (without batches)"""
+    id: int
+    account_id: Optional[int]
+    symbol: str
+    exchange: str
+    direction: PositionDirectionEnum
+    status: PositionStatusEnum
+    total_quantity: Decimal
+    average_entry_price: Optional[Decimal]
+    realized_pnl: Decimal
+    opened_at: datetime
+    closed_at: Optional[datetime]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+

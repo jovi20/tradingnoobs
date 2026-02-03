@@ -22,6 +22,21 @@ class StrategyStatus(str, enum.Enum):
     ARCHIVED = "ARCHIVED"
 
 
+class PositionDirection(str, enum.Enum):
+    LONG = "LONG"
+    SHORT = "SHORT"
+
+
+class PositionStatus(str, enum.Enum):
+    OPEN = "OPEN"
+    CLOSED = "CLOSED"
+
+
+class BatchType(str, enum.Enum):
+    ENTRY = "ENTRY"  # 加仓
+    EXIT = "EXIT"    # 减仓
+
+
 class User(Base):
     __tablename__ = "users"
     
@@ -39,6 +54,7 @@ class User(Base):
     daily_summaries = relationship("DailySummary", back_populates="user")
     weekly_reports = relationship("WeeklyReport", back_populates="user")
     trading_accounts = relationship("TradingAccount", back_populates="user")
+    positions = relationship("Position", back_populates="user")
 
 
 class Trade(Base):
@@ -219,3 +235,75 @@ class SystemSetting(Base):
     value = Column(Text, nullable=True)         # 配置值
     description = Column(String(200), nullable=True) # 描述
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class Position(Base):
+    """持仓记录 - 汇总同标的的交易批次"""
+    __tablename__ = "positions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    account_id = Column(Integer, ForeignKey("trading_accounts.id"), nullable=True)
+    strategy_id = Column(Integer, ForeignKey("strategies.id"), nullable=True)
+    
+    symbol = Column(String(50), nullable=False, index=True)
+    exchange = Column(String(50), nullable=False)
+    direction = Column(SQLEnum(PositionDirection), nullable=False)  # LONG or SHORT
+    status = Column(SQLEnum(PositionStatus), default=PositionStatus.OPEN, index=True)
+    
+    # Aggregated Values (updated on each batch)
+    total_quantity = Column(Numeric(20, 8), default=0)  # Current holding
+    average_entry_price = Column(Numeric(20, 8), nullable=True)  # Weighted avg
+    realized_pnl = Column(Numeric(20, 8), default=0)  # Sum of closed batch PnLs
+    
+    # Timestamps
+    opened_at = Column(DateTime(timezone=True), nullable=False)
+    closed_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # Review (applied when position is fully closed)
+    trade_review = Column(Text, nullable=True)
+    screenshots = Column(JSON, default=list)
+    lessons = Column(JSON, default=list)
+    rating = Column(Integer, nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relationships
+    user = relationship("User", back_populates="positions")
+    trading_account = relationship("TradingAccount")
+    strategy = relationship("Strategy")
+    batches = relationship("TradeBatch", back_populates="position", order_by="TradeBatch.time")
+    
+    @property
+    def unrealized_pnl(self):
+        """Calculate unrealized P&L for open positions"""
+        # This would need current_price from market data
+        return None  # To be computed with live price
+
+
+class TradeBatch(Base):
+    """交易批次 - 加仓/减仓记录"""
+    __tablename__ = "trade_batches"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    position_id = Column(Integer, ForeignKey("positions.id"), nullable=False)
+    
+    type = Column(SQLEnum(BatchType), nullable=False)  # ENTRY or EXIT
+    price = Column(Numeric(20, 8), nullable=False)
+    quantity = Column(Numeric(20, 8), nullable=False)
+    time = Column(DateTime(timezone=True), nullable=False)
+    
+    # Decision Records
+    reason = Column(Text, nullable=True)
+    emotion = Column(String(50), nullable=True)
+    confidence = Column(Integer, nullable=True)  # 1-5
+    
+    # PnL (only for EXIT batches)
+    pnl = Column(Numeric(20, 8), nullable=True)  # Computed on exit
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    position = relationship("Position", back_populates="batches")
+

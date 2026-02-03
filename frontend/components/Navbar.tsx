@@ -10,14 +10,15 @@ import {
     FileText,
     Layers,
     LogOut,
-    User
+    User,
+    Briefcase
 } from 'lucide-react'
 import { ThemeToggle } from './ThemeToggle'
 import { useAuth } from '@/contexts/AuthContext'
 
 const navItems = [
     { href: '/', label: '看板', icon: LayoutDashboard },
-    { href: '/trades', label: '交易', icon: TrendingUp },
+    { href: '/positions', label: '交易', icon: Briefcase },
     { href: '/strategies', label: '策略', icon: Layers },
     { href: '/daily', label: '日历', icon: Calendar },
     { href: '/reports', label: '周报', icon: FileText },

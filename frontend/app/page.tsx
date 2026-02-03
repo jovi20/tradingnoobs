@@ -11,9 +11,11 @@ import {
     Activity,
     Loader2
 } from 'lucide-react'
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts'
+import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
-import { dashboardAPI, tradesAPI, Trade, DashboardStats } from '@/lib/api'
+import { dashboardAPI, tradesAPI, Trade, DashboardStats, AssetAllocation, PositionMover } from '@/lib/api'
+import { getAssetTypeColor } from '@/lib/symbolUtils'
 
 function StatCard({
     title,
@@ -55,11 +57,97 @@ function StatCard({
     )
 }
 
+const COLORS = ['#3b82f6', '#f59e0b', '#10b981', '#6366f1', '#ec4899'];
+
+function AllocationPieChart({ data }: { data: AssetAllocation[] }) {
+    const router = useRouter()
+
+    if (!data || data.length === 0) {
+        return <div className="h-full flex items-center justify-center text-slate-500">暂无数据</div>
+    }
+
+    return (
+        <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                    <Pie
+                        data={data}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={5}
+                        dataKey="value"
+                        onClick={(data) => {
+                            if (data && data.name) {
+                                router.push(`/positions?asset_type=${data.name}`)
+                            }
+                        }}
+                        className="cursor-pointer focus:outline-none"
+                    >
+                        {data.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                    </Pie>
+                    <Tooltip
+                        formatter={(value: number) => `$${value.toLocaleString()}`}
+                    />
+                    <Legend />
+                </PieChart>
+            </ResponsiveContainer>
+        </div>
+    )
+}
+
+function PerformanceMovers({ top, bottom }: { top: PositionMover[], bottom: PositionMover[] }) {
+    const MoverRow = ({ item, type }: { item: PositionMover, type: 'top' | 'bottom' }) => (
+        <div className="flex items-center justify-between py-2 border-b last:border-0 border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${type === 'top' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
+                    {type === 'top' ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                </div>
+                <div>
+                    <h4 className="font-medium text-sm">{item.symbol}</h4>
+                    <p className="text-xs text-slate-500">${item.current_price?.toFixed(2)}</p>
+                </div>
+            </div>
+            <span className={`font-bold text-sm ${type === 'top' ? 'text-emerald-500' : 'text-red-500'}`}>
+                {type === 'top' ? '+' : ''}{item.change_percent?.toFixed(2)}%
+            </span>
+        </div>
+    )
+
+    return (
+        <div className="space-y-6">
+            <div>
+                <h3 className="text-sm font-medium text-slate-500 mb-3 flex items-center gap-1">
+                    <TrendingUp className="w-4 h-4 text-emerald-500" /> 表现最佳
+                </h3>
+                {top.length > 0 ? (
+                    <div className="card p-4">
+                        {top.map(item => <MoverRow key={item.id} item={item} type="top" />)}
+                    </div>
+                ) : <div className="text-sm text-slate-400">暂无数据</div>}
+            </div>
+            <div>
+                <h3 className="text-sm font-medium text-slate-500 mb-3 flex items-center gap-1">
+                    <TrendingDown className="w-4 h-4 text-red-500" /> 表现最差
+                </h3>
+                {bottom.length > 0 ? (
+                    <div className="card p-4">
+                        {bottom.map(item => <MoverRow key={item.id} item={item} type="bottom" />)}
+                    </div>
+                ) : <div className="text-sm text-slate-400">暂无数据</div>}
+            </div>
+        </div>
+    )
+}
+
 function TradeCard({ trade }: { trade: Trade }) {
     const isPositive = (trade.pnl || 0) >= 0
 
     return (
-        <Link href={`/trades/${trade.id}`}>
+        <Link href={`/positions/${trade.id}`}>
             <div className="card p-4 hover:scale-[1.01] transition-transform cursor-pointer">
                 <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center space-x-3">
@@ -138,6 +226,9 @@ export default function DashboardPage() {
                     total_trades: 0,
                     open_positions: 0,
                     closed_trades: 0,
+                    asset_allocation: [],
+                    top_movers: [],
+                    bottom_movers: [],
                 })
             } finally {
                 setIsLoading(false)
@@ -188,6 +279,21 @@ export default function DashboardPage() {
                     icon={Activity}
                     color="text-amber-500"
                 />
+            </div>
+
+            {/* Allocation and Movers */}
+            <div className="grid lg:grid-cols-3 gap-6">
+                {/* Asset Allocation Pie Chart */}
+                <div className="card p-6 lg:col-span-1">
+                    <h2 className="text-lg font-semibold mb-4">资产分布</h2>
+                    <AllocationPieChart data={stats.asset_allocation} />
+                </div>
+
+                {/* Movers */}
+                <div className="lg:col-span-2">
+                    <h2 className="text-lg font-semibold mb-4">今日表现 (3天)</h2>
+                    <PerformanceMovers top={stats.top_movers} bottom={stats.bottom_movers} />
+                </div>
             </div>
 
             {/* Chart and Open Positions */}
@@ -268,13 +374,23 @@ export default function DashboardPage() {
 
                 {/* Open Positions */}
                 <div className="space-y-4">
-                    <h2 className="text-lg font-semibold">持仓中</h2>
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-lg font-semibold">
+                            持仓中
+                            <span className="ml-2 text-sm font-normal text-slate-500">{openTrades.length}</span>
+                        </h2>
+                        {openTrades.length > 5 && (
+                            <Link href="/positions" className="text-sm text-primary-600 hover:text-primary-700 font-medium">
+                                查看更多 →
+                            </Link>
+                        )}
+                    </div>
                     {openTrades.length === 0 ? (
                         <div className="card p-6 text-center text-slate-500">
                             暂无持仓
                         </div>
                     ) : (
-                        openTrades.map((trade) => (
+                        openTrades.slice(0, 5).map((trade) => (
                             <TradeCard key={trade.id} trade={trade} />
                         ))
                     )}
