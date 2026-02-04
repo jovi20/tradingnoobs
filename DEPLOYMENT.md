@@ -130,5 +130,5 @@ sudo docker system prune -f
 代碼更新後，在 VPS 執行：
 ```bash
 git pull
-sudo docker-compose up -d --build
+sudo docker compose up -d --build
 ```
