@@ -28,8 +28,9 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
     ```env
     DOMAIN=coz.japaneast.cloudapp.azure.com
     SECRET_KEY=829e7872b061f6e473e66b647b5b8bd6882f39dfb425dc39f79dd431d697258f
-    DB_PASSWORD=Cudd13!$
+    DB_PASSWORD=Cudd13!$$
     ```
+    > ⚠️ **注意**: 在 Docker Compose 中，如果密码包含 `$` 符号，必须使用 `$$` 进行转义，否则会被当做变量解析导致密码错误。
 2.  **启动应用**: `sudo docker-compose up -d --build`
     *(此路径包含 Backend, Frontend, Postgres)*
 

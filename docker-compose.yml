@@ -10,7 +10,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/tradingnoobs
+      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-postgres}@db:5432/tradingnoobs
       - SECRET_KEY=${SECRET_KEY}
       - CORS_ORIGINS=https://${DOMAIN:-localhost}
     depends_on:
