@@ -18,7 +18,22 @@ export default function DateTimePicker({ value, onChange, label, required }: Dat
     const [selectedDate, setSelectedDate] = useState<Date>(value ? new Date(value) : new Date())
     const [timeValue, setTimeValue] = useState(value ? format(new Date(value), 'HH:mm') : format(new Date(), 'HH:mm'))
 
+    const [placement, setPlacement] = useState<'bottom' | 'top'>('bottom')
     const containerRef = useRef<HTMLDivElement>(null)
+
+    // Automatically check for space To prevent mobile overlap
+    useEffect(() => {
+        if (isOpen && containerRef.current) {
+            const rect = containerRef.current.getBoundingClientRect()
+            const spaceBelow = window.innerHeight - rect.bottom
+            // If less than 400px space (popover is ~380px), flip to top
+            if (spaceBelow < 400) {
+                setPlacement('top')
+            } else {
+                setPlacement('bottom')
+            }
+        }
+    }, [isOpen])
 
     // Sync internal state when prop value changes
     useEffect(() => {
@@ -102,7 +117,14 @@ export default function DateTimePicker({ value, onChange, label, required }: Dat
 
             {/* Popover */}
             {isOpen && (
-                <div className="absolute z-50 left-0 top-full mt-2 w-72 p-4 rounded-xl bg-white dark:bg-slate-800 shadow-xl border border-slate-200 dark:border-slate-700 animate-in fade-in zoom-in-95 duration-200">
+                <div className={`
+                    absolute z-50 left-0 w-72 p-4 rounded-xl bg-white dark:bg-slate-800 shadow-xl border border-slate-200 dark:border-slate-700 
+                    animate-in fade-in duration-200
+                    ${placement === 'top'
+                        ? 'bottom-full mb-2 slide-in-from-bottom-2 origin-bottom'
+                        : 'top-full mt-2 slide-in-from-top-2 origin-top'
+                    }
+                `}>
                     {/* Header */}
                     <div className="flex items-center justify-between mb-4">
                         <button onClick={prevMonth} type="button" className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">

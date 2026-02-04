@@ -28,7 +28,7 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
     ```env
     DOMAIN=coz.japaneast.cloudapp.azure.com
     SECRET_KEY=829e7872b061f6e473e66b647b5b8bd6882f39dfb425dc39f79dd431d697258f
-    DB_PASSWORD=Cudd13!$$
+    DB_PASSWORD=Cudd1314
     ```
     > ⚠️ **注意**: 在 Docker Compose 中，如果密码包含 `$` 符号，必须使用 `$$` 进行转义，否则会被当做变量解析导致密码错误。
 2.  **启动应用**: `sudo docker-compose up -d --build`
@@ -83,17 +83,52 @@ networks:
 *   **应用层**: `docker-compose ps`
 *   **网关层**: 在 Caddy 路径下运行 `docker-compose reload` (或 restart)
 
-## 5. 初始化管理員 (Initialize Admin)
+## 5. 賬戶管理 (User Management)
 
-部署完成後，您需要手動將第一個註冊的用戶提升為管理員：
+部署完成後，您可以使用內置腳本管理用戶權限和密碼：
 
+### 5.1 提升管理員權限
 1.  在網頁端正常註冊一個賬號。
-2.  在 VPS 上執行以下命令（假定容器名為 `tradingnoobs-backend`）：
+2.  在 VPS 上執行以下命令（將 `your@email.com` 替換為您的註冊郵箱）：
     ```bash
-    sudo docker exec -it tradingnoobs-backend python manage_users.py promote-admin jovizhjw@gmail.com
+    sudo docker exec -it tradingnoobs-backend python manage_users.py promote-admin your@email.com
     ```
-3.  重啟該賬號的登錄狀態，即可看到管理員功能（如邀請碼管理）。
+3.  重新登錄後即可看到管理員功能。
 
----
-**Trading Noobs 极简部署方案**
-(ARM 架构已自动设配，Dockerfile 已针对低内存环境进行了分阶段优化)
+### 5.2 重置用戶密碼
+如果您遺忘了密碼，可以通過服務器後台強制重置：
+```bash
+sudo docker exec -it tradingnoobs-backend python manage_users.py reset-password your@email.com new_password
+```
+
+## 6. 運維與保養 (Maintenance & Operations)
+
+### 6.1 數據庫備份 (重要)
+我們已內置備份腳本。建議定期運行：
+```bash
+# 給予執行權限
+chmod +x backup_db.sh
+# 手動執行
+./backup_db.sh
+```
+備份文件存放在 `./backups` 目錄，建議定期下載到本地。
+
+### 6.2 監控資源佔用
+您的 VPS 只有 1G 內存，可以使用以下命令查看容器實時佔用情况：
+```bash
+sudo docker stats
+```
+
+### 6.3 磁盤清理
+如果 60G 空間告急，可以執行以下命令清理 Docker 緩存和無效鏡像：
+```bash
+# 清理未使用的鏡像、容器和網絡
+sudo docker system prune -f
+```
+
+### 6.4 快速更新
+代碼更新後，在 VPS 執行：
+```bash
+git pull
+sudo docker-compose up -d --build
+```

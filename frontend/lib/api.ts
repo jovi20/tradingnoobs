@@ -167,7 +167,10 @@ async function fetchAPI(
         (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`
     }
 
-    const response = await fetch(`${API_BASE}${endpoint}`, {
+    // Always ensure there's exactly one /api prefix
+    const path = endpoint.startsWith('/api') ? endpoint : `/api${endpoint}`
+
+    const response = await fetch(`${API_BASE}${path}`, {
         ...options,
         headers,
     })
@@ -193,6 +196,7 @@ export const authAPI = {
         formData.append('username', email)
         formData.append('password', password)
 
+        // Standardized to use the /api prefix correctly with the raw fetch
         const response = await fetch(`${API_BASE}/api/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -208,14 +212,14 @@ export const authAPI = {
     },
 
     register: async (email: string, password: string, invite_code: string) => {
-        return fetchAPI('/api/auth/register', {
+        return fetchAPI('/auth/register', {
             method: 'POST',
             body: JSON.stringify({ email, password, invite_code }),
         })
     },
 
     me: async (token: string) => {
-        return fetchAPI('/api/auth/me', {}, token)
+        return fetchAPI('/auth/me', {}, token)
     },
 }
 
