@@ -6,15 +6,26 @@ Routes requests to appropriate providers based on asset type:
 - Crypto → Binance
 """
 import re
+from datetime import datetime, timedelta
 import finnhub
 from sqlalchemy.orm import Session
 from typing import Dict, Any, Optional
+import asyncio
+from fastapi.concurrency import run_in_threadpool
 
 from models import SystemSetting
 from services.providers import akshare_provider, binance_provider
+from services.llm_service import classify_asset
+
+# Cache TTL in seconds (1 minute)
+CACHE_TTL_SECONDS = 60
 
 
 class MarketDataService:
+    # Class-level cache shared across instances
+    _quote_cache: Dict[str, Dict[str, Any]] = {}
+    _asset_type_cache: Dict[str, str] = {}
+    
     def __init__(self, db: Session):
         self.db = db
         self._finnhub_client = None
@@ -67,42 +78,90 @@ class MarketDataService:
         # Default/Unknown
         return 'UNKNOWN'
 
-    def get_quote(self, symbol: str, exchange: Optional[str] = None) -> Dict[str, Any]:
+    async def detect_asset_type_enhanced(self, symbol: str, exchange: Optional[str] = None) -> str:
+        """
+        Enhanced detection using rules + LLM for detailed classification (ETF types, etc)
+        """
+        symbol_upper = symbol.upper()
+        exchange_upper = (exchange or '').upper()
+        cache_key = f"{symbol_upper}:{exchange_upper}"
+        
+        # 1. Check Memory Cache
+        if cache_key in self._asset_type_cache:
+            return self._asset_type_cache[cache_key]
+            
+        # 2. Rule-based Detection (Fast)
+        base_type = self.detect_asset_type(symbol, exchange)
+        
+        # If it's definitely Crypto or specialized stock (A/HK), trust rules for now
+        if base_type in ['CRYPTO', 'A_STOCK']:
+            return base_type
+            
+        # 3. LLM Classification (for US Stocks/ETFs or Unknown)
+        try:
+            llm_result = await classify_asset(self.db, symbol, exchange)
+            if llm_result and llm_result.get('type'):
+                category = llm_result['type']
+                self._asset_type_cache[cache_key] = category
+                return category
+        except Exception as e:
+            print(f"Error in enhanced detection: {e}")
+            
+        # 4. Fallback to base rule
+        if base_type == 'US_STOCK':
+            return 'EQUITY'
+            
+        return base_type
+
+    async def get_quote(self, symbol: str, exchange: Optional[str] = None) -> Dict[str, Any]:
         """
         Get quote from appropriate provider based on asset type
         """
         asset_type = self.detect_asset_type(symbol, exchange)
         
         if asset_type == 'CRYPTO':
-            return binance_provider.get_crypto_quote(symbol)
+            return await run_in_threadpool(binance_provider.get_crypto_quote, symbol)
         
         elif asset_type == 'A_STOCK':
-            return akshare_provider.get_a_stock_quote(symbol)
+            return await run_in_threadpool(akshare_provider.get_a_stock_quote, symbol)
         
         elif asset_type == 'HK_STOCK':
-            return akshare_provider.get_hk_stock_quote(symbol)
+            return await run_in_threadpool(akshare_provider.get_hk_stock_quote, symbol)
         
         elif asset_type == 'US_STOCK':
-            return self._get_finnhub_quote(symbol)
+            return await self._get_finnhub_quote(symbol)
             
         else:
             raise ValueError(f"Unknown asset type for symbol: {symbol}")
 
-    def _get_finnhub_quote(self, symbol: str) -> Dict[str, Any]:
+    async def _get_finnhub_quote(self, symbol: str) -> Dict[str, Any]:
         """
-        Get quote from Finnhub (US stocks) with fallback to YFinance
+        Get quote from Finnhub (US stocks) with caching and fallback to YFinance
         """
+        symbol_upper = symbol.upper()
+        cache_key = f"finnhub_{symbol_upper}"
+        
+        # Check cache first
+        cached = MarketDataService._quote_cache.get(cache_key)
+        if cached:
+            cache_age = datetime.now() - cached['timestamp']
+            if cache_age.total_seconds() < CACHE_TTL_SECONDS:
+                print(f"[Cache HIT] Finnhub quote for {symbol_upper} from cache")
+                return cached['data']
+            else:
+                print(f"[Cache EXPIRED] Finnhub quote for {symbol_upper}")
+        
         # 1. Try Finnhub first
         try:
             client = self._get_finnhub_client()
             if client:
-                data = client.quote(symbol.upper())
+                data = await run_in_threadpool(client.quote, symbol_upper)
                 # Check if data is valid (Finnhub sometimes returns 0s for invalid symbols, but usually c=0)
                 # But for valid symbol c should be > 0 ideally, or at least pc
                 if data.get('c') == 0 and data.get('pc') == 0:
                      raise ValueError("Finnhub returned empty data")
                      
-                return {
+                result = {
                     'c': data.get('c'),   # current price
                     'pc': data.get('pc'), # previous close
                     'h': data.get('h'),   # high
@@ -110,8 +169,17 @@ class MarketDataService:
                     'o': data.get('o'),   # open
                     'd': data.get('d'),   # change
                     'dp': data.get('dp'), # change percent
-                    'name': symbol.upper() # Finnhub quote doesn't return name, use symbol
+                    'name': symbol_upper # Finnhub quote doesn't return name, use symbol
                 }
+                
+                # Update cache
+                MarketDataService._quote_cache[cache_key] = {
+                    'data': result,
+                    'timestamp': datetime.now()
+                }
+                print(f"[Cache UPDATE] Finnhub quote for {symbol_upper} cached")
+                
+                return result
         except Exception as e:
             print(f"Finnhub error for {symbol}: {e}")
             # Continue to fallback
@@ -120,7 +188,7 @@ class MarketDataService:
         try:
             import yfinance as yf
             ticker = yf.Ticker(symbol.upper())
-            info = ticker.fast_info
+            info = await run_in_threadpool(getattr, ticker, "fast_info")
             
             if not info.last_price:
                  raise ValueError("Yahoo Finance returned empty data")
@@ -144,13 +212,17 @@ class MarketDataService:
         except Exception as yf_error:
             raise Exception(f"Market data failed. Finnhub & YFinance both failed for {symbol}: {str(yf_error)}")
 
-    def validate_symbol(self, symbol: str, exchange: Optional[str] = None) -> Dict[str, Any]:
+    async def validate_symbol(self, symbol: str, exchange: Optional[str] = None) -> Dict[str, Any]:
         """
         Validate if a symbol exists and return basic info
         """
         try:
-            quote = self.get_quote(symbol, exchange)
-            asset_type = self.detect_asset_type(symbol, exchange)
+            # Enhanced detection for better classification
+            asset_type = await self.detect_asset_type_enhanced(symbol, exchange)
+            
+            # Use base logic for quote fetching (routing)
+            quote = await self.get_quote(symbol, exchange)
+            
             return {
                 'valid': True,
                 'symbol': symbol.upper(),
@@ -190,9 +262,9 @@ class MarketDataService:
             'US_STOCK': 'Finnhub'
         }.get(asset_type, 'Unknown')
 
-    def validate_api_key(self):
+    async def validate_api_key(self):
         """Test if the Finnhub API key works"""
         try:
-            return self._get_finnhub_quote('AAPL')
+            return await self._get_finnhub_quote('AAPL')
         except Exception as e:
             raise Exception(f"Validation failed: {str(e)}")

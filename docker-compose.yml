@@ -1,6 +1,26 @@
 version: '3.8'
 
 services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: tradingnoobs-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+      - caddy_logs:/var/log/caddy
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - tradingnoobs
+
   backend:
     build:
       context: ./backend
@@ -9,8 +29,8 @@ services:
     restart: unless-stopped
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/tradingnoobs
-      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
-      - CORS_ORIGINS=http://localhost:3000,https://${DOMAIN:-localhost}
+      - SECRET_KEY=${SECRET_KEY}
+      - CORS_ORIGINS=https://${DOMAIN:-localhost}
     depends_on:
       - db
     networks:
@@ -20,10 +40,10 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=https://${DOMAIN:-localhost}/api
     container_name: tradingnoobs-frontend
     restart: unless-stopped
-    environment:
-      - NEXT_PUBLIC_API_URL=https://${DOMAIN:-localhost}/api
     depends_on:
       - backend
     networks:
@@ -35,7 +55,7 @@ services:
     restart: unless-stopped
     environment:
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
       - POSTGRES_DB=tradingnoobs
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -48,3 +68,6 @@ networks:
 
 volumes:
   postgres_data:
+  caddy_data:
+  caddy_config:
+  caddy_logs:

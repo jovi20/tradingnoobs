@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useTheme } from 'next-themes'
 import Link from 'next/link'
-import { TrendingUp, Mail, Lock, AlertCircle } from 'lucide-react'
+import { TrendingUp, Mail, Lock, AlertCircle, Gift } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
 export default function RegisterPage() {
@@ -10,8 +11,15 @@ export default function RegisterPage() {
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
+    const [inviteCode, setInviteCode] = useState('')
     const [error, setError] = useState('')
     const [isLoading, setIsLoading] = useState(false)
+    const { theme, resolvedTheme } = useTheme()
+    const [mounted, setMounted] = useState(false)
+
+    useEffect(() => {
+        setMounted(true)
+    }, [])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -27,10 +35,15 @@ export default function RegisterPage() {
             return
         }
 
+        if (!inviteCode.trim()) {
+            setError('请输入邀请码')
+            return
+        }
+
         setIsLoading(true)
 
         try {
-            await register(email, password)
+            await register(email, password, inviteCode)
         } catch (err: any) {
             setError(err.message || '注册失败，该邮箱可能已被使用')
         } finally {
@@ -43,12 +56,15 @@ export default function RegisterPage() {
             <div className="w-full max-w-md">
                 <div className="card p-8">
                     {/* Logo */}
-                    <div className="flex flex-col items-center mb-8">
-                        <div className="w-16 h-16 bg-gradient-to-br from-primary-500 to-accent-500 rounded-2xl flex items-center justify-center mb-4">
-                            <TrendingUp className="w-8 h-8 text-white" />
+                    <div className="flex flex-col items-center mb-8 group">
+                        <div className="relative w-20 h-20 mb-4">
+                            <img
+                                src={mounted && (theme === 'dark' || resolvedTheme === 'dark') ? '/logo-white.png' : '/logo-black.png'}
+                                alt="Trading Noobs Logo"
+                                className="w-full h-full object-contain rotate-6 group-hover:rotate-12 transition-transform duration-500"
+                            />
                         </div>
-                        <h1 className="text-2xl font-bold gradient-text">Trading Noobs</h1>
-                        <p className="text-slate-500 mt-1">创建您的账户</p>
+                        <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Trading Noobs</h1>
                     </div>
 
                     {/* Error */}
@@ -69,7 +85,7 @@ export default function RegisterPage() {
                                     type="email"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    className="input pl-14"
+                                    className="input !pl-14"
                                     placeholder="your@email.com"
                                     required
                                 />
@@ -84,7 +100,7 @@ export default function RegisterPage() {
                                     type="password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className="input pl-14"
+                                    className="input !pl-14"
                                     placeholder="至少6个字符"
                                     required
                                     minLength={6}
@@ -100,8 +116,23 @@ export default function RegisterPage() {
                                     type="password"
                                     value={confirmPassword}
                                     onChange={(e) => setConfirmPassword(e.target.value)}
-                                    className="input pl-14"
+                                    className="input !pl-14"
                                     placeholder="再次输入密码"
+                                    required
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium mb-2">邀请码</label>
+                            <div className="relative">
+                                <Gift className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                                <input
+                                    type="text"
+                                    value={inviteCode}
+                                    onChange={(e) => setInviteCode(e.target.value)}
+                                    className="input !pl-14"
+                                    placeholder="请输入邀请码"
                                     required
                                 />
                             </div>

@@ -16,11 +16,9 @@
 
 body {
   color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-    135deg,
-    rgb(var(--background-start-rgb)),
-    rgb(var(--background-end-rgb))
-  );
+  background: linear-gradient(135deg,
+      rgb(var(--background-start-rgb)),
+      rgb(var(--background-end-rgb)));
   min-height: 100vh;
 }
 
@@ -52,6 +50,7 @@ body {
 .btn {
   @apply px-4 py-2 rounded-xl font-medium transition-all duration-200;
   @apply focus:outline-none focus:ring-2 focus:ring-offset-2;
+  @apply active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100;
 }
 
 .btn-primary {
@@ -75,6 +74,11 @@ body {
   @apply focus:ring-red-500;
 }
 
+.btn-outline {
+  @apply border border-slate-200 dark:border-slate-700 bg-transparent;
+  @apply hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400;
+}
+
 /* Input styles */
 .input {
   @apply w-full px-4 py-3 rounded-xl;
@@ -85,18 +89,38 @@ body {
   @apply transition-all duration-200;
 }
 
+select.input {
+  @apply appearance-none pr-10;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19.5 8.25l-7.5 7.5-7.5-7.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1.25rem;
+}
+
+.dark select.input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19.5 8.25l-7.5 7.5-7.5-7.5'/%3E%3C/svg%3E");
+}
+
 /* Gradient text */
 .gradient-text {
-  @apply bg-gradient-to-r from-primary-500 via-accent-500 to-primary-500;
+  @apply bg-gradient-to-r from-slate-900 via-slate-600 to-slate-900 dark:from-white dark:via-slate-400 dark:to-white;
   @apply bg-clip-text text-transparent;
   background-size: 200% auto;
   animation: gradient 3s linear infinite;
 }
 
 @keyframes gradient {
-  0% { background-position: 0% center; }
-  50% { background-position: 100% center; }
-  100% { background-position: 0% center; }
+  0% {
+    background-position: 0% center;
+  }
+
+  50% {
+    background-position: 100% center;
+  }
+
+  100% {
+    background-position: 0% center;
+  }
 }
 
 /* P&L colors */
@@ -114,7 +138,7 @@ body {
 }
 
 .badge-open {
-  @apply bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400;
+  @apply bg-slate-900 text-white dark:bg-white dark:text-slate-900;
 }
 
 .badge-closed {
@@ -137,4 +161,109 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-slate-400 dark:bg-slate-500;
+}
+
+/* Prose styles for Markdown rendering */
+.prose {
+  @apply text-slate-700 dark:text-slate-300 leading-relaxed;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4 {
+  @apply font-bold text-slate-900 dark:text-slate-100 mt-4 mb-2;
+}
+
+.prose h1 {
+  @apply text-xl;
+}
+
+.prose h2 {
+  @apply text-lg;
+}
+
+.prose h3 {
+  @apply text-base;
+}
+
+.prose p {
+  @apply mb-3;
+}
+
+.prose ul,
+.prose ol {
+  @apply pl-5 mb-3 space-y-1;
+}
+
+.prose ul {
+  @apply list-disc;
+}
+
+.prose ol {
+  @apply list-decimal;
+}
+
+.prose li {
+  @apply pl-1;
+}
+
+.prose strong {
+  @apply font-bold text-slate-900 dark:text-slate-100;
+}
+
+.prose em {
+  @apply italic;
+}
+
+.prose code {
+  @apply bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded text-sm font-mono;
+}
+
+.prose pre {
+  @apply bg-slate-100 dark:bg-slate-700 p-3 rounded-lg overflow-x-auto mb-3;
+}
+
+.prose pre code {
+  @apply bg-transparent p-0;
+}
+
+.prose blockquote {
+  @apply border-l-4 border-primary-500 pl-4 italic text-slate-600 dark:text-slate-400 my-3;
+}
+
+.prose a {
+  @apply text-primary-600 dark:text-primary-400 underline hover:no-underline;
+}
+
+.prose hr {
+  @apply border-slate-200 dark:border-slate-700 my-4;
+}
+
+.prose table {
+  @apply w-full text-left mb-3;
+}
+
+.prose th {
+  @apply border-b border-slate-300 dark:border-slate-600 py-2 font-semibold;
+}
+
+.prose td {
+  @apply border-b border-slate-200 dark:border-slate-700 py-2;
+}
+
+.prose-sm {
+  @apply text-sm;
+}
+
+.prose-sm h1 {
+  @apply text-lg;
+}
+
+.prose-sm h2 {
+  @apply text-base;
+}
+
+.prose-sm h3 {
+  @apply text-sm font-semibold;
 }

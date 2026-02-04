@@ -17,7 +17,9 @@ import {
     Shield,
     CheckCircle2,
     XCircle,
-    PlugZap
+    PlugZap,
+    LogOut,
+    Download
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { settingsAPI, accountsAPI, adminAPI, UserSettings, TradingAccount, TradingAccountCreate, SystemSetting } from '@/lib/api'
@@ -32,7 +34,7 @@ interface LocalSettings extends Partial<UserSettings> {
 }
 
 export default function SettingsPage() {
-    const { token, user } = useAuth()
+    const { token, user, logout, refreshSettings } = useAuth()
     const { theme, setTheme } = useTheme()
 
     // User Settings State
@@ -71,6 +73,34 @@ export default function SettingsPage() {
     })
 
     const isAdmin = user?.role === 'admin'
+    const [isExporting, setIsExporting] = useState(false)
+
+    const handleExportData = async () => {
+        if (!token) return
+        setIsExporting(true)
+        try {
+            const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+            const response = await fetch(`${API_BASE}/api/positions/export/csv`, {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            if (!response.ok) throw new Error('Export failed')
+
+            const blob = await response.blob()
+            const url = window.URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `trading_data_${new Date().toISOString().slice(0, 10)}.csv`
+            document.body.appendChild(a)
+            a.click()
+            window.URL.revokeObjectURL(url)
+            a.remove()
+        } catch (err) {
+            console.error('Export error:', err)
+            setError('导出失败，请稍后重试')
+        } finally {
+            setIsExporting(false)
+        }
+    }
 
     useEffect(() => {
         const fetchData = async () => {
@@ -126,6 +156,7 @@ export default function SettingsPage() {
             // 1. Save User Settings
             await settingsAPI.update(token, {
                 theme: theme || 'system',
+                up_color: settings.up_color || 'GREEN',
                 ibkr_host: settings.ibkr_host || undefined,
                 ibkr_port: settings.ibkr_port || undefined,
                 ibkr_client_id: settings.ibkr_client_id || undefined,
@@ -146,6 +177,9 @@ export default function SettingsPage() {
                     adminAPI.updateSetting(token, item.key, { value: item.value, description: item.desc })
                 ))
             }
+
+            // Sync global state
+            await refreshSettings()
 
             setSaved(true)
             setTimeout(() => setSaved(false), 3000)
@@ -242,7 +276,7 @@ export default function SettingsPage() {
         <div className="max-w-3xl mx-auto space-y-6 pb-20 md:pb-6">
             <h1 className="text-2xl font-bold flex items-center gap-2">
                 设置
-                {isAdmin && <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-300">Admin</span>}
+                {isAdmin && <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-slate-300">Admin</span>}
             </h1>
 
             {/* Error */}
@@ -255,9 +289,11 @@ export default function SettingsPage() {
             {/* Theme */}
             <div className="card p-6">
                 <div className="flex items-center space-x-3 mb-4">
-                    <Moon className="w-5 h-5 text-indigo-500" />
-                    <h2 className="text-lg font-semibold">主题</h2>
+                    <Moon className="w-5 h-5 text-slate-900 dark:text-white" />
+                    <h2 className="text-lg font-semibold">外观</h2>
                 </div>
+
+                <h3 className="text-sm font-semibold mb-3 text-slate-900 dark:text-slate-200">主题模式</h3>
                 <div className="grid grid-cols-3 gap-3">
                     {[
                         { value: 'light', label: '日间', icon: Sun },
@@ -277,15 +313,56 @@ export default function SettingsPage() {
                         </button>
                     ))}
                 </div>
+
+                <div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-800">
+                    <h3 className="text-sm font-semibold mb-3 text-slate-900 dark:text-slate-200">涨跌颜色</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <button
+                            type="button"
+                            onClick={() => updateSetting('up_color', 'GREEN')}
+                            className={`p-3 rounded-lg border-2 flex items-center justify-between transition-all ${!settings.up_color || settings.up_color === 'GREEN'
+                                ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
+                                : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                                }`}
+                        >
+                            <div className="text-left">
+                                <div className="font-medium text-sm">绿涨红跌 (Green Up)</div>
+                                <div className="text-xs text-slate-500">国际惯例 / Crypto</div>
+                            </div>
+                            <div className="flex gap-1">
+                                <div className="w-4 h-4 rounded bg-emerald-500"></div>
+                                <div className="w-4 h-4 rounded bg-red-500"></div>
+                            </div>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => updateSetting('up_color', 'RED')}
+                            className={`p-3 rounded-lg border-2 flex items-center justify-between transition-all ${settings.up_color === 'RED'
+                                ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
+                                : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                                }`}
+                        >
+                            <div className="text-left">
+                                <div className="font-medium text-sm">红涨绿跌 (Red Up)</div>
+                                <div className="text-xs text-slate-500">A股习惯</div>
+                            </div>
+                            <div className="flex gap-1">
+                                <div className="w-4 h-4 rounded bg-red-500"></div>
+                                <div className="w-4 h-4 rounded bg-emerald-500"></div>
+                            </div>
+                        </button>
+                    </div>
+                </div>
             </div>
 
             {/* Admin Global Settings */}
             {isAdmin && (
-                <div className="card p-6 border-2 border-indigo-500/20">
+                <div className="card p-6 border-2 border-slate-200 dark:border-slate-700">
                     <div className="flex items-center space-x-3 mb-6">
-                        <Shield className="w-5 h-5 text-indigo-500" />
+                        <Shield className="w-5 h-5 text-slate-900 dark:text-white" />
                         <div>
-                            <h2 className="text-lg font-semibold text-indigo-600 dark:text-indigo-400">系统全局配置</h2>
+                            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">系统全局配置</h2>
                             <p className="text-xs text-slate-500">仅管理员可见，修改后对所有用户生效</p>
                         </div>
                     </div>
@@ -294,7 +371,7 @@ export default function SettingsPage() {
                         {/* Market Data */}
                         <div className="space-y-4">
                             <h3 className="text-sm font-medium text-slate-900 dark:text-slate-200 flex items-center gap-2">
-                                <Server className="w-4 h-4 text-emerald-500" />
+                                <Server className="w-4 h-4 text-slate-900 dark:text-white" />
                                 行情数据 (Finnhub)
                             </h3>
                             <div>
@@ -368,14 +445,14 @@ export default function SettingsPage() {
                                 </button>
 
                                 {testStatus === 'success' && (
-                                    <span className="text-emerald-500 text-sm flex items-center">
+                                    <span className="text-slate-900 dark:text-white text-sm flex items-center">
                                         <CheckCircle2 className="w-4 h-4 mr-1" />
                                         {testMessage}
                                     </span>
                                 )}
 
                                 {testStatus === 'error' && (
-                                    <span className="text-red-500 text-sm flex items-center">
+                                    <span className="text-slate-900 dark:text-white text-sm flex items-center">
                                         <XCircle className="w-4 h-4 mr-1" />
                                         {testMessage}
                                     </span>
@@ -534,70 +611,9 @@ export default function SettingsPage() {
                 </div>
             </div>
 
-            {/* IBKR Settings */}
-            <div className="card p-6">
-                <div className="flex items-center space-x-3 mb-4">
-                    <Server className="w-5 h-5 text-blue-500" />
-                    <h2 className="text-lg font-semibold">IBKR 盈透证券</h2>
-                </div>
-                <div className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium mb-2">TWS/Gateway 地址</label>
-                        <input
-                            type="text"
-                            value={settings.ibkr_host || ''}
-                            onChange={(e) => updateSetting('ibkr_host', e.target.value)}
-                            className="input"
-                            placeholder="127.0.0.1"
-                        />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium mb-2">端口</label>
-                            <input
-                                type="number"
-                                value={settings.ibkr_port || ''}
-                                onChange={(e) => updateSetting('ibkr_port', parseInt(e.target.value) || null)}
-                                className="input"
-                                placeholder="7497"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium mb-2">Client ID</label>
-                            <input
-                                type="number"
-                                value={settings.ibkr_client_id || ''}
-                                onChange={(e) => updateSetting('ibkr_client_id', parseInt(e.target.value) || null)}
-                                className="input"
-                                placeholder="1"
-                            />
-                        </div>
-                    </div>
-                </div>
-            </div>
+            {/* IBKR Settings deprecated (Configuration moved to Account Setup) */}
 
-            {/* Binance Settings */}
-            <div className="card p-6">
-                <div className="flex items-center space-x-3 mb-4">
-                    <Key className="w-5 h-5 text-amber-500" />
-                    <h2 className="text-lg font-semibold">Binance 币安</h2>
-                </div>
-                <div className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium mb-2">API Key</label>
-                        <input
-                            type="password"
-                            value={settings.binance_api_key || ''}
-                            onChange={(e) => updateSetting('binance_api_key', e.target.value)}
-                            className="input"
-                            placeholder="••••••••"
-                        />
-                    </div>
-                    <p className="text-xs text-slate-500">
-                        ⚠️ 建议仅开启「只读」权限，禁用交易和提现功能
-                    </p>
-                </div>
-            </div>
+            {/* Binance Settings deprecated (Configuration moved to Account Setup) */}
 
             {/* Save Button */}
             <button
@@ -612,6 +628,40 @@ export default function SettingsPage() {
                 )}
                 <span>{isSaving ? '保存中...' : saved ? '已保存 ✓' : '保存设置'}</span>
             </button>
+
+            {/* Data Export Section */}
+            <div className="card p-6">
+                <h2 className="text-lg font-semibold mb-4 flex items-center space-x-2">
+                    <Download className="w-5 h-5 text-blue-500" />
+                    <span>数据导出</span>
+                </h2>
+                <p className="text-sm text-slate-500 mb-4">
+                    导出您的所有交易记录为 CSV 文件，包含持仓信息、交易批次、盈亏数据等。
+                </p>
+                <button
+                    onClick={handleExportData}
+                    disabled={isExporting}
+                    className="btn btn-secondary flex items-center justify-center space-x-2"
+                >
+                    {isExporting ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                        <Download className="w-5 h-5" />
+                    )}
+                    <span>{isExporting ? '导出中...' : '导出交易数据'}</span>
+                </button>
+            </div>
+
+            {/* Logout Button (Mobile Access) */}
+            <div className="pt-6 border-t border-slate-200 dark:border-slate-700 md:hidden">
+                <button
+                    onClick={logout}
+                    className="w-full btn btn-outline border-red-200 text-red-600 hover:bg-red-50 dark:border-red-900/30 dark:hover:bg-red-900/20 flex items-center justify-center space-x-2"
+                >
+                    <LogOut className="w-5 h-5" />
+                    <span>退出登录</span>
+                </button>
+            </div>
         </div>
     )
 }

@@ -1,8 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useTheme } from 'next-themes'
 import Link from 'next/link'
-import { TrendingUp, Mail, Lock, AlertCircle } from 'lucide-react'
+import {
+    Plus,
+    PlusCircle,
+    TrendingUp,
+    Mail,
+    Lock,
+    AlertCircle
+} from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
 export default function LoginPage() {
@@ -11,6 +19,12 @@ export default function LoginPage() {
     const [password, setPassword] = useState('')
     const [error, setError] = useState('')
     const [isLoading, setIsLoading] = useState(false)
+    const { theme, resolvedTheme } = useTheme()
+    const [mounted, setMounted] = useState(false)
+
+    useEffect(() => {
+        setMounted(true)
+    }, [])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -31,12 +45,15 @@ export default function LoginPage() {
             <div className="w-full max-w-md">
                 <div className="card p-8">
                     {/* Logo */}
-                    <div className="flex flex-col items-center mb-8">
-                        <div className="w-16 h-16 bg-gradient-to-br from-primary-500 to-accent-500 rounded-2xl flex items-center justify-center mb-4">
-                            <TrendingUp className="w-8 h-8 text-white" />
+                    <div className="flex flex-col items-center mb-8 group">
+                        <div className="relative w-20 h-20 mb-4">
+                            <img
+                                src={mounted && (theme === 'dark' || resolvedTheme === 'dark') ? '/logo-white.png' : '/logo-black.png'}
+                                alt="Trading Noobs Logo"
+                                className="w-full h-full object-contain rotate-6 group-hover:rotate-12 transition-transform duration-500"
+                            />
                         </div>
-                        <h1 className="text-2xl font-bold gradient-text">Trading Noobs</h1>
-                        <p className="text-slate-500 mt-1">登录您的账户</p>
+                        <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Trading Noobs</h1>
                     </div>
 
                     {/* Error */}
@@ -57,7 +74,7 @@ export default function LoginPage() {
                                     type="email"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    className="input pl-14"
+                                    className="input !pl-14"
                                     placeholder="your@email.com"
                                     required
                                 />
@@ -72,7 +89,7 @@ export default function LoginPage() {
                                     type="password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className="input pl-14"
+                                    className="input !pl-14"
                                     placeholder="••••••••"
                                     required
                                     minLength={6}

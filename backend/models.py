@@ -3,7 +3,7 @@ Trading Noobs Backend - Database Models
 """
 from sqlalchemy import (
     Column, Integer, String, Text, Boolean, DateTime, Date,
-    ForeignKey, Numeric, JSON, Enum as SQLEnum
+    ForeignKey, Numeric, JSON, Enum as SQLEnum, Index
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -93,6 +93,10 @@ class Trade(Base):
     lessons = Column(JSON, default=list)  # List of tags
     rating = Column(Integer, nullable=True)  # 1-5
     
+    # Calculated PnL (Persisted for performance)
+    pnl = Column(Numeric(20, 8), nullable=True)
+    pnl_percent = Column(Numeric(10, 4), nullable=True)
+    
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -102,21 +106,19 @@ class Trade(Base):
     strategy = relationship("Strategy", back_populates="trades")
     trading_account = relationship("TradingAccount") # One-to-Many from Account to Trades
     
-    @property
-    def pnl(self):
-        """Calculate P&L"""
+    # Indices for performance
+    __table_args__ = (
+        Index('idx_user_entry_time', 'user_id', 'entry_time'),
+    )
+    
+    def calculate_pnl(self):
+        """Logic to calculate and update pnl/pnl_percent columns"""
         price = self.exit_price if self.status == TradeStatus.CLOSED else self.current_price
         if price and self.entry_price:
-            return (float(price) - float(self.entry_price)) * float(self.quantity)
-        return None
-    
-    @property
-    def pnl_percent(self):
-        """Calculate P&L percentage"""
-        price = self.exit_price if self.status == TradeStatus.CLOSED else self.current_price
-        if price and self.entry_price and float(self.entry_price) > 0:
-            return ((float(price) - float(self.entry_price)) / float(self.entry_price)) * 100
-        return None
+            self.pnl = (float(price) - float(self.entry_price)) * float(self.quantity)
+            if float(self.entry_price) > 0:
+                self.pnl_percent = ((float(price) - float(self.entry_price)) / float(self.entry_price)) * 100
+        return self.pnl
 
 
 class Strategy(Base):
@@ -167,6 +169,7 @@ class UserSettings(Base):
     
     # Theme
     theme = Column(String(20), default="system")  # light/dark/system
+    up_color = Column(String(20), default="GREEN") # GREEN or RED
     
     # Exchange API Keys (encrypted in production)
     ibkr_host = Column(String(255), nullable=True)
@@ -248,6 +251,7 @@ class Position(Base):
     
     symbol = Column(String(50), nullable=False, index=True)
     exchange = Column(String(50), nullable=False)
+    asset_type = Column(String(20), nullable=True)  # Enhanced Type: EQUITY, ETF_BOND, etc.
     direction = Column(SQLEnum(PositionDirection), nullable=False)  # LONG or SHORT
     status = Column(SQLEnum(PositionStatus), default=PositionStatus.OPEN, index=True)
     

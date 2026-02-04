@@ -165,7 +165,7 @@ export default function MarketStatus() {
     }
 
     return (
-        <div className="flex items-center gap-4 bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-x-auto max-w-full">
+        <div className="grid grid-cols-3 gap-2 bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm w-full">
             {MARKETS.map(market => {
                 const { status, label, color } = getMarketStatus(market, currentTime)
 
@@ -178,13 +178,13 @@ export default function MarketStatus() {
                 }).format(currentTime)
 
                 return (
-                    <div key={market.id} className="flex items-center gap-2 px-2 border-r last:border-0 border-slate-100 dark:border-slate-700 shrink-0">
-                        <div className="text-xs">
-                            <div className="flex items-center gap-1 font-medium text-slate-700 dark:text-slate-300">
+                    <div key={market.id} className="flex flex-col items-center justify-center gap-1 px-1 border-r last:border-0 border-slate-100 dark:border-slate-700">
+                        <div className="text-xs text-center">
+                            <div className="flex items-center justify-center gap-1 font-medium text-slate-700 dark:text-slate-300">
                                 {market.id === 'US' ? <Globe className="w-3 h-3" /> : null}
                                 {market.name}
                             </div>
-                            <div className="text-slate-400 scale-90 origin-left font-mono">
+                            <div className="text-slate-400 scale-90 font-mono">
                                 {localTimeStr}
                             </div>
                         </div>

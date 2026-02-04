@@ -12,6 +12,7 @@ from models import Trade, TradeStatus, User, TradingAccount
 from schemas import TradeCreate, TradeClose, TradeUpdate, TradeResponse
 from services.auth_service import get_current_user
 from services.market_data_service import MarketDataService
+import asyncio
 
 router = APIRouter(prefix="/api/trades", tags=["Trades"])
 
@@ -56,21 +57,25 @@ async def get_trades(
 
     trades = query.offset(skip).limit(limit).all()
     
-    # Initialize Market Service
-    market_service = MarketDataService(db)
+    # Batch fetch quotes for open trades (PARALLEL FETCH)
+    open_trades = [t for t in trades if t.status == TradeStatus.OPEN]
+    quote_results = {}
+    if open_trades:
+        market_service = MarketDataService(db)
+        quote_tasks = [market_service.get_quote(t.symbol) for t in open_trades]
+        quotes = await asyncio.gather(*quote_tasks, return_exceptions=True)
+        for t, q in zip(open_trades, quotes):
+            if not isinstance(q, Exception):
+                quote_results[t.id] = q
     
     # Add computed properties
     result = []
     for trade in trades:
-        # Fetch real-time price for OPEN positions
+        # Fetch real-time price for OPEN positions from our gathered results
         if trade.status == TradeStatus.OPEN:
-            try:
-                quote = market_service.get_quote(trade.symbol)
-                if quote and 'c' in quote:
-                    trade.current_price = quote['c']
-            except Exception as e:
-                print(f"Failed to fetch price for {trade.symbol}: {e}")
-                # Keep existing current_price or None
+            quote = quote_results.get(trade.id)
+            if quote and 'c' in quote:
+                trade.current_price = quote['c']
 
         trade_dict = TradeResponse.model_validate(trade).model_dump()
         trade_dict["pnl"] = trade.pnl
@@ -120,6 +125,8 @@ async def create_trade(
         trade.exit_time = trade_data.exit_time or trade_data.entry_time
         trade.exit_reason = trade_data.exit_reason
     
+    trade.calculate_pnl()
+    
     db.add(trade)
     db.commit()
     db.refresh(trade)
@@ -164,6 +171,8 @@ async def update_trade(
     for field, value in update_data.items():
         setattr(trade, field, value)
     
+    trade.calculate_pnl()
+    
     db.commit()
     db.refresh(trade)
     return trade
@@ -197,6 +206,8 @@ async def close_trade(
     trade.screenshots = close_data.screenshots or []
     trade.lessons = close_data.lessons or []
     trade.rating = close_data.rating
+    
+    trade.calculate_pnl()
     
     db.commit()
     db.refresh(trade)

@@ -3,10 +3,14 @@ Trading Noobs Backend - Positions Router
 Handles Position CRUD and Batch operations
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from typing import List, Optional
 from decimal import Decimal
+import csv
+import io
+from datetime import datetime
 
 from database import get_db
 from routers.auth import get_current_user
@@ -20,6 +24,7 @@ from schemas import (
     PositionStatusEnum, BatchTypeEnum
 )
 from services.market_data_service import MarketDataService
+import asyncio
 
 router = APIRouter(prefix="/api/positions", tags=["positions"])
 
@@ -63,7 +68,8 @@ async def list_positions(
     db: Session = Depends(get_db)
 ):
     """List all positions for the current user"""
-    query = db.query(Position).filter(Position.user_id == current_user.id)
+    from sqlalchemy.orm import joinedload
+    query = db.query(Position).options(joinedload(Position.batches)).filter(Position.user_id == current_user.id)
     
     if status:
         query = query.filter(Position.status == PositionStatus[status.value])
@@ -72,25 +78,73 @@ async def list_positions(
     if account_id:
         query = query.filter(Position.account_id == account_id)
     
+    if asset_type:
+        query = query.filter(Position.asset_type == asset_type)
+    
     positions = query.order_by(desc(Position.opened_at)).all()
     
-    # Post-Query Filtering for Asset Type
-    if asset_type:
-        market_service = MarketDataService(db)
-        filtered_positions = []
-        target_type = asset_type.lower() # 'stock', 'crypto'
+    # Get market data service for current prices
+    market_service = MarketDataService(db)
+    
+    # Batch fetch quotes for open positions (PARALLEL FETCH)
+    open_positions = [p for p in positions if p.status == PositionStatus.OPEN]
+    quote_results = {}
+    if open_positions:
+        quote_tasks = [market_service.get_quote(p.symbol, p.exchange) for p in open_positions]
+        quotes = await asyncio.gather(*quote_tasks, return_exceptions=True)
+        for p, q in zip(open_positions, quotes):
+            if not isinstance(q, Exception):
+                quote_results[p.id] = q
+    
+    # Build response
+    result = []
+    for pos in positions:
+        pos_dict = {
+            'id': pos.id,
+            'account_id': pos.account_id,
+            'symbol': pos.symbol,
+            'exchange': pos.exchange,
+            'asset_type': pos.asset_type,
+            'direction': pos.direction.value,
+            'status': pos.status.value,
+            'total_quantity': pos.total_quantity,
+            'average_entry_price': pos.average_entry_price,
+            'realized_pnl': pos.realized_pnl,
+            'opened_at': pos.opened_at,
+            'closed_at': pos.closed_at,
+            'created_at': pos.created_at,
+            'current_price': None,
+            'unrealized_pnl': None
+        }
         
-        for pos in positions:
-            detected_type = market_service.detect_asset_type(pos.symbol, pos.exchange)
-            # Map specific types to categories
-            category = 'crypto' if detected_type == 'CRYPTO' else 'stock'
-            
-            if category == target_type:
-                filtered_positions.append(pos)
-                
-        return filtered_positions
+        if pos.status == PositionStatus.OPEN:
+            quote = quote_results.get(pos.id)
+            if quote and quote.get('c') is not None:
+                current_price = float(quote['c'])
+                pos_dict['current_price'] = current_price
+                # Calculate unrealized P&L
+                if pos.average_entry_price:
+                    entry = float(pos.average_entry_price)
+                    qty = float(pos.total_quantity)
+                    if pos.direction == PositionDirection.LONG:
+                        pos_dict['unrealized_pnl'] = (current_price - entry) * qty
+                    else:
+                        pos_dict['unrealized_pnl'] = (entry - current_price) * qty
+        else:
+            # For closed positions, calculate weighted average exit price from EXIT batches
+            if pos.batches:
+                exit_batches = [b for b in pos.batches if b.type == BatchType.EXIT]
+                if exit_batches:
+                    total_exit_qty = sum(float(b.quantity) for b in exit_batches)
+                    if total_exit_qty > 0:
+                        weighted_exit_price = sum(
+                            float(b.price) * float(b.quantity) for b in exit_batches
+                        ) / total_exit_qty
+                        pos_dict['current_price'] = weighted_exit_price
         
-    return positions
+        result.append(pos_dict)
+        
+    return result
 
 
 @router.get("/{position_id}", response_model=PositionResponse)
@@ -127,6 +181,12 @@ async def create_position(
     if not account:
         raise HTTPException(status_code=400, detail="Invalid account_id")
     
+    # Detect Asset Type
+    market_service = MarketDataService(db)
+    detected_type = position_data.asset_type
+    if not detected_type:
+        detected_type = await market_service.detect_asset_type_enhanced(position_data.symbol, account.broker)
+
     # Create position
     position = Position(
         user_id=current_user.id,
@@ -134,6 +194,7 @@ async def create_position(
         strategy_id=position_data.strategy_id,
         symbol=position_data.symbol.upper(),
         exchange=account.broker,
+        asset_type=detected_type,
         direction=PositionDirection[position_data.direction.value],
         status=PositionStatus.OPEN,
         total_quantity=position_data.quantity,
@@ -331,3 +392,90 @@ async def check_open_position(
     ).first()
     
     return position
+
+
+# ============== Export Endpoints ==============
+
+@router.get("/export/csv")
+async def export_positions_csv(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Export all positions and batches as CSV"""
+    positions = db.query(Position).filter(
+        Position.user_id == current_user.id
+    ).order_by(desc(Position.opened_at)).all()
+    
+    # Create CSV in memory
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Header row
+    writer.writerow([
+        'Position ID', 'Symbol', 'Exchange', 'Direction', 'Status',
+        'Total Quantity', 'Avg Entry Price', 'Realized PnL',
+        'Opened At', 'Closed At', 'Position Review', 'Lessons',
+        'Batch ID', 'Batch Type', 'Batch Price', 'Batch Quantity',
+        'Batch Time', 'Batch PnL', 'Batch Reason', 'Batch Emotion', 'Batch Confidence'
+    ])
+    
+    # Data rows
+    for pos in positions:
+        # Prepare position-level fields
+        lessons_str = ', '.join(pos.lessons) if pos.lessons else ''
+        
+        # Export position with each batch
+        if pos.batches:
+            for batch in pos.batches:
+                writer.writerow([
+                    pos.id,
+                    pos.symbol,
+                    pos.exchange,
+                    pos.direction.value if pos.direction else '',
+                    pos.status.value if pos.status else '',
+                    float(pos.total_quantity) if pos.total_quantity else 0,
+                    float(pos.average_entry_price) if pos.average_entry_price else 0,
+                    float(pos.realized_pnl) if pos.realized_pnl else 0,
+                    pos.opened_at.isoformat() if pos.opened_at else '',
+                    pos.closed_at.isoformat() if pos.closed_at else '',
+                    pos.trade_review or '',
+                    lessons_str,
+                    batch.id,
+                    batch.type.value if batch.type else '',
+                    float(batch.price) if batch.price else 0,
+                    float(batch.quantity) if batch.quantity else 0,
+                    batch.time.isoformat() if batch.time else '',
+                    float(batch.pnl) if batch.pnl else 0,
+                    batch.reason or '',
+                    batch.emotion or '',
+                    batch.confidence or ''
+                ])
+        else:
+            # Position without batches (shouldn't happen but handle gracefully)
+            writer.writerow([
+                pos.id,
+                pos.symbol,
+                pos.exchange,
+                pos.direction.value if pos.direction else '',
+                pos.status.value if pos.status else '',
+                float(pos.total_quantity) if pos.total_quantity else 0,
+                float(pos.average_entry_price) if pos.average_entry_price else 0,
+                float(pos.realized_pnl) if pos.realized_pnl else 0,
+                pos.opened_at.isoformat() if pos.opened_at else '',
+                pos.closed_at.isoformat() if pos.closed_at else '',
+                pos.trade_review or '',
+                lessons_str,
+                '', '', '', '', '', '', '', '', ''
+            ])
+    
+    # Prepare response with UTF-8 BOM for Excel compatibility
+    output.seek(0)
+    csv_content = '\ufeff' + output.getvalue()  # Add BOM for Excel
+    filename = f"trading_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    
+    return StreamingResponse(
+        iter([csv_content.encode('utf-8')]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+

@@ -12,6 +12,7 @@ from models import Trade, TradeStatus, User, Position, PositionStatus, TradingAc
 from schemas import DashboardStats, AssetAllocation, PositionMover, AccountAllocation
 from services.auth_service import get_current_user
 from services.market_data_service import MarketDataService
+import asyncio
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
@@ -31,32 +32,33 @@ async def get_dashboard_stats(
     if end_date:
         query = query.filter(Trade.entry_time <= end_date)
     
-    trades = query.all()
+    # Calculate stats using SQL aggregations (OOM FIX)
+    stats_query = db.query(
+        func.count(Trade.id).label("total_trades"),
+        func.sum(Trade.pnl).label("total_pnl"),
+        func.count(Trade.id).filter(Trade.status == TradeStatus.CLOSED).label("closed_trades"),
+        func.count(Trade.id).filter(Trade.status == TradeStatus.OPEN).label("open_positions"),
+        func.count(Trade.id).filter(Trade.pnl > 0, Trade.status == TradeStatus.CLOSED).label("winning_trades"),
+        func.sum(Trade.pnl).filter(Trade.pnl > 0, Trade.status == TradeStatus.CLOSED).label("total_wins"),
+        func.sum(func.abs(Trade.pnl)).filter(Trade.pnl < 0, Trade.status == TradeStatus.CLOSED).label("total_losses")
+    ).filter(Trade.user_id == current_user.id)
     
-    # Calculate stats
-    closed_trades = [t for t in trades if t.status == TradeStatus.CLOSED]
-    open_trades = [t for t in trades if t.status == TradeStatus.OPEN]
+    if start_date:
+        stats_query = stats_query.filter(Trade.entry_time >= start_date)
+    if end_date:
+        stats_query = stats_query.filter(Trade.entry_time <= end_date)
+        
+    s = stats_query.one()
     
-    total_pnl = 0.0
-    winning_trades = 0
-    total_wins = 0.0
-    total_losses = 0.0
+    total_trades = s.total_trades or 0
+    total_pnl = float(s.total_pnl or 0)
+    closed_trades_count = s.closed_trades or 0
+    open_positions_count = s.open_positions or 0
+    winning_trades = s.winning_trades or 0
+    total_wins = float(s.total_wins or 0)
+    total_losses = float(s.total_losses or 0)
     
-    for trade in closed_trades:
-        pnl = trade.pnl or 0
-        total_pnl += pnl
-        if pnl > 0:
-            winning_trades += 1
-            total_wins += pnl
-        elif pnl < 0:
-            total_losses += abs(pnl)
-    
-    # Add unrealized P&L from open positions
-    for trade in open_trades:
-        pnl = trade.pnl or 0
-        total_pnl += pnl
-    
-    win_rate = (winning_trades / len(closed_trades) * 100) if closed_trades else 0.0
+    win_rate = (winning_trades / closed_trades_count * 100) if closed_trades_count > 0 else 0.0
     avg_pnl_ratio = (total_wins / total_losses) if total_losses > 0 else 0.0
     
     # --- New Logic: Asset Allocation & Movers (Using Positions) ---
@@ -75,47 +77,48 @@ async def get_dashboard_stats(
     # 3. Calculate Market Values & Fetch Prices for Movers
     market_service = MarketDataService(db)
     
+    # Parallelize asset type detection for all positions
+    detection_tasks = [market_service.detect_asset_type_enhanced(p.symbol, p.exchange) for p in positions]
+    asset_types = await asyncio.gather(*detection_tasks)
+    
     total_portfolio_value = 0.0
     allocation_map = {
-        'Stock': 0.0,  # A_STOCK, HK_STOCK, US_STOCK
-        'Crypto': 0.0, # CRYPTO
-        'Cash': 0.0,
-        'Fixed Income': 0.0 # Placeholder
+        'CASH': 0.0 # Reserve for cash
     }
     
     movers_list = []
     
+    # Batch fetch quotes to fix N+1 (PARALLEL FETCH)
+    quote_tasks = [market_service.get_quote(p.symbol, p.exchange) for p in positions]
+    quotes = await asyncio.gather(*quote_tasks, return_exceptions=True)
+    
+    total_portfolio_value = 0.0
+    allocation_map = {'CASH': 0.0}
+    movers_list = []
+    
     # Process Positions
-    for pos in positions:
-        # Detect asset type if not stored (or use helper)
-        asset_type = market_service.detect_asset_type(pos.symbol, pos.exchange)
-        category = 'Crypto' if asset_type == 'CRYPTO' else 'Stock'
-        
-        # Use entry price and try to get current price
+    for pos, asset_type, quote in zip(positions, asset_types, quotes):
+        category = asset_type
         entry_price = float(pos.average_entry_price or 0)
         current_price = entry_price
         change_pct = 0.0
         
-        if entry_price > 0:
-            try:
-                # Try to fetch current quote
-                quote = market_service.get_quote(pos.symbol, pos.exchange)
-                if quote and quote.get('c'):
-                    current_price = float(quote['c'])
-                    # Calculate P&L percentage based on entry price
-                    change_pct = ((current_price - entry_price) / entry_price) * 100
-                    # Adjust for direction
-                    if pos.direction == 'SHORT':
-                        change_pct = -change_pct
-            except:
-                # If quote fails, calculate based on realized_pnl if available
-                if pos.realized_pnl and pos.total_quantity > 0:
-                    cost = entry_price * float(pos.total_quantity)
-                    if cost > 0:
-                        change_pct = (float(pos.realized_pnl) / cost) * 100
+        # Handle quote result (could be exception)
+        if not isinstance(quote, Exception) and quote and quote.get('c'):
+            current_price = float(quote['c'])
+            if entry_price > 0:
+                change_pct = ((current_price - entry_price) / entry_price) * 100
+                if pos.direction == 'SHORT':
+                    change_pct = -change_pct
+        elif entry_price > 0:
+            # Fallback if quote fails
+            if pos.realized_pnl and pos.total_quantity > 0:
+                cost = entry_price * float(pos.total_quantity)
+                if cost > 0:
+                    change_pct = (float(pos.realized_pnl) / cost) * 100
         
         market_value = float(pos.total_quantity) * current_price
-        allocation_map[category] += market_value
+        allocation_map[category] = allocation_map.get(category, 0.0) + market_value
         total_portfolio_value += market_value
         
         movers_list.append(PositionMover(
@@ -132,7 +135,7 @@ async def get_dashboard_stats(
     # We will assume account.initial_balance is "Available Cash" for this mockup
     for acc in accounts:
         cash = float(acc.initial_balance or 0) # This should be current balance in future
-        allocation_map['Cash'] += cash
+        allocation_map['CASH'] += cash
         total_portfolio_value += cash
         
     # Build Allocation List
@@ -154,17 +157,13 @@ async def get_dashboard_stats(
     for acc in accounts:
         account_value_map[acc.id] = float(acc.initial_balance or 0)
         
-    # Add open positions value
+    # Batch account valuation
+    # Reuse current_prices if possible or simplified
+    # (For account allocation, we can just use the movers_list data we just computed)
+    pos_price_map = {m.id: m.current_price for m in movers_list}
+    
     for pos in positions:
-        # Simplified valuation for account allocation (reuse cached or simple calc)
-        # Note: We already calculated current_price in loop above but didn't store it by pos.id map
-        # Ideally we should optimization this but for brevity:
-        try:
-            quote = market_service.get_quote(pos.symbol, pos.exchange)
-            price = float(quote['c']) if quote and quote.get('c') else float(pos.average_entry_price or 0)
-        except:
-            price = float(pos.average_entry_price or 0)
-            
+        price = pos_price_map.get(pos.id, float(pos.average_entry_price or 0))
         pos_value = float(pos.total_quantity) * price
         if pos.account_id in account_value_map:
             account_value_map[pos.account_id] += pos_value
@@ -198,9 +197,9 @@ async def get_dashboard_stats(
         total_pnl=total_pnl,
         win_rate=win_rate,
         avg_pnl_ratio=avg_pnl_ratio,
-        total_trades=len(trades),
-        open_positions=len(open_trades),
-        closed_trades=len(closed_trades),
+        total_trades=total_trades,
+        open_positions=open_positions_count,
+        closed_trades=closed_trades_count,
         asset_allocation=asset_allocation,
         account_allocation=account_allocation,
         top_movers=top_movers,
@@ -221,18 +220,19 @@ async def get_pnl_history(
     else:
         start_date = date.today() - timedelta(days=days)
     
-    trades = db.query(Trade).filter(
+    # Calculate daily P&L using SQL GROUP BY (OOM FIX)
+    pnl_query = db.query(
+        func.date(Trade.exit_time).label("date"),
+        func.sum(Trade.pnl).label("daily_pnl")
+    ).filter(
         Trade.user_id == current_user.id,
         Trade.status == TradeStatus.CLOSED,
         Trade.exit_time >= start_date
-    ).order_by(Trade.exit_time).all()
+    ).group_by(func.date(Trade.exit_time)).order_by(func.date(Trade.exit_time))
     
-    # Group by date and calculate cumulative P&L
-    pnl_by_date = {}
-    for trade in trades:
-        exit_date = trade.exit_time.date() if trade.exit_time else trade.entry_time.date()
-        pnl = trade.pnl or 0
-        pnl_by_date[exit_date] = pnl_by_date.get(exit_date, 0) + pnl
+    pnl_results = pnl_query.all()
+    # Convert date to string for robust matching across SQLite/Postgres
+    pnl_by_date = {str(res.date): float(res.daily_pnl or 0) for res in pnl_results}
     
     # Calculate Total Principal for % calculation
     accounts = db.query(TradingAccount).filter(
@@ -246,7 +246,7 @@ async def get_pnl_history(
     cumulative = 0
     current_date = start_date
     while current_date <= date.today():
-        cumulative += pnl_by_date.get(current_date, 0)
+        cumulative += pnl_by_date.get(current_date.isoformat(), 0)
         pnl_pct = (cumulative / total_principal * 100) if total_principal > 0 else 0
         result.append({
             "date": current_date.isoformat(),

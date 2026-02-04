@@ -2,7 +2,8 @@
 Trading Noobs Backend - LLM Service for Weekly Reports
 """
 import httpx
-from typing import Optional, List
+import json
+from typing import Optional, List, Dict, Any
 from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
@@ -31,6 +32,88 @@ MUNGER_PROMPT = """你是一位投资分析师，精通查理·芒格的投资�
 ### 💡 改进建议
 基于芒格投资哲学，给出具体的改进建议。
 """
+
+ASSET_CLASSIFICATION_PROMPT = """Role: Financial Asset Classifier
+Task: Classify the given financial symbol into exactly one of the following categories.
+
+Categories:
+- EQUITY: Individual stocks (e.g., AAPL, TSLA) or indices.
+- ETF_EQUITY: Equity-based ETFs (e.g., SPY, QQQ, XLF).
+- ETF_BOND: Fixed income/Bond ETFs (e.g., TLT, AGG, HYG).
+- ETF_COMMODITY: Commodity-based ETFs or trusts (e.g., GLD, SLV, USO).
+- CRYPTO: Cryptocurrencies (e.g., BTC, ETH, SOL).
+- FOREX: Currency pairs (e.g., EURUSD).
+
+Input Symbol: {symbol}
+Exchange: {exchange}
+
+Output Format: JSON only, strictly complying with the schema: {{"type": "CATEGORY_CODE", "name": "Short Descriptive Name"}}
+
+Rules:
+1. Do not explain. Return ONLY JSON.
+2. If unsure or symbol implies mixed assets, choose the dominant asset class.
+3. Common Logic:
+   - "GLD" -> ETF_COMMODITY
+   - "TLT" -> ETF_BOND
+   - "AAPL" -> EQUITY
+   - "BTC" -> CRYPTO
+"""
+
+
+async def classify_asset(db: Session, symbol: str, exchange: Optional[str] = None) -> Optional[Dict[str, str]]:
+    """Classify asset type using LLM"""
+    # Get system settings for LLM
+    llm_api_url_setting = db.query(SystemSetting).filter(SystemSetting.key == 'llm_api_url').first()
+    llm_api_key_setting = db.query(SystemSetting).filter(SystemSetting.key == 'llm_api_key').first()
+    llm_model_setting = db.query(SystemSetting).filter(SystemSetting.key == 'llm_model').first()
+    
+    llm_api_url = llm_api_url_setting.value if llm_api_url_setting else None
+    llm_api_key = llm_api_key_setting.value if llm_api_key_setting else None
+    llm_model = llm_model_setting.value if llm_model_setting else "gpt-4"
+
+    if not llm_api_url or not llm_api_key:
+        return None
+    
+    prompt = ASSET_CLASSIFICATION_PROMPT.format(symbol=symbol, exchange=exchange or "Unknown")
+    
+    # Construct API endpoint
+    api_endpoint = llm_api_url.strip().rstrip('/')
+    if not api_endpoint.endswith('/chat/completions'):
+        api_endpoint = f"{api_endpoint}/chat/completions"
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                api_endpoint,
+                headers={
+                    "Authorization": f"Bearer {llm_api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": llm_model,
+                    "messages": [
+                        {"role": "system", "content": "You are a financial data expert."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.1,
+                    "max_tokens": 100
+                }
+            )
+            response.raise_for_status()
+            result = response.json()
+            content = result["choices"][0]["message"]["content"]
+            
+            # Clean markdown code blocks
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0]
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0]
+            
+            return json.loads(content.strip())
+            
+    except Exception as e:
+        print(f"LLM Classification failed: {str(e)}")
+        return None
 
 
 def format_trades_for_llm(trades: List[Trade]) -> str:

@@ -2,16 +2,18 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { authAPI, User } from '@/lib/api'
+import { authAPI, settingsAPI, User, UserSettings } from '@/lib/api'
 
 interface AuthContextType {
     user: User | null
+    settings: UserSettings | null
     token: string | null
     isLoading: boolean
     isAuthenticated: boolean
     login: (email: string, password: string) => Promise<void>
-    register: (email: string, password: string) => Promise<void>
+    register: (email: string, password: string, invite_code: string) => Promise<void>
     logout: () => void
+    refreshSettings: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -21,6 +23,7 @@ const PUBLIC_PATHS = ['/login', '/register']
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null)
+    const [settings, setSettings] = useState<UserSettings | null>(null)
     const [token, setToken] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const router = useRouter()
@@ -34,6 +37,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 try {
                     const userData = await authAPI.me(storedToken)
                     setUser(userData)
+
+                    // Fetch settings
+                    try {
+                        const settingsData = await settingsAPI.get(storedToken)
+                        setSettings(settingsData)
+                    } catch (e) {
+                        console.error('Failed to fetch settings', e)
+                    }
+
                     setToken(storedToken)
                 } catch (error) {
                     // Token 无效，清除
@@ -65,11 +77,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const userData = await authAPI.me(newToken)
         setUser(userData)
+
+        try {
+            const settingsData = await settingsAPI.get(newToken)
+            setSettings(settingsData)
+        } catch (e) {
+            console.error('Failed to fetch settings', e)
+        }
+
         router.push('/')
     }
 
-    const register = async (email: string, password: string) => {
-        await authAPI.register(email, password)
+    const refreshSettings = async () => {
+        if (!token) return
+        try {
+            const data = await settingsAPI.get(token)
+            setSettings(data)
+        } catch (e) {
+            console.error('Failed to refresh settings', e)
+        }
+    }
+
+    const register = async (email: string, password: string, invite_code: string) => {
+        await authAPI.register(email, password, invite_code)
         // 注册成功后自动登录
         await login(email, password)
     }
@@ -94,12 +124,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         <AuthContext.Provider
             value={{
                 user,
+                settings,
                 token,
                 isLoading,
                 isAuthenticated: !!token,
                 login,
                 register,
                 logout,
+                refreshSettings
             }}
         >
             {children}

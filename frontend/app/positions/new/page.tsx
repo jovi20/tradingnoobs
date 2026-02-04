@@ -17,6 +17,7 @@ import {
 } from '@/lib/api'
 import { detectSymbolType, getAssetTypeColor, getAssetTypeLabel, SymbolDetection } from '@/lib/symbolUtils'
 import DateTimePicker from '@/components/DateTimePicker'
+import CustomSelect from '@/components/CustomSelect'
 
 export default function NewPositionPage() {
     const { token } = useAuth()
@@ -48,7 +49,8 @@ export default function NewPositionPage() {
         entry_time: new Date().toISOString(),
         entry_reason: '',
         entry_emotion: '',
-        entry_confidence: undefined as number | undefined
+        entry_confidence: undefined as number | undefined,
+        asset_type: ''
     })
 
     useEffect(() => {
@@ -72,6 +74,8 @@ export default function NewPositionPage() {
         }
         fetchData()
     }, [token])
+
+    const [isAddingBatch, setIsAddingBatch] = useState(false)
 
     // Check for existing position when symbol or account changes
     useEffect(() => {
@@ -112,20 +116,23 @@ export default function NewPositionPage() {
             }
 
             // Skip API if format is unknown
-            if (detection.type === 'unknown') {
+            if (detection.type === 'UNKNOWN') {
                 setSymbolValidation({
                     valid: false,
                     symbol: form.symbol,
-                    error: '未知格式，请检查代码'
+                    error: '未知格式，请检查代码转义',
+                    candidates: []
                 })
                 return
             }
 
             setIsValidating(true)
             try {
-                // Fix: use detection.symbol instead of undefined detection.normalized
-                const result = await marketAPI.validateSymbol(token, detection.symbol)
+                const result = await marketAPI.validateSymbol(token, detection.normalized)
                 setSymbolValidation(result)
+                if (result.valid && result.asset_type) {
+                    setForm(f => ({ ...f, asset_type: result.asset_type || '' }))
+                }
             } catch {
                 setSymbolValidation({ valid: false, symbol: form.symbol, error: '验证失败' })
             } finally {
@@ -139,6 +146,11 @@ export default function NewPositionPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!token) return
+
+        if (!form.entry_price || !form.quantity) {
+            setError('请输入价格和数量')
+            return
+        }
 
         setError('')
         setIsSubmitting(true)
@@ -154,7 +166,8 @@ export default function NewPositionPage() {
                 entry_time: form.entry_time,
                 entry_reason: form.entry_reason || undefined,
                 entry_emotion: form.entry_emotion || undefined,
-                entry_confidence: form.entry_confidence
+                entry_confidence: form.entry_confidence,
+                asset_type: form.asset_type || undefined
             }
 
             await positionsAPI.create(token, data)
@@ -169,8 +182,15 @@ export default function NewPositionPage() {
     const handleAddToExisting = async () => {
         if (!token || !existingPosition) return
 
+        if (!form.entry_price || !form.quantity) {
+            setError('请输入加仓的价格和数量')
+            // Scroll to fields
+            document.querySelector('.input[type="number"]')?.scrollIntoView({ behavior: 'smooth' })
+            return
+        }
+
         setError('')
-        setIsSubmitting(true)
+        setIsAddingBatch(true)
 
         try {
             const batchData: BatchCreate = {
@@ -188,7 +208,7 @@ export default function NewPositionPage() {
         } catch (err: any) {
             setError(err.message || '加仓失败')
         } finally {
-            setIsSubmitting(false)
+            setIsAddingBatch(false)
         }
     }
 
@@ -204,7 +224,7 @@ export default function NewPositionPage() {
         return (
             <div className="card p-12 text-center">
                 <p className="text-slate-500 mb-4">请先在设置中添加交易账户</p>
-                <Link href="/settings" className="btn btn-primary inline-flex">
+                <Link href="/settings" className="btn btn-primary inline-flex items-center justify-center">
                     前往设置
                 </Link>
             </div>
@@ -223,37 +243,39 @@ export default function NewPositionPage() {
 
             {/* Error */}
             {error && (
-                <div className="mb-6 p-4 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600">
+                <div className="mb-6 p-4 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 animate-in fade-in slide-in-from-top-2">
                     {error}
                 </div>
             )}
 
             {/* Existing Position Prompt */}
             {showExistingPrompt && existingPosition && (
-                <div className="mb-6 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-                    <div className="flex items-start gap-3">
-                        <AlertCircle className="w-5 h-5 text-amber-500 mt-0.5" />
+                <div className="mb-6 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 animate-in zoom-in-95 duration-300">
+                    <div className="flex items-start gap-4">
+                        <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/40">
+                            <AlertCircle className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+                        </div>
                         <div className="flex-1">
-                            <h3 className="font-medium text-amber-800 dark:text-amber-200">
-                                您已有 {existingPosition.symbol} 的持仓
+                            <h3 className="font-semibold text-lg text-amber-900 dark:text-amber-100">
+                                检测到已有 {existingPosition.symbol} 持仓
                             </h3>
-                            <p className="text-sm text-amber-600 dark:text-amber-300 mt-1">
-                                当前持有 {Number(existingPosition.total_quantity).toFixed(4)} 份，
-                                均价 ${Number(existingPosition.average_entry_price || 0).toFixed(2)}
+                            <p className="text-sm text-amber-700/80 dark:text-amber-300/80 mt-1">
+                                您当前持有 <span className="font-bold">{Number(existingPosition.total_quantity).toFixed(4)}</span> 份，
+                                均价 <span className="font-bold">${Number(existingPosition.average_entry_price || 0).toFixed(2)}</span>
                             </p>
-                            <div className="flex gap-2 mt-3">
+                            <div className="flex gap-3 mt-4">
                                 <button
                                     type="button"
                                     onClick={handleAddToExisting}
-                                    disabled={isSubmitting || !form.entry_price || !form.quantity}
-                                    className="btn btn-sm bg-amber-500 hover:bg-amber-600 text-white"
+                                    disabled={isAddingBatch}
+                                    className="btn flex-1 bg-amber-500 hover:bg-amber-600 text-white shadow-lg shadow-amber-500/30"
                                 >
-                                    加仓到此仓位
+                                    {isAddingBatch ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : '加仓到此仓位'}
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setShowExistingPrompt(false)}
-                                    className="btn btn-sm btn-outline"
+                                    className="btn flex-1 btn-outline border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30"
                                 >
                                     开新仓位
                                 </button>
@@ -265,28 +287,22 @@ export default function NewPositionPage() {
 
             <form onSubmit={handleSubmit} className="space-y-6">
                 {/* Account & Symbol */}
-                <div className="card p-6 space-y-4">
+                <div className="card p-6 space-y-4 relative z-20">
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium mb-2">账户 *</label>
-                            <select
-                                required
+                            <CustomSelect
+                                options={accounts.map(a => ({ value: a.id, label: `${a.name} (${a.broker})` }))}
                                 value={form.account_id}
-                                onChange={e => setForm({ ...form, account_id: parseInt(e.target.value) })}
-                                className="input"
-                            >
-                                {accounts.map(a => (
-                                    <option key={a.id} value={a.id}>{a.name} ({a.broker})</option>
-                                ))}
-                            </select>
+                                onChange={val => setForm({ ...form, account_id: typeof val === 'string' ? parseInt(val) : val })}
+                            />
                         </div>
                         <div>
                             <label className="block text-sm font-medium mb-2">
                                 标的代码 *
-                                {symbolDetection && symbolDetection.type !== 'unknown' && (
-                                    <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${getAssetTypeColor(symbolDetection.type)}`}>
-                                        {/* Fix 2: Use getAssetTypeLabel or displayName */}
-                                        {getAssetTypeLabel(symbolDetection.type)}
+                                {(symbolValidation?.asset_type || (symbolDetection && symbolDetection.type !== 'UNKNOWN')) && (
+                                    <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${getAssetTypeColor((symbolValidation?.asset_type as any) || symbolDetection?.type)}`}>
+                                        {getAssetTypeLabel((symbolValidation?.asset_type as any) || symbolDetection?.type)}
                                     </span>
                                 )}
                             </label>
@@ -330,7 +346,7 @@ export default function NewPositionPage() {
                             )}
 
                             {/* Format hint for unknown only if no candidates */}
-                            {symbolDetection && symbolDetection.type === 'unknown' && (!symbolValidation?.candidates || symbolValidation.candidates.length === 0) && form.symbol.length > 0 && (
+                            {symbolDetection && symbolDetection.type === 'UNKNOWN' && (!symbolValidation?.candidates || symbolValidation.candidates.length === 0) && form.symbol.length > 0 && (
                                 <p className="text-xs mt-1 text-amber-600">
                                     格式提示: A股(6位数字) | 港股(5位数字) | 美股(字母) | 加密(XXXUSDT)
                                 </p>
@@ -344,7 +360,7 @@ export default function NewPositionPage() {
                                             <span>
                                                 {symbolValidation.asset_type === 'A_STOCK' ? '¥' :
                                                     symbolValidation.asset_type === 'HK_STOCK' ? 'HK$' :
-                                                        symbolValidation.asset_type === 'US_STOCK' ? '$' : ''}
+                                                        ['US_STOCK', 'EQUITY', 'ETF_EQUITY', 'ETF_BOND', 'ETF_COMMODITY'].includes(symbolValidation.asset_type || '') ? '$' : ''}
                                                 {symbolValidation.price?.toFixed(2) || '-'}
                                                 {symbolValidation.asset_type === 'CRYPTO' ? ' USDT' : ''}
                                             </span>
@@ -386,24 +402,44 @@ export default function NewPositionPage() {
                         </div>
                     </div>
 
-                    {/* Strategy */}
-                    <div>
-                        <label className="block text-sm font-medium mb-2">策略 (可选)</label>
-                        <select
-                            value={form.strategy_id || ''}
-                            onChange={e => setForm({ ...form, strategy_id: e.target.value ? parseInt(e.target.value) : undefined })}
-                            className="input"
-                        >
-                            <option value="">不关联策略</option>
-                            {strategies.map(s => (
-                                <option key={s.id} value={s.id}>{s.name}</option>
-                            ))}
-                        </select>
+                    {/* Strategy & Asset Type */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium mb-2">策略 (可选)</label>
+                            <CustomSelect
+                                options={[
+                                    { value: '', label: '不关联策略' },
+                                    ...strategies.map(s => ({ value: s.id, label: s.name }))
+                                ]}
+                                value={form.strategy_id || ''}
+                                onChange={val => setForm({ ...form, strategy_id: val ? (typeof val === 'string' ? parseInt(val) : val) : undefined })}
+                                placeholder="选择交易策略"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium mb-2">资产分类</label>
+                            <CustomSelect
+                                options={[
+                                    { value: '', label: '自动检测' },
+                                    { value: 'EQUITY', label: '股票 (EQUITY)' },
+                                    { value: 'CRYPTO', label: '加密货币 (CRYPTO)' },
+                                    { value: 'ETF_EQUITY', label: '股票型ETF (ETF_EQUITY)' },
+                                    { value: 'ETF_BOND', label: '债券型ETF (ETF_BOND)' },
+                                    { value: 'ETF_COMMODITY', label: '商品型ETF (ETF_COMMODITY)' },
+                                    { value: 'FOREX', label: '外汇 (FOREX)' },
+                                    { value: 'A_STOCK', label: 'A股 (A_STOCK)' },
+                                    { value: 'HK_STOCK', label: '港股 (HK_STOCK)' },
+                                ]}
+                                value={form.asset_type}
+                                onChange={val => setForm({ ...form, asset_type: val })}
+                                placeholder="选择资产类型"
+                            />
+                        </div>
                     </div>
                 </div>
 
                 {/* Entry Details */}
-                <div className="card p-6 space-y-4">
+                <div className="card p-6 space-y-4 relative z-10">
                     <h2 className="font-semibold">入场信息</h2>
 
                     <div className="grid grid-cols-2 gap-4">
@@ -455,34 +491,36 @@ export default function NewPositionPage() {
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium mb-2">入场情绪</label>
-                            <select
+                            <CustomSelect
+                                options={[
+                                    { value: '', label: '选择情绪' },
+                                    { value: 'confident', label: '自信 😎' },
+                                    { value: 'calm', label: '平静 😌' },
+                                    { value: 'excited', label: '兴奋 🤩' },
+                                    { value: 'anxious', label: '焦虑 😰' },
+                                    { value: 'fomo', label: 'FOMO 😱' },
+                                    { value: 'revenge', label: '报复交易 😤' },
+                                ]}
                                 value={form.entry_emotion}
-                                onChange={e => setForm({ ...form, entry_emotion: e.target.value })}
-                                className="input"
-                            >
-                                <option value="">选择情绪</option>
-                                <option value="confident">自信 😎</option>
-                                <option value="calm">平静 😌</option>
-                                <option value="excited">兴奋 🤩</option>
-                                <option value="anxious">焦虑 😰</option>
-                                <option value="fomo">FOMO 😱</option>
-                                <option value="revenge">报复交易 😤</option>
-                            </select>
+                                onChange={val => setForm({ ...form, entry_emotion: val })}
+                                placeholder="当前情绪"
+                            />
                         </div>
                         <div>
                             <label className="block text-sm font-medium mb-2">信心指数</label>
-                            <select
+                            <CustomSelect
+                                options={[
+                                    { value: '', label: '选择信心' },
+                                    { value: 1, label: '1 - 很低' },
+                                    { value: 2, label: '2 - 较低' },
+                                    { value: 3, label: '3 - 一般' },
+                                    { value: 4, label: '4 - 较高' },
+                                    { value: 5, label: '5 - 非常高' },
+                                ]}
                                 value={form.entry_confidence || ''}
-                                onChange={e => setForm({ ...form, entry_confidence: e.target.value ? parseInt(e.target.value) : undefined })}
-                                className="input"
-                            >
-                                <option value="">选择信心</option>
-                                <option value="1">1 - 很低</option>
-                                <option value="2">2 - 较低</option>
-                                <option value="3">3 - 一般</option>
-                                <option value="4">4 - 较高</option>
-                                <option value="5">5 - 非常高</option>
-                            </select>
+                                onChange={val => setForm({ ...form, entry_confidence: val ? (typeof val === 'string' ? parseInt(val) : val) : undefined })}
+                                placeholder="交易信心"
+                            />
                         </div>
                     </div>
                 </div>

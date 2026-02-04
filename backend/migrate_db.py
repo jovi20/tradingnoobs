@@ -49,8 +49,29 @@ def migrate():
                 conn.execute(text("ALTER TABLE trades ADD COLUMN account_id INTEGER REFERENCES trading_accounts(id)"))
                 conn.commit()
                 print("account_id column added.")
+            
+            if 'pnl' not in columns:
+                print("Adding pnl columns to trades table...")
+                conn.execute(text("ALTER TABLE trades ADD COLUMN pnl NUMERIC(20, 8)"))
+                conn.execute(text("ALTER TABLE trades ADD COLUMN pnl_percent NUMERIC(10, 4)"))
+                conn.commit()
+                print("pnl columns added.")
+                
+                # Backfill P&L for existing trades
+                print("Backfilling P&L for historical trades...")
+                conn.execute(text("""
+                    UPDATE trades 
+                    SET pnl = (COALESCE(exit_price, current_price) - entry_price) * quantity,
+                        pnl_percent = CASE 
+                            WHEN entry_price > 0 THEN ((COALESCE(exit_price, current_price) - entry_price) / entry_price) * 100 
+                            ELSE 0 
+                        END
+                    WHERE entry_price IS NOT NULL AND quantity IS NOT NULL
+                """))
+                conn.commit()
+                print("P&L backfilled.")
             else:
-                print("account_id column already exists.")
+                print("PnL columns already exist.")
                 
         except Exception as e:
             print(f"Error during trades migration: {e}")
@@ -186,6 +207,53 @@ def migrate():
             print(f"Error during positions migration: {e}")
             import traceback
             traceback.print_exc()
+            
+            traceback.print_exc()
+
+    # 5. Add up_color to user_settings
+    print("Checking user_settings schema...")
+    with engine.connect() as conn:
+        try:
+            # Check if table exists first
+            result = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='user_settings'"))
+            if result.fetchone():
+                result = conn.execute(text("PRAGMA table_info(user_settings)"))
+                columns = [row[1] for row in result.fetchall()]
+                
+                if 'up_color' not in columns:
+                    print("Adding up_color column to user_settings...")
+                    conn.execute(text("ALTER TABLE user_settings ADD COLUMN up_color VARCHAR(20) DEFAULT 'GREEN'"))
+                    conn.commit()
+                    print("up_color column added.")
+            else:
+                print("user_settings table does not exist (will be created by metadata.create_all).")
+                
+        except Exception as e:
+            print(f"Error during user_settings migration: {e}")
+
+    # 6. Add asset_type to positions (Enhanced Classification)
+    print("Checking positions table for asset_type...")
+    with engine.connect() as conn:
+        try:
+            result = conn.execute(text("PRAGMA table_info(positions)"))
+            columns = [row[1] for row in result.fetchall()]
+            
+            if 'asset_type' not in columns:
+                print("Adding asset_type column to positions...")
+                conn.execute(text("ALTER TABLE positions ADD COLUMN asset_type VARCHAR(20)"))
+                # Backfill
+                print("Backfilling asset_type...")
+                # 1. Crypto Rules
+                conn.execute(text("UPDATE positions SET asset_type='CRYPTO' WHERE symbol LIKE '%USDT' OR exchange LIKE '%BINANCE%' OR exchange LIKE '%CRYPTO%'"))
+                # 2. Default others to EQUITY (Stock)
+                conn.execute(text("UPDATE positions SET asset_type='EQUITY' WHERE asset_type IS NULL"))
+                conn.commit()
+                print("asset_type column added and backfilled.")
+            else:
+                print("asset_type column already exists.")
+                
+        except Exception as e:
+            print(f"Error during asset_type migration: {e}")
             
     print("Migration completed.")
 

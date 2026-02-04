@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { tradesAPI, marketAPI, Trade, MarketCalendar, MarketHoliday } from '@/lib/api'
+import { useTrendColor } from '@/hooks/useTrendColor'
 
 const weekDays = ['日', '一', '二', '三', '四', '五', '六']
 
@@ -29,6 +30,7 @@ interface DayData {
 
 export default function DailyPage() {
     const { token } = useAuth()
+    const trendColor = useTrendColor()
     const [currentDate, setCurrentDate] = useState(new Date())
     const [trades, setTrades] = useState<Trade[]>([])
     const [calendar, setCalendar] = useState<MarketCalendar | null>(null)
@@ -43,10 +45,11 @@ export default function DailyPage() {
             if (!token) return
             try {
                 setIsLoading(true)
-                const [tradesData, cnCalendar, usCalendar] = await Promise.all([
+                const [tradesData, cnCalendar, usCalendar, hkCalendar] = await Promise.all([
                     tradesAPI.list(token),
                     marketAPI.calendar(token, 'CN', year, month + 1),
-                    marketAPI.calendar(token, 'US', year, month + 1)
+                    marketAPI.calendar(token, 'US', year, month + 1),
+                    marketAPI.calendar(token, 'HK', year, month + 1)
                 ])
                 setTrades(tradesData)
 
@@ -63,7 +66,8 @@ export default function DailyPage() {
                 // Merge Trading Days (Union)
                 const tradingDaysSet = new Set([
                     ...(cnCalendar?.trading_days || []),
-                    ...(usCalendar?.trading_days || [])
+                    ...(usCalendar?.trading_days || []),
+                    ...(hkCalendar?.trading_days || [])
                 ])
                 mergedCalendar.trading_days = Array.from(tradingDaysSet)
 
@@ -72,24 +76,27 @@ export default function DailyPage() {
 
                 cnCalendar?.holidays?.forEach(h => {
                     const existing = holidayMap.get(h.date) || []
-                    existing.push(`[A股] ${h.name}`)
+                    if (!existing.some(e => e.includes('A股'))) existing.push(`[A股] ${h.name}`)
+                    holidayMap.set(h.date, existing)
+                })
+
+                hkCalendar?.holidays?.forEach(h => {
+                    const existing = holidayMap.get(h.date) || []
+                    if (!existing.some(e => e.includes('港股'))) existing.push(`[港股] ${h.name}`)
                     holidayMap.set(h.date, existing)
                 })
 
                 usCalendar?.holidays?.forEach(h => {
                     const existing = holidayMap.get(h.date) || []
-                    existing.push(`[美股] ${h.name}`)
+                    if (!existing.some(e => e.includes('美股'))) existing.push(`[美股] ${h.name}`)
                     holidayMap.set(h.date, existing)
                 })
 
                 mergedCalendar.holidays = Array.from(holidayMap.entries()).map(([date, names]) => ({
                     date,
                     name: names.join(' / '),
-                    is_trading: false // simplified, specialized logic might be needed but good for display
+                    is_trading: false // simplified default
                 }))
-
-                // Non-trading days: Only if NOT in trading set (Intersection of non-trading effectively, or simpler: complement of Union of Trading)
-                // For simplicity just leave empty as we drive logic via trading_days set mostly
 
                 setCalendar(mergedCalendar)
 
@@ -262,11 +269,11 @@ export default function DailyPage() {
             {/* 图例 */}
             <div className="flex flex-wrap gap-4 text-sm">
                 <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded bg-emerald-100 dark:bg-emerald-900/30 border border-emerald-300"></div>
+                    <div className={`w-4 h-4 rounded border ${trendColor.isGreenUp ? 'bg-emerald-100 dark:bg-emerald-900/30 border-emerald-300' : 'bg-red-100 dark:bg-red-900/30 border-red-300'}`}></div>
                     <span className="text-slate-600 dark:text-slate-400">盈利日</span>
                 </div>
                 <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded bg-red-100 dark:bg-red-900/30 border border-red-300"></div>
+                    <div className={`w-4 h-4 rounded border ${trendColor.isGreenUp ? 'bg-red-100 dark:bg-red-900/30 border-red-300' : 'bg-emerald-100 dark:bg-emerald-900/30 border-emerald-300'}`}></div>
                     <span className="text-slate-600 dark:text-slate-400">亏损日</span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -313,16 +320,16 @@ export default function DailyPage() {
                                     onClick={() => setSelectedDate(day.date)}
                                     title={day.holidayName || undefined}
                                     className={`
-                                        aspect-square p-1 md:p-2 rounded-xl text-sm transition-all relative
+                                        min-h-[60px] md:min-h-[90px] p-1 md:p-2 rounded-xl text-sm transition-all relative flex flex-col items-center justify-center gap-1
                                         ${!day.isCurrentMonth ? 'text-slate-300 dark:text-slate-600' : ''}
                                         ${isToday(day.date) ? 'ring-2 ring-primary-500' : ''}
                                         ${isSelected ? 'bg-primary-500 text-white' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}
                                         ${day.isWeekend && !isSelected ? 'bg-slate-100 dark:bg-slate-800' : ''}
                                         ${day.isHoliday && !isSelected ? 'bg-orange-50 dark:bg-orange-900/20' : ''}
-                                        ${hasTrades && !isSelected && !isNonTrading ? (isPositive ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'bg-red-50 dark:bg-red-900/20') : ''}
+                                        ${hasTrades && !isSelected && !isNonTrading ? (isPositive ? (trendColor.isGreenUp ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'bg-red-50 dark:bg-red-900/20') : (trendColor.isGreenUp ? 'bg-red-50 dark:bg-red-900/20' : 'bg-emerald-50 dark:bg-emerald-900/20')) : ''}
                                     `}
                                 >
-                                    <span className="block">{day.date.getDate()}</span>
+                                    <span className="font-semibold">{day.date.getDate()}</span>
 
                                     {/* 节假日标记 */}
                                     {day.isHoliday && !isSelected && (
@@ -331,16 +338,20 @@ export default function DailyPage() {
 
                                     {/* 盈亏显示 */}
                                     {hasTrades && (
-                                        <span className={`text-[10px] md:text-xs block truncate ${isSelected ? 'text-white/80' : isPositive ? 'text-emerald-600' : 'text-red-600'}`}>
+                                        <span className={`text-[10px] md:text-xs block truncate ${isSelected ? 'text-white/80' : isPositive ? trendColor.upColor : trendColor.downColor}`}>
                                             {isPositive ? '+' : ''}{day.pnl.toFixed(0)}
                                         </span>
                                     )}
 
                                     {/* 节假日名称（手机隐藏） */}
                                     {day.isHoliday && day.holidayName && !hasTrades && (
-                                        <span className={`hidden md:block text-[9px] truncate ${isSelected ? 'text-white/70' : 'text-orange-500'}`}>
-                                            {day.holidayName}
-                                        </span>
+                                        <div className={`hidden md:flex flex-col items-center w-full px-1 gap-0.5 overflow-hidden ${isSelected ? 'text-white/70' : 'text-orange-500'}`}>
+                                            {day.holidayName.split(' / ').map((name, i) => (
+                                                <span key={i} className="text-[9px] leading-tight truncate w-full text-center" title={name}>
+                                                    {name}
+                                                </span>
+                                            ))}
+                                        </div>
                                     )}
                                 </button>
                             )
@@ -399,7 +410,7 @@ export default function DailyPage() {
                                     </div>
                                     <div>
                                         <p className="text-sm text-slate-500">当日盈亏</p>
-                                        <p className={`text-xl font-bold ${selectedDayData.pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                        <p className={`text-xl font-bold ${selectedDayData.pnl >= 0 ? trendColor.upColor : trendColor.downColor}`}>
                                             {selectedDayData.pnl >= 0 ? '+' : ''}${selectedDayData.pnl.toFixed(2)}
                                         </p>
                                     </div>
@@ -414,11 +425,11 @@ export default function DailyPage() {
                                             <div className="card p-4 hover:scale-[1.02] transition-transform cursor-pointer">
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex items-center space-x-3">
-                                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${(trade.pnl || 0) >= 0 ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-red-100 dark:bg-red-900/30'}`}>
+                                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${(trade.pnl || 0) >= 0 ? trendColor.upBg : trendColor.downBg}`}>
                                                             {(trade.pnl || 0) >= 0 ? (
-                                                                <TrendingUp className="w-4 h-4 text-emerald-500" />
+                                                                <TrendingUp className={`w-4 h-4 ${trendColor.upColor}`} />
                                                             ) : (
-                                                                <TrendingDown className="w-4 h-4 text-red-500" />
+                                                                <TrendingDown className={`w-4 h-4 ${trendColor.downColor}`} />
                                                             )}
                                                         </div>
                                                         <div>
@@ -426,7 +437,7 @@ export default function DailyPage() {
                                                             <p className="text-xs text-slate-500">{trade.exchange}</p>
                                                         </div>
                                                     </div>
-                                                    <p className={`font-bold ${(trade.pnl || 0) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                                    <p className={`font-bold ${(trade.pnl || 0) >= 0 ? trendColor.upColor : trendColor.downColor}`}>
                                                         {(trade.pnl || 0) >= 0 ? '+' : ''}${trade.pnl?.toFixed(2)}
                                                     </p>
                                                 </div>

@@ -218,11 +218,11 @@ export default function StrategiesPage() {
     return (
         <div className="space-y-6 pb-20 md:pb-6">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold">交易策略</h1>
-                <button onClick={openCreateModal} className="btn btn-primary flex items-center space-x-2">
-                    <Plus className="w-5 h-5" />
-                    <span>新增策略</span>
+                <button onClick={openCreateModal} className="btn btn-primary flex items-center">
+                    <Plus className="w-4 h-4 mr-1" />
+                    新增策略
                 </button>
             </div>
 

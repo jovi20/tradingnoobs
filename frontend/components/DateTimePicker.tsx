@@ -81,7 +81,7 @@ export default function DateTimePicker({ value, onChange, label, required }: Dat
     const emptyDays = Array(startDay).fill(null)
 
     return (
-        <div className="relative" ref={containerRef}>
+        <div className={`relative ${isOpen ? 'z-50' : 'z-10'}`} ref={containerRef}>
             {label && (
                 <label className="block text-sm font-medium mb-2">
                     <CalendarIcon className="w-4 h-4 inline mr-1" />

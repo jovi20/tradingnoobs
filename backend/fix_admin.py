@@ -7,7 +7,7 @@ def fix_admin():
     db = SessionLocal()
     try:
         email = "admin@tradingnoobs.com"
-        password = "admin123456"  # Setting user requested password
+        password = "admin123"  # Resetting to user's expected password
         
         user = db.query(User).filter(User.email == email).first()
         

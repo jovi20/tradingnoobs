@@ -41,6 +41,7 @@ class BatchTypeEnum(str, Enum):
 class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8)
+    invite_code: str = Field(..., min_length=1)
 
 
 class UserLogin(BaseModel):
@@ -210,6 +211,7 @@ class DailySummaryResponse(BaseModel):
 
 class UserSettingsUpdate(BaseModel):
     theme: Optional[str] = Field(None, pattern="^(light|dark|system)$")
+    up_color: Optional[str] = Field(None, pattern="^(GREEN|RED)$")
     ibkr_host: Optional[str] = None
     ibkr_port: Optional[int] = None
     ibkr_client_id: Optional[int] = None
@@ -225,6 +227,7 @@ class UserSettingsResponse(BaseModel):
     id: int
     user_id: int
     theme: str
+    up_color: str = "GREEN"
     ibkr_host: Optional[str]
     ibkr_port: Optional[int]
     ibkr_client_id: Optional[int]
@@ -380,6 +383,7 @@ class TradeBatchResponse(BaseModel):
 class PositionCreate(BaseModel):
     account_id: int
     symbol: str = Field(..., max_length=50)
+    asset_type: Optional[str] = None
     direction: PositionDirectionEnum
     strategy_id: Optional[int] = None
     # First batch info
@@ -406,6 +410,7 @@ class PositionResponse(BaseModel):
     strategy_id: Optional[int]
     symbol: str
     exchange: str
+    asset_type: Optional[str] = None
     direction: PositionDirectionEnum
     status: PositionStatusEnum
     total_quantity: Decimal
@@ -431,11 +436,14 @@ class PositionListResponse(BaseModel):
     account_id: Optional[int]
     symbol: str
     exchange: str
+    asset_type: Optional[str] = None
     direction: PositionDirectionEnum
     status: PositionStatusEnum
     total_quantity: Decimal
     average_entry_price: Optional[Decimal]
     realized_pnl: Decimal
+    current_price: Optional[float] = None  # Live price for open positions
+    unrealized_pnl: Optional[float] = None  # Unrealized P&L
     opened_at: datetime
     closed_at: Optional[datetime]
     created_at: datetime

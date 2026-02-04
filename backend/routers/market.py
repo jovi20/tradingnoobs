@@ -26,7 +26,7 @@ async def validate_symbol(
     Returns symbol info if valid, error if not found
     """
     service = MarketDataService(db)
-    return service.validate_symbol(symbol, exchange)
+    return await service.validate_symbol(symbol, exchange)
 
 
 @router.get("/quote/{symbol}")
@@ -68,7 +68,7 @@ async def detect_asset_type(
     检测标的类型（不查询价格）
     """
     service = MarketDataService(db)
-    asset_type = service.detect_asset_type(symbol, exchange)
+    asset_type = await service.detect_asset_type_enhanced(symbol, exchange)
     return {
         "symbol": symbol.upper(),
         "asset_type": asset_type,

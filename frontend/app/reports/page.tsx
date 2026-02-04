@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { reportsAPI, WeeklyReport } from '@/lib/api'
+import ReactMarkdown from 'react-markdown'
 
 export default function ReportsPage() {
     const { token } = useAuth()
@@ -78,14 +79,23 @@ export default function ReportsPage() {
                 <button
                     onClick={handleGenerateReport}
                     disabled={isGenerating}
-                    className="btn btn-primary flex items-center space-x-2"
+                    className={`
+                        relative group overflow-hidden px-6 py-3 rounded-xl font-medium transition-all
+                        ${isGenerating
+                            ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                            : 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:shadow-lg hover:shadow-primary-500/20 active:scale-95'}
+                        flex items-center justify-center space-x-2 w-full sm:w-auto
+                    `}
                 >
+                    {!isGenerating && (
+                        <div className="absolute inset-0 bg-gradient-to-r from-primary-500/10 to-accent-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    )}
                     {isGenerating ? (
                         <Loader2 className="w-5 h-5 animate-spin" />
                     ) : (
-                        <Sparkles className="w-5 h-5" />
+                        <Sparkles className="w-5 h-5 text-primary-400 group-hover:rotate-12 transition-transform" />
                     )}
-                    <span>{isGenerating ? '生成中...' : '生成本周周报'}</span>
+                    <span>{isGenerating ? '正在深度分析中...' : '生成本周 AI 周报'}</span>
                 </button>
             </div>
 
@@ -155,9 +165,9 @@ export default function ReportsPage() {
                                                     <TrendingUp className="w-4 h-4 text-primary-500" />
                                                     <span>交易回顾</span>
                                                 </h4>
-                                                <p className="text-sm text-slate-600 dark:text-slate-400 whitespace-pre-wrap">
-                                                    {report.trades_summary}
-                                                </p>
+                                                <div className="prose prose-sm dark:prose-invert max-w-none text-slate-600 dark:text-slate-400">
+                                                    <ReactMarkdown>{report.trades_summary}</ReactMarkdown>
+                                                </div>
                                             </div>
                                         )}
 
@@ -168,9 +178,9 @@ export default function ReportsPage() {
                                                     <Sparkles className="w-4 h-4 text-amber-500" />
                                                     <span>芒格视角评估</span>
                                                 </h4>
-                                                <p className="text-sm text-slate-600 dark:text-slate-400 whitespace-pre-wrap">
-                                                    {report.munger_evaluation}
-                                                </p>
+                                                <div className="prose prose-sm dark:prose-invert max-w-none text-slate-600 dark:text-slate-400">
+                                                    <ReactMarkdown>{report.munger_evaluation}</ReactMarkdown>
+                                                </div>
                                             </div>
                                         )}
 
@@ -181,9 +191,9 @@ export default function ReportsPage() {
                                                     <TrendingUp className="w-4 h-4 text-emerald-500" />
                                                     <span>改进建议</span>
                                                 </h4>
-                                                <p className="text-sm text-slate-600 dark:text-slate-400 whitespace-pre-wrap">
-                                                    {report.suggestions}
-                                                </p>
+                                                <div className="prose prose-sm dark:prose-invert max-w-none text-slate-600 dark:text-slate-400">
+                                                    <ReactMarkdown>{report.suggestions}</ReactMarkdown>
+                                                </div>
                                             </div>
                                         )}
                                     </div>
