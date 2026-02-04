@@ -4,6 +4,9 @@
 
 ## 1. 准备工作 (VPS 上执行)
 
+git clone https://github.com/drs-ai/tradingnoobs.git
+
+
 ### 1.1 前置网络环境
 创建一个外部 Docker 网络，允许不同路径下的 Compose 容器互通：
 ```bash
@@ -23,9 +26,9 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 
 1.  **创建环境变量**: `nano .env`
     ```env
-    DOMAIN=yourdomain.com
-    SECRET_KEY=yoursecretkey
-    DB_PASSWORD=yourdbpassword
+    DOMAIN=coz.japaneast.cloudapp.azure.com
+    SECRET_KEY=829e7872b061f6e473e66b647b5b8bd6882f39dfb425dc39f79dd431d697258f
+    DB_PASSWORD=Cudd13!$
     ```
 2.  **启动应用**: `sudo docker-compose up -d --build`
     *(此路径包含 Backend, Frontend, Postgres)*
