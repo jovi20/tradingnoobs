@@ -90,7 +90,7 @@ networks:
 1.  在網頁端正常註冊一個賬號。
 2.  在 VPS 上執行以下命令（假定容器名為 `tradingnoobs-backend`）：
     ```bash
-    sudo docker exec -it tradingnoobs-backend python manage_users.py promote-admin your@email.com
+    sudo docker exec -it tradingnoobs-backend python manage_users.py promote-admin jovizhjw@gmail.com
     ```
 3.  重啟該賬號的登錄狀態，即可看到管理員功能（如邀請碼管理）。
 

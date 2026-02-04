@@ -2,7 +2,9 @@
  * Trading Noobs Frontend - API Client
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+// Strips trailing /api if present to avoid double prefixing when concatenated with /api/ endpoints
+const rawBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API_BASE = rawBase.replace(/\/api$/, '')
 
 // ============== Types ==============
 
