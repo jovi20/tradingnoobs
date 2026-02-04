@@ -1,74 +1,94 @@
-# Trading Noobs 部署指南 (VPS - ARM 架构)
+# Trading Noobs 部署指南 (VPS - ARM 架构 - Caddy 分离版)
 
-针对您的 VPS 配置（ARM 2C/1G/60G），我们推荐使用 **Docker Compose** 进行一键部署。由于 1GB 内存对于 Next.js 编译较为吃力，请务必按照以下步骤设置 **虚拟内存 (Swap)**。
+针对您的 VPS 配置，我们已将应用服务与 Caddy 网关解耦。您可以将 Caddy 放在独立路径下运行，以便统一管理多个站点。
 
 ## 1. 准备工作 (VPS 上执行)
 
-### 1.1 安装 Docker
+### 1.1 前置网络环境
+创建一个外部 Docker 网络，允许不同路径下的 Compose 容器互通：
 ```bash
-# 更新并安装必备组件
-sudo apt update && sudo apt install -y docker.io docker-compose git
-
-# 启动 Docker 并设置开机自启
-sudo systemctl start docker
-sudo systemctl enable docker
+sudo docker network create web-proxy
 ```
 
-### 1.2 设置虚拟内存 (关键：防止 1G 内存构建失败)
+### 1.2 设置虚拟内存 (针对 1G 内存)
 ```bash
-# 创建 2GB 的交换文件
 sudo fallocate -l 2G /swapfile
 sudo chmod 600 /swapfile
 sudo mkswap /swapfile
 sudo swapon /swapfile
-
-# 设置永久生效
 echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 ```
 
-## 2. 获取代码并配置环境
+## 2. 部署项目应用 (当前路径)
 
-### 2.1 克隆仓库
-```bash
-git clone <您的仓库地址> tradingnoobs
-cd tradingnoobs
+1.  **创建环境变量**: `nano .env`
+    ```env
+    DOMAIN=yourdomain.com
+    SECRET_KEY=yoursecretkey
+    DB_PASSWORD=yourdbpassword
+    ```
+2.  **启动应用**: `sudo docker-compose up -d --build`
+    *(此路径包含 Backend, Frontend, Postgres)*
+
+## 3. 部署 Caddy (在您的独立路径下)
+
+在您的 Caddy 运行路径下，确保目录结构如下：
+*   `Caddyfile` (见下方)
+*   `docker-compose.yml` (用于 Caddy 镜像)
+
+### 3.1 Caddyfile 配置
+```caddy
+{$DOMAIN} {
+    # 转发前端 (使用容器名或 localhost)
+    handle {
+        reverse_proxy tradingnoobs-frontend:3000
+    }
+    
+    # 转发后端 API
+    handle /api/* {
+        reverse_proxy tradingnoobs-backend:8000
+    }
+
+    encode gzip
+}
 ```
 
-### 2.2 创建环境变量文件
-创建 `.env` 文件并填入您的信息：
-```bash
-nano .env
-```
-填入以下内容：
-```env
-DOMAIN=yourdomain.com      # 您的域名，没有域名则填公网 IP
-SECRET_KEY=yoursecretkey   # 随机长字符串，用于 JWT 加密
-DB_PASSWORD=yourdbpassword # 数据库密码
-```
+### 3.2 Caddy 的 Compose (示例)
+```yaml
+version: '3.8'
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: global-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+    networks:
+      - web-proxy
 
-## 3. 启动部署
-
-使用一条命令即可完成：
-*   拉取基础镜像 (ARM 自动匹配)
-*   编译前端 (Next.js)
-*   安装后端依赖
-*   通过 Caddy 自动配置 SSL 证书
-
-```bash
-sudo docker-compose up -d --build
+networks:
+  web-proxy:
+    external: true
 ```
 
-## 4. 维护与查看
+## 4. 维护
+*   **应用层**: `docker-compose ps`
+*   **网关层**: 在 Caddy 路径下运行 `docker-compose reload` (或 restart)
 
-*   **查看运行状态**: `sudo docker-compose ps`
-*   **查看日志**: `sudo docker-compose logs -f`
-*   **重启服务**: `sudo docker-compose restart`
+## 5. 初始化管理員 (Initialize Admin)
 
-## 5. 其他注意事项
+部署完成後，您需要手動將第一個註冊的用戶提升為管理員：
 
-1.  **域名解析**: 请将您的域名 A 记录指向 VPS 的公网 IP。
-2.  **防火墙**: 确保 VPS 开放了 `80` (HTTP) 和 `443` (HTTPS) 端口。
-3.  **无域名部署**: 如果没有域名，Caddyfile 会使用 HTTP。建议在 `.env` 中填入 IP。
+1.  在網頁端正常註冊一個賬號。
+2.  在 VPS 上執行以下命令（假定容器名為 `tradingnoobs-backend`）：
+    ```bash
+    sudo docker exec -it tradingnoobs-backend python manage_users.py promote-admin your@email.com
+    ```
+3.  重啟該賬號的登錄狀態，即可看到管理員功能（如邀請碼管理）。
 
 ---
 **Trading Noobs 极简部署方案**
