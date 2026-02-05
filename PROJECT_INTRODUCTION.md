@@ -53,4 +53,8 @@ Trading Noobs 是一个专为交易者设计的现代化交易日志系统。它
 
 ## 📄 许可证
 
-MIT License
+本项目采用双重授权（Dual Licensing）模式
+
+开源授权：GNU General Public License v3.0（GPLv3）
+
+商业授权：需单独向作者购买
