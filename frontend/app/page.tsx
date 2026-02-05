@@ -131,7 +131,7 @@ function AllocationPieChart({ data, dimension }: { data: AssetAllocation[], dime
                         ))}
                     </Pie>
                     <Tooltip
-                        formatter={(value: number) => `$${value.toLocaleString()}`}
+                        formatter={(value: number, name: string, props: any) => `${props.payload.percent}%`}
                     />
                     <Legend />
                 </PieChart>

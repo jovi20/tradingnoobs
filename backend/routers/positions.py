@@ -273,14 +273,24 @@ async def create_position(
     if not detected_type:
         detected_type = await market_service.detect_asset_type_enhanced(position_data.symbol, account.broker)
 
-    # Create position
+    # Ensure AssetMetadata exists for this symbol
+    symbol_upper = position_data.symbol.upper()
+    asset_meta = db.query(AssetMetadata).filter(AssetMetadata.symbol == symbol_upper).first()
+    if not asset_meta:
+        # Create basic metadata - will be enriched via API or manual update
+        asset_meta = AssetMetadata(symbol=symbol_upper, name=symbol_upper)
+        db.add(asset_meta)
+        db.flush()
+    
+    # Create position with asset_metadata_symbol link
     position = Position(
         user_id=current_user.id,
         account_id=position_data.account_id,
         strategy_id=position_data.strategy_id,
-        symbol=position_data.symbol.upper(),
+        symbol=symbol_upper,
         exchange=account.broker,
         asset_type=detected_type,
+        asset_metadata_symbol=symbol_upper,  # Link to metadata
         direction=PositionDirection[position_data.direction.value],
         status=PositionStatus.OPEN,
         total_quantity=position_data.quantity,
@@ -555,8 +565,14 @@ async def export_positions_csv(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Export all positions and batches as CSV"""
-    positions = db.query(Position).filter(
+    """Export all positions and batches to CSV with comprehensive metadata"""
+    # Query with all relationships
+    from sqlalchemy.orm import joinedload
+    positions = db.query(Position).options(
+        joinedload(Position.batches),
+        joinedload(Position.asset_metadata),
+        joinedload(Position.account)
+    ).filter(
         Position.user_id == current_user.id
     ).order_by(desc(Position.opened_at)).all()
     
@@ -564,9 +580,11 @@ async def export_positions_csv(
     output = io.StringIO()
     writer = csv.writer(output)
     
-    # Header row
+    # Write header
     writer.writerow([
-        'Position ID', 'Symbol', 'Exchange', 'Direction', 'Status',
+        'Position ID', 'Symbol', 'Name', 'Asset Class', 'Market', 'Sector', 
+        'Exchange/Broker', 'Account', 'Account Type',
+        'Direction', 'Status', 
         'Total Quantity', 'Avg Entry Price', 'Realized PnL',
         'Opened At', 'Closed At', 'Position Review', 'Lessons',
         'Batch ID', 'Batch Type', 'Batch Price', 'Batch Quantity',
@@ -578,28 +596,51 @@ async def export_positions_csv(
         # Prepare position-level fields
         lessons_str = ', '.join(pos.lessons) if pos.lessons else ''
         
+        # Asset Metadata fields
+        asset_name = pos.asset_metadata.name if pos.asset_metadata else ''
+        asset_core_type = pos.asset_metadata.core_type.value if pos.asset_metadata and pos.asset_metadata.core_type else ''
+        asset_market = pos.asset_metadata.market.value if pos.asset_metadata and pos.asset_metadata.market else ''
+        asset_sector = pos.asset_metadata.sector if pos.asset_metadata else ''
+        
+        # Account fields
+        account_name = pos.account.name if pos.account else ''
+        account_type = pos.account.account_type if pos.account else ''
+        
+        # Helper for basic fields
+        def fmt_float(val):
+            return float(val) if val is not None else 0
+            
+        def fmt_date(val):
+            return val.isoformat() if val else ''
+
         # Export position with each batch
         if pos.batches:
             for batch in pos.batches:
                 writer.writerow([
                     pos.id,
                     pos.symbol,
+                    asset_name,
+                    asset_core_type,
+                    asset_market,
+                    asset_sector,
                     pos.exchange,
+                    account_name,
+                    account_type,
                     pos.direction.value if pos.direction else '',
                     pos.status.value if pos.status else '',
-                    float(pos.total_quantity) if pos.total_quantity else 0,
-                    float(pos.average_entry_price) if pos.average_entry_price else 0,
-                    float(pos.realized_pnl) if pos.realized_pnl else 0,
-                    pos.opened_at.isoformat() if pos.opened_at else '',
-                    pos.closed_at.isoformat() if pos.closed_at else '',
+                    fmt_float(pos.total_quantity),
+                    fmt_float(pos.average_entry_price),
+                    fmt_float(pos.realized_pnl),
+                    fmt_date(pos.opened_at),
+                    fmt_date(pos.closed_at),
                     pos.trade_review or '',
                     lessons_str,
                     batch.id,
                     batch.type.value if batch.type else '',
-                    float(batch.price) if batch.price else 0,
-                    float(batch.quantity) if batch.quantity else 0,
-                    batch.time.isoformat() if batch.time else '',
-                    float(batch.pnl) if batch.pnl else 0,
+                    fmt_float(batch.price),
+                    fmt_float(batch.quantity),
+                    fmt_date(batch.time),
+                    fmt_float(batch.pnl),
                     batch.reason or '',
                     batch.emotion or '',
                     batch.confidence or ''
@@ -609,14 +650,20 @@ async def export_positions_csv(
             writer.writerow([
                 pos.id,
                 pos.symbol,
+                asset_name,
+                asset_core_type,
+                asset_market,
+                asset_sector,
                 pos.exchange,
+                account_name,
+                account_type,
                 pos.direction.value if pos.direction else '',
                 pos.status.value if pos.status else '',
-                float(pos.total_quantity) if pos.total_quantity else 0,
-                float(pos.average_entry_price) if pos.average_entry_price else 0,
-                float(pos.realized_pnl) if pos.realized_pnl else 0,
-                pos.opened_at.isoformat() if pos.opened_at else '',
-                pos.closed_at.isoformat() if pos.closed_at else '',
+                fmt_float(pos.total_quantity),
+                fmt_float(pos.average_entry_price),
+                fmt_float(pos.realized_pnl),
+                fmt_date(pos.opened_at),
+                fmt_date(pos.closed_at),
                 pos.trade_review or '',
                 lessons_str,
                 '', '', '', '', '', '', '', '', ''

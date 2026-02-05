@@ -33,6 +33,12 @@ interface LocalSettings extends Partial<UserSettings> {
     binance_api_secret?: string // Local only, not in UserSettings
 }
 
+const ACCOUNT_TYPES = [
+    { value: 'Spot', label: '现货 (Spot)' },
+    { value: 'Margin', label: '保证金 (Margin)' },
+    { value: 'Unified', label: '统一账户 (Unified)' },
+]
+
 export default function SettingsPage() {
     const { token, user, logout, refreshSettings } = useAuth()
     const { theme, setTheme } = useTheme()
@@ -509,12 +515,16 @@ export default function SettingsPage() {
                             </div>
                             <div>
                                 <label className="block text-xs font-medium mb-1">账户类型</label>
-                                <input
+                                <select
                                     className="input text-sm"
                                     value={accountForm.account_type || ''}
                                     onChange={e => setAccountForm({ ...accountForm, account_type: e.target.value })}
-                                    placeholder="例如: Margin / Spot"
-                                />
+                                >
+                                    <option value="">请选择类型...</option>
+                                    {ACCOUNT_TYPES.map(t => (
+                                        <option key={t.value} value={t.value}>{t.label}</option>
+                                    ))}
+                                </select>
                             </div>
                             <div>
                                 <label className="block text-xs font-medium mb-1">币种</label>
@@ -587,7 +597,7 @@ export default function SettingsPage() {
                                         </span>
                                         {account.account_type && (
                                             <span className="text-xs text-slate-500">
-                                                {account.account_type}
+                                                {ACCOUNT_TYPES.find(t => t.value === account.account_type)?.label || account.account_type}
                                             </span>
                                         )}
                                     </div>

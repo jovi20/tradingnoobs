@@ -56,6 +56,34 @@ def migrate():
                 print("Adding asset_metadata_symbol column to positions...")
                 conn.execute(text("ALTER TABLE positions ADD COLUMN asset_metadata_symbol VARCHAR(50)"))
                 conn.commit()
+            
+            # 5b. Populate asset_metadata_symbol for existing positions
+            print("Linking existing positions to asset_metadata...")
+            # Get all positions without asset_metadata_symbol
+            unlinked = conn.execute(text(
+                "SELECT DISTINCT UPPER(symbol) as symbol FROM positions WHERE asset_metadata_symbol IS NULL"
+            )).fetchall()
+            
+            for row in unlinked:
+                sym = row[0]
+                # Check if AssetMetadata exists
+                exists = conn.execute(text(
+                    "SELECT 1 FROM asset_metadata WHERE symbol = :sym"
+                ), {'sym': sym}).fetchone()
+                
+                if not exists:
+                    # Create basic metadata
+                    conn.execute(text(
+                        "INSERT INTO asset_metadata (symbol, name) VALUES (:sym, :sym)"
+                    ), {'sym': sym})
+                
+                # Link positions to metadata
+                conn.execute(text(
+                    "UPDATE positions SET asset_metadata_symbol = UPPER(symbol) WHERE UPPER(symbol) = :sym"
+                ), {'sym': sym})
+            
+            conn.commit()
+            print(f"Linked {len(unlinked)} unique symbols to asset_metadata.")
 
         # 6. Add current_balance to trading_accounts
         if inspector.has_table('trading_accounts'):
@@ -63,8 +91,20 @@ def migrate():
                 print("Adding current_balance to trading_accounts...")
                 conn.execute(text("ALTER TABLE trading_accounts ADD COLUMN current_balance NUMERIC(20, 2) DEFAULT 0"))
                 conn.commit()
+            
+            if not column_exists('trading_accounts', 'account_type'):
+                print("Adding account_type to trading_accounts...")
+                conn.execute(text("ALTER TABLE trading_accounts ADD COLUMN account_type VARCHAR(50)"))
+                conn.commit()
 
-        # 7. Migrate Trades to Positions if empty
+        # 7. Add account_id to positions
+        if inspector.has_table('positions'):
+            if not column_exists('positions', 'account_id'):
+                print("Adding account_id to positions...")
+                conn.execute(text("ALTER TABLE positions ADD COLUMN account_id INTEGER REFERENCES trading_accounts(id)"))
+                conn.commit()
+
+        # 8. Migrate Trades to Positions if empty
         print("Checking for trades to migrate to positions...")
         res = conn.execute(text("SELECT COUNT(*) FROM positions"))
         pos_count = res.fetchone()[0]
@@ -149,9 +189,6 @@ def migrate():
             print("Trade migration complete.")
 
     print("Migration completed.")
-
-if __name__ == "__main__":
-    migrate()
 
 if __name__ == "__main__":
     migrate()

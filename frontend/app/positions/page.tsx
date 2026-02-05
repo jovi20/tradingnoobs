@@ -37,7 +37,7 @@ export default function PositionsPage() {
     const [accountFilter, setAccountFilter] = useState<number | 'ALL'>('ALL')
 
     // Multi-dimensional filters
-    const [dimension, setDimension] = useState<'CORE_TYPE' | 'MARKET' | 'RISK' | 'ASSET_TYPE'>('ASSET_TYPE')
+    const [dimension, setDimension] = useState<'CORE_TYPE' | 'MARKET' | 'RISK'>('CORE_TYPE')
     const [categoryFilter, setCategoryFilter] = useState<string>('ALL')
 
     // URL params for linking from dashboard
@@ -53,10 +53,7 @@ export default function PositionsPage() {
 
         if (dim) setDimension(dim as any)
 
-        if (type) {
-            setDimension('ASSET_TYPE')
-            setCategoryFilter(type)
-        } else if (core) {
+        if (core) {
             setDimension('CORE_TYPE')
             setCategoryFilter(core)
         } else if (mkt) {
@@ -82,7 +79,6 @@ export default function PositionsPage() {
                 if (accountFilter !== 'ALL') params.account_id = accountFilter
 
                 if (categoryFilter !== 'ALL') {
-                    if (dimension === 'ASSET_TYPE') params.asset_type = categoryFilter
                     if (dimension === 'CORE_TYPE') params.core_type = categoryFilter
                     if (dimension === 'MARKET') params.market = categoryFilter
                     if (dimension === 'RISK') params.risk_level = categoryFilter
@@ -125,8 +121,6 @@ export default function PositionsPage() {
     // Helper to get categories for current dimension
     const getCategories = () => {
         switch (dimension) {
-            case 'ASSET_TYPE':
-                return ['ALL', 'EQUITY', 'ETF_EQUITY', 'ETF_BOND', 'ETF_COMMODITY', 'CRYPTO', 'FOREX']
             case 'CORE_TYPE':
                 return ['ALL', 'STOCK', 'FUND', 'BOND', 'COMMODITY', 'FX', 'CRYPTO']
             case 'MARKET':
@@ -141,16 +135,6 @@ export default function PositionsPage() {
     const getCategoryLabel = (cat: string) => {
         if (cat === 'ALL') return '全部'
         switch (dimension) {
-            case 'ASSET_TYPE':
-                switch (cat) {
-                    case 'EQUITY': return '股票'
-                    case 'ETF_EQUITY': return '股票ETF'
-                    case 'ETF_BOND': return '债券ETF'
-                    case 'ETF_COMMODITY': return '商品ETF'
-                    case 'CRYPTO': return '加密货币'
-                    case 'FOREX': return '外汇'
-                    default: return cat
-                }
             case 'CORE_TYPE':
                 return getCoreTypeLabel(cat as any)
             case 'MARKET':
@@ -174,7 +158,7 @@ export default function PositionsPage() {
         <div className="space-y-6 pb-20 md:pb-6">
             {/* Header */}
             <div className="flex items-center justify-between">
-                <h1 className="text-2xl font-bold">持仓记录</h1>
+                <h1 className="text-2xl font-bold">交易记录</h1>
                 <Link href="/positions/new" className="btn btn-primary flex items-center">
                     <Plus className="w-4 h-4 mr-1" />
                     新增交易
@@ -184,7 +168,6 @@ export default function PositionsPage() {
             {/* Dimension Selector */}
             <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl w-fit">
                 {[
-                    { id: 'ASSET_TYPE', label: '主要类型' },
                     { id: 'CORE_TYPE', label: '底层类别' },
                     { id: 'MARKET', label: '交易市场' },
                     { id: 'RISK', label: '风险等级' },
@@ -225,9 +208,8 @@ export default function PositionsPage() {
                                     url.searchParams.delete('risk_level')
 
                                     if (cat !== 'ALL') {
-                                        const param = dimension === 'ASSET_TYPE' ? 'asset_type' :
-                                            dimension === 'CORE_TYPE' ? 'core_type' :
-                                                dimension === 'MARKET' ? 'market' : 'risk_level'
+                                        const param = dimension === 'CORE_TYPE' ? 'core_type' :
+                                            dimension === 'MARKET' ? 'market' : 'risk_level'
                                         url.searchParams.set(param, cat)
                                         url.searchParams.set('dimension', dimension)
                                     } else {
@@ -280,7 +262,7 @@ export default function PositionsPage() {
             {/* Position List */}
             {filteredPositions.length === 0 ? (
                 <div className="card p-12 text-center">
-                    <p className="text-slate-500 mb-4">暂无持仓记录</p>
+                    <p className="text-slate-500 mb-4">暂无交易记录</p>
                     <Link href="/positions/new" className="btn btn-primary inline-flex items-center">
                         <Plus className="w-4 h-4 mr-1" />
                         新增交易
@@ -407,7 +389,7 @@ export default function PositionsPage() {
                                                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 text-xs font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-all shadow-sm active:scale-95"
                                             >
                                                 <ArrowDownCircle className="w-3.5 h-3.5" />
-                                                <span>减仓</span>
+                                                <span>平仓</span>
                                             </Link>
                                         </div>
                                     </div>
@@ -423,7 +405,7 @@ export default function PositionsPage() {
                                                             ? trendColor.upBg
                                                             : 'bg-amber-100 dark:bg-amber-900/30 text-amber-600'
                                                             }`}>
-                                                            {batch.type === 'ENTRY' ? '加仓' : '减仓'}
+                                                            {batch.type === 'ENTRY' ? '加仓' : '平仓'}
                                                         </span>
                                                         <span className="text-sm text-slate-500">
                                                             {new Date(batch.time).toLocaleString('zh-CN', {

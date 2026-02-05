@@ -132,3 +132,10 @@ sudo docker system prune -f
 git pull
 sudo docker compose up -d --build
 ```
+
+### 6.5 數據庫遷移 (Database Migration)
+當代碼更新涉及數據庫結構變更時（如本此更新），需要執行遷移腳本：
+```bash
+sudo docker exec -it tradingnoobs-backend python migrate_db.py
+```
+> ⚠️ **注意**: 首次部署或更新後如果發現新功能異常（如缺少字段），請務必執行此命令。

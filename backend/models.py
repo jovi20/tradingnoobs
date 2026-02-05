@@ -112,6 +112,8 @@ class User(Base):
     trading_accounts = relationship("TradingAccount", back_populates="user")
     positions = relationship("Position", back_populates="user")
     daily_snapshots = relationship("DailySnapshot", back_populates="user")
+    journal_entries = relationship("JournalEntry", back_populates="user")
+    ai_summaries = relationship("AISummary", back_populates="user")
 
 
 class Trade(Base):
@@ -216,6 +218,45 @@ class DailySummary(Base):
     
     # Relationships
     user = relationship("User", back_populates="daily_summaries")
+
+
+class JournalEntry(Base):
+    """用户随笔 - 每天最多5条，每条最多500字"""
+    __tablename__ = "journal_entries"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    date = Column(Date, nullable=False, index=True)
+    content = Column(String(500), nullable=False)  # 限制500字
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relationships
+    user = relationship("User", back_populates="journal_entries")
+    
+    __table_args__ = (
+        Index('idx_journal_user_date', 'user_id', 'date'),
+    )
+
+
+class AISummary(Base):
+    """AI 每日总结 - 每天最多生成一次"""
+    __tablename__ = "ai_summaries"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    date = Column(Date, nullable=False, index=True)
+    content = Column(Text, nullable=False)  # Markdown 格式的总结内容
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    user = relationship("User", back_populates="ai_summaries")
+    
+    __table_args__ = (
+        Index('idx_ai_summary_user_date', 'user_id', 'date', unique=True),
+    )
 
 
 class UserSettings(Base):

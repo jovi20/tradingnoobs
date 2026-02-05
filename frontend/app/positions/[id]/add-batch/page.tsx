@@ -82,7 +82,7 @@ export default function AddBatchPage() {
             if (form.type === 'EXIT') {
                 const qty = parseFloat(form.quantity)
                 if (qty > Number(position.total_quantity)) {
-                    setError(`减仓数量不能超过当前持仓 (${position.total_quantity})`)
+                    setError(`平仓数量不能超过当前持仓 (${position.total_quantity})`)
                     setIsSubmitting(false)
                     return
                 }
@@ -134,7 +134,7 @@ export default function AddBatchPage() {
                     <ArrowLeft className="w-5 h-5" />
                 </Link>
                 <div>
-                    <h1 className="text-2xl font-bold">加仓 / 减仓</h1>
+                    <h1 className="text-2xl font-bold">加仓 / 平仓</h1>
                     <p className="text-sm text-slate-500">
                         {position.symbol} · 当前持有 {Number(position.total_quantity).toFixed(4)} 份 @ ${Number(position.average_entry_price || 0).toFixed(2)}
                     </p>
@@ -173,14 +173,14 @@ export default function AddBatchPage() {
                                 }`}
                         >
                             <ArrowDownCircle className="w-5 h-5" />
-                            <span className="font-medium">减仓</span>
+                            <span className="font-medium">平仓</span>
                         </button>
                     </div>
                 </div>
 
                 {/* Details */}
                 <div className="card p-6 space-y-4">
-                    <h2 className="font-semibold">{form.type === 'ENTRY' ? '加仓' : '减仓'}信息</h2>
+                    <h2 className="font-semibold">{form.type === 'ENTRY' ? '加仓' : '平仓'}信息</h2>
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -232,7 +232,7 @@ export default function AddBatchPage() {
                             onChange={e => setForm({ ...form, reason: e.target.value })}
                             className="input"
                             rows={3}
-                            placeholder={form.type === 'ENTRY' ? '为什么加仓？' : '为什么减仓/止盈/止损？'}
+                            placeholder={form.type === 'ENTRY' ? '为什么加仓？' : '为什么平仓/止盈/止损？'}
                         />
                     </div>
 
@@ -283,7 +283,7 @@ export default function AddBatchPage() {
                     {isSubmitting ? (
                         <Loader2 className="w-5 h-5 animate-spin mx-auto" />
                     ) : (
-                        form.type === 'ENTRY' ? '确认加仓' : '确认减仓'
+                        form.type === 'ENTRY' ? '确认加仓' : '确认平仓'
                     )}
                 </button>
             </form>

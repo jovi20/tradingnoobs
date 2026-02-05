@@ -83,7 +83,7 @@ export default function PositionDetailPage() {
 
     const handleDelete = async () => {
         if (!token || !position) return
-        if (!window.confirm('确定要删除这个持仓记录吗？所有相关的交易批次也会被删除。')) return
+        if (!window.confirm('确定要删除这个交易记录吗？所有相关的交易批次也会被删除。')) return
 
         setIsDeleting(true)
         try {
@@ -201,50 +201,50 @@ export default function PositionDetailPage() {
     return (
         <div className="space-y-6 pb-20 md:pb-6">
             {/* Header */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
+            <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
                     <Link
                         href="/positions"
-                        className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+                        className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0"
                     >
                         <ArrowLeft className="w-5 h-5" />
                     </Link>
-                    <div>
-                        <h1 className="text-2xl font-bold flex items-center space-x-2">
-                            <span>{position.symbol}</span>
-                            <span className={`text-sm px-2 py-1 rounded-full ${isOpen
+                    <div className="min-w-0">
+                        <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2">
+                            <span className="truncate">{position.symbol}</span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${isOpen
                                 ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
                                 : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
                                 }`}>
                                 {isOpen ? '持仓中' : '已平仓'}
                             </span>
                         </h1>
-                        <p className="text-sm text-slate-500">
+                        <p className="text-sm text-slate-500 truncate">
                             {position.exchange} · {position.direction === 'LONG' ? '做多' : '做空'}
                         </p>
                     </div>
                 </div>
-                <div className="flex space-x-2">
+                <div className="flex gap-2 shrink-0">
                     {isOpen && (
                         <Link
                             href={`/positions/${position.id}/add-batch`}
-                            className="btn btn-primary flex items-center space-x-2"
+                            className="btn btn-primary flex items-center gap-1 px-3 md:px-4"
                         >
                             <Plus className="w-4 h-4" />
-                            <span>加减仓</span>
+                            <span className="hidden sm:inline">加/平仓</span>
                         </Link>
                     )}
                     <button
                         onClick={handleDelete}
                         disabled={isDeleting}
-                        className="btn btn-danger flex items-center space-x-2"
+                        className="btn btn-danger flex items-center gap-1 px-3 md:px-4"
                     >
                         {isDeleting ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
                         ) : (
                             <Trash2 className="w-4 h-4" />
                         )}
-                        <span>删除</span>
+                        <span className="hidden sm:inline">删除</span>
                     </button>
                 </div>
             </div>
@@ -364,7 +364,7 @@ export default function PositionDetailPage() {
                                     </div>
                                     <div>
                                         <p className="font-medium">
-                                            {batch.type === 'ENTRY' ? '加仓' : '减仓'}
+                                            {batch.type === 'ENTRY' ? '加仓' : '平仓'}
                                             <span className="ml-2 text-slate-500">
                                                 {Number(batch.quantity).toLocaleString()} @ ${Number(batch.price).toFixed(2)}
                                             </span>

@@ -350,6 +350,14 @@ export const settingsAPI = {
 
 // ============== Reports API ==============
 
+export interface AISummary {
+    id: number
+    user_id: number
+    date: string
+    content: string
+    created_at: string
+}
+
 export const insightsAPI = {
     list: async (token: string): Promise<WeeklyReport[]> => {
         return fetchAPI('/api/insights', {}, token)
@@ -365,6 +373,17 @@ export const insightsAPI = {
         weekEnd.setDate(weekStart.getDate() + 6)
 
         return fetchAPI('/api/insights/generate-current-week', {
+            method: 'POST',
+        }, token)
+    },
+
+    // AI Summary methods
+    getTodaySummary: async (token: string): Promise<AISummary | null> => {
+        return fetchAPI('/api/insights/summary/today', {}, token)
+    },
+
+    generateSummary: async (token: string): Promise<AISummary> => {
+        return fetchAPI('/api/insights/summary/generate', {
             method: 'POST',
         }, token)
     },
@@ -404,6 +423,47 @@ export const dailyAPI = {
         return fetchAPI(`/api/daily/${date}`, {
             method: 'PATCH',
             body: JSON.stringify(data),
+        }, token)
+    },
+}
+
+// ============== Journal API ==============
+
+export interface JournalEntry {
+    id: number
+    user_id: number
+    date: string
+    content: string
+    created_at: string
+    updated_at?: string
+}
+
+export const journalAPI = {
+    list: async (token: string): Promise<JournalEntry[]> => {
+        return fetchAPI('/api/journal', {}, token)
+    },
+
+    getByDate: async (token: string, date: string): Promise<JournalEntry[]> => {
+        return fetchAPI(`/api/journal/${date}`, {}, token)
+    },
+
+    create: async (token: string, data: { date: string; content: string }): Promise<JournalEntry> => {
+        return fetchAPI('/api/journal', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        }, token)
+    },
+
+    update: async (token: string, id: number, data: { content: string }): Promise<JournalEntry> => {
+        return fetchAPI(`/api/journal/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(data),
+        }, token)
+    },
+
+    delete: async (token: string, id: number): Promise<void> => {
+        return fetchAPI(`/api/journal/${id}`, {
+            method: 'DELETE',
         }, token)
     },
 }

@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 
 from config import get_settings
 from database import engine, Base
-from routers import auth, trades, strategies, dashboard, daily, settings as settings_router, insights, accounts, admin, positions, market
+from routers import auth, trades, strategies, dashboard, daily, settings as settings_router, insights, accounts, admin, positions, market, journal
 
 app_settings = get_settings()
 
@@ -51,6 +51,7 @@ app.include_router(accounts.router)
 app.include_router(admin.router)
 app.include_router(positions.router)
 app.include_router(market.router)
+app.include_router(journal.router)
 
 
 @app.get("/")

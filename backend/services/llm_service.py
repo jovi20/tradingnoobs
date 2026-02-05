@@ -323,3 +323,119 @@ async def generate_weekly_report(
     db.refresh(report)
     
     return report
+
+
+JOURNAL_SUMMARY_PROMPT = """你是一位专业的交易心理与仓位管理顾问。请根据用户本周的随笔记录和持仓变动情况，生成一份简洁的周度总结。
+
+## 本周随笔
+{journal_entries}
+
+## 本周持仓变动
+{position_changes}
+
+## 请从以下两个维度进行分析总结：
+
+### 📊 仓位管理
+分析用户的加仓、减仓、建仓、平仓决策是否合理，是否有过度交易、追涨杀跌等问题。
+
+### 🧠 交易心态
+从随笔中分析用户的情绪状态、决策心理，是否有恐惧、贪婪、焦虑等影响交易的情绪。
+
+### 💡 本周建议
+给出 2-3 条具体可执行的改进建议。
+
+请用中文回答，保持简洁专业。
+"""
+
+
+async def generate_journal_summary(
+    db: Session,
+    user_id: int,
+    week_start: date,
+    week_end: date
+) -> Optional[str]:
+    """Generate weekly journal summary using LLM"""
+    from models import JournalEntry, Position, TradeBatch
+    
+    # Get system settings for LLM
+    llm_api_url_setting = db.query(SystemSetting).filter(SystemSetting.key == 'llm_api_url').first()
+    llm_api_key_setting = db.query(SystemSetting).filter(SystemSetting.key == 'llm_api_key').first()
+    llm_model_setting = db.query(SystemSetting).filter(SystemSetting.key == 'llm_model').first()
+    
+    llm_api_url = llm_api_url_setting.value if llm_api_url_setting else None
+    llm_api_key = llm_api_key_setting.value if llm_api_key_setting else None
+    llm_model = llm_model_setting.value if llm_model_setting else "gpt-4"
+
+    if not llm_api_url or not llm_api_key:
+        raise Exception("LLM API 未配置，请联系管理员")
+    
+    # Get journal entries for the week
+    journal_entries = db.query(JournalEntry).filter(
+        JournalEntry.user_id == user_id,
+        JournalEntry.date >= week_start,
+        JournalEntry.date <= week_end
+    ).order_by(JournalEntry.date, JournalEntry.created_at).all()
+    
+    # Format journal entries
+    if journal_entries:
+        journal_text = "\n".join([
+            f"[{entry.date}] {entry.content}"
+            for entry in journal_entries
+        ])
+    else:
+        journal_text = "本周无随笔记录"
+    
+    # Get position changes (batches) for the week
+    batches = db.query(TradeBatch).join(Position).filter(
+        Position.user_id == user_id,
+        TradeBatch.time >= week_start,
+        TradeBatch.time <= week_end
+    ).all()
+    
+    # Format position changes
+    if batches:
+        position_lines = []
+        for batch in batches:
+            position = db.query(Position).filter(Position.id == batch.position_id).first()
+            action = "建仓/加仓" if batch.type.value == "ENTRY" else "平仓/减仓"
+            pnl_str = f"，盈亏: {batch.pnl}" if batch.pnl else ""
+            position_lines.append(
+                f"[{batch.time.strftime('%Y-%m-%d')}] {position.symbol} {action} {batch.quantity}股 @ ${batch.price}{pnl_str}"
+            )
+        position_text = "\n".join(position_lines)
+    else:
+        position_text = "本周无持仓变动"
+    
+    prompt = JOURNAL_SUMMARY_PROMPT.format(
+        journal_entries=journal_text,
+        position_changes=position_text
+    )
+    
+    # Construct API endpoint
+    api_endpoint = llm_api_url.strip().rstrip('/')
+    if not api_endpoint.endswith('/chat/completions'):
+        api_endpoint = f"{api_endpoint}/chat/completions"
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                api_endpoint,
+                headers={
+                    "Authorization": f"Bearer {llm_api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": llm_model,
+                    "messages": [
+                        {"role": "system", "content": "你是一位专业的交易心理与仓位管理顾问。"},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": 1500
+                }
+            )
+            response.raise_for_status()
+            result = response.json()
+            return result["choices"][0]["message"]["content"]
+    except Exception as e:
+        raise Exception(f"LLM API 调用失败: {str(e)}")

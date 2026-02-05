@@ -244,7 +244,43 @@ class DailySummaryResponse(BaseModel):
         from_attributes = True
 
 
+# ============== Journal Entry Schemas ==============
+
+class JournalEntryCreate(BaseModel):
+    date: date
+    content: str = Field(..., max_length=500)  # 每条限制500字
+
+
+class JournalEntryUpdate(BaseModel):
+    content: Optional[str] = Field(None, max_length=500)
+
+
+class JournalEntryResponse(BaseModel):
+    id: int
+    user_id: int
+    date: date
+    content: str
+    created_at: datetime
+    updated_at: Optional[datetime]
+    
+    class Config:
+        from_attributes = True
+
+# ============== AI Summary Schemas ==============
+
+class AISummaryResponse(BaseModel):
+    id: int
+    user_id: int
+    date: date
+    content: str
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
 # ============== User Settings Schemas ==============
+
 
 class UserSettingsUpdate(BaseModel):
     theme: Optional[str] = Field(None, pattern="^(light|dark|system)$")
