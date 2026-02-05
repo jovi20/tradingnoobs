@@ -8,6 +8,9 @@ on:
       - 'website/**'
       - '.github/workflows/deploy.yml'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build and Deploy
