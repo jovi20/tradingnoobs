@@ -571,7 +571,7 @@ async def export_positions_csv(
     positions = db.query(Position).options(
         joinedload(Position.batches),
         joinedload(Position.asset_metadata),
-        joinedload(Position.account)
+        joinedload(Position.trading_account)
     ).filter(
         Position.user_id == current_user.id
     ).order_by(desc(Position.opened_at)).all()
@@ -603,8 +603,8 @@ async def export_positions_csv(
         asset_sector = pos.asset_metadata.sector if pos.asset_metadata else ''
         
         # Account fields
-        account_name = pos.account.name if pos.account else ''
-        account_type = pos.account.account_type if pos.account else ''
+        account_name = pos.trading_account.name if pos.trading_account else ''
+        account_type = pos.trading_account.account_type if pos.trading_account else ''
         
         # Helper for basic fields
         def fmt_float(val):

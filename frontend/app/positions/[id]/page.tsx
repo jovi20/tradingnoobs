@@ -31,6 +31,7 @@ import {
     AssetRiskLevel
 } from '@/lib/symbolUtils'
 import CustomSelect from '@/components/CustomSelect'
+import DateTimePicker from '@/components/DateTimePicker'
 
 export default function PositionDetailPage() {
     const { token } = useAuth()
@@ -100,7 +101,7 @@ export default function PositionDetailPage() {
         setEditForm({
             price: Number(batch.price),
             quantity: Number(batch.quantity),
-            time: new Date(batch.time).toISOString().slice(0, 16),
+            time: new Date(batch.time).toISOString(), // Use full ISO for DateTimePicker
             reason: batch.reason || '',
             confidence: batch.confidence || 3
         })
@@ -476,11 +477,9 @@ export default function PositionDetailPage() {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium mb-1">成交时间</label>
-                                <input
-                                    type="datetime-local"
+                                <DateTimePicker
                                     value={editForm.time}
-                                    onChange={e => setEditForm({ ...editForm, time: e.target.value })}
-                                    className="input"
+                                    onChange={(val) => setEditForm({ ...editForm, time: val })}
                                 />
                             </div>
                             <div>

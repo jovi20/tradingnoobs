@@ -12,6 +12,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import { positionsAPI, Position, BatchCreate, marketAPI } from '@/lib/api'
 import DateTimePicker from '@/components/DateTimePicker'
+import CustomSelect from '@/components/CustomSelect'
 
 export default function AddBatchPage() {
     const { token } = useAuth()
@@ -239,34 +240,36 @@ export default function AddBatchPage() {
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium mb-2">情绪</label>
-                            <select
+                            <CustomSelect
+                                options={[
+                                    { value: '', label: '选择情绪' },
+                                    { value: 'confident', label: '自信 😎' },
+                                    { value: 'calm', label: '平静 😌' },
+                                    { value: 'excited', label: '兴奋 🤩' },
+                                    { value: 'anxious', label: '焦虑 😰' },
+                                    { value: 'fomo', label: 'FOMO 😱' },
+                                    { value: 'revenge', label: '报复交易 😤' },
+                                ]}
                                 value={form.emotion}
-                                onChange={e => setForm({ ...form, emotion: e.target.value })}
-                                className="input"
-                            >
-                                <option value="">选择情绪</option>
-                                <option value="confident">自信 😎</option>
-                                <option value="calm">平静 😌</option>
-                                <option value="excited">兴奋 🤩</option>
-                                <option value="anxious">焦虑 😰</option>
-                                <option value="fomo">FOMO 😱</option>
-                                <option value="revenge">报复交易 😤</option>
-                            </select>
+                                onChange={val => setForm({ ...form, emotion: val as string })}
+                                placeholder="当前情绪"
+                            />
                         </div>
                         <div>
                             <label className="block text-sm font-medium mb-2">信心指数</label>
-                            <select
+                            <CustomSelect
+                                options={[
+                                    { value: '', label: '选择信心' },
+                                    { value: 1, label: '1 - 很低' },
+                                    { value: 2, label: '2 - 较低' },
+                                    { value: 3, label: '3 - 一般' },
+                                    { value: 4, label: '4 - 较高' },
+                                    { value: 5, label: '5 - 非常高' },
+                                ]}
                                 value={form.confidence || ''}
-                                onChange={e => setForm({ ...form, confidence: e.target.value ? parseInt(e.target.value) : undefined })}
-                                className="input"
-                            >
-                                <option value="">选择信心</option>
-                                <option value="1">1 - 很低</option>
-                                <option value="2">2 - 较低</option>
-                                <option value="3">3 - 一般</option>
-                                <option value="4">4 - 较高</option>
-                                <option value="5">5 - 非常高</option>
-                            </select>
+                                onChange={val => setForm({ ...form, confidence: val ? (typeof val === 'string' ? parseInt(val) : val) : undefined })}
+                                placeholder="交易信心"
+                            />
                         </div>
                     </div>
                 </div>
