@@ -188,7 +188,7 @@ function PerformanceMovers({ top, bottom }: { top: PositionMover[], bottom: Posi
 
 function PositionCard({ position }: { position: Position }) {
     const trendColor = useTrendColor()
-    const pnl = Number(position.realized_pnl) || 0
+    const pnl = position.status === 'OPEN' ? (Number(position.unrealized_pnl) || 0) : (Number(position.realized_pnl) || 0)
     const isPositive = pnl >= 0
 
     return (

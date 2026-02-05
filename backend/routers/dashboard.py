@@ -454,9 +454,13 @@ async def get_dashboard_stats(
         print(f"Snapshot recording failed: {e}")
         # Don't block main response
 
+    # Calculate Total Portfolio PnL (Realized + Unrealized)
+    total_unrealized = sum(s.get('unrealized_total', 0.0) for s in account_stats.values())
+    combined_total_pnl = total_pnl + total_unrealized
+
     return DashboardStats(
         total_assets=total_gross,
-        total_pnl=total_pnl,
+        total_pnl=combined_total_pnl,
         win_rate=win_rate,
         avg_pnl_ratio=avg_pnl_ratio,
         total_trades=total_trades,
