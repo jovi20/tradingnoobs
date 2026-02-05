@@ -1,6 +1,6 @@
-# Trading Noobs 交易日志系统
+# Trading Noobs 交易分析与复盘
 
-> 一个全栈 Web 应用，用于记录、分析和复盘美股与加密货币交易。
+> 一个全栈 Web 应用，用于记录、分析和复盘A股、港股、美股与加密货币交易。
 
 ![Dashboard Preview](https://img.shields.io/badge/Next.js-14-black?style=flat-square&logo=next.js) ![FastAPI](https://img.shields.io/badge/FastAPI-0.109-009688?style=flat-square&logo=fastapi) ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?style=flat-square&logo=typescript)
 
