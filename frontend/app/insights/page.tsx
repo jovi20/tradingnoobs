@@ -119,27 +119,49 @@ export default function ReportsPage() {
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <h1 className="text-2xl font-bold">AI 洞察</h1>
-                <button
-                    onClick={handleGenerateReport}
-                    disabled={isGenerating || hasGeneratedInsightToday}
-                    className={`
+                <div className="flex gap-3 w-full sm:w-auto">
+                    {!dailySummary && !isLoadingSummary && (
+                        <button
+                            onClick={handleGenerateSummary}
+                            disabled={isGeneratingSummary}
+                            className={`
+                            relative group overflow-hidden px-6 py-3 rounded-xl font-medium transition-all
+                            ${isGeneratingSummary
+                                    ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                                    : 'bg-indigo-600 dark:bg-indigo-500 text-white hover:shadow-lg hover:shadow-indigo-500/20 active:scale-95'}
+                            flex items-center justify-center space-x-2 flex-1 sm:flex-none
+                        `}
+                        >
+                            {isGeneratingSummary ? (
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                            ) : (
+                                <Sparkles className="w-5 h-5 text-white/80 group-hover:rotate-12 transition-transform" />
+                            )}
+                            <span>{isGeneratingSummary ? '生成中...' : 'Summary'}</span>
+                        </button>
+                    )}
+                    <button
+                        onClick={handleGenerateReport}
+                        disabled={isGenerating || hasGeneratedInsightToday}
+                        className={`
                         relative group overflow-hidden px-6 py-3 rounded-xl font-medium transition-all
                         ${isGenerating || hasGeneratedInsightToday
-                            ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
-                            : 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:shadow-lg hover:shadow-primary-500/20 active:scale-95'}
-                        flex items-center justify-center space-x-2 w-full sm:w-auto
+                                ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                                : 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:shadow-lg hover:shadow-primary-500/20 active:scale-95'}
+                        flex items-center justify-center space-x-2 flex-1 sm:flex-none
                     `}
-                >
-                    {!isGenerating && !hasGeneratedInsightToday && (
-                        <div className="absolute inset-0 bg-gradient-to-r from-primary-500/10 to-accent-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    )}
-                    {isGenerating ? (
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                        <Sparkles className="w-5 h-5 text-primary-400 group-hover:rotate-12 transition-transform" />
-                    )}
-                    <span>{isGenerating ? '正在深度分析中...' : hasGeneratedInsightToday ? '今日已生成' : 'Insight'}</span>
-                </button>
+                    >
+                        {!isGenerating && !hasGeneratedInsightToday && (
+                            <div className="absolute inset-0 bg-gradient-to-r from-primary-500/10 to-accent-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        )}
+                        {isGenerating ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                            <Sparkles className="w-5 h-5 text-primary-400 group-hover:rotate-12 transition-transform" />
+                        )}
+                        <span>{isGenerating ? '正在深度分析中...' : hasGeneratedInsightToday ? '今日已生成' : 'Insight'}</span>
+                    </button>
+                </div>
             </div>
 
             {/* Error */}
@@ -158,24 +180,10 @@ export default function ReportsPage() {
                                 <Brain className="w-5 h-5 text-white" />
                             </div>
                             <div>
-                                <h3 className="font-semibold">每日总结</h3>
-                                <p className="text-sm text-slate-500">本周随笔 + 持仓变动分析</p>
+                                <h3 className="font-semibold">随笔摘要</h3>
+                                <p className="text-sm text-slate-500">近一周随笔 + 持仓变动摘要</p>
                             </div>
                         </div>
-                        {!dailySummary && !isLoadingSummary && (
-                            <button
-                                onClick={handleGenerateSummary}
-                                disabled={isGeneratingSummary}
-                                className="btn btn-primary btn-sm flex items-center gap-2"
-                            >
-                                {isGeneratingSummary ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                    <Sparkles className="w-4 h-4" />
-                                )}
-                                <span>{isGeneratingSummary ? '生成中...' : '生成今日总结'}</span>
-                            </button>
-                        )}
                     </div>
 
                     {summaryError && (
@@ -197,7 +205,7 @@ export default function ReportsPage() {
                         </div>
                     ) : (
                         <p className="text-slate-500 text-center py-4">
-                            点击上方按钮生成今日总结（每天限一次）
+                            点击顶部 Summary 按钮生成摘要
                         </p>
                     )}
                 </div>

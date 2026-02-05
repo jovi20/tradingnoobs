@@ -6,7 +6,7 @@
 export type AssetType = 'A_STOCK' | 'HK_STOCK' | 'CRYPTO' | 'US_STOCK' | 'UNKNOWN' | 'EQUITY' | 'ETF_EQUITY' | 'ETF_BOND' | 'ETF_COMMODITY' | 'FOREX' | 'CASH'
 
 // Rich Multi-dimensional Metadata Types
-export type AssetCoreType = 'STOCK' | 'BOND' | 'FUND' | 'COMMODITY' | 'FX' | 'DERIVATIVE' | 'CRYPTO';
+export type AssetCoreType = 'STOCK' | 'BOND' | 'FUND' | 'COMMODITY' | 'FX' | 'DERIVATIVE' | 'CRYPTO' | 'CASH';
 export type AssetMarket = 'US' | 'HK' | 'A_SHARE' | 'CN_OTC' | 'FOREX' | 'COMMODITY_FUT' | 'UK' | 'CRYPTO';
 export type AssetCurrency = 'USD' | 'HKD' | 'CNY' | 'EUR' | 'GBP';
 export type AssetRiskLevel = 'CONSERVATIVE' | 'MODERATE' | 'GROWTH' | 'AGGRESSIVE' | 'HEDGE';
@@ -196,7 +196,7 @@ export function getAssetTypeLabel(type: AssetType): string {
         case 'ETF_BOND': return '债券ETF'
         case 'ETF_COMMODITY': return '商品ETF'
         case 'FOREX': return '外汇'
-        case 'CASH': return '现金'
+        case 'CASH': return 'Cash'
         default: return type
     }
 }
@@ -212,7 +212,8 @@ export function getCoreTypeLabel(type: AssetCoreType): string {
         COMMODITY: '大宗商品',
         FX: '外汇',
         DERIVATIVE: '衍生品',
-        CRYPTO: '加密货币'
+        CRYPTO: '加密货币',
+        CASH: 'Cash'
     };
     return labels[type] || type;
 }

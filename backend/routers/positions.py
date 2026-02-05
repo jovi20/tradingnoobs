@@ -596,26 +596,87 @@ async def export_positions_csv(
         # Prepare position-level fields
         lessons_str = ', '.join(pos.lessons) if pos.lessons else ''
         
-        # Asset Metadata fields
-        asset_name = pos.asset_metadata.name if pos.asset_metadata else ''
-        asset_core_type = pos.asset_metadata.core_type.value if pos.asset_metadata and pos.asset_metadata.core_type else ''
-        asset_market = pos.asset_metadata.market.value if pos.asset_metadata and pos.asset_metadata.market else ''
-        asset_sector = pos.asset_metadata.sector if pos.asset_metadata else ''
-        
-        # Account fields
-        account_name = pos.trading_account.name if pos.trading_account else ''
-        account_type = pos.trading_account.account_type if pos.trading_account else ''
-        
-        # Helper for basic fields
+        # Helper for safe attribute access
+        def get_enum_value(val):
+            if val is None:
+                return ''
+            if hasattr(val, 'value'):
+                return val.value
+            return str(val)
+
+        def get_attr(obj, attr, default=''):
+            if obj is None:
+                return default
+            return getattr(obj, attr, default)
+
+        # Helper for basic formatting
         def fmt_float(val):
-            return float(val) if val is not None else 0
+            try:
+                if val is not None:
+                    return float(val)
+            except:
+                pass
+            return 0
             
         def fmt_date(val):
-            return val.isoformat() if val else ''
+            try:
+                if val:
+                    return val.isoformat()
+            except:
+                pass
+            return ''
 
-        # Export position with each batch
-        if pos.batches:
-            for batch in pos.batches:
+        try:
+            # Asset Metadata fields - Use safe access
+            meta = pos.asset_metadata
+            asset_name = get_attr(meta, 'name')
+            asset_core_type = get_enum_value(get_attr(meta, 'core_type', None))
+            asset_market = get_enum_value(get_attr(meta, 'market', None))
+            asset_sector = get_attr(meta, 'sector')
+            
+            # Account fields
+            account = pos.trading_account
+            account_name = get_attr(account, 'name')
+            account_type = get_attr(account, 'account_type')
+            
+            # Position Enum fields
+            direction = get_enum_value(pos.direction)
+            status = get_enum_value(pos.status)
+
+            # Export position with each batch
+            if pos.batches:
+                for batch in pos.batches:
+                    writer.writerow([
+                        pos.id,
+                        pos.symbol,
+                        asset_name,
+                        asset_core_type,
+                        asset_market,
+                        asset_sector,
+                        get_attr(pos, 'exchange'),
+                        account_name,
+                        account_type,
+                        direction,
+                        status,
+                        fmt_float(pos.total_quantity),
+                        fmt_float(pos.average_entry_price),
+                        fmt_float(pos.realized_pnl),
+                        fmt_date(pos.opened_at),
+                        fmt_date(pos.closed_at),
+                        get_attr(pos, 'trade_review'),
+                        lessons_str,
+                        batch.id,
+                        get_enum_value(batch.type),
+                        fmt_float(batch.price),
+                        fmt_float(batch.quantity),
+                        fmt_date(batch.time),
+                        fmt_float(batch.pnl),
+                        get_attr(batch, 'reason'),
+                        get_attr(batch, 'emotion'),
+                        get_attr(batch, 'confidence')
+                    ])
+            else:
+                # Position without batches
                 writer.writerow([
                     pos.id,
                     pos.symbol,
@@ -623,51 +684,24 @@ async def export_positions_csv(
                     asset_core_type,
                     asset_market,
                     asset_sector,
-                    pos.exchange,
+                    get_attr(pos, 'exchange'),
                     account_name,
                     account_type,
-                    pos.direction.value if pos.direction else '',
-                    pos.status.value if pos.status else '',
+                    direction,
+                    status,
                     fmt_float(pos.total_quantity),
                     fmt_float(pos.average_entry_price),
                     fmt_float(pos.realized_pnl),
                     fmt_date(pos.opened_at),
                     fmt_date(pos.closed_at),
-                    pos.trade_review or '',
+                    get_attr(pos, 'trade_review'),
                     lessons_str,
-                    batch.id,
-                    batch.type.value if batch.type else '',
-                    fmt_float(batch.price),
-                    fmt_float(batch.quantity),
-                    fmt_date(batch.time),
-                    fmt_float(batch.pnl),
-                    batch.reason or '',
-                    batch.emotion or '',
-                    batch.confidence or ''
+                    '', '', '', '', '', '', '', '', ''
                 ])
-        else:
-            # Position without batches (shouldn't happen but handle gracefully)
-            writer.writerow([
-                pos.id,
-                pos.symbol,
-                asset_name,
-                asset_core_type,
-                asset_market,
-                asset_sector,
-                pos.exchange,
-                account_name,
-                account_type,
-                pos.direction.value if pos.direction else '',
-                pos.status.value if pos.status else '',
-                fmt_float(pos.total_quantity),
-                fmt_float(pos.average_entry_price),
-                fmt_float(pos.realized_pnl),
-                fmt_date(pos.opened_at),
-                fmt_date(pos.closed_at),
-                pos.trade_review or '',
-                lessons_str,
-                '', '', '', '', '', '', '', '', ''
-            ])
+        except Exception as e:
+            # Log error but skip row to allow partial export
+            print(f"Error exporting position {pos.id}: {str(e)}")
+            continue
     
     # Prepare response with UTF-8 BOM for Excel compatibility
     output.seek(0)

@@ -23,6 +23,7 @@ import {
     getAssetTypeHexColor,
     getMarketLabel,
     getRiskLevelInfo,
+    getCoreTypeLabel,
     AssetCoreType,
     AssetMarket,
     AssetRiskLevel
@@ -91,7 +92,7 @@ function AllocationPieChart({ data, dimension }: { data: AssetAllocation[], dime
 
     const chartData = data.map(item => {
         let label = item.name;
-        if (dimension === 'CORE_TYPE') label = getAssetTypeLabel(item.name as any);
+        if (dimension === 'CORE_TYPE') label = getCoreTypeLabel(item.name as any);
         else if (dimension === 'MARKET') label = getMarketLabel(item.name as AssetMarket);
         else if (dimension === 'RISK') label = getRiskLevelInfo(item.name as AssetRiskLevel).label;
 
