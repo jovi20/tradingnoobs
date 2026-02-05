@@ -23,7 +23,7 @@ const navItems = [
     { href: '/positions', label: '交易', icon: Briefcase },
     { href: '/strategies', label: '策略', icon: Layers },
     { href: '/daily', label: '日历', icon: Calendar },
-    { href: '/reports', label: '周报', icon: FileText },
+    { href: '/insights', label: 'AI洞察', icon: FileText },
     { href: '/settings', label: '设置', icon: Settings },
 ]
 

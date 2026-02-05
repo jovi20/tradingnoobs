@@ -15,9 +15,14 @@ import {
     positionsAPI, accountsAPI, strategiesAPI, marketAPI,
     TradingAccount, Strategy, Position, PositionCreate, BatchCreate, SymbolValidation
 } from '@/lib/api'
-import { detectSymbolType, getAssetTypeColor, getAssetTypeLabel, SymbolDetection } from '@/lib/symbolUtils'
+import {
+    detectSymbolType, getAssetTypeColor, getAssetTypeLabel, SymbolDetection,
+    getCoreTypeLabel, getMarketLabel, getRiskLevelInfo,
+    AssetCoreType, AssetMarket, AssetCurrency, AssetRiskLevel
+} from '@/lib/symbolUtils'
 import DateTimePicker from '@/components/DateTimePicker'
 import CustomSelect from '@/components/CustomSelect'
+import { Info } from 'lucide-react'
 
 export default function NewPositionPage() {
     const { token } = useAuth()
@@ -50,7 +55,16 @@ export default function NewPositionPage() {
         entry_reason: '',
         entry_emotion: '',
         entry_confidence: undefined as number | undefined,
-        asset_type: ''
+        asset_type: '',
+        metadata: {
+            name: '',
+            core_type: '' as AssetCoreType | '',
+            market: '' as AssetMarket | '',
+            currency: '' as AssetCurrency | '',
+            sector: '',
+            risk_level: '' as AssetRiskLevel | '',
+            instrument: ''
+        }
     })
 
     useEffect(() => {
@@ -103,45 +117,58 @@ export default function NewPositionPage() {
     }, [token, form.symbol, form.account_id])
 
     // Validate symbol when it changes
+    // Validate symbol when it changes
+    // Simplified symbol behavior: No auto-validation on typing
     useEffect(() => {
-        // Step 1: Frontend format detection
         const detection = detectSymbolType(form.symbol)
         setSymbolDetection(detection)
 
-        // Step 2: Only call API if format is recognized
-        const validateSymbol = async () => {
-            if (!token || !form.symbol || form.symbol.length < 2) {
-                setSymbolValidation(null)
-                return
-            }
+        if (!form.symbol) {
+            setSymbolValidation(null)
+            return
+        }
 
-            // Skip API if format is unknown
-            if (detection.type === 'UNKNOWN') {
-                setSymbolValidation({
-                    valid: false,
-                    symbol: form.symbol,
-                    error: '未知格式，请检查代码转义',
-                    candidates: []
-                })
-                return
-            }
-
+        // Debounce validation
+        const timeoutId = setTimeout(async () => {
+            if (!token) return
             setIsValidating(true)
             try {
-                const result = await marketAPI.validateSymbol(token, detection.normalized)
-                setSymbolValidation(result)
-                if (result.valid && result.asset_type) {
-                    setForm(f => ({ ...f, asset_type: result.asset_type || '' }))
+                // Determine exchange hint based on detection
+                let exchangeHint = undefined
+                if (detection.type === 'CRYPTO') exchangeHint = 'BINANCE'
+                if (detection.type === 'HK_STOCK') exchangeHint = 'HKEX'
+                if (detection.type === 'A_STOCK') exchangeHint = 'A_SHARE'
+
+                const res = await marketAPI.validateSymbol(token, form.symbol, exchangeHint)
+                setSymbolValidation(res)
+
+                if (res.valid && res.metadata) {
+                    // Auto-fill form if metadata found
+                    setForm(prev => ({
+                        ...prev,
+                        asset_type: res.asset_type || prev.asset_type,
+                        entry_price: (prev.entry_price && prev.entry_price !== '0') ? prev.entry_price : (res.price ? res.price.toString() : ''),
+                        metadata: {
+                            ...prev.metadata,
+                            name: res.name || res.metadata.name || prev.metadata.name,
+                            core_type: (res.metadata.core_type as any) || prev.metadata.core_type,
+                            market: (res.metadata.market as any) || prev.metadata.market,
+                            currency: (res.metadata.currency as any) || prev.metadata.currency,
+                            sector: res.metadata.sector || prev.metadata.sector,
+                            risk_level: (res.metadata.risk_level as any) || prev.metadata.risk_level,
+                            instrument: res.metadata.instrument || prev.metadata.instrument
+                        }
+                    }))
                 }
-            } catch {
-                setSymbolValidation({ valid: false, symbol: form.symbol, error: '验证失败' })
+            } catch (err) {
+                console.warn("Validation failed", err)
             } finally {
                 setIsValidating(false)
             }
-        }
-        const debounce = setTimeout(validateSymbol, 300)
-        return () => clearTimeout(debounce)
-    }, [token, form.symbol])
+        }, 800)
+
+        return () => clearTimeout(timeoutId)
+    }, [form.symbol, token])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -167,7 +194,16 @@ export default function NewPositionPage() {
                 entry_reason: form.entry_reason || undefined,
                 entry_emotion: form.entry_emotion || undefined,
                 entry_confidence: form.entry_confidence,
-                asset_type: form.asset_type || undefined
+                asset_type: form.asset_type || undefined,
+                asset_metadata: {
+                    name: form.metadata.name || form.symbol,
+                    core_type: form.metadata.core_type || undefined,
+                    market: form.metadata.market || undefined,
+                    currency: form.metadata.currency || undefined,
+                    sector: form.metadata.sector || undefined,
+                    risk_level: form.metadata.risk_level || undefined,
+                    instrument: form.metadata.instrument || undefined
+                }
             }
 
             await positionsAPI.create(token, data)
@@ -312,62 +348,15 @@ export default function NewPositionPage() {
                                     type="text"
                                     value={form.symbol}
                                     onChange={e => setForm({ ...form, symbol: e.target.value.toUpperCase() })}
-                                    className={`input uppercase pr-10 ${symbolValidation?.valid === false ? 'border-red-500' : symbolValidation?.valid ? 'border-emerald-500' : ''}`}
+                                    className="input uppercase"
                                     placeholder="AAPL, 600519, BTCUSDT, 00700"
                                 />
-                                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                                    {isValidating && <Loader2 className="w-4 h-4 animate-spin text-slate-400" />}
-                                    {!isValidating && symbolValidation?.valid && (
-                                        <span className="text-emerald-500">✓</span>
-                                    )}
-                                    {!isValidating && symbolValidation?.valid === false && (
-                                        <span className="text-red-500">✗</span>
-                                    )}
-                                </div>
                             </div>
-                            {/* Candidates Selection */}
-                            {symbolValidation?.candidates && symbolValidation.candidates.length > 0 && (
-                                <div className="mt-3">
-                                    <p className="text-xs text-slate-500 mb-2">您是不是想找：</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {symbolValidation.candidates.map((c, idx) => (
-                                            <button
-                                                key={idx}
-                                                type="button"
-                                                onClick={() => setForm({ ...form, symbol: c.symbol })}
-                                                className="px-3 py-1.5 rounded-lg text-sm bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors border border-primary-100 dark:border-primary-800"
-                                            >
-                                                <span className="font-medium">{c.symbol}</span>
-                                                <span className="ml-1.5 text-xs opacity-70">({c.reason})</span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
 
-                            {/* Format hint for unknown only if no candidates */}
-                            {symbolDetection && symbolDetection.type === 'UNKNOWN' && (!symbolValidation?.candidates || symbolValidation.candidates.length === 0) && form.symbol.length > 0 && (
+                            {/* Format hint for unknown only */}
+                            {symbolDetection && symbolDetection.type === 'UNKNOWN' && form.symbol.length > 0 && (
                                 <p className="text-xs mt-1 text-amber-600">
                                     格式提示: A股(6位数字) | 港股(5位数字) | 美股(字母) | 加密(XXXUSDT)
-                                </p>
-                            )}
-                            {symbolValidation && (
-                                <p className={`text-xs mt-1 ${symbolValidation.valid ? 'text-emerald-600' : 'text-red-500'}`}>
-                                    {symbolValidation.valid ? (
-                                        <>
-                                            <span className="font-semibold">{symbolValidation.name || symbolValidation.symbol}</span>
-                                            <span className="mx-2 text-slate-300">|</span>
-                                            <span>
-                                                {symbolValidation.asset_type === 'A_STOCK' ? '¥' :
-                                                    symbolValidation.asset_type === 'HK_STOCK' ? 'HK$' :
-                                                        ['US_STOCK', 'EQUITY', 'ETF_EQUITY', 'ETF_BOND', 'ETF_COMMODITY'].includes(symbolValidation.asset_type || '') ? '$' : ''}
-                                                {symbolValidation.price?.toFixed(2) || '-'}
-                                                {symbolValidation.asset_type === 'CRYPTO' ? ' USDT' : ''}
-                                            </span>
-                                        </>
-                                    ) : (
-                                        symbolValidation.error
-                                    )}
                                 </p>
                             )}
                         </div>
@@ -402,7 +391,7 @@ export default function NewPositionPage() {
                         </div>
                     </div>
 
-                    {/* Strategy & Asset Type */}
+                    {/* Strategy & Multi-dimensional Attributes */}
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium mb-2">策略 (可选)</label>
@@ -417,23 +406,110 @@ export default function NewPositionPage() {
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium mb-2">资产分类</label>
-                            <CustomSelect
-                                options={[
-                                    { value: '', label: '自动检测' },
-                                    { value: 'EQUITY', label: '股票 (EQUITY)' },
-                                    { value: 'CRYPTO', label: '加密货币 (CRYPTO)' },
-                                    { value: 'ETF_EQUITY', label: '股票型ETF (ETF_EQUITY)' },
-                                    { value: 'ETF_BOND', label: '债券型ETF (ETF_BOND)' },
-                                    { value: 'ETF_COMMODITY', label: '商品型ETF (ETF_COMMODITY)' },
-                                    { value: 'FOREX', label: '外汇 (FOREX)' },
-                                    { value: 'A_STOCK', label: 'A股 (A_STOCK)' },
-                                    { value: 'HK_STOCK', label: '港股 (HK_STOCK)' },
-                                ]}
-                                value={form.asset_type}
-                                onChange={val => setForm({ ...form, asset_type: val })}
-                                placeholder="选择资产类型"
+                            <label className="block text-sm font-medium mb-2">标的名称</label>
+                            <input
+                                type="text"
+                                value={form.metadata.name}
+                                onChange={e => setForm({ ...form, metadata: { ...form.metadata, name: e.target.value } })}
+                                className="input"
+                                placeholder="标的名称"
                             />
+                        </div>
+                    </div>
+
+                    {/* Metadata Detail Section */}
+                    <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+                        <div className="flex items-center gap-2 mb-4 text-slate-500">
+                            <Info className="w-4 h-4" />
+                            <span className="text-xs font-semibold uppercase tracking-wider">资产多维属性 (自动识别)</span>
+                        </div>
+
+                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div>
+                                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">核心类型</label>
+                                <CustomSelect
+                                    size="sm"
+                                    options={[
+                                        { value: 'STOCK', label: '股票 (STOCK)' },
+                                        { value: 'BOND', label: '债券 (BOND)' },
+                                        { value: 'FUND', label: '基金 (FUND)' },
+                                        { value: 'COMMODITY', label: '大宗商品 (COMM)' },
+                                        { value: 'FX', label: '外汇 (FX)' },
+                                        { value: 'DERIVATIVE', label: '衍生品 (DERIV)' },
+                                        { value: 'CRYPTO', label: '加密货币 (CRYPTO)' },
+                                    ]}
+                                    value={form.metadata.core_type}
+                                    onChange={val => setForm({ ...form, metadata: { ...form.metadata, core_type: val as any }, asset_type: val as string })}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">市场</label>
+                                <CustomSelect
+                                    size="sm"
+                                    options={[
+                                        { value: 'US', label: '美股 (US)' },
+                                        { value: 'HK', label: '港股 (HK)' },
+                                        { value: 'A_SHARE', label: 'A股 (A_SHARE)' },
+                                        { value: 'CN_OTC', label: '中国场外 (OTC)' },
+                                        { value: 'FOREX', label: '外汇市场 (FX)' },
+                                        { value: 'COMMODITY_FUT', label: '商品期货 (FUT)' },
+                                        { value: 'UK', label: '英股 (UK)' },
+                                        { value: 'CRYPTO', label: '加密货币 (CRYPTO)' },
+                                    ]}
+                                    value={form.metadata.market}
+                                    onChange={val => setForm({ ...form, metadata: { ...form.metadata, market: val as any } })}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">计价货币</label>
+                                <CustomSelect
+                                    size="sm"
+                                    options={[
+                                        { value: 'USD', label: '美元 (USD)' },
+                                        { value: 'HKD', label: '港币 (HKD)' },
+                                        { value: 'CNY', label: '人民币 (CNY)' },
+                                        { value: 'EUR', label: '欧元 (EUR)' },
+                                        { value: 'GBP', label: '英镑 (GBP)' },
+                                    ]}
+                                    value={form.metadata.currency}
+                                    onChange={val => setForm({ ...form, metadata: { ...form.metadata, currency: val as any } })}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">风险等级</label>
+                                <CustomSelect
+                                    size="sm"
+                                    options={[
+                                        { value: 'CONSERVATIVE', label: '保守 (CONSERV)' },
+                                        { value: 'MODERATE', label: '稳健 (MODERATE)' },
+                                        { value: 'GROWTH', label: '成长 (GROWTH)' },
+                                        { value: 'AGGRESSIVE', label: '激进 (AGGR)' },
+                                        { value: 'HEDGE', label: '避险 (HEDGE)' },
+                                    ]}
+                                    value={form.metadata.risk_level}
+                                    onChange={val => setForm({ ...form, metadata: { ...form.metadata, risk_level: val as any } })}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">行业/主题</label>
+                                <input
+                                    type="text"
+                                    value={form.metadata.sector}
+                                    onChange={e => setForm({ ...form, metadata: { ...form.metadata, sector: e.target.value } })}
+                                    className="input py-1 text-sm h-9"
+                                    placeholder="例如: 科技, AI"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">工具类型</label>
+                                <input
+                                    type="text"
+                                    value={form.metadata.instrument}
+                                    onChange={e => setForm({ ...form, metadata: { ...form.metadata, instrument: e.target.value } })}
+                                    className="input py-1 text-sm h-9"
+                                    placeholder="例如: Spot, ETF, Future"
+                                />
+                            </div>
                         </div>
                     </div>
                 </div>

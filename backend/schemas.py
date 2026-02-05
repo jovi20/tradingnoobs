@@ -36,6 +36,43 @@ class BatchTypeEnum(str, Enum):
     EXIT = "EXIT"
 
 
+class AssetCoreTypeEnum(str, Enum):
+    STOCK = "STOCK"
+    BOND = "BOND"
+    FUND = "FUND"
+    COMMODITY = "COMMODITY"
+    FX = "FX"
+    DERIVATIVE = "DERIVATIVE"
+    CRYPTO = "CRYPTO"
+
+
+class AssetMarketEnum(str, Enum):
+    US = "US"
+    HK = "HK"
+    A_SHARE = "A_SHARE"
+    CN_OTC = "CN_OTC"
+    FOREX = "FOREX"
+    COMMODITY_FUT = "COMMODITY_FUT"
+    UK = "UK"
+    CRYPTO = "CRYPTO"
+
+
+class AssetCurrencyEnum(str, Enum):
+    USD = "USD"
+    HKD = "HKD"
+    CNY = "CNY"
+    EUR = "EUR"
+    GBP = "GBP"
+
+
+class AssetRiskLevelEnum(str, Enum):
+    CONSERVATIVE = "CONSERVATIVE"
+    MODERATE = "MODERATE"
+    GROWTH = "GROWTH"
+    AGGRESSIVE = "AGGRESSIVE"
+    HEDGE = "HEDGE"
+
+
 # ============== Auth Schemas ==============
 
 class UserCreate(BaseModel):
@@ -275,7 +312,20 @@ class PositionMover(BaseModel):
     change_percent: float
     current_price: float
 
+class SankeyNode(BaseModel):
+    name: str
+
+class SankeyLink(BaseModel):
+    source: int
+    target: int
+    value: float
+
+class PortfolioFlow(BaseModel):
+    nodes: List[SankeyNode]
+    links: List[SankeyLink]
+
 class DashboardStats(BaseModel):
+    total_assets: float = 0.0  # Added for frontend percentage calculation
     total_pnl: float
     win_rate: float
     avg_pnl_ratio: float
@@ -283,9 +333,13 @@ class DashboardStats(BaseModel):
     open_positions: int
     closed_trades: int
     asset_allocation: List[AssetAllocation] = []
+    core_type_allocation: List[AssetAllocation] = []
+    market_allocation: List[AssetAllocation] = []
+    risk_level_allocation: List[AssetAllocation] = []
     account_allocation: List['AccountAllocation'] = []
     top_movers: List[PositionMover] = []
     bottom_movers: List[PositionMover] = []
+    portfolio_flow: Optional[PortfolioFlow] = None
 
 
 class AccountAllocation(BaseModel):
@@ -303,6 +357,9 @@ class TradingAccountCreate(BaseModel):
     account_type: Optional[str] = Field(None, max_length=50)
     currency: str = Field(default="USD", max_length=10)
     initial_balance: Optional[Decimal] = None
+    current_balance: Optional[Decimal] = None
+    total_assets: Optional[Decimal] = None
+    total_liabilities: Optional[Decimal] = None
     description: Optional[str] = None
 
 
@@ -312,6 +369,9 @@ class TradingAccountUpdate(BaseModel):
     account_type: Optional[str] = Field(None, max_length=50)
     currency: Optional[str] = Field(None, max_length=10)
     initial_balance: Optional[Decimal] = None
+    current_balance: Optional[Decimal] = None
+    total_assets: Optional[Decimal] = None
+    total_liabilities: Optional[Decimal] = None
     description: Optional[str] = None
     is_active: Optional[bool] = None
 
@@ -324,6 +384,7 @@ class TradingAccountResponse(BaseModel):
     account_type: Optional[str]
     currency: str
     initial_balance: Optional[Decimal]
+    current_balance: Optional[Decimal]
     description: Optional[str]
     is_active: bool
     created_at: datetime
@@ -363,6 +424,15 @@ class TradeBatchCreate(BaseModel):
     confidence: Optional[int] = Field(None, ge=1, le=5)
 
 
+class TradeBatchUpdate(BaseModel):
+    price: Optional[Decimal] = Field(None, gt=0)
+    quantity: Optional[Decimal] = Field(None, gt=0)
+    time: Optional[datetime] = None
+    reason: Optional[str] = None
+    emotion: Optional[str] = None
+    confidence: Optional[int] = Field(None, ge=1, le=5)
+
+
 class TradeBatchResponse(BaseModel):
     id: int
     position_id: int
@@ -378,6 +448,30 @@ class TradeBatchResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class AssetMetadataResponse(BaseModel):
+    symbol: str
+    name: Optional[str]
+    core_type: Optional[AssetCoreTypeEnum]
+    market: Optional[AssetMarketEnum]
+    currency: Optional[AssetCurrencyEnum]
+    sector: Optional[str]
+    risk_level: Optional[AssetRiskLevelEnum]
+    instrument: Optional[str]
+    
+    class Config:
+        from_attributes = True
+
+
+class AssetMetadataUpdate(BaseModel):
+    name: Optional[str] = None
+    core_type: Optional[str] = None # Using str to allow flexible input or enum mapping in router
+    market: Optional[str] = None
+    currency: Optional[str] = None
+    sector: Optional[str] = None
+    risk_level: Optional[str] = None
+    instrument: Optional[str] = None
 
 
 class PositionCreate(BaseModel):
@@ -401,6 +495,7 @@ class PositionUpdate(BaseModel):
     screenshots: Optional[List[str]] = None
     lessons: Optional[List[str]] = None
     rating: Optional[int] = Field(None, ge=1, le=5)
+    asset_metadata: Optional[AssetMetadataUpdate] = None
 
 
 class PositionResponse(BaseModel):
@@ -416,6 +511,8 @@ class PositionResponse(BaseModel):
     total_quantity: Decimal
     average_entry_price: Optional[Decimal]
     realized_pnl: Decimal
+    current_price: Optional[float] = None
+    unrealized_pnl: Optional[float] = None
     opened_at: datetime
     closed_at: Optional[datetime]
     trade_review: Optional[str]
@@ -424,6 +521,7 @@ class PositionResponse(BaseModel):
     rating: Optional[int]
     created_at: datetime
     updated_at: Optional[datetime]
+    asset_metadata: Optional[AssetMetadataResponse] = None
     batches: List[TradeBatchResponse] = []
 
     class Config:
@@ -447,6 +545,8 @@ class PositionListResponse(BaseModel):
     opened_at: datetime
     closed_at: Optional[datetime]
     created_at: datetime
+    asset_metadata: Optional[AssetMetadataResponse] = None
+    batches: List[TradeBatchResponse] = []
 
     class Config:
         from_attributes = True

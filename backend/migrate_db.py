@@ -231,29 +231,42 @@ def migrate():
         except Exception as e:
             print(f"Error during user_settings migration: {e}")
 
-    # 6. Add asset_type to positions (Enhanced Classification)
-    print("Checking positions table for asset_type...")
+    # 7. Add asset_metadata_symbol to positions & Create asset_metadata table
+    print("Checking asset_metadata migration...")
     with engine.connect() as conn:
         try:
+            # 1. Create table (Base.metadata.create_all handles this)
+            Base.metadata.create_all(bind=engine)
+            
+            # 2. Add column to positions
             result = conn.execute(text("PRAGMA table_info(positions)"))
             columns = [row[1] for row in result.fetchall()]
             
-            if 'asset_type' not in columns:
-                print("Adding asset_type column to positions...")
-                conn.execute(text("ALTER TABLE positions ADD COLUMN asset_type VARCHAR(20)"))
-                # Backfill
-                print("Backfilling asset_type...")
-                # 1. Crypto Rules
-                conn.execute(text("UPDATE positions SET asset_type='CRYPTO' WHERE symbol LIKE '%USDT' OR exchange LIKE '%BINANCE%' OR exchange LIKE '%CRYPTO%'"))
-                # 2. Default others to EQUITY (Stock)
-                conn.execute(text("UPDATE positions SET asset_type='EQUITY' WHERE asset_type IS NULL"))
+            if 'asset_metadata_symbol' not in columns:
+                print("Adding asset_metadata_symbol column to positions...")
+                conn.execute(text("ALTER TABLE positions ADD COLUMN asset_metadata_symbol VARCHAR(50) REFERENCES asset_metadata(symbol)"))
+                
+                # Backfill: For each unique symbol in positions, create a basic entry in asset_metadata and link it
+                print("Backfilling asset_metadata link...")
+                positions = conn.execute(text("SELECT DISTINCT symbol FROM positions")).fetchall()
+                for (sym,) in positions:
+                    # Create basic metadata if it doesn't exist
+                    conn.execute(text("""
+                        INSERT OR IGNORE INTO asset_metadata (symbol, name, created_at)
+                        VALUES (:sym, :sym, CURRENT_TIMESTAMP)
+                    """), {"sym": sym.upper()})
+                    
+                    # Update position to point to metadata
+                    conn.execute(text("UPDATE positions SET asset_metadata_symbol = :sym_upper WHERE symbol = :sym"), 
+                                 {"sym_upper": sym.upper(), "sym": sym})
+                
                 conn.commit()
-                print("asset_type column added and backfilled.")
+                print("asset_metadata migration complete.")
             else:
-                print("asset_type column already exists.")
+                print("asset_metadata_symbol column already exists.")
                 
         except Exception as e:
-            print(f"Error during asset_type migration: {e}")
+            print(f"Error during asset_metadata migration: {e}")
             
     print("Migration completed.")
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
     ArrowLeft,
@@ -10,13 +10,14 @@ import {
     ArrowDownCircle
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { positionsAPI, Position, BatchCreate } from '@/lib/api'
+import { positionsAPI, Position, BatchCreate, marketAPI } from '@/lib/api'
 import DateTimePicker from '@/components/DateTimePicker'
 
 export default function AddBatchPage() {
     const { token } = useAuth()
     const router = useRouter()
     const params = useParams()
+    const searchParams = useSearchParams()
     const positionId = parseInt(params.id as string)
 
     const [position, setPosition] = useState<Position | null>(null)
@@ -24,9 +25,12 @@ export default function AddBatchPage() {
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState('')
 
+    // Initialize type from query param
+    const initType = (searchParams.get('type') === 'EXIT') ? 'EXIT' : 'ENTRY'
+
     // Form state
     const [form, setForm] = useState({
-        type: 'ENTRY' as 'ENTRY' | 'EXIT',
+        type: initType as 'ENTRY' | 'EXIT',
         price: '',
         quantity: '',
         time: new Date().toISOString(),
@@ -39,8 +43,24 @@ export default function AddBatchPage() {
         const fetchPosition = async () => {
             if (!token) return
             try {
+                // 1. Get Position Details
                 const data = await positionsAPI.get(token, positionId)
                 setPosition(data)
+
+                // 2. Try to get current market price to pre-fill
+                if (data.status === 'OPEN') {
+                    try {
+                        const quote = await marketAPI.validateSymbol(token, data.symbol)
+                        if (quote.valid && quote.price) {
+                            setForm(prev => ({
+                                ...prev,
+                                price: quote.price ? quote.price.toString() : ''
+                            }))
+                        }
+                    } catch (e) {
+                        console.warn('Failed to fetch current price', e)
+                    }
+                }
             } catch (err: any) {
                 setError(err.message || '加载失败')
             } finally {
@@ -137,8 +157,8 @@ export default function AddBatchPage() {
                             type="button"
                             onClick={() => setForm({ ...form, type: 'ENTRY' })}
                             className={`p-4 rounded-xl border-2 transition-all flex items-center justify-center gap-2 ${form.type === 'ENTRY'
-                                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600'
-                                    : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                                ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600'
+                                : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'
                                 }`}
                         >
                             <ArrowUpCircle className="w-5 h-5" />
@@ -148,8 +168,8 @@ export default function AddBatchPage() {
                             type="button"
                             onClick={() => setForm({ ...form, type: 'EXIT' })}
                             className={`p-4 rounded-xl border-2 transition-all flex items-center justify-center gap-2 ${form.type === 'EXIT'
-                                    ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20 text-amber-600'
-                                    : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                                ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20 text-amber-600'
+                                : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'
                                 }`}
                         >
                             <ArrowDownCircle className="w-5 h-5" />
@@ -256,8 +276,8 @@ export default function AddBatchPage() {
                     type="submit"
                     disabled={isSubmitting}
                     className={`w-full btn py-3 ${form.type === 'ENTRY'
-                            ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
-                            : 'bg-amber-500 hover:bg-amber-600 text-white'
+                        ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                        : 'bg-amber-500 hover:bg-amber-600 text-white'
                         }`}
                 >
                     {isSubmitting ? (

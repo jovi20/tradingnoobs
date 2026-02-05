@@ -12,7 +12,7 @@ from schemas import WeeklyReportCreate, WeeklyReportResponse
 from services.auth_service import get_current_user
 from services.llm_service import generate_weekly_report
 
-router = APIRouter(prefix="/api/reports", tags=["Weekly Reports"])
+router = APIRouter(prefix="/api/insights", tags=["Insights"])
 
 
 @router.get("", response_model=List[WeeklyReportResponse])

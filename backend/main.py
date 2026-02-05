@@ -1,5 +1,6 @@
 """
 Trading Noobs Backend - Main Application Entry Point
+# Trigger Reload
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,7 +8,7 @@ from contextlib import asynccontextmanager
 
 from config import get_settings
 from database import engine, Base
-from routers import auth, trades, strategies, dashboard, daily, settings as settings_router, weekly_report, accounts, admin, positions, market
+from routers import auth, trades, strategies, dashboard, daily, settings as settings_router, insights, accounts, admin, positions, market
 
 app_settings = get_settings()
 
@@ -45,7 +46,7 @@ app.include_router(strategies.router)
 app.include_router(dashboard.router)
 app.include_router(daily.router)
 app.include_router(settings_router.router)
-app.include_router(weekly_report.router)
+app.include_router(insights.router)
 app.include_router(accounts.router)
 app.include_router(admin.router)
 app.include_router(positions.router)

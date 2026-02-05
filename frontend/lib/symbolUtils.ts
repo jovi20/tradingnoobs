@@ -5,12 +5,30 @@
 
 export type AssetType = 'A_STOCK' | 'HK_STOCK' | 'CRYPTO' | 'US_STOCK' | 'UNKNOWN' | 'EQUITY' | 'ETF_EQUITY' | 'ETF_BOND' | 'ETF_COMMODITY' | 'FOREX' | 'CASH'
 
+// Rich Multi-dimensional Metadata Types
+export type AssetCoreType = 'STOCK' | 'BOND' | 'FUND' | 'COMMODITY' | 'FX' | 'DERIVATIVE' | 'CRYPTO';
+export type AssetMarket = 'US' | 'HK' | 'A_SHARE' | 'CN_OTC' | 'FOREX' | 'COMMODITY_FUT' | 'UK' | 'CRYPTO';
+export type AssetCurrency = 'USD' | 'HKD' | 'CNY' | 'EUR' | 'GBP';
+export type AssetRiskLevel = 'CONSERVATIVE' | 'MODERATE' | 'GROWTH' | 'AGGRESSIVE' | 'HEDGE';
+
+export interface AssetMetadata {
+    symbol: string;
+    name: string;
+    core_type: AssetCoreType;
+    market: AssetMarket;
+    currency: AssetCurrency;
+    sector: string;
+    risk_level: AssetRiskLevel;
+    instrument: string;
+}
+
 export interface SymbolDetection {
     type: AssetType
     normalized: string
     label: string
     provider: string
     format: string
+    metadata?: Partial<AssetMetadata>
 }
 
 /**
@@ -41,11 +59,23 @@ export function detectSymbolType(symbol: string): SymbolDetection {
 
     // A股检测: 6位数字
     const aSharePatterns = [
-        /^6\d{5}$/,      // 上海主板 600xxx, 601xxx, 603xxx, 688xxx
-        /^0[0-3]\d{4}$/, // 深圳主板/中小板 000xxx, 001xxx, 002xxx, 003xxx
+        /^6\d{5}$/,      // 上海主板
+        /^0[0-3]\d{4}$/, // 深圳主板/中小板
         /^300\d{3}$/,    // 创业板
-        /^8\d{5}$/,      // 北交所
+        /^[48][37]\d{5}$/, // 北交所 (修正为6位正则) - 实际上用户提供的是前2位，总计6位
     ]
+
+    // 北交所正则修正
+    if (/^[48][37]\d{4}$/.test(s)) {
+        return {
+            type: 'A_STOCK',
+            normalized: s,
+            label: 'A股(北)',
+            provider: 'AKShare',
+            format: '北交所代码 (如 830833)'
+        }
+    }
+
     for (const pattern of aSharePatterns) {
         if (pattern.test(s)) {
             return {
@@ -55,6 +85,17 @@ export function detectSymbolType(symbol: string): SymbolDetection {
                 provider: 'AKShare',
                 format: '6位数字 (如 600519, 000001)'
             }
+        }
+    }
+
+    // 基金检测: 15, 16, 18, 50, 51, 56 开头
+    if (/^(15|16|18|50|51|56)\d{4}$/.test(s)) {
+        return {
+            type: 'ETF_EQUITY',
+            normalized: s,
+            label: '基金',
+            provider: 'AKShare',
+            format: '基金代码 (如 510300)'
         }
     }
 
@@ -91,7 +132,18 @@ export function detectSymbolType(symbol: string): SymbolDetection {
         }
     }
 
-    // 美股检测: 1-5位纯字母
+    // 外汇检测: 纯字母6位
+    if (/^[A-Z]{6}$/.test(s)) {
+        return {
+            type: 'FOREX',
+            normalized: s,
+            label: '外汇',
+            provider: 'AKShare/YFinance',
+            format: '货币对 (如 USDCNY, EURUSD)'
+        }
+    }
+
+    // 美股检测: 1-5位纯字母 (避开6位外汇)
     if (/^[A-Z]{1,5}$/.test(s)) {
         return {
             type: 'US_STOCK',
@@ -150,20 +202,88 @@ export function getAssetTypeLabel(type: AssetType): string {
 }
 
 /**
+ * 获取核心资产类型的标签
+ */
+export function getCoreTypeLabel(type: AssetCoreType): string {
+    const labels: Record<AssetCoreType, string> = {
+        STOCK: '股票',
+        BOND: '债券',
+        FUND: '基金',
+        COMMODITY: '大宗商品',
+        FX: '外汇',
+        DERIVATIVE: '衍生品',
+        CRYPTO: '加密货币'
+    };
+    return labels[type] || type;
+}
+
+/**
+ * 获取市场的标签
+ */
+export function getMarketLabel(market: AssetMarket): string {
+    const labels: Record<AssetMarket, string> = {
+        US: '美股',
+        HK: '港股',
+        A_SHARE: 'A股',
+        CN_OTC: '中国场外',
+        FOREX: '外汇市场',
+        COMMODITY_FUT: '商品期货',
+        UK: '英股',
+        CRYPTO: '加密市场'
+    };
+    return labels[market] || market;
+}
+
+/**
+ * 获取风险等级的标签和颜色
+ */
+export function getRiskLevelInfo(level: AssetRiskLevel): { label: string, color: string } {
+    const info: Record<AssetRiskLevel, { label: string, color: string }> = {
+        CONSERVATIVE: { label: '保守', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
+        MODERATE: { label: '稳健', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
+        GROWTH: { label: '成长', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' },
+        AGGRESSIVE: { label: '激进', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
+        HEDGE: { label: '避险', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' }
+    };
+    return info[level] || { label: level, color: 'bg-slate-100 text-slate-700' };
+}
+
+/**
  * 获取资产类型的十六进制颜色值 (用于图表 - 灰色系/单色系)
  */
 export function getAssetTypeHexColor(type: string): string {
     switch (type) {
+        // Core Types
         case 'A_STOCK': return '#0f172a' // slate-900
         case 'HK_STOCK': return '#334155' // slate-700
         case 'CRYPTO': return '#64748b' // slate-500
         case 'US_STOCK':
         case 'EQUITY':
+        case 'STOCK':
         case 'ETF_EQUITY': return '#0f172a' // slate-900
+        case 'BOND':
         case 'ETF_BOND': return '#94a3b8' // slate-400
+        case 'FUND': return '#475569' // slate-600
+        case 'COMMODITY':
         case 'ETF_COMMODITY': return '#cbd5e1' // slate-300
+        case 'FX':
         case 'FOREX': return '#475569' // slate-600
         case 'CASH': return '#e2e8f0' // slate-200
+
+        // Markets
+        case 'US': return '#0f172a' // slate-900
+        case 'HK': return '#334155' // slate-700
+        case 'A_SHARE': return '#475569' // slate-600
+        case 'CN_OTC': return '#64748b' // slate-500
+        case 'UK': return '#94a3b8' // slate-400
+
+        // Risk Levels
+        case 'CONSERVATIVE': return '#cbd5e1' // slate-300
+        case 'MODERATE': return '#94a3b8' // slate-400
+        case 'GROWTH': return '#64748b' // slate-500
+        case 'AGGRESSIVE': return '#334155' // slate-700
+        case 'HEDGE': return '#0f172a' // slate-900
+
         default: return '#94a3b8' // slate-400
     }
 }

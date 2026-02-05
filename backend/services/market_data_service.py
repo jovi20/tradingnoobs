@@ -13,9 +13,9 @@ from typing import Dict, Any, Optional
 import asyncio
 from fastapi.concurrency import run_in_threadpool
 
-from models import SystemSetting
+from models import SystemSetting, AssetMetadata, AssetCoreType, AssetMarket, AssetCurrency, AssetRiskLevel
 from services.providers import akshare_provider, binance_provider
-from services.llm_service import classify_asset
+from services.llm_service import classify_asset, classify_asset_rich
 
 # Cache TTL in seconds (1 minute)
 CACHE_TTL_SECONDS = 60
@@ -60,10 +60,21 @@ class MarketDataService:
             r'^0[0-3]\d{4}$',   # 深圳主板/中小板 000xxx, 001xxx, 002xxx, 003xxx
             r'^300\d{3}$',      # 创业板 300xxx
             r'^6[0-9]\d{4}$',   # 上海主板 600xxx, 601xxx, 603xxx, 688xxx
+            r'^[48][37]\d{4}$', # 北交所 43xxxx, 83xxxx, 87xxxx
         ]
         for pattern in a_share_patterns:
             if re.match(pattern, symbol_upper):
                 return 'A_STOCK'
+        
+        # Fund detection (6-digit codes starting with specific prefixes)
+        fund_patterns = [
+            r'^5[016]\d{4}$',   # 场内基金 (50, 51, 56)
+            r'^1[568]\d{4}$',   # 场内基金 (15, 16, 18)
+            r'^0\d{5}$',        # 场外基金 (0xxxxx - note: 000xxx collision with SZ stock handled by order)
+        ]
+        for pattern in fund_patterns:
+            if re.match(pattern, symbol_upper):
+                return 'ETF_EQUITY' # Treating all funds as ETF_EQUITY for simplicity in types for now
         
         # HK Stock detection
         if symbol_upper.endswith('.HK') or exchange_upper in ['HKEX', 'HK', 'HONG KONG']:
@@ -71,67 +82,149 @@ class MarketDataService:
         if re.match(r'^\d{5}$', symbol_upper):  # 5-digit HK code
             return 'HK_STOCK'
         
-        # US Stock detection (Basic: 1-5 letters, maybe dots for BRK.B)
+        # Forex detection: 6-letter alphabetic pairs
+        # Common pattern: USDCNY, EURUSD, GBPJPY
+        if re.match(r'^[A-Z]{6}$', symbol_upper):
+             # We can be more specific, but for now 6 alphabetic letters is a strong hint for FX
+             return 'FOREX'
+
+        # US Stock detection (Basic: 1-5 letters, 7-8 letters)
         if re.match(r'^[A-Z\.]{1,8}$', symbol_upper):
             return 'US_STOCK'
 
         # Default/Unknown
         return 'UNKNOWN'
 
-    async def detect_asset_type_enhanced(self, symbol: str, exchange: Optional[str] = None) -> str:
+    async def get_or_create_asset_metadata(self, symbol: str, name: Optional[str] = None, exchange: Optional[str] = None) -> AssetMetadata:
         """
-        Enhanced detection using rules + LLM for detailed classification (ETF types, etc)
+        Get asset metadata from DB, or create/detect it using rules and LLM.
         """
         symbol_upper = symbol.upper()
-        exchange_upper = (exchange or '').upper()
-        cache_key = f"{symbol_upper}:{exchange_upper}"
         
-        # 1. Check Memory Cache
-        if cache_key in self._asset_type_cache:
-            return self._asset_type_cache[cache_key]
+        # 1. Check Database
+        metadata = self.db.query(AssetMetadata).filter(AssetMetadata.symbol == symbol_upper).first()
+        if metadata and metadata.core_type: # Ensure it's fully populated
+            return metadata
             
-        # 2. Rule-based Detection (Fast)
+        if not metadata:
+            metadata = AssetMetadata(symbol=symbol_upper, name=name or symbol_upper)
+            self.db.add(metadata)
+        
+        # 2. Rule-based Detection (Market and Currency)
         base_type = self.detect_asset_type(symbol, exchange)
         
-        # If it's definitely Crypto or specialized stock (A/HK), trust rules for now
-        if base_type in ['CRYPTO', 'A_STOCK']:
-            return base_type
+        # Market Mapping
+        if base_type == 'A_STOCK':
+            metadata.market = AssetMarket.A_SHARE
+            metadata.currency = AssetCurrency.CNY
+            metadata.core_type = AssetCoreType.STOCK
+        elif base_type == 'HK_STOCK':
+            metadata.market = AssetMarket.HK
+            metadata.currency = AssetCurrency.HKD
+            metadata.core_type = AssetCoreType.STOCK
+        elif base_type == 'CRYPTO':
+            metadata.core_type = AssetCoreType.CRYPTO
+            metadata.market = AssetMarket.CRYPTO
+            metadata.currency = AssetCurrency.USD # Most pairs are USDT/USD
+        elif base_type == 'ETF_EQUITY':
+            # Could be A-share or HK or US. Let's check symbol.
+            if re.match(r'^\d{6}$', symbol_upper):
+                metadata.market = AssetMarket.A_SHARE
+                metadata.currency = AssetCurrency.CNY
+            metadata.core_type = AssetCoreType.FUND
+        elif base_type == 'FOREX':
+            metadata.market = AssetMarket.FOREX
+            metadata.core_type = AssetCoreType.FX
+            # Currency depends on the pair, LLM is better here
             
-        # 3. LLM Classification (for US Stocks/ETFs or Unknown)
+        # 3. LLM Classification for missing/nuanced fields
         try:
-            llm_result = await classify_asset(self.db, symbol, exchange)
-            if llm_result and llm_result.get('type'):
-                category = llm_result['type']
-                self._asset_type_cache[cache_key] = category
-                return category
+            rich_info = await classify_asset_rich(self.db, symbol_upper, name, exchange)
+            if rich_info:
+                # Only fill if not already set by rules, or override if needed
+                if not metadata.core_type: metadata.core_type = AssetCoreType(rich_info['core_type'])
+                if not metadata.market: metadata.market = AssetMarket(rich_info['market'])
+                if not metadata.currency: metadata.currency = AssetCurrency(rich_info['currency'])
+                if not metadata.risk_level: metadata.risk_level = AssetRiskLevel(rich_info['risk_level'])
+                
+                metadata.sector = rich_info.get('sector', 'General')
+                metadata.instrument = rich_info.get('instrument', 'Spot')
+                
         except Exception as e:
-            print(f"Error in enhanced detection: {e}")
+            print(f"Error in rich LLM detection for {symbol}: {e}")
             
-        # 4. Fallback to base rule
-        if base_type == 'US_STOCK':
-            return 'EQUITY'
-            
-        return base_type
+        # 4. Final Fallbacks
+        if not metadata.core_type:
+             metadata.core_type = AssetCoreType.STOCK if base_type == 'US_STOCK' else AssetCoreType.STOCK
+        if not metadata.market:
+             metadata.market = AssetMarket.US if base_type == 'US_STOCK' else AssetMarket.US
+        if not metadata.currency:
+             metadata.currency = AssetCurrency.USD
+        if not metadata.risk_level:
+             metadata.risk_level = AssetRiskLevel.GROWTH # Default
+             if metadata.core_type == AssetCoreType.CRYPTO:
+                 metadata.risk_level = AssetRiskLevel.AGGRESSIVE
+             elif metadata.core_type == AssetCoreType.FX:
+                 metadata.risk_level = AssetRiskLevel.MODERATE
+        
+        self.db.commit()
+        self.db.refresh(metadata)
+        return metadata
 
-    async def get_quote(self, symbol: str, exchange: Optional[str] = None) -> Dict[str, Any]:
+    async def detect_asset_type_enhanced(self, symbol: str, exchange: Optional[str] = None) -> str:
+        """
+        Maintains backward compatibility but uses the new metadata system.
+        """
+        metadata = await self.get_or_create_asset_metadata(symbol, exchange=exchange)
+        return metadata.core_type.value if metadata.core_type else "EQUITY"
+
+    async def get_quote(
+        self, 
+        symbol: str, 
+        exchange: Optional[str] = None,
+        core_type: Optional[str] = None,
+        market: Optional[str] = None,
+        instrument: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Get quote from appropriate provider based on asset type
+        Hints (core_type, market, instrument) help in choosing the right provider
         """
-        asset_type = self.detect_asset_type(symbol, exchange)
+        # If core_type is provided, we can use it directly or refine with market
+        asset_type = core_type
+        if not asset_type:
+            asset_type = self.detect_asset_type(symbol, exchange)
         
-        if asset_type == 'CRYPTO':
+        # Mapping hints to our internal provider routing logic
+        if asset_type == 'CRYPTO' or market == 'CRYPTO':
             return await run_in_threadpool(binance_provider.get_crypto_quote, symbol)
         
-        elif asset_type == 'A_STOCK':
+        # Prioritize US Market (Stocks, ETFs)
+        elif market == 'US' or asset_type == 'US_STOCK' or (asset_type == 'STOCK' and market == 'US'):
+            return await self._get_finnhub_quote(symbol)
+        
+        elif asset_type == 'A_STOCK' or market == 'A_SHARE':
             return await run_in_threadpool(akshare_provider.get_a_stock_quote, symbol)
         
-        elif asset_type == 'HK_STOCK':
+        elif asset_type == 'HK_STOCK' or market == 'HK':
             return await run_in_threadpool(akshare_provider.get_hk_stock_quote, symbol)
         
-        elif asset_type == 'US_STOCK':
-            return await self._get_finnhub_quote(symbol)
+        elif asset_type == 'FUND' or asset_type == 'ETF_EQUITY' or asset_type == 'ETF_BOND' or asset_type == 'ETF_COMMODITY':
+            return await run_in_threadpool(akshare_provider.get_fund_quote, symbol)
+
+        elif asset_type == 'FX' or asset_type == 'FOREX' or market == 'FOREX':
+            return await run_in_threadpool(akshare_provider.get_forex_quote, symbol)
             
         else:
+            # Final fallback to detection if hints weren't enough
+            final_type = self.detect_asset_type(symbol, exchange)
+            if final_type == 'CRYPTO': return await run_in_threadpool(binance_provider.get_crypto_quote, symbol)
+            if final_type == 'A_STOCK': return await run_in_threadpool(akshare_provider.get_a_stock_quote, symbol)
+            if final_type == 'HK_STOCK': return await run_in_threadpool(akshare_provider.get_hk_stock_quote, symbol)
+            if final_type == 'ETF_EQUITY': return await run_in_threadpool(akshare_provider.get_fund_quote, symbol)
+            if final_type == 'US_STOCK': return await self._get_finnhub_quote(symbol)
+            if final_type == 'FOREX': return await run_in_threadpool(akshare_provider.get_forex_quote, symbol)
+            
             raise ValueError(f"Unknown asset type for symbol: {symbol}")
 
     async def _get_finnhub_quote(self, symbol: str) -> Dict[str, Any]:
@@ -217,40 +310,73 @@ class MarketDataService:
         Validate if a symbol exists and return basic info
         """
         try:
-            # Enhanced detection for better classification
-            asset_type = await self.detect_asset_type_enhanced(symbol, exchange)
+            # Get rich metadata (handles DB cache internally)
+            metadata = await self.get_or_create_asset_metadata(symbol, exchange=exchange)
             
-            # Use base logic for quote fetching (routing)
+            # Get current quote
             quote = await self.get_quote(symbol, exchange)
             
             return {
                 'valid': True,
                 'symbol': symbol.upper(),
-                'asset_type': asset_type,
+                'asset_type': metadata.core_type.value if metadata.core_type else "EQUITY",
                 'price': quote.get('c'),
-                'name': quote.get('name'),
-                'provider': self._get_provider_name(asset_type)
+                'name': quote.get('name') or metadata.name,
+                'metadata': {
+                    'name': metadata.name,
+                    'core_type': metadata.core_type.value if metadata.core_type else None,
+                    'market': metadata.market.value if metadata.market else None,
+                    'currency': metadata.currency.value if metadata.currency else None,
+                    'sector': metadata.sector,
+                    'risk_level': metadata.risk_level.value if metadata.risk_level else None,
+                    'instrument': metadata.instrument
+                },
+                'provider': self._get_provider_name(metadata.core_type.value if metadata.core_type else "EQUITY")
             }
         except Exception as e:
             # Generate candidates on failure
             candidates = []
             symbol_upper = symbol.upper()
+            raw_error = str(e)
             
             # Crypto Smart Suggestions
-            # If 3-5 letters and not purely numeric, suggest adding USDT
-            # (e.g. BTC -> BTCUSDT)
-            if re.match(r'^[A-Z]{3,5}$', symbol_upper):
+            # If 3-5 letters, suggest adding USDT
+            # But avoid double-suffixing if user is already typing the suffix (e.g. "ETHUS" -> "ETHUSUSDT" is bad)
+            # So we skip if it ends with common suffix starts
+            
+            is_potential_len = re.match(r'^[A-Z0-9]{3,5}$', symbol_upper)
+            is_pure_numeric = re.match(r'^\d+$', symbol_upper)
+            has_partial_suffix = symbol_upper.endswith(('U', 'US', 'USD', 'BUS', 'BUSD'))
+            
+            if is_potential_len and not is_pure_numeric and not has_partial_suffix:
                  candidates.append({
                      'symbol': f"{symbol_upper}USDT",
                      'asset_type': 'CRYPTO',
                      'reason': '推荐: Binance 交易对'
                  })
             
+            # Sanitize Error Message
+            error_msg = "查询失败，请检查代码是否正确"
+            
+            if "Invalid symbol" in raw_error or "-1121" in raw_error:
+                error_msg = "未找到该交易对 (Invalid Symbol)"
+            elif "not found" in raw_error.lower() or "404" in raw_error:
+                error_msg = "未找到该标的"
+            elif "empty data" in raw_error:
+                error_msg = "暂无该标的数据"
+            elif "Unauthorized" in raw_error or "401" in raw_error:
+                error_msg = "API 密钥无效或过期"
+            elif "AKShare" in raw_error:
+                error_msg = "数据源 (AKShare) 查询失败，请稍后再试"
+            elif "Binance" in raw_error:
+                error_msg = "数据源 (Binance) 查询失败，请检查交易对格式"
+            
             return {
                 'valid': False,
                 'symbol': symbol.upper(),
-                'error': str(e),
-                'candidates': candidates
+                'error': error_msg,
+                'candidates': candidates,
+                'raw_error': raw_error # Optional: keep raw error for debug in console if needed, but UI shows 'error'
             }
 
     def _get_provider_name(self, asset_type: str) -> str:
@@ -259,7 +385,9 @@ class MarketDataService:
             'A_STOCK': 'AKShare',
             'HK_STOCK': 'AKShare', 
             'CRYPTO': 'Binance',
-            'US_STOCK': 'Finnhub'
+            'US_STOCK': 'Finnhub',
+            'FOREX': 'AKShare/YFinance',
+            'ETF_EQUITY': 'AKShare'
         }.get(asset_type, 'Unknown')
 
     async def validate_api_key(self):

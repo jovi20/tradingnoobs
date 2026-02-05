@@ -216,6 +216,7 @@ export default function SettingsPage() {
             account_type: '',
             currency: 'USD',
             initial_balance: 0,
+            current_balance: 0,
             description: ''
         })
         setIsAccountFormOpen(true)
@@ -229,6 +230,7 @@ export default function SettingsPage() {
             account_type: account.account_type || '',
             currency: account.currency,
             initial_balance: account.initial_balance || 0,
+            current_balance: account.current_balance || 0,
             description: account.description || ''
         })
         setIsAccountFormOpen(true)
@@ -531,6 +533,16 @@ export default function SettingsPage() {
                                     value={accountForm.initial_balance || ''}
                                     onChange={e => setAccountForm({ ...accountForm, initial_balance: parseFloat(e.target.value) })}
                                     placeholder="0.00"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium mb-1 text-emerald-600 dark:text-emerald-400">当前净值 (可选)</label>
+                                <input
+                                    type="number"
+                                    className="input text-sm border-emerald-200 dark:border-emerald-800 focus:border-emerald-500"
+                                    value={accountForm.current_balance || ''}
+                                    onChange={e => setAccountForm({ ...accountForm, current_balance: parseFloat(e.target.value) })}
+                                    placeholder="用于校准总资产"
                                 />
                             </div>
                             <div>

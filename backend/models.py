@@ -37,6 +37,62 @@ class BatchType(str, enum.Enum):
     EXIT = "EXIT"    # 减仓
 
 
+class AssetCoreType(str, enum.Enum):
+    STOCK = "STOCK"
+    BOND = "BOND"
+    FUND = "FUND"
+    COMMODITY = "COMMODITY"
+    FX = "FX"
+    DERIVATIVE = "DERIVATIVE"
+    CRYPTO = "CRYPTO"
+
+
+class AssetMarket(str, enum.Enum):
+    US = "US"
+    HK = "HK"
+    A_SHARE = "A_SHARE"
+    CN_OTC = "CN_OTC"
+    FOREX = "FOREX"
+    COMMODITY_FUT = "COMMODITY_FUT"
+    UK = "UK"
+    CRYPTO = "CRYPTO"
+
+
+class AssetCurrency(str, enum.Enum):
+    USD = "USD"
+    HKD = "HKD"
+    CNY = "CNY"
+    EUR = "EUR"
+    GBP = "GBP"
+
+
+class AssetRiskLevel(str, enum.Enum):
+    CONSERVATIVE = "CONSERVATIVE"
+    MODERATE = "MODERATE"
+    GROWTH = "GROWTH"
+    AGGRESSIVE = "AGGRESSIVE"
+    HEDGE = "HEDGE"
+
+
+class AssetMetadata(Base):
+    """标的元数据表 - 存储资产的多维属性"""
+    __tablename__ = "asset_metadata"
+    
+    symbol = Column(String(50), primary_key=True, index=True) # Uppercase identifier
+    name = Column(String(100), nullable=True)
+    
+    core_type = Column(SQLEnum(AssetCoreType), nullable=True)
+    market = Column(SQLEnum(AssetMarket), nullable=True)
+    currency = Column(SQLEnum(AssetCurrency), nullable=True)
+    
+    sector = Column(String(100), nullable=True)    # 行业/主题
+    risk_level = Column(SQLEnum(AssetRiskLevel), nullable=True)
+    instrument = Column(String(50), nullable=True)  # 具量化工具, 如 "Spot", "ETF", "Future"
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
 class User(Base):
     __tablename__ = "users"
     
@@ -55,6 +111,7 @@ class User(Base):
     weekly_reports = relationship("WeeklyReport", back_populates="user")
     trading_accounts = relationship("TradingAccount", back_populates="user")
     positions = relationship("Position", back_populates="user")
+    daily_snapshots = relationship("DailySnapshot", back_populates="user")
 
 
 class Trade(Base):
@@ -219,7 +276,9 @@ class TradingAccount(Base):
     broker = Column(String(50), nullable=False)  # 券商/交易所，如 "IBKR", "Binance"
     account_type = Column(String(50), nullable=True)  # 账户类型，如 "现货", "合约", "保证金"
     currency = Column(String(10), default="USD")  # 账户币种
+    currency = Column(String(10), default="USD")  # 账户币种
     initial_balance = Column(Numeric(20, 2), nullable=True)  # 初始资金
+    current_balance = Column(Numeric(20, 2), nullable=True, default=0) # 当前净值 (NAV) - Manually Synced
     description = Column(Text, nullable=True)  # 备注
     is_active = Column(Boolean, default=True)  # 是否启用
     
@@ -273,10 +332,13 @@ class Position(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
+    asset_metadata_symbol = Column(String(50), ForeignKey("asset_metadata.symbol"), nullable=True)
+    
     # Relationships
     user = relationship("User", back_populates="positions")
     trading_account = relationship("TradingAccount")
     strategy = relationship("Strategy")
+    asset_metadata = relationship("AssetMetadata")
     batches = relationship("TradeBatch", back_populates="position", order_by="TradeBatch.time")
     
     @property
@@ -310,4 +372,24 @@ class TradeBatch(Base):
     
     # Relationships
     position = relationship("Position", back_populates="batches")
+
+
+class DailySnapshot(Base):
+    """每日资产快照 - 记录每日总资产净值"""
+    __tablename__ = "daily_snapshots"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    
+    date = Column(Date, nullable=False, index=True)
+    total_equity = Column(Numeric(20, 2), nullable=False)   # 总权益 (Cash + Market Value)
+    total_assets = Column(Numeric(20, 2), nullable=False)   # 总资产 (Gross)
+    total_liabilities = Column(Numeric(20, 2), nullable=False) # 总负债
+    net_transfers = Column(Numeric(20, 2), default=0)       # 当日净充提
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relationships
+    user = relationship("User", back_populates="daily_snapshots")
 

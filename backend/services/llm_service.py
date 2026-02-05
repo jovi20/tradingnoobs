@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from models import Trade, TradeStatus, UserSettings, WeeklyReport, SystemSetting
 
 
-MUNGER_PROMPT = """你是一位投资分析师，精通查理·芒格的投资哲学。请根据以下一周的交易记录，生成周报总结。
+MUNGER_PROMPT = """你是一位投资分析师，精通查理·芒格的投资哲学。请根据以下一周的交易记录，生成交易洞察报告。
 
 ## 交易记录
 {trades_data}
@@ -47,17 +47,102 @@ Categories:
 Input Symbol: {symbol}
 Exchange: {exchange}
 
-Output Format: JSON only, strictly complying with the schema: {{"type": "CATEGORY_CODE", "name": "Short Descriptive Name"}}
+Output Format: JSON only, strictly complying with the schema: {"type": "CATEGORY_CODE", "name": "Short Descriptive Name"}
 
 Rules:
 1. Do not explain. Return ONLY JSON.
 2. If unsure or symbol implies mixed assets, choose the dominant asset class.
-3. Common Logic:
-   - "GLD" -> ETF_COMMODITY
-   - "TLT" -> ETF_BOND
-   - "AAPL" -> EQUITY
-   - "BTC" -> CRYPTO
 """
+
+RICH_ASSET_CLASSIFICATION_PROMPT = """Role: Multi-dimensional Financial Asset Classifier
+Task: Extract rich metadata for the given financial ticker/symbol.
+
+Input:
+Symbol: {symbol}
+Name: {name}
+Exchange: {exchange}
+
+Output Format: JSON only.
+Schema:
+{{
+  "core_type": "STOCK|BOND|FUND|COMMODITY|FX|DERIVATIVE|CRYPTO",
+  "market": "US|HK|A_SHARE|CN_OTC|FOREX|COMMODITY_FUT|UK|CRYPTO",
+  "currency": "USD|HKD|CNY|EUR|GBP",
+  "risk_level": "CONSERVATIVE|MODERATE|GROWTH|AGGRESSIVE|HEDGE",
+  "sector": "Sector or Theme (e.g., Technology, AI, Finance)",
+  "instrument": "Spot|ETF|Future|Option|Bond|Index"
+}}
+
+Mappings for Reference:
+- core_type: STOCK(股票), BOND(债券), FUND(基金), COMMODITY(大宗商品), FX(外汇), DERIVATIVE(衍生品), CRYPTO(加密货币)
+- market: US(美股), HK(港股), A_SHARE(A股), CN_OTC(中国场外), FOREX(外汇市场), COMMODITY_FUT(商品期货), UK(英股), CRYPTO(加密货币市场)
+- risk_level: CONSERVATIVE(保守), MODERATE(稳健), GROWTH(成长), AGGRESSIVE(激进), HEDGE(避险)
+
+Rules:
+1. Be financially accurate.
+2. Return ONLY clean JSON. No markdown blocks.
+3. If unsure about sector, use "General".
+"""
+
+
+async def classify_asset_rich(db: Session, symbol: str, name: Optional[str] = None, exchange: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Classify asset with rich multi-dimensional metadata using LLM"""
+    # Get system settings for LLM 
+    llm_api_url_setting = db.query(SystemSetting).filter(SystemSetting.key == 'llm_api_url').first()
+    llm_api_key_setting = db.query(SystemSetting).filter(SystemSetting.key == 'llm_api_key').first()
+    llm_model_setting = db.query(SystemSetting).filter(SystemSetting.key == 'llm_model').first()
+    
+    llm_api_url = llm_api_url_setting.value if llm_api_url_setting else None
+    llm_api_key = llm_api_key_setting.value if llm_api_key_setting else None
+    llm_model = llm_model_setting.value if llm_model_setting else "gpt-4"
+
+    if not llm_api_url or not llm_api_key:
+        return None
+    
+    prompt = RICH_ASSET_CLASSIFICATION_PROMPT.format(
+        symbol=symbol, 
+        name=name or "Unknown", 
+        exchange=exchange or "Unknown"
+    )
+    
+    api_endpoint = llm_api_url.strip().rstrip('/')
+    if not api_endpoint.endswith('/chat/completions'):
+        api_endpoint = f"{api_endpoint}/chat/completions"
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                api_endpoint,
+                headers={
+                    "Authorization": f"Bearer {llm_api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": llm_model,
+                    "messages": [
+                        {"role": "system", "content": "You are a professional financial data expert. Return ONLY JSON."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.0,
+                    "max_tokens": 300
+                }
+            )
+            response.raise_for_status()
+            result = response.json()
+            content = result["choices"][0]["message"]["content"]
+            
+            # Clean markdown code blocks
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0]
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0]
+            
+            return json.loads(content.strip())
+            
+    except Exception as e:
+        print(f"Rich LLM Classification failed for {symbol}: {str(e)}")
+        return None
+
 
 
 async def classify_asset(db: Session, symbol: str, exchange: Optional[str] = None) -> Optional[Dict[str, str]]:

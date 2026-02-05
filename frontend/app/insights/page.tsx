@@ -12,7 +12,7 @@ import {
     Loader2
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { reportsAPI, WeeklyReport } from '@/lib/api'
+import { insightsAPI, WeeklyReport } from '@/lib/api'
 import ReactMarkdown from 'react-markdown'
 
 export default function ReportsPage() {
@@ -27,7 +27,7 @@ export default function ReportsPage() {
         if (!token) return
         try {
             setIsLoading(true)
-            const data = await reportsAPI.list(token)
+            const data = await insightsAPI.list(token)
             setReports(data)
             if (data.length > 0) {
                 setExpandedReport(data[0].id)
@@ -48,11 +48,11 @@ export default function ReportsPage() {
         setError('')
         setIsGenerating(true)
         try {
-            const newReport = await reportsAPI.generateCurrentWeek(token)
+            const newReport = await insightsAPI.generateCurrentWeek(token)
             setReports([newReport, ...reports])
             setExpandedReport(newReport.id)
         } catch (err: any) {
-            setError(err.message || '生成周报失败，请确保已配置 LLM API')
+            setError(err.message || '生成洞察失败，请确保已配置 LLM API')
         } finally {
             setIsGenerating(false)
         }
@@ -75,7 +75,7 @@ export default function ReportsPage() {
         <div className="space-y-6 pb-20 md:pb-6">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <h1 className="text-2xl font-bold">AI 周报</h1>
+                <h1 className="text-2xl font-bold">AI 洞察</h1>
                 <button
                     onClick={handleGenerateReport}
                     disabled={isGenerating}
@@ -95,7 +95,7 @@ export default function ReportsPage() {
                     ) : (
                         <Sparkles className="w-5 h-5 text-primary-400 group-hover:rotate-12 transition-transform" />
                     )}
-                    <span>{isGenerating ? '正在深度分析中...' : '生成本周 AI 周报'}</span>
+                    <span>{isGenerating ? '正在深度分析中...' : '生成本周 AI 洞察'}</span>
                 </button>
             </div>
 
@@ -110,9 +110,9 @@ export default function ReportsPage() {
             {reports.length === 0 ? (
                 <div className="card p-12 text-center">
                     <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                    <p className="text-slate-500 mb-4">暂无周报</p>
+                    <p className="text-slate-500 mb-4">暂无洞察报告</p>
                     <p className="text-sm text-slate-400 mb-6">
-                        点击上方按钮生成本周的 AI 交易周报
+                        点击上方按钮生成本周的 AI 交易洞察
                     </p>
                     <button
                         onClick={handleGenerateReport}
@@ -120,7 +120,7 @@ export default function ReportsPage() {
                         className="btn btn-primary inline-flex items-center space-x-2"
                     >
                         <Sparkles className="w-5 h-5" />
-                        <span>生成第一份周报</span>
+                        <span>生成第一份洞察</span>
                     </button>
                 </div>
             ) : (

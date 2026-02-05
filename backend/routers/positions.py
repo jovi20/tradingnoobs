@@ -3,7 +3,8 @@ Trading Noobs Backend - Positions Router
 Handles Position CRUD and Batch operations
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from typing import List, Optional
@@ -15,14 +16,15 @@ from datetime import datetime
 from database import get_db
 from routers.auth import get_current_user
 from models import (
-    User, Position, TradeBatch, TradingAccount,
+    User, Position, TradeBatch, TradingAccount, AssetMetadata,
     PositionStatus, PositionDirection, BatchType
 )
 from schemas import (
     PositionCreate, PositionUpdate, PositionResponse, PositionListResponse,
-    TradeBatchCreate, TradeBatchResponse,
-    PositionStatusEnum, BatchTypeEnum
+    TradeBatchCreate, TradeBatchUpdate, TradeBatchResponse,
+    PositionStatusEnum, BatchTypeEnum, AssetMetadataUpdate
 )
+from models import AssetCoreType, AssetMarket, AssetRiskLevel, AssetCurrency
 from services.market_data_service import MarketDataService
 import asyncio
 
@@ -58,18 +60,24 @@ def recalculate_position(position: Position, db: Session):
         position.closed_at = None
 
 
-@router.get("", response_model=List[PositionListResponse])
+@router.get("")
 async def list_positions(
     status: Optional[PositionStatusEnum] = None,
     symbol: Optional[str] = None,
     account_id: Optional[int] = None,
     asset_type: Optional[str] = None, # Stock, Crypto
+    core_type: Optional[str] = None,
+    market: Optional[str] = None,
+    risk_level: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """List all positions for the current user"""
     from sqlalchemy.orm import joinedload
-    query = db.query(Position).options(joinedload(Position.batches)).filter(Position.user_id == current_user.id)
+    query = db.query(Position).outerjoin(AssetMetadata).options(
+        joinedload(Position.batches),
+        joinedload(Position.asset_metadata)
+    ).filter(Position.user_id == current_user.id)
     
     if status:
         query = query.filter(Position.status == PositionStatus[status.value])
@@ -80,6 +88,13 @@ async def list_positions(
     
     if asset_type:
         query = query.filter(Position.asset_type == asset_type)
+    
+    if core_type:
+        query = query.filter(AssetMetadata.core_type == core_type)
+    if market:
+        query = query.filter(AssetMetadata.market == market)
+    if risk_level:
+        query = query.filter(AssetMetadata.risk_level == risk_level)
     
     positions = query.order_by(desc(Position.opened_at)).all()
     
@@ -100,6 +115,7 @@ async def list_positions(
     result = []
     for pos in positions:
         pos_dict = {
+
             'id': pos.id,
             'account_id': pos.account_id,
             'symbol': pos.symbol,
@@ -114,8 +130,43 @@ async def list_positions(
             'closed_at': pos.closed_at,
             'created_at': pos.created_at,
             'current_price': None,
-            'unrealized_pnl': None
+            'created_at': pos.created_at,
+            'current_price': None,
+            'unrealized_pnl': None,
+            'asset_metadata': None
         }
+
+        # Populate asset_metadata
+        if pos.asset_metadata:
+            meta = pos.asset_metadata
+            pos_dict['asset_metadata'] = {
+                'symbol': meta.symbol,
+                'name': meta.name,
+                'core_type': meta.core_type,
+                'market': meta.market,
+                'currency': meta.currency,
+                'sector': meta.sector,
+                'risk_level': meta.risk_level,
+                'risk_level': meta.risk_level,
+                'instrument': meta.instrument
+            }
+
+        # Populate batches for detailed view (since frontend logic is simplified)
+        pos_dict['batches'] = [
+            {
+                'id': b.id,
+                'position_id': b.position_id,
+                'type': b.type.value,
+                'price': b.price,
+                'quantity': b.quantity,
+                'time': b.time,
+                'reason': b.reason,
+                'emotion': b.emotion,
+                'confidence': b.confidence,
+                'pnl': b.pnl,
+                'created_at': b.created_at
+            } for b in pos.batches
+        ]
         
         if pos.status == PositionStatus.OPEN:
             quote = quote_results.get(pos.id)
@@ -144,7 +195,9 @@ async def list_positions(
         
         result.append(pos_dict)
         
-    return result
+
+        
+    return JSONResponse(content=jsonable_encoder(result))
 
 
 @router.get("/{position_id}", response_model=PositionResponse)
@@ -154,7 +207,11 @@ async def get_position(
     db: Session = Depends(get_db)
 ):
     """Get a single position with all batches"""
-    position = db.query(Position).filter(
+    from sqlalchemy.orm import joinedload
+    position = db.query(Position).options(
+        joinedload(Position.batches),
+        joinedload(Position.asset_metadata)
+    ).filter(
         Position.id == position_id,
         Position.user_id == current_user.id
     ).first()
@@ -162,6 +219,35 @@ async def get_position(
     if not position:
         raise HTTPException(status_code=404, detail="Position not found")
     
+    # Enrich with market data if open
+    if position.status == PositionStatus.OPEN:
+        market_service = MarketDataService(db)
+        # Use metadata hints for more accurate quote
+        meta = position.asset_metadata
+        try:
+            quote = await market_service.get_quote(
+                position.symbol, 
+                position.exchange,
+                core_type=meta.core_type.value if meta and meta.core_type else None,
+                market=meta.market.value if meta and meta.market else None,
+                instrument=meta.instrument if meta else None
+            )
+            
+            if quote and quote.get('c') is not None:
+                current_price = float(quote['c'])
+                position.current_price = current_price
+                if position.average_entry_price:
+                    entry = float(position.average_entry_price)
+                    qty = float(position.total_quantity)
+                    if position.direction == PositionDirection.LONG:
+                        position.unrealized_pnl = (current_price - entry) * qty
+                    else:
+                        position.unrealized_pnl = (entry - current_price) * qty
+        except Exception as e:
+            print(f"Error fetching quote for {position.symbol}: {e}")
+            # Continue without real-time price
+            pass
+                    
     return position
 
 
@@ -240,6 +326,37 @@ async def update_position(
         raise HTTPException(status_code=404, detail="Position not found")
     
     update_data = position_data.model_dump(exclude_unset=True)
+    
+    # Handle Asset Metadata Update
+    metadata_update = update_data.pop('asset_metadata', None)
+    if metadata_update:
+        # Find or create metadata for this symbol
+        asset_meta = db.query(AssetMetadata).filter(
+            AssetMetadata.symbol == position.symbol
+        ).first()
+        
+        if not asset_meta:
+            asset_meta = AssetMetadata(symbol=position.symbol)
+            db.add(asset_meta)
+            
+        # Update fields
+        for key, value in metadata_update.items():
+            if value is not None:
+                # Handle Enums if necessary (SQLAlchemy might handle string->Enum if valid)
+                # But manual mapping helps avoid errors if strings don't match exactly or empty
+                if key == 'core_type' and value:
+                    setattr(asset_meta, key, AssetCoreType[value])
+                elif key == 'market' and value:
+                    setattr(asset_meta, key, AssetMarket[value])
+                elif key == 'risk_level' and value:
+                    setattr(asset_meta, key, AssetRiskLevel[value])
+                else:
+                    setattr(asset_meta, key, value)
+        
+        # Ensure the link exists
+        if position.asset_metadata_symbol != position.symbol:
+            position.asset_metadata_symbol = position.symbol
+    
     for key, value in update_data.items():
         setattr(position, key, value)
     
@@ -372,6 +489,43 @@ async def delete_batch(
     recalculate_position(position, db)
     
     db.commit()
+
+
+@router.patch("/batches/{batch_id}", response_model=TradeBatchResponse)
+async def update_batch(
+    batch_id: int,
+    batch_data: TradeBatchUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update a trade batch and recalculate position"""
+    batch = db.query(TradeBatch).join(Position).filter(
+        TradeBatch.id == batch_id,
+        Position.user_id == current_user.id
+    ).first()
+    
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    update_data = batch_data.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(batch, key, value)
+    
+    # If this is an EXIT batch, we might need to recalculate its PnL
+    # But recalculate_position handles the overall PnL, let's ensure individual batch pnl is correct
+    if batch.type == BatchType.EXIT:
+        position = batch.position
+        if position.average_entry_price:
+            if position.direction == PositionDirection.LONG:
+                batch.pnl = (batch.price - position.average_entry_price) * batch.quantity
+            else:
+                batch.pnl = (position.average_entry_price - batch.price) * batch.quantity
+    
+    db.flush()
+    recalculate_position(batch.position, db)
+    db.commit()
+    db.refresh(batch)
+    return batch
 
 
 # ============== Helper Endpoints ==============

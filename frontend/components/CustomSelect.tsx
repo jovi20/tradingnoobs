@@ -14,6 +14,7 @@ interface CustomSelectProps {
     onChange: (value: any) => void
     placeholder?: string
     className?: string
+    size?: 'sm' | 'md'
 }
 
 export default function CustomSelect({
@@ -21,7 +22,8 @@ export default function CustomSelect({
     value,
     onChange,
     placeholder = '请选择',
-    className = ''
+    className = '',
+    size = 'md'
 }: CustomSelectProps) {
     const [isOpen, setIsOpen] = useState(false)
     const containerRef = useRef<HTMLDivElement>(null)
@@ -44,12 +46,12 @@ export default function CustomSelect({
             <button
                 type="button"
                 onClick={() => setIsOpen(!isOpen)}
-                className="w-full h-10 px-4 flex items-center justify-between gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:border-slate-300 dark:hover:border-slate-600 transition-all text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                className={`w-full ${size === 'sm' ? 'h-8 px-2 text-xs' : 'h-10 px-4 text-sm'} flex items-center justify-between gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:border-slate-300 dark:hover:border-slate-600 transition-all font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20`}
             >
                 <span className="truncate">
                     {selectedOption ? selectedOption.label : placeholder}
                 </span>
-                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`${size === 'sm' ? 'w-3 h-3' : 'w-4 h-4'} text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
             </button>
 
             {/* Dropdown Menu */}

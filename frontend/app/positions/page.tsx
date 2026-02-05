@@ -19,6 +19,10 @@ import { useAuth } from '@/contexts/AuthContext'
 import { positionsAPI, Position, TradeBatch, accountsAPI, TradingAccount } from '@/lib/api'
 import { useTrendColor } from '@/hooks/useTrendColor'
 import CustomSelect from '@/components/CustomSelect'
+import {
+    getMarketLabel, getRiskLevelInfo, getCoreTypeLabel,
+    AssetMarket, AssetRiskLevel
+} from '@/lib/symbolUtils'
 
 export default function PositionsPage() {
     const { token } = useAuth()
@@ -31,7 +35,10 @@ export default function PositionsPage() {
     // Filters
     const [statusFilter, setStatusFilter] = useState<'ALL' | 'OPEN' | 'CLOSED'>('ALL')
     const [accountFilter, setAccountFilter] = useState<number | 'ALL'>('ALL')
-    const [assetFilter, setAssetFilter] = useState<'ALL' | 'Stock' | 'Crypto'>('ALL')
+
+    // Multi-dimensional filters
+    const [dimension, setDimension] = useState<'CORE_TYPE' | 'MARKET' | 'RISK' | 'ASSET_TYPE'>('ASSET_TYPE')
+    const [categoryFilter, setCategoryFilter] = useState<string>('ALL')
 
     // URL params for linking from dashboard
     const searchParams = useSearchParams()
@@ -39,8 +46,25 @@ export default function PositionsPage() {
 
     useEffect(() => {
         const type = searchParams.get('asset_type')
+        const core = searchParams.get('core_type')
+        const mkt = searchParams.get('market')
+        const risk = searchParams.get('risk_level')
+        const dim = searchParams.get('dimension')
+
+        if (dim) setDimension(dim as any)
+
         if (type) {
-            setAssetFilter(type as any)
+            setDimension('ASSET_TYPE')
+            setCategoryFilter(type)
+        } else if (core) {
+            setDimension('CORE_TYPE')
+            setCategoryFilter(core)
+        } else if (mkt) {
+            setDimension('MARKET')
+            setCategoryFilter(mkt)
+        } else if (risk) {
+            setDimension('RISK')
+            setCategoryFilter(risk)
         }
     }, [searchParams])
 
@@ -56,7 +80,13 @@ export default function PositionsPage() {
                 const params: any = {}
                 if (statusFilter !== 'ALL') params.status = statusFilter
                 if (accountFilter !== 'ALL') params.account_id = accountFilter
-                if (assetFilter !== 'ALL') params.asset_type = assetFilter
+
+                if (categoryFilter !== 'ALL') {
+                    if (dimension === 'ASSET_TYPE') params.asset_type = categoryFilter
+                    if (dimension === 'CORE_TYPE') params.core_type = categoryFilter
+                    if (dimension === 'MARKET') params.market = categoryFilter
+                    if (dimension === 'RISK') params.risk_level = categoryFilter
+                }
 
                 const [positionsData, accountsData] = await Promise.all([
                     positionsAPI.list(token, params),
@@ -71,26 +101,17 @@ export default function PositionsPage() {
             }
         }
         fetchData()
-    }, [token, statusFilter, accountFilter, assetFilter])
+    }, [token, statusFilter, accountFilter, dimension, categoryFilter])
 
     const filteredPositions = positions
 
-    const toggleExpand = async (id: number) => {
+    const toggleExpand = async (id: number, e: React.MouseEvent) => {
+        // Stop propagation to prevent row click from triggering twice if button is clicked
+        e.stopPropagation()
+
         if (expandedId === id) {
             setExpandedId(null)
         } else {
-            if (!positions.find(p => p.id === id)?.batches) {
-                try {
-                    const fullPosition = await positionsAPI.get(token!, id)
-                    setPositions(prev => prev.map(p => p.id === id ? {
-                        ...fullPosition,
-                        current_price: p.current_price,
-                        unrealized_pnl: p.unrealized_pnl
-                    } : p))
-                } catch (err) {
-                    console.error('Failed to load batches', err)
-                }
-            }
             setExpandedId(id)
         }
     }
@@ -99,6 +120,46 @@ export default function PositionsPage() {
         if (!accountId) return '-'
         const account = accounts.find(a => a.id === accountId)
         return account?.name || '-'
+    }
+
+    // Helper to get categories for current dimension
+    const getCategories = () => {
+        switch (dimension) {
+            case 'ASSET_TYPE':
+                return ['ALL', 'EQUITY', 'ETF_EQUITY', 'ETF_BOND', 'ETF_COMMODITY', 'CRYPTO', 'FOREX']
+            case 'CORE_TYPE':
+                return ['ALL', 'STOCK', 'FUND', 'BOND', 'COMMODITY', 'FX', 'CRYPTO']
+            case 'MARKET':
+                return ['ALL', 'US', 'HK', 'A_SHARE', 'CN_OTC', 'FOREX', 'CRYPTO', 'UK']
+            case 'RISK':
+                return ['ALL', 'CONSERVATIVE', 'MODERATE', 'GROWTH', 'AGGRESSIVE', 'HEDGE']
+            default:
+                return ['ALL']
+        }
+    }
+
+    const getCategoryLabel = (cat: string) => {
+        if (cat === 'ALL') return '全部'
+        switch (dimension) {
+            case 'ASSET_TYPE':
+                switch (cat) {
+                    case 'EQUITY': return '股票'
+                    case 'ETF_EQUITY': return '股票ETF'
+                    case 'ETF_BOND': return '债券ETF'
+                    case 'ETF_COMMODITY': return '商品ETF'
+                    case 'CRYPTO': return '加密货币'
+                    case 'FOREX': return '外汇'
+                    default: return cat
+                }
+            case 'CORE_TYPE':
+                return getCoreTypeLabel(cat as any)
+            case 'MARKET':
+                return getMarketLabel(cat as any)
+            case 'RISK':
+                return getRiskLevelInfo(cat as any).label
+            default:
+                return cat
+        }
     }
 
     if (isLoading) {
@@ -120,44 +181,68 @@ export default function PositionsPage() {
                 </Link>
             </div>
 
+            {/* Dimension Selector */}
+            <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl w-fit">
+                {[
+                    { id: 'ASSET_TYPE', label: '主要类型' },
+                    { id: 'CORE_TYPE', label: '底层类别' },
+                    { id: 'MARKET', label: '交易市场' },
+                    { id: 'RISK', label: '风险等级' },
+                ].map(dim => (
+                    <button
+                        key={dim.id}
+                        onClick={() => {
+                            setDimension(dim.id as any)
+                            setCategoryFilter('ALL')
+                            // Clear URL params
+                            router.push('/positions')
+                        }}
+                        className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${dimension === dim.id
+                            ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                            }`}
+                    >
+                        {dim.label}
+                    </button>
+                ))}
+            </div>
+
             {/* Top Bar with Tabs and Compact Filters */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-700 pb-0.5">
-                {/* Asset Type Tabs */}
+                {/* Dynamic Tabs */}
                 <div className="overflow-x-auto scrollbar-hide">
                     <div className="flex space-x-6 min-w-max">
-                        {['ALL', 'EQUITY', 'ETF_EQUITY', 'ETF_BOND', 'ETF_COMMODITY', 'CRYPTO', 'FOREX'].map((type) => {
-                            const getLabel = (t: string) => {
-                                switch (t) {
-                                    case 'ALL': return '全部'
-                                    case 'EQUITY': return '股票'
-                                    case 'ETF_EQUITY': return '股票ETF'
-                                    case 'ETF_BOND': return '债券ETF'
-                                    case 'ETF_COMMODITY': return '商品ETF'
-                                    case 'CRYPTO': return '加密货币'
-                                    case 'FOREX': return '外汇'
-                                    default: return t
-                                }
-                            }
+                        {getCategories().map((cat) => (
+                            <button
+                                key={cat}
+                                onClick={() => {
+                                    setCategoryFilter(cat)
+                                    const url = new URL(window.location.href)
+                                    // Clear other dimension params
+                                    url.searchParams.delete('asset_type')
+                                    url.searchParams.delete('core_type')
+                                    url.searchParams.delete('market')
+                                    url.searchParams.delete('risk_level')
 
-                            return (
-                                <button
-                                    key={type}
-                                    onClick={() => {
-                                        setAssetFilter(type as any)
-                                        const url = new URL(window.location.href)
-                                        if (type !== 'ALL') url.searchParams.set('asset_type', type)
-                                        else url.searchParams.delete('asset_type')
-                                        router.push(`${url.pathname}${url.search}`)
-                                    }}
-                                    className={`pb-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap min-w-max px-2 ${assetFilter === type
-                                        ? 'border-slate-900 text-slate-900 dark:border-white dark:text-white'
-                                        : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
-                                        }`}
-                                >
-                                    {getLabel(type)}
-                                </button>
-                            )
-                        })}
+                                    if (cat !== 'ALL') {
+                                        const param = dimension === 'ASSET_TYPE' ? 'asset_type' :
+                                            dimension === 'CORE_TYPE' ? 'core_type' :
+                                                dimension === 'MARKET' ? 'market' : 'risk_level'
+                                        url.searchParams.set(param, cat)
+                                        url.searchParams.set('dimension', dimension)
+                                    } else {
+                                        url.searchParams.delete('dimension')
+                                    }
+                                    router.push(`${url.pathname}${url.search}`)
+                                }}
+                                className={`pb-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap min-w-max px-2 ${categoryFilter === cat
+                                    ? 'border-slate-900 text-slate-900 dark:border-white dark:text-white'
+                                    : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                                    }`}
+                            >
+                                {getCategoryLabel(cat)}
+                            </button>
+                        ))}
                     </div>
                 </div>
 
@@ -208,7 +293,7 @@ export default function PositionsPage() {
                             {/* Position Summary Row */}
                             <div
                                 className="p-4 flex flex-col md:flex-row md:items-center justify-between cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors gap-4"
-                                onClick={() => toggleExpand(position.id)}
+                                onClick={(e) => toggleExpand(position.id, e)}
                             >
                                 <div className="flex items-center gap-4">
                                     <div className={`p-2 rounded-lg ${position.direction === 'LONG'
@@ -234,6 +319,25 @@ export default function PositionsPage() {
                                         <p className="text-xs text-slate-500">
                                             {getAccountName(position.account_id)} · {position.exchange}
                                         </p>
+
+                                        {/* Rich Metadata Badges */}
+                                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                            {position.asset_metadata?.market && (
+                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                                                    {getMarketLabel(position.asset_metadata.market as AssetMarket)}
+                                                </span>
+                                            )}
+                                            {position.asset_metadata?.sector && (
+                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800/50">
+                                                    {position.asset_metadata.sector}
+                                                </span>
+                                            )}
+                                            {position.asset_metadata?.risk_level && (
+                                                <span className={`text-[10px] px-1.5 py-0.5 rounded border ${getRiskLevelInfo(position.asset_metadata.risk_level as AssetRiskLevel).color}`}>
+                                                    {getRiskLevelInfo(position.asset_metadata.risk_level as AssetRiskLevel).label}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 
@@ -276,7 +380,12 @@ export default function PositionsPage() {
                                         </p>
                                     </div>
                                     <div className="text-slate-400 pl-2">
-                                        {expandedId === position.id ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                        <button
+                                            type="button"
+                                            className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition"
+                                        >
+                                            {expandedId === position.id ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -285,53 +394,83 @@ export default function PositionsPage() {
                                 <div className="border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 p-4">
                                     <div className="flex items-center justify-between mb-3">
                                         <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">交易批次</h3>
-                                        {position.status === 'OPEN' && (
+                                        <div className="flex items-center gap-2">
                                             <Link
-                                                href={`/positions/${position.id}/add-batch`}
-                                                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-medium text-slate-600 dark:text-slate-400 hover:border-slate-400 dark:hover:border-slate-500 hover:text-slate-900 dark:hover:text-white transition-all shadow-sm active:scale-95"
+                                                href={`/positions/${position.id}/add-batch?type=ENTRY`}
+                                                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-all shadow-sm active:scale-95"
                                             >
-                                                <Plus className="w-3.5 h-3.5" />
-                                                <span>加仓 / 减仓</span>
+                                                <ArrowUpCircle className="w-3.5 h-3.5" />
+                                                <span>加仓</span>
                                             </Link>
-                                        )}
+                                            <Link
+                                                href={`/positions/${position.id}/add-batch?type=EXIT`}
+                                                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 text-xs font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-all shadow-sm active:scale-95"
+                                            >
+                                                <ArrowDownCircle className="w-3.5 h-3.5" />
+                                                <span>减仓</span>
+                                            </Link>
+                                        </div>
                                     </div>
                                     <div className="space-y-2">
                                         {position.batches.map((batch: TradeBatch) => (
                                             <div
                                                 key={batch.id}
-                                                className="flex items-center justify-between p-3 rounded-lg bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700"
+                                                className="p-3 rounded-lg bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 hover:shadow-sm transition-shadow"
                                             >
-                                                <div className="flex items-center gap-3">
-                                                    <span className={`text-xs font-medium px-2 py-0.5 rounded ${batch.type === 'ENTRY'
-                                                        ? trendColor.upBg
-                                                        : 'bg-amber-100 dark:bg-amber-900/30 text-amber-600'
-                                                        }`}>
-                                                        {batch.type === 'ENTRY' ? '加仓' : '减仓'}
-                                                    </span>
-                                                    <span className="text-sm text-slate-500">
-                                                        {new Date(batch.time).toLocaleString('zh-CN', {
-                                                            month: 'short',
-                                                            day: 'numeric',
-                                                            hour: '2-digit',
-                                                            minute: '2-digit'
-                                                        })}
-                                                    </span>
-                                                </div>
-                                                <div className="flex items-center gap-4 text-sm">
-                                                    <span>${Number(batch.price).toFixed(2)}</span>
-                                                    <span className="text-slate-500">x {(() => {
-                                                        const bQty = Number(batch.quantity)
-                                                        if (position.asset_type === 'CRYPTO' || position.asset_type === 'FOREX') {
-                                                            return bQty.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })
-                                                        }
-                                                        return bQty.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-                                                    })()}</span>
-                                                    {batch.pnl !== null && batch.pnl !== undefined && (
-                                                        <span className={Number(batch.pnl) >= 0 ? trendColor.upColor : trendColor.downColor}>
-                                                            {Number(batch.pnl) >= 0 ? '+' : ''}{Number(batch.pnl).toFixed(2)}
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <div className="flex items-center gap-3">
+                                                        <span className={`text-xs font-medium px-2 py-0.5 rounded ${batch.type === 'ENTRY'
+                                                            ? trendColor.upBg
+                                                            : 'bg-amber-100 dark:bg-amber-900/30 text-amber-600'
+                                                            }`}>
+                                                            {batch.type === 'ENTRY' ? '加仓' : '减仓'}
                                                         </span>
-                                                    )}
+                                                        <span className="text-sm text-slate-500">
+                                                            {new Date(batch.time).toLocaleString('zh-CN', {
+                                                                month: 'short',
+                                                                day: 'numeric',
+                                                                hour: '2-digit',
+                                                                minute: '2-digit'
+                                                            })}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-4 text-sm">
+                                                        <span className="font-mono">${Number(batch.price).toFixed(2)}</span>
+                                                        <span className="text-slate-500">x {(() => {
+                                                            const bQty = Number(batch.quantity)
+                                                            if (position.asset_type === 'CRYPTO' || position.asset_type === 'FOREX') {
+                                                                return bQty.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })
+                                                            }
+                                                            return bQty.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+                                                        })()}</span>
+                                                        {batch.pnl !== null && batch.pnl !== undefined && (
+                                                            <span className={`font-medium ${Number(batch.pnl) >= 0 ? trendColor.upColor : trendColor.downColor}`}>
+                                                                {Number(batch.pnl) >= 0 ? '+' : ''}{Number(batch.pnl).toFixed(2)}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </div>
+
+                                                {/* Emotion & Reason Row */}
+                                                {(batch.emotion || batch.reason || batch.confidence) && (
+                                                    <div className="flex flex-wrap items-start gap-3 pt-2 border-t border-slate-100 dark:border-slate-700/50 mt-2 text-xs">
+                                                        {batch.emotion && (
+                                                            <span className="px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 border border-purple-100 dark:border-purple-800/50">
+                                                                Mood: {batch.emotion}
+                                                            </span>
+                                                        )}
+                                                        {batch.confidence && (
+                                                            <span className="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800/50">
+                                                                Conf: {batch.confidence}/5
+                                                            </span>
+                                                        )}
+                                                        {batch.reason && (
+                                                            <span className="text-slate-600 dark:text-slate-400 flex-1 leading-relaxed">
+                                                                {batch.reason}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
                                         ))}
                                     </div>

@@ -98,7 +98,30 @@ export interface PositionMover {
     current_price: number
 }
 
+export interface SankeyNode {
+    name: string
+}
+
+export interface SankeyLink {
+    source: number
+    target: number
+    value: number
+}
+
+export interface PortfolioFlow {
+    nodes: SankeyNode[]
+    links: SankeyLink[]
+}
+
+export interface AccountAllocation {
+    name: string
+    broker: string
+    value: number
+    percent: number
+}
+
 export interface DashboardStats {
+    total_assets: number;
     total_pnl: number
     win_rate: number
     avg_pnl_ratio: number
@@ -106,9 +129,13 @@ export interface DashboardStats {
     open_positions: number
     closed_trades: number
     asset_allocation: AssetAllocation[]
-    account_allocation?: { name: string; broker: string; value: number; percent: number }[]
+    core_type_allocation: AssetAllocation[];
+    market_allocation: AssetAllocation[];
+    risk_level_allocation: AssetAllocation[];
+    account_allocation: AccountAllocation[]
     top_movers: PositionMover[]
     bottom_movers: PositionMover[]
+    portfolio_flow?: PortfolioFlow
 }
 
 export interface DailySummary {
@@ -128,7 +155,10 @@ export interface TradingAccount {
     broker: string
     account_type?: string
     currency: string
-    initial_balance?: number
+    initial_balance: number
+    current_balance?: number
+    total_assets?: number
+    total_liabilities?: number
     description?: string
     is_active: boolean
     created_at: string
@@ -146,8 +176,11 @@ export interface TradingAccountCreate {
     name: string
     broker: string
     account_type?: string
-    currency?: string
-    initial_balance?: number
+    currency: string
+    initial_balance: number
+    current_balance?: number
+    total_assets?: number
+    total_liabilities?: number
     description?: string
 }
 
@@ -317,9 +350,9 @@ export const settingsAPI = {
 
 // ============== Reports API ==============
 
-export const reportsAPI = {
+export const insightsAPI = {
     list: async (token: string): Promise<WeeklyReport[]> => {
-        return fetchAPI('/api/reports', {}, token)
+        return fetchAPI('/api/insights', {}, token)
     },
 
     generateCurrentWeek: async (token: string): Promise<WeeklyReport> => {
@@ -331,12 +364,8 @@ export const reportsAPI = {
         const weekEnd = new Date(weekStart)
         weekEnd.setDate(weekStart.getDate() + 6)
 
-        return fetchAPI('/api/reports/generate', {
+        return fetchAPI('/api/insights/generate-current-week', {
             method: 'POST',
-            body: JSON.stringify({
-                week_start: weekStart.toISOString().split('T')[0],
-                week_end: weekEnd.toISOString().split('T')[0],
-            }),
         }, token)
     },
 }
@@ -476,6 +505,7 @@ export interface Position {
     rating?: number
     created_at: string
     updated_at?: string
+    asset_metadata?: any // Detailed AssetMetadataResponse
     batches?: TradeBatch[]
 }
 
@@ -491,6 +521,15 @@ export interface PositionCreate {
     entry_reason?: string
     entry_emotion?: string
     entry_confidence?: number
+    asset_metadata?: {
+        name?: string
+        core_type?: string
+        market?: string
+        currency?: string
+        sector?: string
+        risk_level?: string
+        instrument?: string
+    }
 }
 
 export interface BatchCreate {
@@ -506,11 +545,22 @@ export interface BatchCreate {
 // ============== Positions API ==============
 
 export const positionsAPI = {
-    list: async (token: string, params?: { status?: string; symbol?: string; account_id?: number; asset_type?: string }): Promise<Position[]> => {
+    list: async (token: string, params?: {
+        status?: string;
+        symbol?: string;
+        account_id?: number | string;
+        core_type?: string;
+        market?: string;
+        risk_level?: string;
+        asset_type?: string;
+    }): Promise<Position[]> => {
         const searchParams = new URLSearchParams()
         if (params?.status) searchParams.append('status', params.status)
         if (params?.symbol) searchParams.append('symbol', params.symbol)
         if (params?.account_id) searchParams.append('account_id', params.account_id.toString())
+        if (params?.core_type) searchParams.append('core_type', params.core_type)
+        if (params?.market) searchParams.append('market', params.market)
+        if (params?.risk_level) searchParams.append('risk_level', params.risk_level)
         if (params?.asset_type) searchParams.append('asset_type', params.asset_type)
         const query = searchParams.toString()
         return fetchAPI(`/api/positions${query ? `?${query}` : ''}`, {}, token)
@@ -545,14 +595,19 @@ export const positionsAPI = {
     },
 
     // Batch operations
-    addBatch: async (token: string, positionId: number, data: BatchCreate): Promise<TradeBatch> => {
-        return fetchAPI(`/api/positions/${positionId}/batches`, {
+    addBatch: (token: string, positionId: number, data: BatchCreate): Promise<TradeBatch> =>
+        fetchAPI(`/api/positions/${positionId}/batches`, {
             method: 'POST',
-            body: JSON.stringify(data),
-        }, token)
-    },
+            body: JSON.stringify(data)
+        }, token),
 
-    deleteBatch: async (token: string, batchId: number): Promise<void> => {
+    updateBatch: (token: string, batchId: number, data: Partial<BatchCreate>): Promise<TradeBatch> =>
+        fetchAPI(`/api/positions/batches/${batchId}`, {
+            method: 'PATCH',
+            body: JSON.stringify(data)
+        }, token),
+
+    deleteBatch: (token: string, batchId: number): Promise<void> => {
         return fetchAPI(`/api/positions/batches/${batchId}`, {
             method: 'DELETE',
         }, token)
@@ -569,6 +624,7 @@ export interface SymbolValidation {
     name?: string
     provider?: string
     error?: string
+    metadata?: any // Rich metadata
     candidates?: { symbol: string; reason: string }[]
 }
 
