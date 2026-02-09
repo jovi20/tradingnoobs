@@ -104,6 +104,13 @@ def migrate():
                 conn.execute(text("ALTER TABLE positions ADD COLUMN account_id INTEGER REFERENCES trading_accounts(id)"))
                 conn.commit()
 
+        # 7.5 Add pnl to trade_batches
+        if inspector.has_table('trade_batches'):
+            if not column_exists('trade_batches', 'pnl'):
+                print("Adding pnl column to trade_batches...")
+                conn.execute(text("ALTER TABLE trade_batches ADD COLUMN pnl NUMERIC(20, 8)"))
+                conn.commit()
+
         # 8. Migrate Trades to Positions if empty
         print("Checking for trades to migrate to positions...")
         res = conn.execute(text("SELECT COUNT(*) FROM positions"))
@@ -187,6 +194,44 @@ def migrate():
             
             conn.commit()
             print("Trade migration complete.")
+
+        # === Phase 1: Pre-Trade Checklist & Plan Drift Detection ===
+        
+        # Add checklist_items to strategies
+        if inspector.has_table('strategies'):
+            if not column_exists('strategies', 'checklist_items'):
+                print("Adding checklist_items to strategies...")
+                conn.execute(text("ALTER TABLE strategies ADD COLUMN checklist_items JSON DEFAULT '[]'"))
+                conn.commit()
+        
+        # Add checklist and plan drift fields to positions
+        if inspector.has_table('positions'):
+            if not column_exists('positions', 'checklist_responses'):
+                print("Adding checklist_responses to positions...")
+                conn.execute(text("ALTER TABLE positions ADD COLUMN checklist_responses JSON"))
+                conn.commit()
+            
+            if not column_exists('positions', 'checklist_completed_at'):
+                print("Adding checklist_completed_at to positions...")
+                conn.execute(text("ALTER TABLE positions ADD COLUMN checklist_completed_at TIMESTAMP"))
+                conn.commit()
+            
+            if not column_exists('positions', 'planned_entry_price'):
+                print("Adding planned_entry_price to positions...")
+                conn.execute(text("ALTER TABLE positions ADD COLUMN planned_entry_price NUMERIC(20, 8)"))
+                conn.commit()
+            
+            if not column_exists('positions', 'planned_stop_loss'):
+                print("Adding planned_stop_loss to positions...")
+                conn.execute(text("ALTER TABLE positions ADD COLUMN planned_stop_loss NUMERIC(20, 8)"))
+                conn.commit()
+            
+            if not column_exists('positions', 'planned_take_profit'):
+                print("Adding planned_take_profit to positions...")
+                conn.execute(text("ALTER TABLE positions ADD COLUMN planned_take_profit JSON"))
+                conn.commit()
+        
+        print("Phase 1 migration complete.")
 
     print("Migration completed.")
 

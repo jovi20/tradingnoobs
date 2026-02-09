@@ -24,11 +24,45 @@ CACHE_TTL_SECONDS = 60
 class MarketDataService:
     # Class-level cache shared across instances
     _quote_cache: Dict[str, Dict[str, Any]] = {}
+
+    def _get_cached_quote(self, symbol: str, fetch_func):
+        """
+        Generic caching wrapper for any quote fetching function
+        """
+        symbol_upper = symbol.upper()
+        cache_key = f"quote_{symbol_upper}"
+        
+        # Check cache
+        cached = MarketDataService._quote_cache.get(cache_key)
+        if cached:
+            cache_age = datetime.now() - cached['timestamp']
+            if cache_age.total_seconds() < CACHE_TTL_SECONDS:
+                return cached['data']
+        
+        # Fetch fresh data
+        try:
+            data = fetch_func()
+            
+            # Update cache
+            MarketDataService._quote_cache[cache_key] = {
+                'data': data,
+                'timestamp': datetime.now()
+            }
+            return data
+        except Exception as e:
+            print(f"Error fetching quote for {symbol}: {e}")
+            raise e
     _asset_type_cache: Dict[str, str] = {}
     
     def __init__(self, db: Session):
         self.db = db
         self._finnhub_client = None
+
+    async def _fetch_with_timeout(self, coro, timeout=5):
+        try:
+            return await asyncio.wait_for(coro, timeout=timeout)
+        except asyncio.TimeoutError:
+            raise Exception(f"Market data request timed out ({timeout}s)")
 
     def _get_finnhub_client(self):
         """Lazy load Finnhub client"""
@@ -196,36 +230,64 @@ class MarketDataService:
             asset_type = self.detect_asset_type(symbol, exchange)
         
         # Mapping hints to our internal provider routing logic
-        if asset_type == 'CRYPTO' or market == 'CRYPTO':
-            return await run_in_threadpool(binance_provider.get_crypto_quote, symbol)
-        
-        # Prioritize US Market (Stocks, ETFs)
-        elif market == 'US' or asset_type == 'US_STOCK' or (asset_type == 'STOCK' and market == 'US'):
-            return await self._get_finnhub_quote(symbol)
-        
-        elif asset_type == 'A_STOCK' or market == 'A_SHARE':
-            return await run_in_threadpool(akshare_provider.get_a_stock_quote, symbol)
-        
-        elif asset_type == 'HK_STOCK' or market == 'HK':
-            return await run_in_threadpool(akshare_provider.get_hk_stock_quote, symbol)
-        
-        elif asset_type == 'FUND' or asset_type == 'ETF_EQUITY' or asset_type == 'ETF_BOND' or asset_type == 'ETF_COMMODITY':
-            return await run_in_threadpool(akshare_provider.get_fund_quote, symbol)
+        async def fetch_wrapper():
+            if asset_type == 'CRYPTO' or market == 'CRYPTO':
+                return await self._fetch_with_timeout(run_in_threadpool(binance_provider.get_crypto_quote, symbol))
+            
+            # Prioritize US Market (Stocks, ETFs)
+            elif market == 'US' or asset_type == 'US_STOCK' or (asset_type == 'STOCK' and market == 'US'):
+                # Finnhub has its own internal caching, but let's wrap it for consistency or reuse its logic
+                # Since _get_finnhub_quote already caches, we can just call it.
+                # However, to be consistent with others, we could wrap it, but double caching is harmless.
+                return await self._fetch_with_timeout(self._get_finnhub_quote(symbol))
+            
+            elif asset_type == 'A_STOCK' or market == 'A_SHARE':
+                return await self._fetch_with_timeout(run_in_threadpool(akshare_provider.get_a_stock_quote, symbol))
+            
+            elif asset_type == 'HK_STOCK' or market == 'HK':
+                return await self._fetch_with_timeout(run_in_threadpool(akshare_provider.get_hk_stock_quote, symbol))
+            
+            elif asset_type == 'FUND' or asset_type == 'ETF_EQUITY' or asset_type == 'ETF_BOND' or asset_type == 'ETF_COMMODITY':
+                return await self._fetch_with_timeout(run_in_threadpool(akshare_provider.get_fund_quote, symbol))
 
-        elif asset_type == 'FX' or asset_type == 'FOREX' or market == 'FOREX':
-            return await run_in_threadpool(akshare_provider.get_forex_quote, symbol)
-            
-        else:
-            # Final fallback to detection if hints weren't enough
-            final_type = self.detect_asset_type(symbol, exchange)
-            if final_type == 'CRYPTO': return await run_in_threadpool(binance_provider.get_crypto_quote, symbol)
-            if final_type == 'A_STOCK': return await run_in_threadpool(akshare_provider.get_a_stock_quote, symbol)
-            if final_type == 'HK_STOCK': return await run_in_threadpool(akshare_provider.get_hk_stock_quote, symbol)
-            if final_type == 'ETF_EQUITY': return await run_in_threadpool(akshare_provider.get_fund_quote, symbol)
-            if final_type == 'US_STOCK': return await self._get_finnhub_quote(symbol)
-            if final_type == 'FOREX': return await run_in_threadpool(akshare_provider.get_forex_quote, symbol)
-            
-            raise ValueError(f"Unknown asset type for symbol: {symbol}")
+            elif asset_type == 'FX' or asset_type == 'FOREX' or market == 'FOREX':
+                return await self._fetch_with_timeout(run_in_threadpool(akshare_provider.get_forex_quote, symbol))
+                
+            else:
+                # Final fallback
+                final_type = self.detect_asset_type(symbol, exchange)
+                if final_type == 'CRYPTO': return await self._fetch_with_timeout(run_in_threadpool(binance_provider.get_crypto_quote, symbol))
+                if final_type == 'A_STOCK': return await self._fetch_with_timeout(run_in_threadpool(akshare_provider.get_a_stock_quote, symbol))
+                if final_type == 'HK_STOCK': return await self._fetch_with_timeout(run_in_threadpool(akshare_provider.get_hk_stock_quote, symbol))
+                if final_type == 'ETF_EQUITY': return await self._fetch_with_timeout(run_in_threadpool(akshare_provider.get_fund_quote, symbol))
+                if final_type == 'US_STOCK': return await self._fetch_with_timeout(self._get_finnhub_quote(symbol))
+                if final_type == 'FOREX': return await self._fetch_with_timeout(run_in_threadpool(akshare_provider.get_forex_quote, symbol))
+                
+                raise ValueError(f"Unknown asset type for symbol: {symbol}")
+
+        # Use the generic cache wrapper
+        # Note: _get_cached_quote is synchronous logic but fetch_wrapper is async
+        # We need an async aware cache wrapper or handle it here
+        
+        symbol_upper = symbol.upper()
+        cache_key = f"quote_{symbol_upper}"
+        
+        # Check cache
+        cached = MarketDataService._quote_cache.get(cache_key)
+        if cached:
+            cache_age = datetime.now() - cached['timestamp']
+            if cache_age.total_seconds() < CACHE_TTL_SECONDS:
+                return cached['data']
+        
+        # Fetch fresh
+        data = await fetch_wrapper()
+        
+        # Update cache
+        MarketDataService._quote_cache[cache_key] = {
+            'data': data,
+            'timestamp': datetime.now()
+        }
+        return data
 
     async def _get_finnhub_quote(self, symbol: str) -> Dict[str, Any]:
         """

@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import Link from 'next/link'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import {
     Plus,
     TrendingUp,
@@ -21,16 +21,15 @@ import { useTrendColor } from '@/hooks/useTrendColor'
 import CustomSelect from '@/components/CustomSelect'
 import {
     getMarketLabel, getRiskLevelInfo, getCoreTypeLabel,
-    AssetMarket, AssetRiskLevel
+    AssetMarket, AssetRiskLevel,
+    ALL_ASSET_CORE_TYPES, ALL_ASSET_MARKETS, ALL_ASSET_RISK_LEVELS
 } from '@/lib/symbolUtils'
+import { usePositionsData } from '@/hooks/usePositionsData'
 
 export default function PositionsPage() {
     const { token } = useAuth()
+    console.log('PositionsPage Rendered', { token: !!token })
     const trendColor = useTrendColor()
-    const [positions, setPositions] = useState<Position[]>([])
-    const [accounts, setAccounts] = useState<TradingAccount[]>([])
-    const [isLoading, setIsLoading] = useState(true)
-    const [error, setError] = useState('')
 
     // Filters
     const [statusFilter, setStatusFilter] = useState<'ALL' | 'OPEN' | 'CLOSED'>('ALL')
@@ -65,41 +64,21 @@ export default function PositionsPage() {
         }
     }, [searchParams])
 
+    // Use custom hook for data fetching
+    const { positions, accounts, isLoading, error } = usePositionsData({
+        token,
+        statusFilter,
+        accountFilter,
+        dimension,
+        categoryFilter
+    })
+
     // Expanded position for batch view
     const [expandedId, setExpandedId] = useState<number | null>(null)
 
-    useEffect(() => {
-        const fetchData = async () => {
-            if (!token) return
-            try {
-                setIsLoading(true)
-                // Build API params
-                const params: any = {}
-                if (statusFilter !== 'ALL') params.status = statusFilter
-                if (accountFilter !== 'ALL') params.account_id = accountFilter
-
-                if (categoryFilter !== 'ALL') {
-                    if (dimension === 'CORE_TYPE') params.core_type = categoryFilter
-                    if (dimension === 'MARKET') params.market = categoryFilter
-                    if (dimension === 'RISK') params.risk_level = categoryFilter
-                }
-
-                const [positionsData, accountsData] = await Promise.all([
-                    positionsAPI.list(token, params),
-                    accountsAPI.list(token)
-                ])
-                setPositions(positionsData)
-                setAccounts(accountsData)
-            } catch (err: any) {
-                setError(err.message || '加载失败')
-            } finally {
-                setIsLoading(false)
-            }
-        }
-        fetchData()
-    }, [token, statusFilter, accountFilter, dimension, categoryFilter])
-
-    const filteredPositions = positions
+    const filteredPositions = useMemo(() => {
+        return positions
+    }, [positions])
 
     const toggleExpand = async (id: number, e: React.MouseEvent) => {
         // Stop propagation to prevent row click from triggering twice if button is clicked
@@ -122,11 +101,11 @@ export default function PositionsPage() {
     const getCategories = () => {
         switch (dimension) {
             case 'CORE_TYPE':
-                return ['ALL', 'STOCK', 'FUND', 'BOND', 'COMMODITY', 'FX', 'CRYPTO']
+                return ['ALL', ...ALL_ASSET_CORE_TYPES]
             case 'MARKET':
-                return ['ALL', 'US', 'HK', 'A_SHARE', 'CN_OTC', 'FOREX', 'CRYPTO', 'UK']
+                return ['ALL', ...ALL_ASSET_MARKETS]
             case 'RISK':
-                return ['ALL', 'CONSERVATIVE', 'MODERATE', 'GROWTH', 'AGGRESSIVE', 'HEDGE']
+                return ['ALL', ...ALL_ASSET_RISK_LEVELS]
             default:
                 return ['ALL']
         }

@@ -187,6 +187,7 @@ class StrategyCreate(BaseModel):
     exit_rules: Optional[str] = None
     risk_rules: Optional[str] = None
     symbols: Optional[List[str]] = []
+    checklist_items: Optional[List[dict]] = []  # [{"id": 1, "label": "...", "category": "entry", "required": True}, ...]
 
 
 class StrategyUpdate(BaseModel):
@@ -197,6 +198,7 @@ class StrategyUpdate(BaseModel):
     risk_rules: Optional[str] = None
     symbols: Optional[List[str]] = None
     status: Optional[StrategyStatusEnum] = None
+    checklist_items: Optional[List[dict]] = None
 
 
 class StrategyResponse(BaseModel):
@@ -209,6 +211,7 @@ class StrategyResponse(BaseModel):
     risk_rules: Optional[str]
     symbols: List[str]
     status: StrategyStatusEnum
+    checklist_items: Optional[List[dict]] = []
     created_at: datetime
     updated_at: Optional[datetime]
     
@@ -393,6 +396,8 @@ class TradingAccountCreate(BaseModel):
     account_type: Optional[str] = Field(None, max_length=50)
     currency: str = Field(default="USD", max_length=10)
     initial_balance: Optional[Decimal] = None
+    initial_balance: Optional[Decimal] = None
+    cash_balance: Optional[Decimal] = None
     current_balance: Optional[Decimal] = None
     total_assets: Optional[Decimal] = None
     total_liabilities: Optional[Decimal] = None
@@ -405,6 +410,7 @@ class TradingAccountUpdate(BaseModel):
     account_type: Optional[str] = Field(None, max_length=50)
     currency: Optional[str] = Field(None, max_length=10)
     initial_balance: Optional[Decimal] = None
+    cash_balance: Optional[Decimal] = None
     current_balance: Optional[Decimal] = None
     total_assets: Optional[Decimal] = None
     total_liabilities: Optional[Decimal] = None
@@ -420,12 +426,36 @@ class TradingAccountResponse(BaseModel):
     account_type: Optional[str]
     currency: str
     initial_balance: Optional[Decimal]
+    cash_balance: Optional[Decimal]
     current_balance: Optional[Decimal]
     description: Optional[str]
     is_active: bool
     created_at: datetime
     updated_at: Optional[datetime]
     
+    class Config:
+        from_attributes = True
+
+
+
+# ============== Transaction Schemas ==============
+
+class TransactionBase(BaseModel):
+    type: str # TransactionType enum value
+    amount: Decimal
+    currency: str = "USD"
+    date: datetime
+    description: Optional[str] = None
+
+class TransactionCreate(TransactionBase):
+    pass
+
+class TransactionResponse(TransactionBase):
+    id: int
+    account_id: int
+    created_at: datetime
+    updated_at: Optional[datetime]
+
     class Config:
         from_attributes = True
 
@@ -523,6 +553,12 @@ class PositionCreate(BaseModel):
     entry_reason: Optional[str] = None
     entry_emotion: Optional[str] = None
     entry_confidence: Optional[int] = Field(None, ge=1, le=5)
+    # Phase 1: Plan Drift Detection
+    planned_entry_price: Optional[Decimal] = None
+    planned_stop_loss: Optional[Decimal] = None
+    planned_take_profit: Optional[List[dict]] = None  # [{"price": 100, "percent": 50}, ...]
+    # Phase 1: Checklist Responses
+    checklist_responses: Optional[dict] = None  # {"1": true, "2": false, ...}
 
 
 class PositionUpdate(BaseModel):
@@ -532,6 +568,12 @@ class PositionUpdate(BaseModel):
     lessons: Optional[List[str]] = None
     rating: Optional[int] = Field(None, ge=1, le=5)
     asset_metadata: Optional[AssetMetadataUpdate] = None
+    # Phase 1: Plan Drift Detection
+    planned_entry_price: Optional[Decimal] = None
+    planned_stop_loss: Optional[Decimal] = None
+    planned_take_profit: Optional[List[dict]] = None
+    # Phase 1: Checklist Responses
+    checklist_responses: Optional[dict] = None
 
 
 class PositionResponse(BaseModel):
@@ -559,7 +601,16 @@ class PositionResponse(BaseModel):
     updated_at: Optional[datetime]
     asset_metadata: Optional[AssetMetadataResponse] = None
     batches: List[TradeBatchResponse] = []
-
+    # Phase 1: Plan Drift Detection
+    planned_entry_price: Optional[Decimal] = None
+    planned_stop_loss: Optional[Decimal] = None
+    planned_take_profit: Optional[List[dict]] = None
+    # Phase 1: Checklist Responses
+    checklist_responses: Optional[dict] = None
+    checklist_completed_at: Optional[datetime] = None
+    # Phase 1: Plan Drift Analysis (computed from planned vs actual)
+    drift_analysis: Optional[dict] = None  # {"entry_drift_pct": 1.5, "has_drift": True, ...}
+    
     class Config:
         from_attributes = True
 

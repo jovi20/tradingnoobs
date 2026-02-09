@@ -8,7 +8,7 @@ from typing import Optional
 from datetime import date, timedelta
 
 from database import get_db
-from models import Trade, TradeStatus, User, Position, PositionStatus, TradingAccount
+from models import Trade, TradeStatus, User, Position, PositionStatus, TradingAccount, TradeBatch, BatchType
 from schemas import DashboardStats, AssetAllocation, PositionMover, AccountAllocation, PortfolioFlow, SankeyNode, SankeyLink
 from services.auth_service import get_current_user
 from services.market_data_service import MarketDataService
@@ -34,33 +34,52 @@ async def get_dashboard_stats(
     if end_date:
         query = query.filter(Position.opened_at <= end_date)
     
-    # Calculate stats using Position table
-    stats_query = db.query(
+    # Calculate stats using TradeBatch for more granular performance metrics
+    # Win Rate and PnL Ratio should reflect every EXIT event (partial or full)
+    batch_stats = db.query(
+        func.count(TradeBatch.id).label("total_exits"),
+        func.count(TradeBatch.id).filter(TradeBatch.pnl > 0).label("winning_exits"),
+        func.sum(TradeBatch.pnl).filter(TradeBatch.pnl > 0).label("total_wins"),
+        func.sum(func.abs(TradeBatch.pnl)).filter(TradeBatch.pnl < 0).label("total_losses")
+    ).join(Position).filter(
+        Position.user_id == current_user.id,
+        TradeBatch.type == BatchType.EXIT
+    )
+    
+    if start_date:
+        batch_stats = batch_stats.filter(TradeBatch.time >= start_date)
+    if end_date:
+        batch_stats = batch_stats.filter(TradeBatch.time <= end_date)
+        
+    bs = batch_stats.one()
+    
+    total_exits = bs.total_exits or 0
+    winning_exits = bs.winning_exits or 0
+    total_wins = float(bs.total_wins or 0)
+    total_losses = float(bs.total_losses or 0)
+    
+    # Position counts for context
+    pos_stats = db.query(
         func.count(Position.id).label("total_trades"),
         func.sum(Position.realized_pnl).label("total_pnl"),
         func.count(Position.id).filter(Position.status == PositionStatus.CLOSED).label("closed_trades"),
-        func.count(Position.id).filter(Position.status == PositionStatus.OPEN).label("open_positions"),
-        func.count(Position.id).filter(Position.realized_pnl > 0, Position.status == PositionStatus.CLOSED).label("winning_trades"),
-        func.sum(Position.realized_pnl).filter(Position.realized_pnl > 0, Position.status == PositionStatus.CLOSED).label("total_wins"),
-        func.sum(func.abs(Position.realized_pnl)).filter(Position.realized_pnl < 0, Position.status == PositionStatus.CLOSED).label("total_losses")
+        func.count(Position.id).filter(Position.status == PositionStatus.OPEN).label("open_positions")
     ).filter(Position.user_id == current_user.id)
     
     if start_date:
-        stats_query = stats_query.filter(Position.opened_at >= start_date)
+        pos_stats = pos_stats.filter(Position.opened_at >= start_date)
     if end_date:
-        stats_query = stats_query.filter(Position.opened_at <= end_date)
+        pos_stats = pos_stats.filter(Position.opened_at <= end_date)
         
-    s = stats_query.one()
+    ps = pos_stats.one()
     
-    total_trades = s.total_trades or 0
-    total_pnl = float(s.total_pnl or 0)
-    closed_trades_count = s.closed_trades or 0
-    open_positions_count = s.open_positions or 0
-    winning_trades = s.winning_trades or 0
-    total_wins = float(s.total_wins or 0)
-    total_losses = float(s.total_losses or 0)
+    total_trades = ps.total_trades or 0
+    total_pnl = float(ps.total_pnl or 0)
+    closed_trades_count = ps.closed_trades or 0
+    open_positions_count = ps.open_positions or 0
     
-    win_rate = (winning_trades / closed_trades_count * 100) if closed_trades_count > 0 else 0.0
+    # Calculate performance metrics
+    win_rate = (winning_exits / total_exits * 100) if total_exits > 0 else 0.0
     avg_pnl_ratio = (total_wins / total_losses) if total_losses > 0 else 0.0
     
     # --- New Logic: Asset & Account Allocation Corrected ---
@@ -111,8 +130,11 @@ async def get_dashboard_stats(
     # Account Stats: { acc_id: { initial, realized, unrealized, cost_basis, market_value, obj } }
     account_stats = {}
     for acc in accounts:
+        # Use cash_balance if available, else fallback logic
+        current_cash = float(acc.cash_balance or 0)
         account_stats[acc.id] = {
             'initial': float(acc.initial_balance or 0),
+            'cash_balance': current_cash,
             'realized': realized_pnl_map.get(acc.id, 0.0),
             'unrealized': 0.0,
             'cost_basis': 0.0,
@@ -172,6 +194,7 @@ async def get_dashboard_stats(
             stats = account_stats[pos.account_id]
             stats['unrealized'] += unrealized_pnl
             stats['unrealized_total'] = stats.get('unrealized_total', 0.0) + unrealized_pnl
+            stats['market_value'] += market_value # Accumulate market value of holdings
 
     # Final Aggregation & List Building
     total_portfolio_value = 0.0
@@ -179,11 +202,7 @@ async def get_dashboard_stats(
     
     for acc_id, stats in account_stats.items():
         acc_obj = stats['obj']
-        manual_balance = float(acc_obj.current_balance or 0)
-        if manual_balance > 0:
-            nav = manual_balance
-        else:
-            nav = stats['initial'] + stats['realized'] + stats.get('unrealized_total', 0.0)
+        nav = stats['market_value'] + stats['cash_balance'] # Market Value of Positions + Cash
         
         total_portfolio_value += nav
         account_allocation.append(AccountAllocation(
@@ -194,8 +213,8 @@ async def get_dashboard_stats(
         ))
 
     # Calculate Cash component for Allocations
-    total_invested_value = sum(v for k, v in core_type_map.items() if k != 'CASH')
-    global_cash = max(0.0, total_portfolio_value - total_invested_value)
+    # Now we sum up explicit cash balances from accounts
+    global_cash = sum(s['cash_balance'] for s in account_stats.values())
     
     core_type_map['CASH'] = global_cash
     market_map['CASH'] = global_cash
@@ -304,10 +323,8 @@ async def get_dashboard_stats(
                     cat_holdings[asset_cat_name][sym_name] = cat_holdings[asset_cat_name].get(sym_name, 0.0) + val
 
         # Cash & Margin
-        manual_val = float(acc_obj.current_balance or 0)
-        nav = manual_val if manual_val > 0 else (stats['initial'] + stats['realized'] + stats.get('unrealized_total', 0.0))
-        
-        derived_cash = nav - acc_longs + acc_shorts
+        # Now using explicit cash_balance
+        derived_cash = stats['cash_balance']
         
         acc_cash_asset = 0.0
         acc_margin_liab = 0.0

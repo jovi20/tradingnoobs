@@ -8,9 +8,6 @@ import {
     Moon,
     Sun,
     Monitor,
-    Server,
-    Bot,
-    Loader2,
     Plus,
     Trash2,
     Briefcase,
@@ -18,11 +15,17 @@ import {
     CheckCircle2,
     XCircle,
     PlugZap,
+    Server,
+    Bot,
+    Loader2,
     LogOut,
-    Download
+    Download,
+    ChevronRight,
+    Wallet
 } from 'lucide-react'
+import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
-import { settingsAPI, accountsAPI, adminAPI, UserSettings, TradingAccount, TradingAccountCreate, SystemSetting } from '@/lib/api'
+import { settingsAPI, accountsAPI, adminAPI, UserSettings, TradingAccount, TradingAccountCreate, SystemSetting, API_BASE } from '@/lib/api'
 
 interface LocalSettings extends Partial<UserSettings> {
     // Local state for system settings (only utilized if admin)
@@ -78,6 +81,16 @@ export default function SettingsPage() {
         description: ''
     })
 
+    const refreshAccounts = async () => {
+        if (!token) return
+        try {
+            const data = await accountsAPI.list(token)
+            setAccounts(data)
+        } catch (err) {
+            console.error('Failed to refresh accounts:', err)
+        }
+    }
+
     const isAdmin = user?.role === 'admin'
     const [isExporting, setIsExporting] = useState(false)
 
@@ -85,7 +98,6 @@ export default function SettingsPage() {
         if (!token) return
         setIsExporting(true)
         try {
-            const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
             const response = await fetch(`${API_BASE}/api/positions/export/csv`, {
                 headers: { Authorization: `Bearer ${token}` }
             })
@@ -222,22 +234,9 @@ export default function SettingsPage() {
             account_type: '',
             currency: 'USD',
             initial_balance: 0,
+            cash_balance: 0,
             current_balance: 0,
             description: ''
-        })
-        setIsAccountFormOpen(true)
-    }
-
-    const handleOpenEditAccount = (account: TradingAccount) => {
-        setEditingAccount(account)
-        setAccountForm({
-            name: account.name,
-            broker: account.broker,
-            account_type: account.account_type || '',
-            currency: account.currency,
-            initial_balance: account.initial_balance || 0,
-            current_balance: account.current_balance || 0,
-            description: account.description || ''
         })
         setIsAccountFormOpen(true)
     }
@@ -246,29 +245,12 @@ export default function SettingsPage() {
         e.preventDefault()
         if (!token) return
         try {
-            if (editingAccount) {
-                // Update
-                const updated = await accountsAPI.update(token, editingAccount.id, accountForm)
-                setAccounts(accounts.map(a => a.id === updated.id ? updated : a))
-            } else {
-                // Create
-                const created = await accountsAPI.create(token, accountForm)
-                setAccounts([created, ...accounts])
-            }
+            // Create only (Edit moved to detail page)
+            const created = await accountsAPI.create(token, accountForm)
+            setAccounts([created, ...accounts])
             setIsAccountFormOpen(false)
-            setEditingAccount(null)
         } catch (err: any) {
             setError(err.message || '保存账户失败')
-        }
-    }
-
-    const handleDeleteAccount = async (id: number) => {
-        if (!token || !confirm('确定要删除这个账户标签吗？')) return
-        try {
-            await accountsAPI.delete(token, id)
-            setAccounts(accounts.filter(a => a.id !== id))
-        } catch (err: any) {
-            setError(err.message || '删除失败')
         }
     }
 
@@ -294,7 +276,72 @@ export default function SettingsPage() {
                 </div>
             )}
 
-            {/* Theme */}
+            {/* Trading Accounts Summary - Moved to Top */}
+            <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-bold flex items-center gap-2">
+                        <Wallet className="w-5 h-5 text-indigo-500" />
+                        实盘账户管理
+                    </h2>
+                    <button
+                        onClick={handleOpenAddAccount}
+                        className="text-sm font-medium text-indigo-500 hover:text-indigo-600 flex items-center gap-1"
+                    >
+                        <Plus className="w-4 h-4" />
+                        添加账户
+                    </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {accounts.length === 0 ? (
+                        <div className="col-span-full py-8 text-center bg-slate-50 dark:bg-slate-800/30 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
+                            <p className="text-slate-500 text-sm">暂无账户，点击右上角添加</p>
+                        </div>
+                    ) : (
+                        accounts.map(account => (
+                            <Link
+                                key={account.id}
+                                href={`/settings/accounts/${account.id}`}
+                                className="group relative p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 hover:border-indigo-200 dark:hover:border-indigo-900/50 hover:shadow-lg hover:shadow-indigo-500/5 transition-all"
+                            >
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400">
+                                        <Briefcase className="w-5 h-5" />
+                                    </div>
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${account.is_active
+                                        ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400'
+                                        : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                                        }`}>
+                                        {account.is_active ? 'Active' : 'Inactive'}
+                                    </span>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <h3 className="font-bold text-slate-900 dark:text-white group-hover:text-indigo-500 transition-colors">
+                                        {account.name}
+                                    </h3>
+                                    <p className="text-xs text-slate-500 flex items-center gap-1">
+                                        {account.broker} • {ACCOUNT_TYPES.find(t => t.value === account.account_type)?.label || account.account_type || 'General'}
+                                    </p>
+                                </div>
+
+                                <div className="mt-6 flex items-end justify-between">
+                                    <div>
+                                        <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-0.5">Cash Balance</p>
+                                        <p className="font-mono font-bold text-lg text-slate-900 dark:text-white">
+                                            {account.currency} {Number(account.cash_balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                        </p>
+                                    </div>
+                                    <div className="p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-400 group-hover:bg-indigo-500 group-hover:text-white transition-all">
+                                        <ChevronRight className="w-4 h-4" />
+                                    </div>
+                                </div>
+                            </Link>
+                        ))
+                    )}
+                </div>
+            </div>
+
             <div className="card p-6">
                 <div className="flex items-center space-x-3 mb-4">
                     <Moon className="w-5 h-5 text-slate-900 dark:text-white" />
@@ -471,168 +518,6 @@ export default function SettingsPage() {
                 </div>
             )}
 
-            {/* Trading Accounts */}
-            <div className="card p-6">
-                <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center space-x-3">
-                        <Briefcase className="w-5 h-5 text-slate-500" />
-                        <h2 className="text-lg font-semibold">实盘账户管理</h2>
-                    </div>
-                    <button
-                        onClick={handleOpenAddAccount}
-                        className="btn btn-sm btn-outline flex items-center space-x-1"
-                    >
-                        <Plus className="w-4 h-4" />
-                        <span>添加账户</span>
-                    </button>
-                </div>
-
-                {isAccountFormOpen && (
-                    <form onSubmit={handleAccountSubmit} className="mb-6 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
-                        <h3 className="text-sm font-semibold mb-3">
-                            {editingAccount ? '编辑账户' : '添加新账户'}
-                        </h3>
-                        <div className="grid grid-cols-2 gap-4 mb-4">
-                            <div>
-                                <label className="block text-xs font-medium mb-1">账户名称</label>
-                                <input
-                                    required
-                                    className="input text-sm"
-                                    value={accountForm.name}
-                                    onChange={e => setAccountForm({ ...accountForm, name: e.target.value })}
-                                    placeholder="例如: IBKR主账户"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium mb-1">券商/交易所</label>
-                                <input
-                                    required
-                                    className="input text-sm"
-                                    value={accountForm.broker}
-                                    onChange={e => setAccountForm({ ...accountForm, broker: e.target.value })}
-                                    placeholder="例如: Interactive Brokers"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium mb-1">账户类型</label>
-                                <select
-                                    className="input text-sm"
-                                    value={accountForm.account_type || ''}
-                                    onChange={e => setAccountForm({ ...accountForm, account_type: e.target.value })}
-                                >
-                                    <option value="">请选择类型...</option>
-                                    {ACCOUNT_TYPES.map(t => (
-                                        <option key={t.value} value={t.value}>{t.label}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium mb-1">币种</label>
-                                <input
-                                    className="input text-sm"
-                                    value={accountForm.currency}
-                                    onChange={e => setAccountForm({ ...accountForm, currency: e.target.value })}
-                                    placeholder="USD"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium mb-1">初始资金</label>
-                                <input
-                                    type="number"
-                                    className="input text-sm"
-                                    value={accountForm.initial_balance || ''}
-                                    onChange={e => setAccountForm({ ...accountForm, initial_balance: parseFloat(e.target.value) })}
-                                    placeholder="0.00"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium mb-1 text-emerald-600 dark:text-emerald-400">当前净值 (可选)</label>
-                                <input
-                                    type="number"
-                                    className="input text-sm border-emerald-200 dark:border-emerald-800 focus:border-emerald-500"
-                                    value={accountForm.current_balance || ''}
-                                    onChange={e => setAccountForm({ ...accountForm, current_balance: parseFloat(e.target.value) })}
-                                    placeholder="用于校准总资产"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium mb-1">备注</label>
-                                <input
-                                    className="input text-sm"
-                                    value={accountForm.description || ''}
-                                    onChange={e => setAccountForm({ ...accountForm, description: e.target.value })}
-                                    placeholder="可选备注"
-                                />
-                            </div>
-                        </div>
-                        <div className="flex justify-end space-x-2">
-                            <button
-                                type="button"
-                                onClick={() => setIsAccountFormOpen(false)}
-                                className="px-3 py-1.5 text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                            >
-                                取消
-                            </button>
-                            <button
-                                type="submit"
-                                className="px-3 py-1.5 text-sm bg-indigo-500 text-white rounded-lg hover:bg-indigo-600"
-                            >
-                                {editingAccount ? '更新' : '添加'}
-                            </button>
-                        </div>
-                    </form>
-                )}
-
-                <div className="space-y-3">
-                    {accounts.length === 0 ? (
-                        <p className="text-center text-slate-500 py-4 text-sm">暂无账户，请点击右上角添加</p>
-                    ) : (
-                        accounts.map(account => (
-                            <div key={account.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-slate-100 dark:border-slate-800">
-                                <div>
-                                    <div className="flex items-center space-x-2">
-                                        <h3 className="font-medium">{account.name}</h3>
-                                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
-                                            {account.broker}
-                                        </span>
-                                        {account.account_type && (
-                                            <span className="text-xs text-slate-500">
-                                                {ACCOUNT_TYPES.find(t => t.value === account.account_type)?.label || account.account_type}
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div className="flex items-center space-x-4 mt-1 text-xs text-slate-500">
-                                        <span>{account.currency}</span>
-                                        {account.initial_balance && (
-                                            <span>初始: {account.initial_balance.toLocaleString()}</span>
-                                        )}
-                                        {account.description && (
-                                            <span>{account.description}</span>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className="flex space-x-1">
-                                    <button
-                                        onClick={() => handleOpenEditAccount(account)}
-                                        className="p-2 text-slate-400 hover:text-indigo-500 transition-colors"
-                                        title="编辑账户"
-                                    >
-                                        <Key className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                        onClick={() => handleDeleteAccount(account.id)}
-                                        className="p-2 text-slate-400 hover:text-red-500 transition-colors"
-                                        title="删除账户"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            </div>
-                        ))
-                    )}
-                </div>
-            </div>
-
             {/* IBKR Settings deprecated (Configuration moved to Account Setup) */}
 
             {/* Binance Settings deprecated (Configuration moved to Account Setup) */}
@@ -684,6 +569,76 @@ export default function SettingsPage() {
                     <span>退出登录</span>
                 </button>
             </div>
+
+            {/* Account Form Modal (For Add Account) */}
+            {isAccountFormOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-md p-6">
+                        <form onSubmit={handleAccountSubmit} className="space-y-4">
+                            <h3 className="text-lg font-bold">
+                                添加新账户
+                            </h3>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="col-span-2">
+                                    <label className="label-text mb-1 block">账户名称</label>
+                                    <input
+                                        required
+                                        className="input text-sm"
+                                        value={accountForm.name}
+                                        onChange={e => setAccountForm({ ...accountForm, name: e.target.value })}
+                                        placeholder="例如: IBKR主账户"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="label-text mb-1 block">券商</label>
+                                    <input
+                                        required
+                                        className="input text-sm"
+                                        value={accountForm.broker}
+                                        onChange={e => setAccountForm({ ...accountForm, broker: e.target.value })}
+                                        placeholder="Interactive Brokers"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="label-text mb-1 block">类型</label>
+                                    <select
+                                        className="input text-sm"
+                                        value={accountForm.account_type || ''}
+                                        onChange={e => setAccountForm({ ...accountForm, account_type: e.target.value })}
+                                    >
+                                        <option value="">请选择...</option>
+                                        {ACCOUNT_TYPES.map(t => (
+                                            <option key={t.value} value={t.value}>{t.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="label-text mb-1 block">币种</label>
+                                    <input
+                                        className="input text-sm"
+                                        value={accountForm.currency}
+                                        onChange={e => setAccountForm({ ...accountForm, currency: e.target.value })}
+                                        placeholder="USD"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="label-text mb-1 block">初始资金</label>
+                                    <input
+                                        type="number"
+                                        className="input text-sm"
+                                        value={accountForm.initial_balance || 0}
+                                        onChange={e => setAccountForm({ ...accountForm, initial_balance: parseFloat(e.target.value) })}
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex justify-end gap-2 pt-4">
+                                <button type="button" onClick={() => setIsAccountFormOpen(false)} className="btn btn-ghost">取消</button>
+                                <button type="submit" className="btn btn-primary">确定</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

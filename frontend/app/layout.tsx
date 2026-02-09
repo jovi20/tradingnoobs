@@ -7,8 +7,8 @@ import { Navbar } from '@/components/Navbar'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-    title: 'Trading Noobs | 交易复盘与分析',
-    description: '专业级交易日志记录、性能分析与 AI 深度复盘 system',
+    title: 'Trading Noobs | 交易日志与洞察',
+    description: '专业级交易日志记录、分析与 AI 深度复盘 system',
     icons: {
         icon: '/logo.png',
         shortcut: '/logo.png',

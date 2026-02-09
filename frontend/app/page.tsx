@@ -4,253 +4,47 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import {
     TrendingUp,
-    TrendingDown,
-    Target,
     BarChart3,
     Wallet,
     Activity,
     Loader2,
     Calendar,
-    FileText
+    FileText,
+    Target
 } from 'lucide-react'
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend, Sankey } from 'recharts'
-import { useRouter } from 'next/navigation'
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { useAuth } from '@/contexts/AuthContext'
-import { dashboardAPI, positionsAPI, Position, DashboardStats, AssetAllocation, PositionMover } from '@/lib/api'
-import {
-    getAssetTypeColor,
-    getAssetTypeLabel,
-    getAssetTypeHexColor,
-    getMarketLabel,
-    getRiskLevelInfo,
-    getCoreTypeLabel,
-    AssetCoreType,
-    AssetMarket,
-    AssetRiskLevel
-} from '@/lib/symbolUtils'
+import { dashboardAPI, positionsAPI, Position, DashboardStats } from '@/lib/api'
 import MarketStatus from '@/components/MarketStatus'
 import PortfolioSankey from '@/components/PortfolioSankey'
 import { useTrendColor } from '@/hooks/useTrendColor'
+import { useDashboardData } from '@/hooks/useDashboardData'
+import { useRouter } from 'next/navigation'
 
-function StatCard({
-    title,
-    value,
-    icon: Icon,
-    trend,
-    color
-}: {
-    title: string
-    value: string
-    icon: React.ElementType
-    trend?: 'up' | 'down'
-    color: string
-}) {
-    const trendColor = useTrendColor()
-
-    const getBgClass = (colorClass: string) => {
-        if (colorClass.includes('emerald')) return 'bg-emerald-100 dark:bg-emerald-900/30'
-        if (colorClass.includes('red')) return 'bg-red-100 dark:bg-red-900/30'
-        if (colorClass.includes('blue')) return 'bg-blue-100 dark:bg-blue-900/30'
-        if (colorClass.includes('purple')) return 'bg-purple-100 dark:bg-purple-900/30'
-        if (colorClass.includes('amber')) return 'bg-amber-100 dark:bg-amber-900/30'
-        return 'bg-slate-100 dark:bg-slate-700'
-    }
-
-    return (
-        <div className="card p-3 md:p-6">
-            <div className="flex items-start justify-between">
-                <div className="min-w-0 flex-1">
-                    <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400">{title}</p>
-                    <p className={`text-lg md:text-2xl font-bold mt-1 truncate ${color}`} title={value}>{value}</p>
-                </div>
-                <div className={`p-2 md:p-3 rounded-xl ml-2 shrink-0 ${getBgClass(color)}`}>
-                    <Icon className={`w-5 h-5 md:w-6 md:h-6 ${color}`} />
-                </div>
-            </div>
-            {trend && (
-                <div className="flex items-center mt-2 text-sm">
-                    {trend === 'up' ? (
-                        <TrendingUp className={`w-4 h-4 mr-1 ${trendColor.upColor}`} />
-                    ) : (
-                        <TrendingDown className={`w-4 h-4 mr-1 ${trendColor.downColor}`} />
-                    )}
-                    <span className={trend === 'up' ? trendColor.upColor : trendColor.downColor}>
-                        vs last week
-                    </span>
-                </div>
-            )}
-        </div>
-    )
-}
-
-function AllocationPieChart({ data, dimension }: { data: AssetAllocation[], dimension: 'CORE_TYPE' | 'MARKET' | 'RISK' }) {
-    const router = useRouter()
-
-    if (!data || data.length === 0) {
-        return <div className="h-full flex items-center justify-center text-slate-500 min-h-[300px]">暂无数据</div>
-    }
-
-    const chartData = data.map(item => {
-        let label = item.name;
-        if (dimension === 'CORE_TYPE') label = getCoreTypeLabel(item.name as any);
-        else if (dimension === 'MARKET') label = getMarketLabel(item.name as AssetMarket);
-        else if (dimension === 'RISK') label = getRiskLevelInfo(item.name as AssetRiskLevel).label;
-
-        return {
-            ...item,
-            name: label,
-            originalName: item.name
-        }
-    })
-
-    return (
-        <div className="h-[300px] w-full mt-4">
-            <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                    <Pie
-                        data={chartData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
-                        paddingAngle={5}
-                        dataKey="value"
-                        nameKey="name"
-                        onClick={(entry) => {
-                            if (entry && entry.originalName) {
-                                let queryParam = 'asset_type';
-                                if (dimension === 'CORE_TYPE') queryParam = 'core_type';
-                                else if (dimension === 'MARKET') queryParam = 'market';
-                                else if (dimension === 'RISK') queryParam = 'risk_level';
-                                router.push(`/positions?${queryParam}=${entry.originalName}&dimension=${dimension}`)
-                            }
-                        }}
-                        className="cursor-pointer focus:outline-none"
-                    >
-                        {chartData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={getAssetTypeHexColor(entry.originalName)} />
-                        ))}
-                    </Pie>
-                    <Tooltip
-                        formatter={(value: number, name: string, props: any) => `${props.payload.percent}%`}
-                    />
-                    <Legend />
-                </PieChart>
-            </ResponsiveContainer>
-        </div>
-    )
-}
-
-function PerformanceMovers({ top, bottom }: { top: PositionMover[], bottom: PositionMover[] }) {
-    const trendColor = useTrendColor()
-
-    const MoverRow = ({ item, type }: { item: PositionMover, type: 'top' | 'bottom' }) => (
-        <div className="flex items-center justify-between py-2 border-b last:border-0 border-slate-100 dark:border-slate-800">
-            <div className="flex items-center gap-2">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${type === 'top' ? trendColor.upBg : trendColor.downBg}`}>
-                    {type === 'top' ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                </div>
-                <div>
-                    <h4 className="font-medium text-sm">{item.symbol}</h4>
-                    <p className="text-xs text-slate-500">${item.current_price?.toFixed(2)}</p>
-                </div>
-            </div>
-            <span className={`font-bold text-sm ${type === 'top' ? trendColor.upColor : trendColor.downColor}`}>
-                {type === 'top' ? '+' : ''}{item.change_percent?.toFixed(2)}%
-            </span>
-        </div>
-    )
-
-    return (
-        <div className="space-y-6">
-            <div>
-                <h3 className="text-sm font-medium text-slate-500 mb-3 flex items-center gap-1">
-                    <TrendingUp className={`w-4 h-4 ${trendColor.upColor}`} /> 表现最佳
-                </h3>
-                {top.length > 0 ? (
-                    <div className="card p-4">
-                        {top.map(item => <MoverRow key={item.id} item={item} type="top" />)}
-                    </div>
-                ) : <div className="text-sm text-slate-400">暂无数据</div>}
-            </div>
-            <div>
-                <h3 className="text-sm font-medium text-slate-500 mb-3 flex items-center gap-1">
-                    <TrendingDown className={`w-4 h-4 ${trendColor.downColor}`} /> 表现最差
-                </h3>
-                {bottom.length > 0 ? (
-                    <div className="card p-4">
-                        {bottom.map(item => <MoverRow key={item.id} item={item} type="bottom" />)}
-                    </div>
-                ) : <div className="text-sm text-slate-400">暂无数据</div>}
-            </div>
-        </div>
-    )
-}
-
-function PositionCard({ position }: { position: Position }) {
-    const trendColor = useTrendColor()
-    const pnl = position.status === 'OPEN' ? (Number(position.unrealized_pnl) || 0) : (Number(position.realized_pnl) || 0)
-    const isPositive = pnl >= 0
-
-    return (
-        <Link href={`/positions/${position.id}`}>
-            <div className="card p-2 hover:scale-[1.01] transition-transform cursor-pointer border-transparent hover:border-slate-200 dark:hover:border-slate-700">
-                <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center space-x-2">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isPositive ? trendColor.upBg : trendColor.downBg}`}>
-                            {isPositive ? (
-                                <TrendingUp className={`w-4 h-4 ${trendColor.upColor}`} />
-                            ) : (
-                                <TrendingDown className={`w-4 h-4 ${trendColor.downColor}`} />
-                            )}
-                        </div>
-                        <div className="min-w-0">
-                            <h3 className="font-semibold text-sm truncate">{position.symbol}</h3>
-                            <p className="text-[10px] text-slate-500 truncate">{position.exchange}</p>
-                        </div>
-                    </div>
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${position.direction === 'LONG' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
-                        {position.direction === 'LONG' ? '做多' : '做空'}
-                    </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-y-1 gap-x-2 text-xs">
-                    <div>
-                        <p className="text-slate-500 dark:text-slate-400">均价</p>
-                        <p className="font-medium">${Number(position.average_entry_price || 0).toFixed(2)}</p>
-                    </div>
-                    <div>
-                        <p className="text-slate-500 dark:text-slate-400">现价</p>
-                        <p className="font-medium">{position.current_price ? `$${Number(position.current_price).toFixed(2)}` : '-'}</p>
-                    </div>
-                    <div>
-                        <p className="text-slate-500 dark:text-slate-400">数量</p>
-                        <p className="font-medium">{Number(position.total_quantity).toLocaleString()}</p>
-                    </div>
-                    <div>
-                        <p className="text-slate-500 dark:text-slate-400">盈亏</p>
-                        <p className={`font-bold ${isPositive ? trendColor.upColor : trendColor.downColor}`}>
-                            {isPositive ? '+' : ''}${pnl.toFixed(2)}
-                        </p>
-                    </div>
-                </div>
-            </div>
-        </Link>
-    )
-}
+// Imported Components
+import StatCard from '@/components/dashboard/StatCard'
+import AllocationPieChart from '@/components/dashboard/AllocationPieChart'
+import PerformanceMovers from '@/components/dashboard/PerformanceMovers'
+import PositionCard from '@/components/dashboard/PositionCard'
 
 export default function DashboardPage() {
-    const { token } = useAuth()
+    const { token, user } = useAuth()
+    const router = useRouter()
+    console.log('DashboardPage Rendered', { token: !!token })
     const trendColor = useTrendColor()
-    const [stats, setStats] = useState<DashboardStats | null>(null)
-    const [isLoading, setIsLoading] = useState(true)
+
+    // State for dashboard configuration
+    const [selectedPeriod, setSelectedPeriod] = useState<string>('1周')
+    const [historyDays, setHistoryDays] = useState<number>(7)
     const [allocationDimension, setAllocationDimension] = useState<'CORE_TYPE' | 'MARKET' | 'RISK'>('CORE_TYPE')
-    const [pnlHistory, setPnlHistory] = useState<{ date: string; pnl: number; pnl_percent: number }[]>([])
-    const [openPositions, setOpenPositions] = useState<Position[]>([])
+    const [isMobile, setIsMobile] = useState(false)
+
+    // Derived state for PnL display
     const [periodPnl, setPeriodPnl] = useState<number>(0)
     const [periodValue, setPeriodValue] = useState<number>(0)
-    const [selectedPeriod, setSelectedPeriod] = useState<string>('1周')
-    const [isMobile, setIsMobile] = useState(false)
+
+    // Use custom hook for data
+    const { stats, pnlHistory, openPositions, isLoading, error } = useDashboardData(token, historyDays)
 
     useEffect(() => {
         const handleResize = () => {
@@ -262,43 +56,12 @@ export default function DashboardPage() {
     }, [])
 
     useEffect(() => {
-        const fetchData = async () => {
-            if (!token) return
-            try {
-                setIsLoading(true)
-                const [statsData, historyData, positionsData] = await Promise.all([
-                    dashboardAPI.stats(token),
-                    dashboardAPI.pnlHistory(token, 7),
-                    positionsAPI.list(token, { status: 'OPEN' }),
-                ])
-                setStats(statsData)
-                setPnlHistory(historyData)
-                setOpenPositions(positionsData)
-            } catch (err) {
-                setStats({
-                    total_assets: 0,
-                    total_pnl: 0,
-                    win_rate: 0,
-                    avg_pnl_ratio: 0,
-                    total_trades: 0,
-                    open_positions: 0,
-                    closed_trades: 0,
-                    asset_allocation: [],
-                    core_type_allocation: [],
-                    market_allocation: [],
-                    risk_level_allocation: [],
-                    account_allocation: [],
-                    top_movers: [],
-                    bottom_movers: [],
-                })
-            } finally {
-                setIsLoading(false)
-            }
+        if (!pnlHistory || pnlHistory.length === 0) {
+            setPeriodPnl(0)
+            setPeriodValue(0)
+            return
         }
-        fetchData()
-    }, [token])
 
-    useEffect(() => {
         if (pnlHistory.length > 1) {
             const latest = pnlHistory[pnlHistory.length - 1]
             const start = pnlHistory[0]
@@ -307,9 +70,6 @@ export default function DashboardPage() {
         } else if (pnlHistory.length === 1) {
             setPeriodPnl(pnlHistory[0].pnl_percent)
             setPeriodValue(pnlHistory[0].pnl)
-        } else {
-            setPeriodPnl(0)
-            setPeriodValue(0)
         }
     }, [pnlHistory])
 
@@ -328,6 +88,11 @@ export default function DashboardPage() {
 
     return (
         <div className="space-y-6 pb-20 md:pb-6">
+            {error && (
+                <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-xl text-sm mb-4">
+                    Error loading dashboard data: {error}
+                </div>
+            )}
             {/* Quick Actions & Market Status */}
             <div className="flex flex-col md:flex-row items-center justify-between gap-4 pb-2">
                 <div className="grid grid-cols-2 md:flex gap-3 md:gap-4 w-full md:w-auto">
@@ -438,27 +203,21 @@ export default function DashboardPage() {
                                 ].map((option) => (
                                     <button
                                         key={option.label}
-                                        onClick={async () => {
-                                            if (!token) return
-                                            try {
-                                                setSelectedPeriod(option.label)
-                                                let days = option.days
-                                                if (days === -1) {
-                                                    const now = new Date()
-                                                    days = now.getDate()
-                                                } else if (days === -2) {
-                                                    const now = new Date()
-                                                    const startOfYear = new Date(now.getFullYear(), 0, 1)
-                                                    days = Math.ceil((now.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24))
-                                                }
-                                                // Ensure days is at least 1
-                                                if (days < 1) days = 1
-
-                                                const data = await dashboardAPI.pnlHistory(token, days)
-                                                setPnlHistory(data)
-                                            } catch (err) {
-                                                console.error('Failed to fetch PnL history:', err)
+                                        onClick={() => {
+                                            setSelectedPeriod(option.label)
+                                            let days = option.days
+                                            if (days === -1) {
+                                                const now = new Date()
+                                                days = now.getDate()
+                                            } else if (days === -2) {
+                                                const now = new Date()
+                                                const startOfYear = new Date(now.getFullYear(), 0, 1)
+                                                days = Math.ceil((now.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24))
                                             }
+                                            // Ensure days is at least 1
+                                            if (days < 1) days = 1
+
+                                            setHistoryDays(days)
                                         }}
                                         className={`px-2 py-1 text-xs rounded-md transition-colors ${selectedPeriod === option.label
                                             ? 'bg-primary-600 text-white shadow-sm'

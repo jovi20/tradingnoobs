@@ -13,7 +13,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import {
     positionsAPI, accountsAPI, strategiesAPI, marketAPI,
-    TradingAccount, Strategy, Position, PositionCreate, BatchCreate, SymbolValidation
+    TradingAccount, Strategy, Position, PositionCreate, BatchCreate, SymbolValidation, ChecklistItem
 } from '@/lib/api'
 import {
     detectSymbolType, getAssetTypeColor, getAssetTypeLabel, SymbolDetection,
@@ -56,6 +56,11 @@ export default function NewPositionPage() {
         entry_emotion: '',
         entry_confidence: undefined as number | undefined,
         asset_type: '',
+        // Phase 1: Plan Drift Detection
+        planned_entry_price: '' as string,
+        planned_stop_loss: '' as string,
+        // Phase 1: Checklist Responses
+        checklist_responses: {} as Record<string, boolean>,
         metadata: {
             name: '',
             core_type: '' as AssetCoreType | '',
@@ -195,6 +200,11 @@ export default function NewPositionPage() {
                 entry_emotion: form.entry_emotion || undefined,
                 entry_confidence: form.entry_confidence,
                 asset_type: form.asset_type || undefined,
+                // Phase 1: Plan Drift Detection
+                planned_entry_price: form.planned_entry_price ? parseFloat(form.planned_entry_price) : undefined,
+                planned_stop_loss: form.planned_stop_loss ? parseFloat(form.planned_stop_loss) : undefined,
+                // Phase 1: Checklist Responses
+                checklist_responses: Object.keys(form.checklist_responses).length > 0 ? form.checklist_responses : undefined,
                 asset_metadata: {
                     name: form.metadata.name || form.symbol,
                     core_type: form.metadata.core_type || undefined,
@@ -401,7 +411,11 @@ export default function NewPositionPage() {
                                     ...strategies.map(s => ({ value: s.id, label: s.name }))
                                 ]}
                                 value={form.strategy_id || ''}
-                                onChange={val => setForm({ ...form, strategy_id: val ? (typeof val === 'string' ? parseInt(val) : val) : undefined })}
+                                onChange={val => {
+                                    const strategyId = val ? (typeof val === 'string' ? parseInt(val) : val) : undefined
+                                    // Reset checklist responses when strategy changes
+                                    setForm({ ...form, strategy_id: strategyId, checklist_responses: {} })
+                                }}
                                 placeholder="选择交易策略"
                             />
                         </div>
@@ -514,6 +528,75 @@ export default function NewPositionPage() {
                     </div>
                 </div>
 
+                {/* Phase 1: Pre-Trade Checklist Confirmation */}
+                {form.strategy_id && (() => {
+                    const selectedStrategy = strategies.find(s => s.id === form.strategy_id)
+                    const checklistItems = selectedStrategy?.checklist_items || []
+                    if (checklistItems.length === 0) return null
+
+                    const requiredItems = checklistItems.filter(item => item.required)
+                    const allRequiredChecked = requiredItems.every(item => form.checklist_responses[String(item.id)])
+
+                    return (
+                        <div className={`card p-6 space-y-4 border-2 ${allRequiredChecked ? 'border-emerald-200 dark:border-emerald-800' : 'border-amber-200 dark:border-amber-800'}`}>
+                            <div className="flex items-center justify-between">
+                                <h2 className="font-semibold flex items-center gap-2">
+                                    ✅ 交易前检查清单
+                                    <span className="text-xs font-normal text-slate-500">
+                                        ({selectedStrategy?.name})
+                                    </span>
+                                </h2>
+                                {!allRequiredChecked && requiredItems.length > 0 && (
+                                    <span className="text-xs px-2 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded">
+                                        有必填项未勾选
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-xs text-slate-500">开仓前请确认以下检查项</p>
+
+                            <div className="space-y-2">
+                                {checklistItems.map((item) => (
+                                    <label
+                                        key={item.id}
+                                        className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${form.checklist_responses[String(item.id)]
+                                                ? 'bg-emerald-50 dark:bg-emerald-900/20'
+                                                : 'bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700'
+                                            }`}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={form.checklist_responses[String(item.id)] || false}
+                                            onChange={(e) => {
+                                                setForm({
+                                                    ...form,
+                                                    checklist_responses: {
+                                                        ...form.checklist_responses,
+                                                        [String(item.id)]: e.target.checked
+                                                    }
+                                                })
+                                            }}
+                                            className="w-5 h-5 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
+                                        />
+                                        <span className={`flex-1 ${form.checklist_responses[String(item.id)] ? 'text-emerald-700 dark:text-emerald-300' : ''}`}>
+                                            {item.label}
+                                        </span>
+                                        {item.required && (
+                                            <span className="text-xs px-1.5 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-500 rounded">
+                                                必填
+                                            </span>
+                                        )}
+                                        {item.category && (
+                                            <span className="text-xs px-1.5 py-0.5 bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 rounded">
+                                                {item.category === 'entry' ? '入场' : item.category === 'risk' ? '风控' : item.category === 'exit' ? '出场' : '其他'}
+                                            </span>
+                                        )}
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                    )
+                })()}
+
                 {/* Entry Details */}
                 <div className="card p-6 space-y-4 relative z-10">
                     <h2 className="font-semibold">入场信息</h2>
@@ -543,6 +626,39 @@ export default function NewPositionPage() {
                                 placeholder="0"
                             />
                         </div>
+                    </div>
+
+                    {/* Phase 1: Plan Drift Detection - Plan Prices */}
+                    <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
+                        <div className="flex items-center gap-2 mb-3 text-slate-500">
+                            <Info className="w-4 h-4" />
+                            <span className="text-xs font-semibold uppercase tracking-wider">计划价格 (可选)</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs text-slate-500 mb-1">计划入场价</label>
+                                <input
+                                    type="number"
+                                    step="any"
+                                    value={form.planned_entry_price}
+                                    onChange={e => setForm({ ...form, planned_entry_price: e.target.value })}
+                                    className="input py-1 text-sm h-9"
+                                    placeholder="计划入场价格"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-slate-500 mb-1">计划止损价</label>
+                                <input
+                                    type="number"
+                                    step="any"
+                                    value={form.planned_stop_loss}
+                                    onChange={e => setForm({ ...form, planned_stop_loss: e.target.value })}
+                                    className="input py-1 text-sm h-9"
+                                    placeholder="计划止损价格"
+                                />
+                            </div>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-2">用于交易后对比计划与实际执行的偏移</p>
                     </div>
 
                     <div>

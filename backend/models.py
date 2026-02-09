@@ -194,6 +194,9 @@ class Strategy(Base):
     symbols = Column(JSON, default=list)  # List of symbols
     status = Column(SQLEnum(StrategyStatus), default=StrategyStatus.ACTIVE)
     
+    # Phase 1: Pre-Trade Checklist
+    checklist_items = Column(JSON, default=list)  # [{"id": 1, "label": "成交量确认", "category": "entry", "required": True}, ...]
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
@@ -319,6 +322,7 @@ class TradingAccount(Base):
     currency = Column(String(10), default="USD")  # 账户币种
     currency = Column(String(10), default="USD")  # 账户币种
     initial_balance = Column(Numeric(20, 2), nullable=True)  # 初始资金
+    cash_balance = Column(Numeric(20, 2), nullable=True, default=0) # 当前现金余额
     current_balance = Column(Numeric(20, 2), nullable=True, default=0) # 当前净值 (NAV) - Manually Synced
     description = Column(Text, nullable=True)  # 备注
     is_active = Column(Boolean, default=True)  # 是否启用
@@ -328,6 +332,7 @@ class TradingAccount(Base):
     
     # Relationships
     user = relationship("User", back_populates="trading_accounts")
+    transactions = relationship("Transaction", back_populates="trading_account", cascade="all, delete-orphan")
 
 
 class SystemSetting(Base):
@@ -369,6 +374,15 @@ class Position(Base):
     screenshots = Column(JSON, default=list)
     lessons = Column(JSON, default=list)
     rating = Column(Integer, nullable=True)
+    
+    # Phase 1: Pre-Trade Checklist Responses
+    checklist_responses = Column(JSON, nullable=True)  # {"1": true, "2": false, ...}
+    checklist_completed_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # Phase 1: Plan Drift Detection
+    planned_entry_price = Column(Numeric(20, 8), nullable=True)   # 计划入场价
+    planned_stop_loss = Column(Numeric(20, 8), nullable=True)     # 计划止损价
+    planned_take_profit = Column(JSON, nullable=True)             # 计划止盈价 [{"price": 100, "percent": 50}, ...]
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -432,5 +446,36 @@ class DailySnapshot(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
     # Relationships
+    # Relationships
     user = relationship("User", back_populates="daily_snapshots")
+
+
+class TransactionType(str, enum.Enum):
+    DEPOSIT = "DEPOSIT"
+    WITHDRAWAL = "WITHDRAWAL"
+    INTEREST = "INTEREST"
+    FEE = "FEE"
+    TRANSFER_IN = "TRANSFER_IN"
+    TRANSFER_OUT = "TRANSFER_OUT"
+
+
+class Transaction(Base):
+    """资金流水 - 记录充提、利息、费用等"""
+    __tablename__ = "transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    account_id = Column(Integer, ForeignKey("trading_accounts.id"), nullable=False)
+    
+    type = Column(SQLEnum(TransactionType), nullable=False)
+    amount = Column(Numeric(20, 2), nullable=False) # Signed amount: Deposit (+), Withdrawal (-)
+    currency = Column(String(10), default="USD")
+    date = Column(DateTime(timezone=True), nullable=False, default=func.now())
+    description = Column(Text, nullable=True)
+    related_tx_id = Column(Integer, nullable=True) # For transfers between accounts
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    trading_account = relationship("TradingAccount", back_populates="transactions")
 

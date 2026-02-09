@@ -28,7 +28,10 @@ import {
     getRiskLevelInfo,
     AssetCoreType,
     AssetMarket,
-    AssetRiskLevel
+    AssetRiskLevel,
+    ALL_ASSET_CORE_TYPES,
+    ALL_ASSET_MARKETS,
+    ALL_ASSET_RISK_LEVELS
 } from '@/lib/symbolUtils'
 import CustomSelect from '@/components/CustomSelect'
 import DateTimePicker from '@/components/DateTimePicker'
@@ -339,6 +342,102 @@ export default function PositionDetailPage() {
                 </div>
             )}
 
+            {/* Phase 1: Plan Drift Analysis Card */}
+            {position.drift_analysis?.has_planned_data && (
+                <div className="card p-5">
+                    <h2 className="text-sm font-bold text-slate-400 mb-4 uppercase tracking-wider flex items-center">
+                        📊 计划执行对比
+                    </h2>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {/* Planned Entry */}
+                        <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                            <p className="text-xs text-slate-500 mb-1">计划入场价</p>
+                            <p className="font-semibold">${Number(position.planned_entry_price || 0).toFixed(2)}</p>
+                        </div>
+                        {/* Actual Entry */}
+                        <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                            <p className="text-xs text-slate-500 mb-1">实际入场价</p>
+                            <p className="font-semibold">${Number(position.average_entry_price || 0).toFixed(2)}</p>
+                        </div>
+                        {/* Entry Drift */}
+                        <div className={`p-3 rounded-lg ${position.drift_analysis.execution_quality === 'excellent' ? 'bg-emerald-50 dark:bg-emerald-900/20' :
+                                position.drift_analysis.execution_quality === 'good' ? 'bg-blue-50 dark:bg-blue-900/20' :
+                                    position.drift_analysis.execution_quality === 'fair' ? 'bg-amber-50 dark:bg-amber-900/20' :
+                                        'bg-red-50 dark:bg-red-900/20'
+                            }`}>
+                            <p className="text-xs text-slate-500 mb-1">入场偏移</p>
+                            <p className={`font-semibold ${Math.abs(position.drift_analysis.entry_drift_pct || 0) <= 2 ? 'text-emerald-600' :
+                                    Math.abs(position.drift_analysis.entry_drift_pct || 0) <= 5 ? 'text-amber-600' : 'text-red-600'
+                                }`}>
+                                {(position.drift_analysis.entry_drift_pct || 0) > 0 ? '+' : ''}{position.drift_analysis.entry_drift_pct}%
+                                <span className="text-xs ml-1 text-slate-500">
+                                    ({position.drift_analysis.entry_drift_direction === 'above' ? '高于计划' :
+                                        position.drift_analysis.entry_drift_direction === 'below' ? '低于计划' : '命中'})
+                                </span>
+                            </p>
+                        </div>
+                        {/* Execution Quality */}
+                        <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                            <p className="text-xs text-slate-500 mb-1">执行质量</p>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${position.drift_analysis.execution_quality === 'excellent' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                                    position.drift_analysis.execution_quality === 'good' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                                        position.drift_analysis.execution_quality === 'fair' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+                                            'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                }`}>
+                                {position.drift_analysis.execution_quality === 'excellent' ? '优秀 ⭐' :
+                                    position.drift_analysis.execution_quality === 'good' ? '良好' :
+                                        position.drift_analysis.execution_quality === 'fair' ? '一般' : '需改进'}
+                            </span>
+                        </div>
+                    </div>
+                    {/* Risk Info */}
+                    {position.planned_stop_loss && (
+                        <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700 flex items-center gap-4">
+                            <div>
+                                <span className="text-xs text-slate-500">计划止损: </span>
+                                <span className="font-medium">${Number(position.planned_stop_loss).toFixed(2)}</span>
+                            </div>
+                            {position.drift_analysis.stop_loss_risk_pct && (
+                                <div>
+                                    <span className="text-xs text-slate-500">风险占比: </span>
+                                    <span className={`font-medium ${position.drift_analysis.stop_loss_risk_pct > 5 ? 'text-red-600' : 'text-slate-700 dark:text-slate-300'}`}>
+                                        {position.drift_analysis.stop_loss_risk_pct}%
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Phase 1: Checklist Responses Card */}
+            {position.checklist_responses && Object.keys(position.checklist_responses).length > 0 && (
+                <div className="card p-5">
+                    <h2 className="text-sm font-bold text-slate-400 mb-4 uppercase tracking-wider flex items-center">
+                        ✅ 交易前检查清单
+                        {position.checklist_completed_at && (
+                            <span className="ml-2 text-xs font-normal text-slate-500">
+                                (完成于 {new Date(position.checklist_completed_at).toLocaleString('zh-CN')})
+                            </span>
+                        )}
+                    </h2>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        {Object.entries(position.checklist_responses).map(([id, checked]) => (
+                            <div
+                                key={id}
+                                className={`flex items-center gap-2 p-2 rounded-lg ${checked ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'bg-red-50 dark:bg-red-900/20'
+                                    }`}
+                            >
+                                <span className={checked ? 'text-emerald-500' : 'text-red-500'}>
+                                    {checked ? '✓' : '✗'}
+                                </span>
+                                <span className="text-sm">检查项 #{id}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {/* Trade Batches */}
             <div className="card">
                 <div className="p-6 border-b border-slate-100 dark:border-slate-700">
@@ -548,13 +647,11 @@ export default function PositionDetailPage() {
                                     onChange={e => setMetadataForm({ ...metadataForm, core_type: e.target.value })}
                                     className="input"
                                 >
-                                    <option value="STOCK">股票 (Stock)</option>
-                                    <option value="FUND">基金 (Fund)</option>
-                                    <option value="BOND">债券 (Bond)</option>
-                                    <option value="COMMODITY">商品 (Commodity)</option>
-                                    <option value="FX">外汇 (Forex)</option>
-                                    <option value="CRYPTO">加密货币 (Crypto)</option>
-                                    <option value="DERIVATIVE">衍生品 (Derivative)</option>
+                                    {ALL_ASSET_CORE_TYPES.map(type => (
+                                        <option key={type} value={type}>
+                                            {getCoreTypeLabel(type)} ({type})
+                                        </option>
+                                    ))}
                                 </select>
                             </div>
                             <div>
@@ -574,13 +671,11 @@ export default function PositionDetailPage() {
                                     onChange={e => setMetadataForm({ ...metadataForm, market: e.target.value })}
                                     className="input"
                                 >
-                                    <option value="US">美股 (US)</option>
-                                    <option value="HK">港股 (HK)</option>
-                                    <option value="A_SHARE">A股 (CN)</option>
-                                    <option value="CN_OTC">场外基金 (CN OTC)</option>
-                                    <option value="FOREX">外汇 (Forex)</option>
-                                    <option value="CRYPTO">币圈 (Crypto)</option>
-                                    <option value="UK">英股 (UK)</option>
+                                    {ALL_ASSET_MARKETS.map(market => (
+                                        <option key={market} value={market}>
+                                            {getMarketLabel(market)} ({market as string})
+                                        </option>
+                                    ))}
                                 </select>
                             </div>
                             <div>
@@ -590,11 +685,11 @@ export default function PositionDetailPage() {
                                     onChange={e => setMetadataForm({ ...metadataForm, risk_level: e.target.value })}
                                     className="input"
                                 >
-                                    <option value="CONSERVATIVE">保守 (Low)</option>
-                                    <option value="MODERATE">稳健 (Medium)</option>
-                                    <option value="GROWTH">成长 (High)</option>
-                                    <option value="AGGRESSIVE">进取 (Very High)</option>
-                                    <option value="HEDGE">对冲/投机 (Speculative)</option>
+                                    {ALL_ASSET_RISK_LEVELS.map(level => (
+                                        <option key={level} value={level}>
+                                            {getRiskLevelInfo(level).label} ({level})
+                                        </option>
+                                    ))}
                                 </select>
                             </div>
                             <div className="md:col-span-2">

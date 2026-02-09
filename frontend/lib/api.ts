@@ -4,7 +4,7 @@
 
 // Strips trailing /api if present to avoid double prefixing when concatenated with /api/ endpoints
 const rawBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-const API_BASE = rawBase.replace(/\/api$/, '')
+export const API_BASE = rawBase.replace(/\/api$/, '')
 
 // ============== Types ==============
 
@@ -46,8 +46,17 @@ export interface Strategy {
     risk_rules?: string
     symbols: string[]
     status: 'ACTIVE' | 'PAUSED' | 'ARCHIVED'
+    checklist_items?: ChecklistItem[]  // Phase 1: Pre-Trade Checklist
     created_at: string
     updated_at?: string
+}
+
+// Phase 1: Checklist item structure
+export interface ChecklistItem {
+    id: number
+    label: string
+    category?: 'entry' | 'risk' | 'exit' | 'other'
+    required?: boolean
 }
 
 export interface StrategyCreate {
@@ -57,6 +66,7 @@ export interface StrategyCreate {
     exit_rules?: string
     risk_rules?: string
     symbols?: string[]
+    checklist_items?: ChecklistItem[]  // Phase 1: Pre-Trade Checklist
 }
 
 export interface UserSettings {
@@ -156,12 +166,32 @@ export interface TradingAccount {
     account_type?: string
     currency: string
     initial_balance: number
+    cash_balance?: number
     current_balance?: number
     total_assets?: number
     total_liabilities?: number
     description?: string
     is_active: boolean
     created_at: string
+}
+
+export interface Transaction {
+    id: number
+    account_id: number
+    type: 'DEPOSIT' | 'WITHDRAWAL' | 'INTEREST' | 'FEE' | 'TRANSFER_IN' | 'TRANSFER_OUT'
+    amount: number
+    currency: string
+    date: string
+    description?: string
+    created_at: string
+}
+
+export interface TransactionCreate {
+    type: string
+    amount: number
+    currency?: string
+    date: string
+    description?: string
 }
 
 export interface User {
@@ -178,6 +208,7 @@ export interface TradingAccountCreate {
     account_type?: string
     currency: string
     initial_balance: number
+    cash_balance?: number
     current_balance?: number
     total_assets?: number
     total_liabilities?: number
@@ -498,6 +529,24 @@ export const accountsAPI = {
             method: 'DELETE',
         }, token)
     },
+
+    // Transactions
+    getTransactions: async (token: string, accountId: number): Promise<Transaction[]> => {
+        return fetchAPI(`/api/accounts/${accountId}/transactions`, {}, token)
+    },
+
+    createTransaction: async (token: string, accountId: number, data: TransactionCreate): Promise<Transaction> => {
+        return fetchAPI(`/api/accounts/${accountId}/transactions`, {
+            method: 'POST',
+            body: JSON.stringify(data),
+        }, token)
+    },
+
+    deleteTransaction: async (token: string, id: number): Promise<void> => {
+        return fetchAPI(`/api/transactions/${id}`, {
+            method: 'DELETE',
+        }, token)
+    }
 }
 
 export interface SystemSetting {
@@ -567,6 +616,22 @@ export interface Position {
     updated_at?: string
     asset_metadata?: any // Detailed AssetMetadataResponse
     batches?: TradeBatch[]
+    // Phase 1: Plan Drift Detection
+    planned_entry_price?: number
+    planned_stop_loss?: number
+    planned_take_profit?: { price: number; percent?: number }[]
+    // Phase 1: Checklist Responses
+    checklist_responses?: Record<string, boolean>
+    checklist_completed_at?: string
+    // Phase 1: Drift Analysis (computed by backend)
+    drift_analysis?: {
+        has_planned_data: boolean
+        has_drift: boolean
+        entry_drift_pct?: number
+        entry_drift_direction?: 'above' | 'below' | 'on_target'
+        stop_loss_risk_pct?: number
+        execution_quality?: 'excellent' | 'good' | 'fair' | 'poor'
+    }
 }
 
 export interface PositionCreate {
@@ -581,6 +646,12 @@ export interface PositionCreate {
     entry_reason?: string
     entry_emotion?: string
     entry_confidence?: number
+    // Phase 1: Plan Drift Detection
+    planned_entry_price?: number
+    planned_stop_loss?: number
+    planned_take_profit?: { price: number; percent?: number }[]
+    // Phase 1: Checklist Responses
+    checklist_responses?: Record<string, boolean>
     asset_metadata?: {
         name?: string
         core_type?: string

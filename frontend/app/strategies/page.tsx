@@ -15,7 +15,7 @@ import {
     X
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { strategiesAPI, Strategy, StrategyCreate } from '@/lib/api'
+import { strategiesAPI, Strategy, StrategyCreate, ChecklistItem } from '@/lib/api'
 
 function StrategyCard({
     strategy,
@@ -133,6 +133,7 @@ export default function StrategiesPage() {
         exit_rules: '',
         risk_rules: '',
         symbols: [],
+        checklist_items: [],
     })
 
     const fetchStrategies = async () => {
@@ -161,6 +162,7 @@ export default function StrategiesPage() {
             exit_rules: '',
             risk_rules: '',
             symbols: [],
+            checklist_items: [],
         })
         setShowModal(true)
     }
@@ -174,6 +176,7 @@ export default function StrategiesPage() {
             exit_rules: strategy.exit_rules || '',
             risk_rules: strategy.risk_rules || '',
             symbols: strategy.symbols || [],
+            checklist_items: strategy.checklist_items || [],
         })
         setShowModal(true)
     }
@@ -315,6 +318,93 @@ export default function StrategiesPage() {
                                     className="input min-h-[80px]"
                                     placeholder="描述仓位管理和风险控制..."
                                 />
+                            </div>
+
+                            {/* Phase 1: Pre-Trade Checklist Editor */}
+                            <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
+                                <div className="flex items-center justify-between mb-3">
+                                    <label className="block text-sm font-medium">交易前检查清单</label>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const newItem: ChecklistItem = {
+                                                id: Date.now(),
+                                                label: '',
+                                                category: 'entry',
+                                                required: false
+                                            }
+                                            setForm({
+                                                ...form,
+                                                checklist_items: [...(form.checklist_items || []), newItem]
+                                            })
+                                        }}
+                                        className="text-xs px-2 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 rounded hover:bg-primary-200 dark:hover:bg-primary-900/50"
+                                    >
+                                        + 添加检查项
+                                    </button>
+                                </div>
+                                <p className="text-xs text-slate-500 mb-3">开仓时需要确认的检查项，帮助执行交易纪律</p>
+
+                                {(form.checklist_items || []).length === 0 ? (
+                                    <p className="text-sm text-slate-400 text-center py-4 border border-dashed border-slate-200 dark:border-slate-700 rounded-lg">
+                                        暂无检查项，点击上方按钮添加
+                                    </p>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {(form.checklist_items || []).map((item, index) => (
+                                            <div key={item.id} className="flex items-center gap-2 p-2 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
+                                                <input
+                                                    type="text"
+                                                    value={item.label}
+                                                    onChange={(e) => {
+                                                        const updated = [...(form.checklist_items || [])]
+                                                        updated[index] = { ...item, label: e.target.value }
+                                                        setForm({ ...form, checklist_items: updated })
+                                                    }}
+                                                    className="flex-1 input text-sm py-1"
+                                                    placeholder="例如：成交量确认"
+                                                />
+                                                <select
+                                                    value={item.category || 'entry'}
+                                                    onChange={(e) => {
+                                                        const updated = [...(form.checklist_items || [])]
+                                                        updated[index] = { ...item, category: e.target.value as 'entry' | 'risk' | 'exit' | 'other' }
+                                                        setForm({ ...form, checklist_items: updated })
+                                                    }}
+                                                    className="input text-xs py-1 w-20"
+                                                >
+                                                    <option value="entry">入场</option>
+                                                    <option value="risk">风控</option>
+                                                    <option value="exit">出场</option>
+                                                    <option value="other">其他</option>
+                                                </select>
+                                                <label className="flex items-center text-xs">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={item.required || false}
+                                                        onChange={(e) => {
+                                                            const updated = [...(form.checklist_items || [])]
+                                                            updated[index] = { ...item, required: e.target.checked }
+                                                            setForm({ ...form, checklist_items: updated })
+                                                        }}
+                                                        className="mr-1"
+                                                    />
+                                                    必填
+                                                </label>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const updated = (form.checklist_items || []).filter((_, i) => i !== index)
+                                                        setForm({ ...form, checklist_items: updated })
+                                                    }}
+                                                    className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded"
+                                                >
+                                                    <X className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
 
                             <button

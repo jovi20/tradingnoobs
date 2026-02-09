@@ -42,7 +42,8 @@ async def create_strategy(
         entry_rules=strategy_data.entry_rules,
         exit_rules=strategy_data.exit_rules,
         risk_rules=strategy_data.risk_rules,
-        symbols=strategy_data.symbols or []
+        symbols=strategy_data.symbols or [],
+        checklist_items=strategy_data.checklist_items or []
     )
     db.add(strategy)
     db.commit()

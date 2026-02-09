@@ -7,9 +7,15 @@ export type AssetType = 'A_STOCK' | 'HK_STOCK' | 'CRYPTO' | 'US_STOCK' | 'UNKNOW
 
 // Rich Multi-dimensional Metadata Types
 export type AssetCoreType = 'STOCK' | 'BOND' | 'FUND' | 'COMMODITY' | 'FX' | 'DERIVATIVE' | 'CRYPTO' | 'CASH';
+export const ALL_ASSET_CORE_TYPES: AssetCoreType[] = ['STOCK', 'BOND', 'FUND', 'COMMODITY', 'FX', 'DERIVATIVE', 'CRYPTO', 'CASH'];
+
 export type AssetMarket = 'US' | 'HK' | 'A_SHARE' | 'CN_OTC' | 'FOREX' | 'COMMODITY_FUT' | 'UK' | 'CRYPTO';
+export const ALL_ASSET_MARKETS: AssetMarket[] = ['US', 'HK', 'A_SHARE', 'CN_OTC', 'FOREX', 'COMMODITY_FUT', 'UK', 'CRYPTO'];
+
 export type AssetCurrency = 'USD' | 'HKD' | 'CNY' | 'EUR' | 'GBP';
+
 export type AssetRiskLevel = 'CONSERVATIVE' | 'MODERATE' | 'GROWTH' | 'AGGRESSIVE' | 'HEDGE';
+export const ALL_ASSET_RISK_LEVELS: AssetRiskLevel[] = ['CONSERVATIVE', 'MODERATE', 'GROWTH', 'AGGRESSIVE', 'HEDGE'];
 
 export interface AssetMetadata {
     symbol: string;
@@ -213,7 +219,7 @@ export function getCoreTypeLabel(type: AssetCoreType): string {
         FX: '外汇',
         DERIVATIVE: '衍生品',
         CRYPTO: '加密货币',
-        CASH: 'Cash'
+        CASH: '现金'
     };
     return labels[type] || type;
 }

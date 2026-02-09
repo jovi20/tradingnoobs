@@ -179,64 +179,71 @@ def get_fund_quote(symbol: str) -> Dict[str, Any]:
 
 def get_hk_stock_quote(symbol: str) -> Dict[str, Any]:
     """
-    获取港股实时行情
+    获取港股实时行情 (仅限 AKShare，不使用 Yahoo Finance)
     symbol: 股票代码，如 "00700", "09988"
     """
-    # Remove possible .HK suffix and normalize to 5 digits
+    # 格式化代码：去除后缀并填充至5位
     clean_symbol = symbol.replace('.HK', '').replace('.hk', '').zfill(5)
     
-    # Thoroughly disable proxy env vars
+    # 彻底禁用代理，防止网络干扰
     import os
     for key in ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy']:
         os.environ.pop(key, None)
     os.environ['NO_PROXY'] = '*'
     
-    try:
-        import akshare as ak
-        
-        # Method 1: EM Real-time (Snapshot of all HK stocks)
-        try:
-            df = ak.stock_hk_spot_em()
-            if df is not None and not df.empty:
-                # Robust matching: ensure '代码' is treated as string and matched against padded clean_symbol
-                row = df[df['代码'].astype(str).str.zfill(5) == clean_symbol]
-                if not row.empty:
-                    row = row.iloc[0]
-                    return {
-                        'c': float(row['最新价']) if row['最新价'] else None,
-                        'pc': float(row['昨收']) if row['昨收'] else None,
-                        'h': float(row['最高']) if row['最高'] else None,
-                        'l': float(row['最低']) if row['最低'] else None,
-                        'o': float(row['今开']) if row['今开'] else None,
-                        'name': row['名称'],
-                        'change_percent': float(row['涨跌幅']) if row['涨跌幅'] else 0
-                    }
-        except Exception as em_err:
-            print(f"AKShare HK EM query failed: {em_err}")
-            
-        # Method 2: Sina Real-time (Fall back to more specific provider if EM is down)
-        try:
-            # Note: stock_hk_zh_spot uses a different data source
-            df = ak.stock_hk_zh_spot(symbol=clean_symbol)
-            if df is not None and not df.empty:
-                # stock_hk_zh_spot returns a dataframe for a single stock usually or small set
-                row = df.iloc[0]
-                return {
-                    'c': float(row['last']),
-                    'pc': float(row['prevclose']),
-                    'h': float(row['high']),
-                    'l': float(row['low']),
-                    'o': float(row['open']),
-                    'name': row['name'],
-                    'change_percent': ((float(row['last']) - float(row['prevclose'])) / float(row['prevclose'])) * 100 if float(row['prevclose']) else 0
-                }
-        except Exception as sina_err:
-            print(f"AKShare HK Sina query failed: {sina_err}")
+    import akshare as ak
+    import time
 
-        raise ValueError(f"AKShare无法找到或获取港股代码: {symbol}")
+    def try_fetch(func, name, **kwargs):
+        """辅助函数：尝试执行接口并返回标准格式"""
+        try:
+            df = func(**kwargs)
+            if df is not None and not df.empty:
+                # 统一匹配逻辑
+                code_col = '代码' if '代码' in df.columns else 'symbol'
+                if code_col in df.columns:
+                    row = df[df[code_col].astype(str).str.zfill(5) == clean_symbol]
+                    if not row.empty:
+                        row = row.iloc[0]
+                        # 字段映射（根据接口列名可能不同）
+                        price = float(row['最新价']) if '最新价' in row and row['最新价'] else None
+                        if price is None and 'last' in row: price = float(row['last'])
+                        
+                        prev_close = float(row['昨收']) if '昨收' in row and row['昨收'] else price
+                        if prev_close is None and 'prevclose' in row: prev_close = float(row['prevclose'])
+                        
+                        return {
+                            'c': price,
+                            'pc': prev_close,
+                            'h': float(row['最高']) if '最高' in row and row['最高'] else None,
+                            'l': float(row['最低']) if '最低' in row and row['最低'] else None,
+                            'o': float(row['今开']) if '今开' in row and row['今开'] else None,
+                            'name': row['名称'] if '名称' in row else row.get('name', symbol),
+                            'change_percent': float(row['涨跌幅']) if '涨跌幅' in row and row['涨跌幅'] else 0
+                        }
+            return None
+        except Exception as e:
+            print(f"AKShare HK {name} query failed: {e}")
+            return None
+
+    # 第一级回退：多轮重试
+    for attempt in range(2):
+        # 1. 优先尝试 EM 实时行情 (全港股快照，最快)
+        res = try_fetch(ak.stock_hk_spot_em, "EM Spot")
+        if res: return res
+
+        # 2. 尝试 EM 主板行情 (确认较稳定)
+        res = try_fetch(ak.stock_hk_main_board_spot_em, "EM Main Board")
+        if res: return res
+
+        # 3. 尝试旧版 HK Spot (虽然慢，但覆盖广)
+        res = try_fetch(ak.stock_hk_spot, "HK Spot")
+        if res: return res
         
-    except Exception as e:
-        raise Exception(f"AKShare 港股查询失败: {str(e)}")
+        if attempt == 0:
+            time.sleep(1) # 短暂等待后重试
+
+    raise Exception(f"港股查询失败: AKShare 所有接口均无法获取 {symbol} 的实时数据 (已尝试 EM/主板/全量接口)")
 
 
 def search_stock(keyword: str, market: str = 'A') -> list:

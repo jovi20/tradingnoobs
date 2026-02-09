@@ -32,25 +32,56 @@ router = APIRouter(prefix="/api/positions", tags=["positions"])
 
 
 def recalculate_position(position: Position, db: Session):
-    """Recalculate position aggregates after batch changes"""
-    entry_batches = [b for b in position.batches if b.type == BatchType.ENTRY]
-    exit_batches = [b for b in position.batches if b.type == BatchType.EXIT]
+    """
+    Recalculate position aggregates after batch changes using Moving Average Cost.
+    - Exits realize PnL based on current average cost but do not change the average cost.
+    - Entries average into the remaining quantity basis.
+    """
+    # Sort batches chronologically (handle mixed timezone-aware and naive datetimes)
+    def get_sortable_time(batch):
+        t = batch.time
+        if t is None:
+            return datetime.min
+        # Remove timezone info for comparison if present
+        if hasattr(t, 'tzinfo') and t.tzinfo is not None:
+            return t.replace(tzinfo=None)
+        return t
     
-    # Total entry quantity and weighted avg price
-    total_entry_qty = sum(float(b.quantity) for b in entry_batches)
-    total_exit_qty = sum(float(b.quantity) for b in exit_batches)
+    batches = sorted(position.batches, key=get_sortable_time)
     
-    position.total_quantity = Decimal(str(total_entry_qty - total_exit_qty))
+    current_qty = Decimal('0')
+    avg_price = Decimal('0')
+    realized_pnl = Decimal('0')
+
+    for batch in batches:
+        qty = Decimal(str(batch.quantity))
+        price = Decimal(str(batch.price))
+        
+        if batch.type == BatchType.ENTRY:
+            # New Average = (Old Qty * Old Avg + New Qty * New Price) / Total Qty
+            new_qty = current_qty + qty
+            if new_qty > 0:
+                avg_price = (current_qty * avg_price + qty * price) / new_qty
+            current_qty = new_qty
+            # Entry batches don't have PnL
+            batch.pnl = Decimal('0')
+        else:  # EXIT
+            # Calculate PnL for this exit batch relative to CURRENT avg_price
+            if position.direction == PositionDirection.LONG:
+                batch_pnl = (price - avg_price) * qty
+            else:  # SHORT
+                batch_pnl = (avg_price - price) * qty
+            
+            batch.pnl = batch_pnl
+            realized_pnl += batch_pnl
+            current_qty -= qty
+
+    # Update Position attributes
+    position.total_quantity = current_qty
+    position.average_entry_price = avg_price
+    position.realized_pnl = realized_pnl
     
-    # Weighted average entry price
-    if total_entry_qty > 0:
-        weighted_sum = sum(float(b.price) * float(b.quantity) for b in entry_batches)
-        position.average_entry_price = Decimal(str(weighted_sum / total_entry_qty))
-    
-    # Realized PnL from exit batches
-    position.realized_pnl = sum(b.pnl or Decimal(0) for b in exit_batches)
-    
-    # Auto-close if quantity is 0
+    # Auto-close if quantity is <= 0
     if position.total_quantity <= 0:
         position.status = PositionStatus.CLOSED
         from datetime import datetime, timezone
@@ -58,6 +89,64 @@ def recalculate_position(position: Position, db: Session):
     else:
         position.status = PositionStatus.OPEN
         position.closed_at = None
+
+
+def calculate_drift(position: Position) -> dict:
+    """
+    Calculate drift between planned and actual execution.
+    Returns a dict with drift analysis metrics.
+    """
+    drift = {
+        "has_planned_data": False,
+        "has_drift": False,
+        "entry_drift_pct": None,
+        "entry_drift_direction": None,  # "above" or "below" planned
+        "stop_loss_risk_pct": None,
+        "execution_quality": None  # "good", "fair", "poor"
+    }
+    
+    # Check if planned data exists
+    if not position.planned_entry_price and not position.planned_stop_loss:
+        return drift
+    
+    drift["has_planned_data"] = True
+    actual_entry = float(position.average_entry_price) if position.average_entry_price else None
+    planned_entry = float(position.planned_entry_price) if position.planned_entry_price else None
+    planned_stop = float(position.planned_stop_loss) if position.planned_stop_loss else None
+    
+    # Calculate entry drift
+    if actual_entry and planned_entry and planned_entry > 0:
+        entry_diff = actual_entry - planned_entry
+        entry_drift_pct = (entry_diff / planned_entry) * 100
+        drift["entry_drift_pct"] = round(entry_drift_pct, 2)
+        drift["entry_drift_direction"] = "above" if entry_diff > 0 else "below" if entry_diff < 0 else "on_target"
+        
+        # For LONG, buying below plan is good; for SHORT, selling above plan is good
+        is_favorable = (position.direction == PositionDirection.LONG and entry_diff < 0) or \
+                       (position.direction == PositionDirection.SHORT and entry_diff > 0)
+        
+        abs_drift = abs(entry_drift_pct)
+        if abs_drift <= 0.5:
+            drift["execution_quality"] = "excellent"
+        elif abs_drift <= 2.0 or is_favorable:
+            drift["execution_quality"] = "good"
+        elif abs_drift <= 5.0:
+            drift["execution_quality"] = "fair"
+        else:
+            drift["execution_quality"] = "poor"
+        
+        if abs_drift > 0.1:  # More than 0.1% drift
+            drift["has_drift"] = True
+    
+    # Calculate stop loss risk percentage
+    if actual_entry and planned_stop and actual_entry > 0:
+        if position.direction == PositionDirection.LONG:
+            risk_pct = ((actual_entry - planned_stop) / actual_entry) * 100
+        else:  # SHORT
+            risk_pct = ((planned_stop - actual_entry) / actual_entry) * 100
+        drift["stop_loss_risk_pct"] = round(risk_pct, 2)
+    
+    return drift
 
 
 @router.get("")
@@ -197,6 +286,7 @@ async def list_positions(
         
 
         
+        
     return JSONResponse(content=jsonable_encoder(result))
 
 
@@ -247,8 +337,46 @@ async def get_position(
             print(f"Error fetching quote for {position.symbol}: {e}")
             # Continue without real-time price
             pass
-                    
-    return position
+    
+    # Phase 1: Calculate drift analysis
+    drift_analysis = calculate_drift(position)
+    
+    # Convert to response dict manually to include drift_analysis
+    response = {
+        "id": position.id,
+        "user_id": position.user_id,
+        "account_id": position.account_id,
+        "strategy_id": position.strategy_id,
+        "symbol": position.symbol,
+        "exchange": position.exchange,
+        "asset_type": position.asset_type,
+        "direction": position.direction.value,
+        "status": position.status.value,
+        "total_quantity": position.total_quantity,
+        "average_entry_price": position.average_entry_price,
+        "realized_pnl": position.realized_pnl,
+        "current_price": getattr(position, 'current_price', None),
+        "unrealized_pnl": getattr(position, 'unrealized_pnl', None),
+        "opened_at": position.opened_at,
+        "closed_at": position.closed_at,
+        "trade_review": position.trade_review,
+        "screenshots": position.screenshots or [],
+        "lessons": position.lessons or [],
+        "rating": position.rating,
+        "created_at": position.created_at,
+        "updated_at": position.updated_at,
+        "asset_metadata": position.asset_metadata,
+        "batches": position.batches,
+        # Phase 1 fields
+        "planned_entry_price": position.planned_entry_price,
+        "planned_stop_loss": position.planned_stop_loss,
+        "planned_take_profit": position.planned_take_profit,
+        "checklist_responses": position.checklist_responses,
+        "checklist_completed_at": position.checklist_completed_at,
+        "drift_analysis": drift_analysis
+    }
+    
+    return JSONResponse(content=jsonable_encoder(response))
 
 
 @router.post("", response_model=PositionResponse, status_code=status.HTTP_201_CREATED)
@@ -296,7 +424,13 @@ async def create_position(
         total_quantity=position_data.quantity,
         average_entry_price=position_data.entry_price,
         realized_pnl=Decimal(0),
-        opened_at=position_data.entry_time
+        opened_at=position_data.entry_time,
+        # Phase 1: Plan Drift Detection
+        planned_entry_price=position_data.planned_entry_price,
+        planned_stop_loss=position_data.planned_stop_loss,
+        planned_take_profit=position_data.planned_take_profit,
+        # Phase 1: Checklist Responses
+        checklist_responses=position_data.checklist_responses
     )
     db.add(position)
     db.flush()  # Get position ID
@@ -711,6 +845,9 @@ async def export_positions_csv(
     return StreamingResponse(
         iter([csv_content.encode('utf-8')]),
         media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}",
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
     )
 
