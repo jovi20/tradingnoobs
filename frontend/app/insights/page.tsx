@@ -15,6 +15,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import ReactMarkdown from 'react-markdown'
 import AnalysisAssistant from '@/components/insights/AnalysisAssistant'
+import { insightsAPI, WeeklyReport, AISummary } from '@/lib/api'
 
 export default function ReportsPage() {
     const { token } = useAuth()
