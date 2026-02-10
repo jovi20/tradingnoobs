@@ -384,6 +384,10 @@ class Position(Base):
     planned_stop_loss = Column(Numeric(20, 8), nullable=True)     # 计划止损价
     planned_take_profit = Column(JSON, nullable=True)             # 计划止盈价 [{"price": 100, "percent": 50}, ...]
     
+    # Phase 2: MAE/MFE Analysis
+    max_price_during_hold = Column(Numeric(20, 8), nullable=True) # 持仓期间最高价 (MFE for Long, MAE for Short)
+    min_price_during_hold = Column(Numeric(20, 8), nullable=True) # 持仓期间最低价 (MAE for Long, MFE for Short)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     

@@ -9,7 +9,7 @@ import re
 from datetime import datetime, timedelta
 import finnhub
 from sqlalchemy.orm import Session
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import asyncio
 from fastapi.concurrency import run_in_threadpool
 
@@ -451,6 +451,100 @@ class MarketDataService:
             'FOREX': 'AKShare/YFinance',
             'ETF_EQUITY': 'AKShare'
         }.get(asset_type, 'Unknown')
+
+    async def get_price_history(self, symbol: str, start: datetime, end: datetime, exchange: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Get historical price data (K-lines)
+        Returns: [{'date': 'YYYY-MM-DD', 'open': 10, 'high': 12, 'low': 9, 'close': 11, 'volume': 100}, ...]
+        """
+        # Detect Asset Type
+        asset_type = self.detect_asset_type(symbol, exchange)
+        
+        start_str = start.strftime('%Y%m%d')
+        end_str = end.strftime('%Y%m%d')
+        
+        start_ts = int(start.timestamp() * 1000)
+        end_ts = int(end.timestamp() * 1000)
+        
+        try:
+            if asset_type == 'A_STOCK' or asset_type == 'HK_STOCK':
+                return await run_in_threadpool(akshare_provider.get_history_k_data, symbol, start_str, end_str)
+                
+            elif asset_type == 'CRYPTO':
+                # Daily interval default
+                return await run_in_threadpool(binance_provider.get_klines, symbol, '1d', start_ts, end_ts)
+                
+            elif asset_type == 'US_STOCK':
+                # Use YFinance for history (Finnhub free tier limits history)
+                # Or use Finnhub stock_candles if available
+                return await run_in_threadpool(self._get_us_history, symbol, start, end)
+                
+            else:
+                # Fallback to generic YFinance
+                return await run_in_threadpool(self._get_yfinance_history, symbol, start, end)
+                
+        except Exception as e:
+            print(f"Error fetching history for {symbol}: {e}")
+            return []
+
+    def _get_us_history(self, symbol: str, start: datetime, end: datetime) -> List[Dict[str, Any]]:
+        try:
+            # Try Finnhub first if key exists
+            client = self._get_finnhub_client()
+            if client:
+                # Finnhub uses unix timestamp in seconds
+                res = client.stock_candles(symbol.upper(), 'D', int(start.timestamp()), int(end.timestamp()))
+                if res['s'] == 'ok':
+                    history = []
+                    for i in range(len(res['t'])):
+                        history.append({
+                            'date': datetime.fromtimestamp(res['t'][i]).strftime('%Y-%m-%d'),
+                            'open': res['o'][i],
+                            'high': res['h'][i],
+                            'low': res['l'][i],
+                            'close': res['c'][i],
+                            'volume': res['v'][i]
+                        })
+                    return history
+        except:
+            pass
+            
+        return self._get_yfinance_history(symbol, start, end)
+
+    def _get_yfinance_history(self, symbol: str, start: datetime, end: datetime) -> List[Dict[str, Any]]:
+        import yfinance as yf
+        import pandas as pd
+        # Ticker adjustment usually needed if using YFinance directly
+        # But let's assume standard format or rely on yF's smarts
+        # Need to map suffixes if A-share/HK fell through to here (unlikely)
+        
+        hist = yf.download(symbol.upper(), start=start, end=end, progress=False, ignore_tz=True)
+        if hist.empty:
+            return []
+            
+        # Flatten MultiIndex columns if present (yfinance >= 0.2.x)
+        # This handles the case where columns are (Price, Ticker)
+        if isinstance(hist.columns, pd.MultiIndex):
+             # Depending on structure, usually level 0 is Price (Open, Close, etc)
+             # But sometimes it might be swapped. usually it is (Price, Ticker)
+             # If we have only 1 ticker, we can just drop the ticker level
+             try:
+                 hist.columns = hist.columns.droplevel(1)
+             except:
+                 # Fallback: just use get_level_values if droplevel fails or unseen structure
+                 hist.columns = hist.columns.get_level_values(0)
+            
+        result = []
+        for index, row in hist.iterrows():
+            result.append({
+                'date': index.strftime('%Y-%m-%d'),
+                'open': float(row['Open']),
+                'high': float(row['High']),
+                'low': float(row['Low']),
+                'close': float(row['Close']),
+                'volume': float(row['Volume'])
+            })
+        return result
 
     async def validate_api_key(self):
         """Test if the Finnhub API key works"""

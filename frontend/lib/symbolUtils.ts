@@ -294,3 +294,17 @@ export function getAssetTypeHexColor(type: string): string {
         default: return '#94a3b8' // slate-400
     }
 }
+
+/**
+ * 获取货币符号
+ */
+export function getCurrencySymbol(currency?: string): string {
+    switch (currency) {
+        case 'CNY': return '¥'
+        case 'HKD': return 'HK$'
+        case 'EUR': return '€'
+        case 'GBP': return '£'
+        case 'USD':
+        default: return '$'
+    }
+}

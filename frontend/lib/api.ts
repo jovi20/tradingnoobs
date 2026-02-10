@@ -94,6 +94,21 @@ export interface WeeklyReport {
     created_at: string
 }
 
+export type AnalysisType = 'holding_period' | 'losing_streak' | 'emotion_pnl' | 'checklist_effect' | 'strategy_health'
+
+export interface AnalysisRequest {
+    analysis_type: AnalysisType
+    start_date?: string
+    end_date?: string
+}
+
+export interface AnalysisResponse {
+    analysis_type: AnalysisType
+    raw_data: any
+    ai_insights?: string
+    created_at: string
+}
+
 export interface AssetAllocation {
     name: string
     value: number
@@ -146,6 +161,11 @@ export interface DashboardStats {
     top_movers: PositionMover[]
     bottom_movers: PositionMover[]
     portfolio_flow?: PortfolioFlow
+    // Risk Metrics
+    sharpe_ratio?: number
+    sortino_ratio?: number
+    calmar_ratio?: number
+    max_drawdown?: number
 }
 
 export interface DailySummary {
@@ -168,6 +188,8 @@ export interface TradingAccount {
     initial_balance: number
     cash_balance?: number
     current_balance?: number
+    market_value?: number // Real-time calculated
+    total_equity?: number // Real-time calculated (NAV)
     total_assets?: number
     total_liabilities?: number
     description?: string
@@ -418,6 +440,13 @@ export const insightsAPI = {
             method: 'POST',
         }, token)
     },
+
+    analyze: async (token: string, data: AnalysisRequest): Promise<AnalysisResponse> => {
+        return fetchAPI('/api/insights/analyze', {
+            method: 'POST',
+            body: JSON.stringify(data)
+        }, token)
+    },
 }
 
 // ============== Dashboard API ==============
@@ -632,6 +661,9 @@ export interface Position {
         stop_loss_risk_pct?: number
         execution_quality?: 'excellent' | 'good' | 'fair' | 'poor'
     }
+    // Phase 2: MAE/MFE
+    max_price_during_hold?: number
+    min_price_during_hold?: number
 }
 
 export interface PositionCreate {
@@ -725,6 +757,12 @@ export const positionsAPI = {
         return fetchAPI(`/api/positions/check/${symbol}?account_id=${accountId}`, {}, token)
     },
 
+    analyze: async (token: string, id: number): Promise<Position> => {
+        return fetchAPI(`/api/positions/${id}/analyze`, {
+            method: 'POST',
+        }, token)
+    },
+
     // Batch operations
     addBatch: (token: string, positionId: number, data: BatchCreate): Promise<TradeBatch> =>
         fetchAPI(`/api/positions/${positionId}/batches`, {
@@ -743,6 +781,45 @@ export const positionsAPI = {
             method: 'DELETE',
         }, token)
     },
+
+    // Import operations
+    importUpload: async (token: string, file: File): Promise<any> => {
+        const formData = new FormData()
+        formData.append('file', file)
+
+        // Use raw fetch for FormData to avoid Content-Type json override
+        const response = await fetch(`${API_BASE}/api/positions/import/upload`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
+            body: formData
+        })
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ detail: 'Upload failed' }))
+            throw new Error(error.detail || 'Upload failed')
+        }
+        return response.json()
+    },
+
+    importConfirm: async (token: string, data: { file_token: string, account_id: number, selected_indices?: number[] }): Promise<any> => {
+        return fetchAPI('/api/positions/import/confirm', {
+            method: 'POST',
+            body: JSON.stringify(data)
+        }, token)
+    },
+
+    getImportTemplate: async (token: string): Promise<Blob> => {
+        const response = await fetch(`${API_BASE}/api/positions/import/template`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        })
+        if (!response.ok) throw new Error("Failed to download template")
+        return response.blob()
+    }
 }
 
 // ============== Market Data API ==============

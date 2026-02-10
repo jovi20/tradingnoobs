@@ -26,6 +26,8 @@ import StatCard from '@/components/dashboard/StatCard'
 import AllocationPieChart from '@/components/dashboard/AllocationPieChart'
 import PerformanceMovers from '@/components/dashboard/PerformanceMovers'
 import PositionCard from '@/components/dashboard/PositionCard'
+import RiskMetricsCard from '@/components/dashboard/RiskMetricsCard'
+import { MaeMfeScatterPlot } from '@/components/dashboard/MaeMfeScatterPlot'
 
 export default function DashboardPage() {
     const { token, user } = useAuth()
@@ -44,7 +46,7 @@ export default function DashboardPage() {
     const [periodValue, setPeriodValue] = useState<number>(0)
 
     // Use custom hook for data
-    const { stats, pnlHistory, openPositions, isLoading, error } = useDashboardData(token, historyDays)
+    const { stats, pnlHistory, openPositions, allPositions, isLoading, error } = useDashboardData(token, historyDays)
 
     useEffect(() => {
         const handleResize = () => {
@@ -264,6 +266,13 @@ export default function DashboardPage() {
                         </div>
                     </div>
 
+                    {/* MAE/MFE Scatter Plot Analysis */}
+                    {allPositions && allPositions.length > 0 && (
+                        <div className="card">
+                            <MaeMfeScatterPlot positions={allPositions} />
+                        </div>
+                    )}
+
                     {/* Open Positions - Positioned under Chart on Desktop but at the bottom on Mobile */}
                     <div className="space-y-4 order-4">
                         <div className="flex items-center justify-between">
@@ -348,6 +357,14 @@ export default function DashboardPage() {
                         </div>
                     </div>
 
+                    {/* Risk Metrics */}
+                    <RiskMetricsCard
+                        sharpe={stats.sharpe_ratio}
+                        sortino={stats.sortino_ratio}
+                        calmar={stats.calmar_ratio}
+                        maxDrawdown={stats.max_drawdown}
+                    />
+
                     {/* Historical Performance (Movers) - Moved to Sidebar */}
                     <div className="card p-4">
                         <h2 className="text-sm font-semibold mb-4 text-slate-900 dark:text-white">历史表现</h2>
@@ -356,6 +373,6 @@ export default function DashboardPage() {
                 </div>
 
             </div>
-        </div>
+        </div >
     )
 }

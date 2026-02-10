@@ -7,7 +7,7 @@ from typing import Optional, List, Dict, Any
 from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
-from models import Trade, TradeStatus, UserSettings, WeeklyReport, SystemSetting
+from models import Trade, TradeStatus, UserSettings, WeeklyReport, SystemSetting, TradeBatch, Position, BatchType
 
 
 MUNGER_PROMPT = """你是一位投资分析师，精通查理·芒格的投资哲学。请根据以下一周的交易记录，生成交易洞察报告。
@@ -201,37 +201,41 @@ async def classify_asset(db: Session, symbol: str, exchange: Optional[str] = Non
         return None
 
 
-def format_trades_for_llm(trades: List[Trade]) -> str:
-    """Format trades data for LLM prompt"""
-    if not trades:
+def format_trades_for_llm(batches: List[TradeBatch]) -> str:
+    """Format trade batches (transactions) for LLM prompt"""
+    if not batches:
         return "本周无交易记录"
     
     lines = []
-    for i, trade in enumerate(trades, 1):
-        status = "已平仓" if trade.status == TradeStatus.CLOSED else "持仓中"
-        pnl = trade.pnl or 0
-        pnl_str = f"+{pnl:.2f}" if pnl >= 0 else f"{pnl:.2f}"
+    for i, batch in enumerate(batches, 1):
+        # Access relationship to get symbol/position info
+        # Note: batch.position should be available if joined or lazy loaded
+        position = batch.position
+        symbol = position.symbol if position else "Unknown"
+        exchange = position.exchange if position else "Unknown"
         
+        type_str = "建仓/加仓" if batch.type == BatchType.ENTRY else "平仓/减仓"
+        pnl_str = ""
+        if batch.pnl is not None:
+             val = float(batch.pnl)
+             pnl_str = f", 盈亏: {val:+.2f}"
+             
         lines.append(f"""
 交易 {i}:
-- 标的: {trade.symbol} ({trade.exchange})
-- 状态: {status}
-- 成本价: {trade.entry_price}
-- 数量: {trade.quantity}
-- 盈亏: {pnl_str}
-- 买入理由: {trade.entry_reason or '未填写'}
-- 买入情绪: {trade.entry_emotion or '未填写'}
-- 信心程度: {trade.entry_confidence or '未填写'}/5
+- 时间: {batch.time.strftime('%Y-%m-%d %H:%M')}
+- 标的: {symbol} ({exchange})
+- 动作: {type_str}
+- 价格: {batch.price}
+- 数量: {batch.quantity}
+{f'- 产生的盈亏: {batch.pnl}' if batch.pnl is not None else ''}
+- 理由: {batch.reason or '未填写'}
+- 情绪: {batch.emotion or '未填写'}
+- 信心: {batch.confidence or '未填写'}/5
 """)
         
-        if trade.status == TradeStatus.CLOSED:
-            lines.append(f"""- 卖出价: {trade.exit_price}
-- 卖出理由: {trade.exit_reason or '未填写'}
-- 卖出情绪: {trade.exit_emotion or '未填写'}
-- 复盘笔记: {trade.trade_review or '未填写'}
-- 自评分: {trade.rating or '未填写'}/5
-""")
-    
+        # If this is an exit and position is closed, maybe add position review?
+        # For now, keep it simple to individual actions.
+
     return "\n".join(lines)
 
 
@@ -254,15 +258,15 @@ async def generate_weekly_report(
     if not llm_api_url or not llm_api_key:
         return None
     
-    # Get trades for the week
-    trades = db.query(Trade).filter(
-        Trade.user_id == user_id,
-        Trade.entry_time >= week_start,
-        Trade.entry_time <= week_end
-    ).all()
+    # Get trade batches for the week
+    batches = db.query(TradeBatch).join(Position).filter(
+        Position.user_id == user_id,
+        TradeBatch.time >= week_start,
+        TradeBatch.time <= week_end
+    ).order_by(TradeBatch.time).all()
     
     # Format trades for LLM
-    trades_data = format_trades_for_llm(trades)
+    trades_data = format_trades_for_llm(batches)
     prompt = MUNGER_PROMPT.format(trades_data=trades_data)
     
     # Construct API endpoint
@@ -439,3 +443,74 @@ async def generate_journal_summary(
             return result["choices"][0]["message"]["content"]
     except Exception as e:
         raise Exception(f"LLM API 调用失败: {str(e)}")
+
+
+ANALYSIS_PROMPT_TEMPLATE = """你是一位资深的交易绩效教练。请分析以下交易统计数据并提供可操作的建议。
+
+分析类型: {analysis_type}
+数据:
+{data}
+
+请使用 **中文** 回答，输出格式为 Markdown，包含以下部分：
+1. **🔍 深度诊断**: 数据反映了交易者的什么行为模式？
+2. **💡 核心洞察**: 一个最重要的发现。
+3. **🚀 改进建议**: 2-3 条具体的改进措施。
+
+保持专业、鼓励性，并基于数据说话。
+"""
+
+async def get_analysis_insight(
+    db: Session,
+    analysis_type: str,
+    data: Dict[str, Any]
+) -> Optional[str]:
+    """Generate insight for advanced analytics using LLM"""
+    
+    # Get system settings for LLM
+    llm_api_url_setting = db.query(SystemSetting).filter(SystemSetting.key == 'llm_api_url').first()
+    llm_api_key_setting = db.query(SystemSetting).filter(SystemSetting.key == 'llm_api_key').first()
+    llm_model_setting = db.query(SystemSetting).filter(SystemSetting.key == 'llm_model').first()
+    
+    llm_api_url = llm_api_url_setting.value if llm_api_url_setting else None
+    llm_api_key = llm_api_key_setting.value if llm_api_key_setting else None
+    llm_model = llm_model_setting.value if llm_model_setting else "gpt-4"
+
+    if not llm_api_url or not llm_api_key:
+        return "LLM not configured."
+    
+    # Format data for prompt
+    data_str = json.dumps(data, indent=2, ensure_ascii=False, default=str)
+    
+    prompt = ANALYSIS_PROMPT_TEMPLATE.format(
+        analysis_type=analysis_type,
+        data=data_str
+    )
+    
+    # Construct API endpoint
+    api_endpoint = llm_api_url.strip().rstrip('/')
+    if not api_endpoint.endswith('/chat/completions'):
+        api_endpoint = f"{api_endpoint}/chat/completions"
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                api_endpoint,
+                headers={
+                    "Authorization": f"Bearer {llm_api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": llm_model,
+                    "messages": [
+                        {"role": "system", "content": "You are a professional trading coach."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": 1000
+                }
+            )
+            response.raise_for_status()
+            result = response.json()
+            return result["choices"][0]["message"]["content"]
+    except Exception as e:
+        return f"Failed to generate insight: {str(e)}"

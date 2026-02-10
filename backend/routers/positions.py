@@ -3,7 +3,8 @@ Trading Noobs Backend - Positions Router
 Handles Position CRUD and Batch operations
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
@@ -22,7 +23,8 @@ from models import (
 from schemas import (
     PositionCreate, PositionUpdate, PositionResponse, PositionListResponse,
     TradeBatchCreate, TradeBatchUpdate, TradeBatchResponse,
-    PositionStatusEnum, BatchTypeEnum, AssetMetadataUpdate
+    PositionStatusEnum, BatchTypeEnum, AssetMetadataUpdate,
+    ImportPreviewResponse, ImportConfirmRequest
 )
 from models import AssetCoreType, AssetMarket, AssetRiskLevel, AssetCurrency
 from services.market_data_service import MarketDataService
@@ -193,8 +195,21 @@ async def list_positions(
     # Batch fetch quotes for open positions (PARALLEL FETCH)
     open_positions = [p for p in positions if p.status == PositionStatus.OPEN]
     quote_results = {}
+    quote_results = {}
     if open_positions:
-        quote_tasks = [market_service.get_quote(p.symbol, p.exchange) for p in open_positions]
+        # Use metadata hints for more accurate quote
+        quote_tasks = []
+        for p in open_positions:
+            meta = p.asset_metadata
+            task = market_service.get_quote(
+                p.symbol, 
+                p.exchange,
+                core_type=meta.core_type.value if meta and meta.core_type else None,
+                market=meta.market.value if meta and meta.market else None,
+                instrument=meta.instrument if meta else None
+            )
+            quote_tasks.append(task)
+            
         quotes = await asyncio.gather(*quote_tasks, return_exceptions=True)
         for p, q in zip(open_positions, quotes):
             if not isinstance(q, Exception):
@@ -372,8 +387,11 @@ async def get_position(
         "planned_stop_loss": position.planned_stop_loss,
         "planned_take_profit": position.planned_take_profit,
         "checklist_responses": position.checklist_responses,
+        "checklist_responses": position.checklist_responses,
         "checklist_completed_at": position.checklist_completed_at,
-        "drift_analysis": drift_analysis
+        "drift_analysis": drift_analysis,
+        "max_price_during_hold": position.max_price_during_hold,
+        "min_price_during_hold": position.min_price_during_hold
     }
     
     return JSONResponse(content=jsonable_encoder(response))
@@ -692,6 +710,100 @@ async def check_open_position(
     return position
 
 
+    return position
+
+
+@router.post("/{position_id}/analyze", response_model=PositionResponse)
+async def analyze_position(
+    position_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Analyze position for MAE/MFE using historical data"""
+    position = db.query(Position).filter(
+        Position.id == position_id,
+        Position.user_id == current_user.id
+    ).first()
+    
+    if not position:
+        raise HTTPException(status_code=404, detail="Position not found")
+        
+    # Get history
+    market_service = MarketDataService(db)
+    
+    # Determine result time range
+    start_date = position.opened_at
+    # If open, use now
+    # If closed, use closed_at
+    end_date = position.closed_at or datetime.now()
+    
+    # Safety: ensure start < end
+    if start_date and end_date and start_date > end_date:
+        end_date = start_date + timedelta(minutes=1) # Minimal range
+        
+    if not start_date:
+        return position # Should not happen for valid position
+        
+    print(f"Analyzing position {position.id} ({position.symbol}) from {start_date} to {end_date}")
+    
+    history = await market_service.get_price_history(position.symbol, start_date, end_date)
+    
+    if history:
+        # Calculate Max/Min from HISTORY
+        highs = [item['high'] for item in history if item.get('high') is not None]
+        lows = [item['low'] for item in history if item.get('low') is not None]
+        
+        if highs:
+            position.max_price_during_hold = max(highs)
+        if lows:
+            position.min_price_during_hold = min(lows)
+            
+        db.commit()
+        db.refresh(position)
+    else:
+        print(f"No history found for {position.symbol}")
+        
+    # Construct Response (Similar to get_position)
+    drift_analysis = calculate_drift(position)
+    
+    response = {
+        "id": position.id,
+        "user_id": position.user_id,
+        "account_id": position.account_id,
+        "strategy_id": position.strategy_id,
+        "symbol": position.symbol,
+        "exchange": position.exchange,
+        "asset_type": position.asset_type,
+        "direction": position.direction.value,
+        "status": position.status.value,
+        "total_quantity": position.total_quantity,
+        "average_entry_price": position.average_entry_price,
+        "realized_pnl": position.realized_pnl,
+        "current_price": getattr(position, 'current_price', None),
+        "unrealized_pnl": getattr(position, 'unrealized_pnl', None),
+        "opened_at": position.opened_at,
+        "closed_at": position.closed_at,
+        "trade_review": position.trade_review,
+        "screenshots": position.screenshots or [],
+        "lessons": position.lessons or [],
+        "rating": position.rating,
+        "created_at": position.created_at,
+        "updated_at": position.updated_at,
+        "asset_metadata": position.asset_metadata,
+        "batches": position.batches,
+        "planned_entry_price": position.planned_entry_price,
+        "planned_stop_loss": position.planned_stop_loss,
+        "planned_take_profit": position.planned_take_profit,
+        "checklist_responses": position.checklist_responses,
+        "checklist_completed_at": position.checklist_completed_at,
+        "drift_analysis": drift_analysis,
+        "max_price_during_hold": position.max_price_during_hold,
+        "min_price_during_hold": position.min_price_during_hold
+    }
+    
+    return JSONResponse(content=jsonable_encoder(response))
+
+
 # ============== Export Endpoints ==============
 
 @router.get("/export/csv")
@@ -850,4 +962,75 @@ async def export_positions_csv(
             "Access-Control-Expose-Headers": "Content-Disposition"
         }
     )
+
+
+# ============== Import Endpoints ==============
+
+@router.post("/import/upload", response_model=ImportPreviewResponse)
+async def upload_import_file(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Upload and parse CSV/Excel file for import preview"""
+    from services.import_service import ImportService
+    service = ImportService(db)
+    
+    token, preview_rows = await service.parse_file(file)
+    
+    valid_count = sum(1 for r in preview_rows if r['is_valid'])
+    error_count = len(preview_rows) - valid_count
+    
+    return {
+        "total_rows": len(preview_rows),
+        "valid_rows": valid_count,
+        "error_rows": error_count,
+        "preview_rows": preview_rows,
+        "file_token": token
+    }
+
+@router.post("/import/confirm")
+async def confirm_import(
+    request: ImportConfirmRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Confirm and process imported data"""
+    from services.import_service import ImportService
+    service = ImportService(db)
+    
+    if not request.account_id:
+        raise HTTPException(status_code=400, detail="Target account is required")
+        
+    count = service.process_import(
+        request.file_token,
+        request.account_id,
+        current_user.id,
+        request.selected_indices
+    )
+    
+    return {"message": "Import successful", "imported_count": count}
+
+@router.get("/import/template")
+async def get_import_template():
+    """Download CSV template"""
+    header = ["Time (YYYY-MM-DD HH:MM)", "Symbol", "Direction", "Action", "Price", "Quantity", "Strategy", "Emotion", "Confidence", "Reason", "Commission"]
+    example_open = ["2023-01-01 10:00", "AAPL", "LONG", "OPEN", "150.00", "100", "Strategy A", "Neutral", "4", "Entry Signal", "2.0"]
+    example_close = ["2023-01-05 14:00", "AAPL", "LONG", "CLOSE", "155.00", "50", "Strategy A", "Happy", "5", "Target Hit", "2.0"]
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(header)
+    writer.writerow(example_open)
+    writer.writerow(example_close)
+    
+    output.seek(0)
+    
+    # Use StreamingResponse for CSV download
+    response = StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv"
+    )
+    response.headers["Content-Disposition"] = "attachment; filename=trade_import_template.csv"
+    return response
 

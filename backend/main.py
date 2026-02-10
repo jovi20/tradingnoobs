@@ -1,6 +1,6 @@
 """
 Trading Noobs Backend - Main Application Entry Point
-# Trigger Reload
+# Trigger Reload 3
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

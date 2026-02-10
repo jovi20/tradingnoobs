@@ -31,7 +31,8 @@ import {
     AssetRiskLevel,
     ALL_ASSET_CORE_TYPES,
     ALL_ASSET_MARKETS,
-    ALL_ASSET_RISK_LEVELS
+    ALL_ASSET_RISK_LEVELS,
+    getCurrencySymbol
 } from '@/lib/symbolUtils'
 import CustomSelect from '@/components/CustomSelect'
 import DateTimePicker from '@/components/DateTimePicker'
@@ -68,6 +69,15 @@ export default function PositionDetailPage() {
         sector: '',
         risk_level: 'MODERATE',
         instrument: 'Spot'
+    })
+
+    // Extremes Edit State
+    const [editingExtremes, setEditingExtremes] = useState(false)
+    const [isSavingExtremes, setIsSavingExtremes] = useState(false)
+    const [isAnalyzing, setIsAnalyzing] = useState(false)
+    const [extremesForm, setExtremesForm] = useState({
+        max_price: 0,
+        min_price: 0
     })
 
     useEffect(() => {
@@ -175,6 +185,37 @@ export default function PositionDetailPage() {
         }
     }
 
+    const handleAnalyze = async () => {
+        if (!token || !position) return
+        setIsAnalyzing(true)
+        try {
+            const updated = await positionsAPI.analyze(token, position.id)
+            setPosition(updated)
+        } catch (err: any) {
+            alert(err.message || '分析失败')
+        } finally {
+            setIsAnalyzing(false)
+        }
+    }
+
+    const handleUpdateExtremes = async () => {
+        if (!token || !position) return
+        setIsSavingExtremes(true)
+        try {
+            await positionsAPI.update(token, position.id, {
+                max_price_during_hold: extremesForm.max_price,
+                min_price_during_hold: extremesForm.min_price
+            })
+            const updated = await positionsAPI.get(token, position.id)
+            setPosition(updated)
+            setEditingExtremes(false)
+        } catch (err: any) {
+            alert(err.message || '更新失败')
+        } finally {
+            setIsSavingExtremes(false)
+        }
+    }
+
     if (isLoading) {
         return (
             <div className="flex items-center justify-center py-20">
@@ -263,10 +304,10 @@ export default function PositionDetailPage() {
                     <div className="p-4 lg:p-6">
                         <p className="text-xs text-slate-500 mb-1 uppercase tracking-wider font-semibold">均价 / 当前价</p>
                         <p className="text-xl font-bold">
-                            ${Number(position.average_entry_price || 0).toFixed(2)}
+                            {getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.average_entry_price || 0).toFixed(2)}
                             {position.current_price && (
                                 <span className="text-sm font-normal ml-2 text-slate-400">
-                                    → ${Number(position.current_price).toFixed(2)}
+                                    → {getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.current_price).toFixed(2)}
                                 </span>
                             )}
                         </p>
@@ -274,14 +315,14 @@ export default function PositionDetailPage() {
                     <div className="p-4 lg:p-6">
                         <p className="text-xs text-slate-500 mb-1 uppercase tracking-wider font-semibold">已实现盈亏</p>
                         <p className={`text-xl font-bold ${isPositive ? 'pnl-positive' : 'pnl-negative'}`}>
-                            {isPositive ? '+' : ''}${Number(position.realized_pnl).toFixed(2)}
+                            {isPositive ? '+' : ''}{getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.realized_pnl).toFixed(2)}
                         </p>
                     </div>
                     {position.status === 'OPEN' && (
                         <div className="p-4 lg:p-6 bg-slate-50/50 dark:bg-slate-800/30">
                             <p className="text-xs text-slate-500 mb-1 uppercase tracking-wider font-semibold">未实现盈亏</p>
                             <p className={`text-xl font-bold ${(position.unrealized_pnl || 0) >= 0 ? 'pnl-positive' : 'pnl-negative'}`}>
-                                {(position.unrealized_pnl || 0) >= 0 ? '+' : ''}${Number(position.unrealized_pnl || 0).toFixed(2)}
+                                {(position.unrealized_pnl || 0) >= 0 ? '+' : ''}{getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.unrealized_pnl || 0).toFixed(2)}
                             </p>
                         </div>
                     )}
@@ -342,6 +383,71 @@ export default function PositionDetailPage() {
                 </div>
             )}
 
+            {/* Price Extremes & MAE/MFE Card */}
+            <div className="card p-5 relative group">
+                <button
+                    onClick={() => {
+                        setExtremesForm({
+                            max_price: Number(position.max_price_during_hold || 0),
+                            min_price: Number(position.min_price_during_hold || 0)
+                        })
+                        setEditingExtremes(true)
+                    }}
+                    className="absolute top-4 right-14 p-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                    title="手动修改极值"
+                >
+                    <Edit3 className="w-4 h-4" />
+                </button>
+                <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                    <button
+                        onClick={handleAnalyze}
+                        disabled={isAnalyzing}
+                        className="p-2 rounded-lg bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400"
+                        title="自动分析 (从历史数据)"
+                    >
+                        {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
+                    </button>
+                </div>
+
+                <h2 className="text-sm font-bold text-slate-400 mb-4 uppercase tracking-wider flex items-center">
+                    <TrendingUp className="w-4 h-4 mr-2" />
+                    价格极值 (MAE/MFE)
+                </h2>
+
+                <div className="grid grid-cols-2 gap-6">
+                    <div>
+                        <p className="text-xs text-slate-500 mb-1">持仓期最高 (Max Price)</p>
+                        <p className="font-semibold text-lg flex items-center">
+                            {position.max_price_during_hold ? (
+                                <span>{getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.max_price_during_hold).toFixed(2)}</span>
+                            ) : (
+                                <span className="text-slate-300">-</span>
+                            )}
+                        </p>
+                        {position.average_entry_price && position.max_price_during_hold && (
+                            <p className={`text-xs mt-1 ${position.direction === 'LONG' ? 'text-emerald-500' : 'text-red-500'}`}>
+                                {position.direction === 'LONG' ? 'MFE' : 'MAE'}: {((Number(position.max_price_during_hold) - Number(position.average_entry_price)) / Number(position.average_entry_price) * 100).toFixed(2)}%
+                            </p>
+                        )}
+                    </div>
+                    <div>
+                        <p className="text-xs text-slate-500 mb-1">持仓期最低 (Min Price)</p>
+                        <p className="font-semibold text-lg flex items-center">
+                            {position.min_price_during_hold ? (
+                                <span>{getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.min_price_during_hold).toFixed(2)}</span>
+                            ) : (
+                                <span className="text-slate-300">-</span>
+                            )}
+                        </p>
+                        {position.average_entry_price && position.min_price_during_hold && (
+                            <p className={`text-xs mt-1 ${position.direction === 'LONG' ? 'text-red-500' : 'text-emerald-500'}`}>
+                                {position.direction === 'LONG' ? 'MAE' : 'MFE'}: {((Number(position.min_price_during_hold) - Number(position.average_entry_price)) / Number(position.average_entry_price) * 100).toFixed(2)}%
+                            </p>
+                        )}
+                    </div>
+                </div>
+            </div>
+
             {/* Phase 1: Plan Drift Analysis Card */}
             {position.drift_analysis?.has_planned_data && (
                 <div className="card p-5">
@@ -352,22 +458,22 @@ export default function PositionDetailPage() {
                         {/* Planned Entry */}
                         <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
                             <p className="text-xs text-slate-500 mb-1">计划入场价</p>
-                            <p className="font-semibold">${Number(position.planned_entry_price || 0).toFixed(2)}</p>
+                            <p className="font-semibold">{getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.planned_entry_price || 0).toFixed(2)}</p>
                         </div>
                         {/* Actual Entry */}
                         <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
                             <p className="text-xs text-slate-500 mb-1">实际入场价</p>
-                            <p className="font-semibold">${Number(position.average_entry_price || 0).toFixed(2)}</p>
+                            <p className="font-semibold">{getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.average_entry_price || 0).toFixed(2)}</p>
                         </div>
                         {/* Entry Drift */}
                         <div className={`p-3 rounded-lg ${position.drift_analysis.execution_quality === 'excellent' ? 'bg-emerald-50 dark:bg-emerald-900/20' :
-                                position.drift_analysis.execution_quality === 'good' ? 'bg-blue-50 dark:bg-blue-900/20' :
-                                    position.drift_analysis.execution_quality === 'fair' ? 'bg-amber-50 dark:bg-amber-900/20' :
-                                        'bg-red-50 dark:bg-red-900/20'
+                            position.drift_analysis.execution_quality === 'good' ? 'bg-blue-50 dark:bg-blue-900/20' :
+                                position.drift_analysis.execution_quality === 'fair' ? 'bg-amber-50 dark:bg-amber-900/20' :
+                                    'bg-red-50 dark:bg-red-900/20'
                             }`}>
                             <p className="text-xs text-slate-500 mb-1">入场偏移</p>
                             <p className={`font-semibold ${Math.abs(position.drift_analysis.entry_drift_pct || 0) <= 2 ? 'text-emerald-600' :
-                                    Math.abs(position.drift_analysis.entry_drift_pct || 0) <= 5 ? 'text-amber-600' : 'text-red-600'
+                                Math.abs(position.drift_analysis.entry_drift_pct || 0) <= 5 ? 'text-amber-600' : 'text-red-600'
                                 }`}>
                                 {(position.drift_analysis.entry_drift_pct || 0) > 0 ? '+' : ''}{position.drift_analysis.entry_drift_pct}%
                                 <span className="text-xs ml-1 text-slate-500">
@@ -380,9 +486,9 @@ export default function PositionDetailPage() {
                         <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
                             <p className="text-xs text-slate-500 mb-1">执行质量</p>
                             <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${position.drift_analysis.execution_quality === 'excellent' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
-                                    position.drift_analysis.execution_quality === 'good' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
-                                        position.drift_analysis.execution_quality === 'fair' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
-                                            'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                position.drift_analysis.execution_quality === 'good' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                                    position.drift_analysis.execution_quality === 'fair' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+                                        'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
                                 }`}>
                                 {position.drift_analysis.execution_quality === 'excellent' ? '优秀 ⭐' :
                                     position.drift_analysis.execution_quality === 'good' ? '良好' :
@@ -395,7 +501,7 @@ export default function PositionDetailPage() {
                         <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700 flex items-center gap-4">
                             <div>
                                 <span className="text-xs text-slate-500">计划止损: </span>
-                                <span className="font-medium">${Number(position.planned_stop_loss).toFixed(2)}</span>
+                                <span className="font-medium">{getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.planned_stop_loss).toFixed(2)}</span>
                             </div>
                             {position.drift_analysis.stop_loss_risk_pct && (
                                 <div>
@@ -466,7 +572,7 @@ export default function PositionDetailPage() {
                                         <p className="font-medium">
                                             {batch.type === 'ENTRY' ? '加仓' : '平仓'}
                                             <span className="ml-2 text-slate-500">
-                                                {Number(batch.quantity).toLocaleString()} @ ${Number(batch.price).toFixed(2)}
+                                                {Number(batch.quantity).toLocaleString()} @ {getCurrencySymbol(position.asset_metadata?.currency)}{Number(batch.price).toFixed(2)}
                                             </span>
                                         </p>
                                         <p className="text-sm text-slate-500">
@@ -478,7 +584,7 @@ export default function PositionDetailPage() {
                                     <div className="hidden md:block">
                                         {batch.type === 'EXIT' && batch.pnl !== null && (
                                             <p className={`font-bold ${Number(batch.pnl) >= 0 ? 'pnl-positive' : 'pnl-negative'}`}>
-                                                {Number(batch.pnl) >= 0 ? '+' : ''}${Number(batch.pnl).toFixed(2)}
+                                                {Number(batch.pnl) >= 0 ? '+' : ''}{getCurrencySymbol(position.asset_metadata?.currency)}{Number(batch.pnl).toFixed(2)}
                                             </p>
                                         )}
                                         {batch.confidence && (
@@ -717,6 +823,60 @@ export default function PositionDetailPage() {
                             >
                                 {isSavingMetadata && <Loader2 className="w-4 h-4 animate-spin" />}
                                 <span>保存属性</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Edit Extremes Modal */}
+            {editingExtremes && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+                    <div className="card w-full max-w-sm shadow-2xl animate-in zoom-in duration-200">
+                        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                            <h3 className="text-lg font-bold">编辑价格极值</h3>
+                            <button
+                                onClick={() => setEditingExtremes(false)}
+                                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                            >
+                                <Plus className="w-5 h-5 rotate-45" />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium mb-1">持仓期最高价</label>
+                                <input
+                                    type="number"
+                                    step="any"
+                                    value={extremesForm.max_price}
+                                    onChange={e => setExtremesForm({ ...extremesForm, max_price: parseFloat(e.target.value) })}
+                                    className="input"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">持仓期最低价</label>
+                                <input
+                                    type="number"
+                                    step="any"
+                                    value={extremesForm.min_price}
+                                    onChange={e => setExtremesForm({ ...extremesForm, min_price: parseFloat(e.target.value) })}
+                                    className="input"
+                                />
+                            </div>
+                        </div>
+                        <div className="p-6 border-t border-slate-100 dark:border-slate-800 flex justify-end space-x-3">
+                            <button
+                                onClick={() => setEditingExtremes(false)}
+                                className="btn btn-secondary"
+                            >
+                                取消
+                            </button>
+                            <button
+                                onClick={handleUpdateExtremes}
+                                disabled={isSavingExtremes}
+                                className="btn btn-primary flex items-center space-x-2"
+                            >
+                                {isSavingExtremes && <Loader2 className="w-4 h-4 animate-spin" />}
+                                <span>保存</span>
                             </button>
                         </div>
                     </div>

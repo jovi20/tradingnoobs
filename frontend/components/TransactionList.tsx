@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Transaction, accountsAPI } from '@/lib/api'
 import { Trash2, ArrowUpRight, ArrowDownLeft, ArrowRight } from 'lucide-react'
 import { format } from 'date-fns'
+import { getCurrencySymbol } from '@/lib/symbolUtils'
 
 interface TransactionListProps {
     token: string
@@ -55,10 +56,13 @@ export function TransactionList({ token, transactions, onDelete }: TransactionLi
     }
 
     const formatAmount = (amount: number, currency: string) => {
-        return new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: currency
-        }).format(amount)
+        const symbol = getCurrencySymbol(currency)
+        // Format number with commas
+        const value = Math.abs(amount).toLocaleString('en-US', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        })
+        return `${symbol}${value}`
     }
 
     if (transactions.length === 0) {
@@ -88,7 +92,7 @@ export function TransactionList({ token, transactions, onDelete }: TransactionLi
 
                     <div className="flex items-center gap-4">
                         <div className={`font-mono font-medium ${tx.amount >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                            {tx.amount > 0 ? '+' : ''}{formatAmount(tx.amount, tx.currency)}
+                            {tx.amount > 0 ? '+' : tx.amount < 0 ? '-' : ''}{formatAmount(tx.amount, tx.currency)}
                         </div>
                         <button
                             onClick={() => handleDelete(tx.id)}

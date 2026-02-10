@@ -26,6 +26,7 @@ import {
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { settingsAPI, accountsAPI, adminAPI, UserSettings, TradingAccount, TradingAccountCreate, SystemSetting, API_BASE } from '@/lib/api'
+import { getCurrencySymbol } from '@/lib/symbolUtils'
 
 interface LocalSettings extends Partial<UserSettings> {
     // Local state for system settings (only utilized if admin)
@@ -325,15 +326,24 @@ export default function SettingsPage() {
                                     </p>
                                 </div>
 
-                                <div className="mt-6 flex items-end justify-between">
+                                <div className="mt-6 grid grid-cols-3 gap-2 border-t border-slate-100 dark:border-slate-800 pt-4">
                                     <div>
-                                        <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-0.5">Cash Balance</p>
-                                        <p className="font-mono font-bold text-lg text-slate-900 dark:text-white">
-                                            {account.currency} {Number(account.cash_balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                        <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-0.5">NAV 净值</p>
+                                        <p className="font-mono font-bold text-sm text-slate-900 dark:text-white">
+                                            {getCurrencySymbol(account.currency)} {Number(account.total_equity ?? account.cash_balance ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                         </p>
                                     </div>
-                                    <div className="p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-400 group-hover:bg-indigo-500 group-hover:text-white transition-all">
-                                        <ChevronRight className="w-4 h-4" />
+                                    <div>
+                                        <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-0.5">Market Val</p>
+                                        <p className="font-mono font-bold text-sm text-slate-900 dark:text-white">
+                                            {getCurrencySymbol(account.currency)} {Number(account.market_value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-0.5">Cash</p>
+                                        <p className="font-mono font-bold text-sm text-slate-900 dark:text-white">
+                                            {getCurrencySymbol(account.currency)} {Number(account.cash_balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </p>
                                     </div>
                                 </div>
                             </Link>

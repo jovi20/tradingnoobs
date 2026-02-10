@@ -14,6 +14,7 @@ from services.auth_service import get_current_user
 from services.market_data_service import MarketDataService
 import asyncio
 from models import DailySnapshot
+from services.metrics_service import MetricsService
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
@@ -404,15 +405,21 @@ async def get_dashboard_stats(
         cat_total = sum(symbols.values())
         if cat_total < 1: continue
         
-        threshold = cat_total * 0.01
+        # Improve: Increase threshold to 2.5% to reduce noise
+        threshold = cat_total * 0.025
         others = 0.0
         
-        for sym, val in symbols.items():
+        # Sort symbols by value descending for better visualization
+        sorted_symbols = sorted(symbols.items(), key=lambda item: item[1], reverse=True)
+        
+        for sym, val in sorted_symbols:
             if val < 1: continue
-            if val < threshold and sym != "Cash":
-                others += val
-            else:
+            
+            # Keep massive positions or Cash separate
+            if (val >= threshold) or (sym == "Cash"):
                 flows_l3[(cat, sym)] = val
+            else:
+                others += val
                 
         if others > 0:
             flows_l3[(cat, "Others")] = others
@@ -475,6 +482,48 @@ async def get_dashboard_stats(
     total_unrealized = sum(s.get('unrealized_total', 0.0) for s in account_stats.values())
     combined_total_pnl = total_pnl + total_unrealized
 
+    # Calculate Risk Metrics (Sharpe, Sortino, Calmar, MaxDD)
+    sharpe_ratio = None
+    sortino_ratio = None
+    calmar_ratio = None
+    max_drawdown = None
+    
+    # Fetch full history of snapshots for metrics
+    # We need a decent history to calculate these, e.g. all time or last year
+    # Let's use all available history for "Account Stats"
+    all_snapshots = db.query(DailySnapshot).filter(
+        DailySnapshot.user_id == current_user.id
+    ).order_by(DailySnapshot.date).all()
+    
+    if len(all_snapshots) >= 2: # Minimal data requirement (lowered for visibility)
+        equity_curve = [float(s.total_equity) for s in all_snapshots]
+        
+        # Add current real-time equity as the latest data point
+        if total_portfolio_value > 0:
+             equity_curve.append(total_portfolio_value)
+             
+        daily_returns = MetricsService.calculate_daily_returns(equity_curve)
+        
+        # Sharpe (Annualized)
+        sharpe_ratio = MetricsService.calculate_sharpe_ratio(daily_returns)
+        
+        # Sortino (Annualized)
+        sortino_ratio = MetricsService.calculate_sortino_ratio(daily_returns)
+        
+        # Max Drawdown
+        max_drawdown = MetricsService.calculate_max_drawdown(equity_curve)
+        
+        # Calmar Ratio (Annualized Return / Max DD)
+        # Calculate simple annualized return first
+        if max_drawdown > 0 and len(equity_curve) > 1:
+            days = (date.today() - all_snapshots[0].date).days
+            if days > 0:
+                # CAGR
+                start_eq = float(all_snapshots[0].total_equity)
+                end_eq = total_portfolio_value
+                cagr = MetricsService.calculate_cagr(start_eq, end_eq, days)
+                calmar_ratio = cagr / max_drawdown
+
     return DashboardStats(
         total_assets=total_gross,
         total_pnl=combined_total_pnl,
@@ -490,7 +539,11 @@ async def get_dashboard_stats(
         account_allocation=account_allocation[:5],
         top_movers=top_movers,
         bottom_movers=bottom_movers,
-        portfolio_flow={"nodes": sankey_nodes, "links": sankey_links}
+        portfolio_flow={"nodes": sankey_nodes, "links": sankey_links},
+        sharpe_ratio=sharpe_ratio,
+        sortino_ratio=sortino_ratio,
+        calmar_ratio=calmar_ratio,
+        max_drawdown=max_drawdown
     )
 
 

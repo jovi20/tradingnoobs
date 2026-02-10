@@ -13,7 +13,8 @@ import {
     ArrowUpCircle,
     ArrowDownCircle,
     ArrowRight,
-    Filter
+    Filter,
+    Upload
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { positionsAPI, Position, TradeBatch, accountsAPI, TradingAccount } from '@/lib/api'
@@ -22,7 +23,8 @@ import CustomSelect from '@/components/CustomSelect'
 import {
     getMarketLabel, getRiskLevelInfo, getCoreTypeLabel,
     AssetMarket, AssetRiskLevel,
-    ALL_ASSET_CORE_TYPES, ALL_ASSET_MARKETS, ALL_ASSET_RISK_LEVELS
+    ALL_ASSET_CORE_TYPES, ALL_ASSET_MARKETS, ALL_ASSET_RISK_LEVELS,
+    getCurrencySymbol
 } from '@/lib/symbolUtils'
 import { usePositionsData } from '@/hooks/usePositionsData'
 
@@ -138,10 +140,16 @@ export default function PositionsPage() {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold">交易记录</h1>
-                <Link href="/positions/new" className="btn btn-primary flex items-center">
-                    <Plus className="w-4 h-4 mr-1" />
-                    新增交易
-                </Link>
+                <div className="flex gap-2">
+                    <Link href="/positions/import" className="btn btn-secondary flex items-center">
+                        <Upload className="w-4 h-4 mr-1" />
+                        批量导入
+                    </Link>
+                    <Link href="/positions/new" className="btn btn-primary flex items-center">
+                        <Plus className="w-4 h-4 mr-1" />
+                        新增交易
+                    </Link>
+                </div>
             </div>
 
             {/* Dimension Selector */}
@@ -317,13 +325,13 @@ export default function PositionsPage() {
                                     </div>
                                     <div className="text-center md:text-right flex-1 md:flex-none">
                                         <p className="text-xs text-slate-500">均价</p>
-                                        <p className="font-medium text-sm md:text-base">${Number(position.average_entry_price || 0).toFixed(2)}</p>
+                                        <p className="font-medium text-sm md:text-base">{getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.average_entry_price || 0).toFixed(2)}</p>
                                     </div>
                                     <div className="text-center md:text-right flex-1 md:flex-none">
                                         <p className="text-xs text-slate-500">{position.status === 'OPEN' ? '现价' : '出场'}</p>
                                         <p className="font-medium text-sm md:text-base">
                                             {position.current_price
-                                                ? `$${Number(position.current_price).toFixed(2)}`
+                                                ? `${getCurrencySymbol(position.asset_metadata?.currency)}${Number(position.current_price).toFixed(2)}`
                                                 : '-'}
                                         </p>
                                     </div>
@@ -337,7 +345,7 @@ export default function PositionsPage() {
                                                 ? <TrendingUp className="w-3 h-3 md:w-4 md:h-4" />
                                                 : <TrendingDown className="w-3 h-3 md:w-4 md:h-4" />
                                             }
-                                            ${Math.abs(position.status === 'OPEN' ? Number(position.unrealized_pnl || 0) : Number(position.realized_pnl)).toFixed(2)}
+                                            {getCurrencySymbol(position.asset_metadata?.currency)}{Math.abs(position.status === 'OPEN' ? Number(position.unrealized_pnl || 0) : Number(position.realized_pnl)).toFixed(2)}
                                         </p>
                                     </div>
                                     <div className="text-slate-400 pl-2">
@@ -396,7 +404,7 @@ export default function PositionsPage() {
                                                         </span>
                                                     </div>
                                                     <div className="flex items-center gap-4 text-sm">
-                                                        <span className="font-mono">${Number(batch.price).toFixed(2)}</span>
+                                                        <span className="font-mono">{getCurrencySymbol(position.asset_metadata?.currency)}{Number(batch.price).toFixed(2)}</span>
                                                         <span className="text-slate-500">x {(() => {
                                                             const bQty = Number(batch.quantity)
                                                             if (position.asset_type === 'CRYPTO' || position.asset_type === 'FOREX') {

@@ -20,6 +20,8 @@ import { accountsAPI, TradingAccount, TradingAccountCreate, Transaction } from '
 import { TransactionList } from '@/components/TransactionList'
 import { TransactionForm } from '@/components/TransactionForm'
 
+import { getCurrencySymbol } from '@/lib/symbolUtils'
+
 const ACCOUNT_TYPES = [
     { value: 'Spot', label: '现货 (Spot)' },
     { value: 'Margin', label: '保证金 (Margin)' },
@@ -186,7 +188,7 @@ export default function AccountDetailPage({ params }: { params: { id: string } }
                 {/* Main Content: Info & Transactions */}
                 <div className="lg:col-span-2 space-y-8">
                     {/* Account Stats Cards */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
                             <div className="flex justify-between items-start mb-4">
                                 <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400">
@@ -195,7 +197,18 @@ export default function AccountDetailPage({ params }: { params: { id: string } }
                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Available Cash</span>
                             </div>
                             <p className="text-2xl font-mono font-bold text-slate-900 dark:text-white">
-                                {account.currency} {Number(account.cash_balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                {getCurrencySymbol(account.currency)} {Number(account.cash_balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </p>
+                        </div>
+                        <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
+                            <div className="flex justify-between items-start mb-4">
+                                <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
+                                    <TrendingUp className="w-5 h-5" />
+                                </div>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Market Value</span>
+                            </div>
+                            <p className="text-2xl font-mono font-bold text-slate-900 dark:text-white">
+                                {getCurrencySymbol(account.currency)} {Number(account.market_value || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </p>
                         </div>
                         <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
@@ -206,7 +219,7 @@ export default function AccountDetailPage({ params }: { params: { id: string } }
                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Net Asset Value (NAV)</span>
                             </div>
                             <p className="text-2xl font-mono font-bold text-slate-900 dark:text-white">
-                                {account.currency} {Number(account.current_balance || account.cash_balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                {getCurrencySymbol(account.currency)} {Number(account.total_equity ?? account.cash_balance ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </p>
                         </div>
                     </div>

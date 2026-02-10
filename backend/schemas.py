@@ -316,6 +316,29 @@ class UserSettingsResponse(BaseModel):
         from_attributes = True
 
 
+# ============== Analysis Schemas ==============
+
+class AnalysisType(str, Enum):
+    HOLDING_PERIOD = "holding_period"
+    LOSING_STREAK = "losing_streak"
+    EMOTION_PNL = "emotion_pnl"
+    CHECKLIST_EFFECT = "checklist_effect"
+    STRATEGY_HEALTH = "strategy_health"
+
+
+class AnalysisRequest(BaseModel):
+    analysis_type: AnalysisType
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+
+
+class AnalysisResponse(BaseModel):
+    analysis_type: AnalysisType
+    raw_data: dict
+    ai_insights: Optional[str]
+    created_at: datetime
+
+
 # ============== Weekly Report Schemas ==============
 
 class WeeklyReportCreate(BaseModel):
@@ -379,6 +402,12 @@ class DashboardStats(BaseModel):
     top_movers: List[PositionMover] = []
     bottom_movers: List[PositionMover] = []
     portfolio_flow: Optional[PortfolioFlow] = None
+    
+    # Risk Metrics
+    sharpe_ratio: Optional[float] = None
+    sortino_ratio: Optional[float] = None
+    calmar_ratio: Optional[float] = None
+    max_drawdown: Optional[float] = None
 
 
 class AccountAllocation(BaseModel):
@@ -428,6 +457,8 @@ class TradingAccountResponse(BaseModel):
     initial_balance: Optional[Decimal]
     cash_balance: Optional[Decimal]
     current_balance: Optional[Decimal]
+    market_value: Optional[Decimal] = None
+    total_equity: Optional[Decimal] = None
     description: Optional[str]
     is_active: bool
     created_at: datetime
@@ -611,6 +642,10 @@ class PositionResponse(BaseModel):
     # Phase 1: Plan Drift Analysis (computed from planned vs actual)
     drift_analysis: Optional[dict] = None  # {"entry_drift_pct": 1.5, "has_drift": True, ...}
     
+    # Phase 2: MAE/MFE
+    max_price_during_hold: Optional[float] = None
+    min_price_during_hold: Optional[float] = None
+    
     class Config:
         from_attributes = True
 
@@ -637,4 +672,26 @@ class PositionListResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ============== Import Schemas ==============
+
+class ImportPreviewRow(BaseModel):
+    index: int
+    data: dict  # Raw data from file
+    is_valid: bool
+    errors: List[str] = []
+    parsed: Optional[dict] = None  # Parsed and normalized data
+
+class ImportPreviewResponse(BaseModel):
+    total_rows: int
+    valid_rows: int
+    error_rows: int
+    preview_rows: List[ImportPreviewRow]  # First N rows or all validation errors
+    file_token: str  # Temporary token to reference uploaded file cache
+
+class ImportConfirmRequest(BaseModel):
+    file_token: str
+    account_id: Optional[int] = None # Target account if not specified in file
+    selected_indices: Optional[List[int]] = None # If None, import all valid rows
 

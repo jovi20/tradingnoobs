@@ -10,7 +10,11 @@ interface PortfolioSankeyProps {
     isMobile: boolean;
 }
 
+import { useState } from 'react'
+
 export default function PortfolioSankey({ data, totalAssets, isMobile }: PortfolioSankeyProps) {
+    const [activeIndex, setActiveIndex] = useState<number | null>(null)
+
     if (!data || data.nodes.length === 0) return null
 
     return (
@@ -23,7 +27,7 @@ export default function PortfolioSankey({ data, totalAssets, isMobile }: Portfol
                 <ResponsiveContainer width="100%" height="100%">
                     <Sankey
                         data={data}
-                        nodePadding={50}
+                        nodePadding={10}
                         margin={{ left: 20, right: isMobile ? 20 : 120, top: 40, bottom: 20 }}
                         link={{ stroke: '#cbd5e1', strokeOpacity: 0.3 }}
                         node={(props: any) => {
@@ -77,49 +81,49 @@ export default function PortfolioSankey({ data, totalAssets, isMobile }: Portfol
                                 )
                             }
 
+                            const isActive = index === activeIndex;
+
                             return (
-                                <g>
+                                <g
+                                    onMouseEnter={() => setActiveIndex(index)}
+                                    onMouseLeave={() => setActiveIndex(null)}
+                                    style={{ cursor: 'pointer' }}
+                                >
                                     <rect x={x} y={y} width={width} height={height} fill={fill} fillOpacity="0.8" rx={2} />
                                     {!isMobile && (
                                         <>
                                             <text
                                                 x={x > containerWidth / 2 ? x - 6 : x + width + 6}
                                                 y={y + height / 2}
-                                                dy={-6}
+                                                dy={isActive ? -8 : 0} // Shift up if details shown
                                                 textAnchor={x > containerWidth / 2 ? 'end' : 'start'}
+                                                dominantBaseline="middle"
                                                 fill={fill}
                                                 fontSize="12"
                                                 fontWeight="600"
                                             >{name}</text>
-                                            {/* Percent Label */}
-                                            <text
-                                                x={x > containerWidth / 2 ? x - 6 : x + width + 6}
-                                                y={y + height / 2}
-                                                dy={10}
-                                                textAnchor={x > containerWidth / 2 ? 'end' : 'start'}
-                                                fill="#64748b"
-                                                fontSize="11"
-                                            >
-                                                {percent}
-                                            </text>
+
+                                            {/* Percent & Value Label - Only on Hover */}
+                                            {isActive && (
+                                                <text
+                                                    x={x > containerWidth / 2 ? x - 6 : x + width + 6}
+                                                    y={y + height / 2}
+                                                    dy={12}
+                                                    textAnchor={x > containerWidth / 2 ? 'end' : 'start'}
+                                                    dominantBaseline="middle"
+                                                    fill="#64748b"
+                                                    fontSize="11"
+                                                    fontWeight="500"
+                                                >
+                                                    {percent} (${Number(value).toLocaleString()})
+                                                </text>
+                                            )}
                                         </>
                                     )}
                                 </g>
                             );
                         }}
                     >
-                        <Tooltip
-                            isAnimationActive={false}
-                            content={({ payload }) => {
-                                if (!payload || !payload.length) return null;
-                                const data = payload[0];
-                                return (
-                                    <div className="bg-slate-800 text-white p-2 rounded shadow text-xs border border-slate-700">
-                                        {data.name || (data.payload && data.payload.name) || 'Flow'}: ${Number(data.value).toLocaleString()}
-                                    </div>
-                                )
-                            }}
-                        />
                     </Sankey>
                 </ResponsiveContainer>
             </div>

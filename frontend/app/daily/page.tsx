@@ -18,6 +18,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import { positionsAPI, marketAPI, journalAPI, Position, TradeBatch, MarketCalendar, MarketHoliday, JournalEntry } from '@/lib/api'
 import { useTrendColor } from '@/hooks/useTrendColor'
+import { getCurrencySymbol } from '@/lib/symbolUtils'
 
 const weekDays = ['日', '一', '二', '三', '四', '五', '六']
 
@@ -505,8 +506,8 @@ export default function DailyPage() {
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex items-center space-x-3">
                                                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${batch.type === 'ENTRY'
-                                                                ? 'bg-blue-100 dark:bg-blue-900/30'
-                                                                : (Number(batch.pnl) || 0) >= 0 ? trendColor.upBg : trendColor.downBg
+                                                            ? 'bg-blue-100 dark:bg-blue-900/30'
+                                                            : (Number(batch.pnl) || 0) >= 0 ? trendColor.upBg : trendColor.downBg
                                                             }`}>
                                                             {batch.type === 'ENTRY' ? (
                                                                 <TrendingUp className="w-4 h-4 text-blue-500" />
@@ -519,13 +520,13 @@ export default function DailyPage() {
                                                         <div>
                                                             <p className="font-medium">{position.symbol}</p>
                                                             <p className="text-xs text-slate-500">
-                                                                {batch.type === 'ENTRY' ? '建仓' : '平仓'} · {Number(batch.quantity).toFixed(2)} 股 @ ${Number(batch.price).toFixed(2)}
+                                                                {batch.type === 'ENTRY' ? '建仓' : '平仓'} · {Number(batch.quantity).toFixed(2)} 股 @ {getCurrencySymbol(position.asset_metadata?.currency)}{Number(batch.price).toFixed(2)}
                                                             </p>
                                                         </div>
                                                     </div>
                                                     {batch.type === 'EXIT' && (
                                                         <p className={`font-bold ${(Number(batch.pnl) || 0) >= 0 ? trendColor.upColor : trendColor.downColor}`}>
-                                                            {(Number(batch.pnl) || 0) >= 0 ? '+' : ''}${Number(batch.pnl || 0).toFixed(2)}
+                                                            {(Number(batch.pnl) || 0) >= 0 ? '+' : ''}{getCurrencySymbol(position.asset_metadata?.currency)}{Number(batch.pnl || 0).toFixed(2)}
                                                         </p>
                                                     )}
                                                 </div>

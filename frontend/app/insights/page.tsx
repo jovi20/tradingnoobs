@@ -13,8 +13,8 @@ import {
     Brain
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { insightsAPI, WeeklyReport, AISummary } from '@/lib/api'
 import ReactMarkdown from 'react-markdown'
+import AnalysisAssistant from '@/components/insights/AnalysisAssistant'
 
 export default function ReportsPage() {
     const { token } = useAuth()
@@ -170,6 +170,9 @@ export default function ReportsPage() {
                     {error}
                 </div>
             )}
+
+            {/* AI Analysis Assistant */}
+            <AnalysisAssistant />
 
             {/* Daily Summary Card */}
             <div className="card overflow-hidden">

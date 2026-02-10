@@ -26,6 +26,7 @@ export function useDashboardData(token: string | null, historyDays: number = 7) 
     })
 
     // 3. Fetch Open Positions
+    // 3. Fetch Open Positions
     const positionsQuery = useQuery({
         queryKey: ['dashboard', 'open_positions', token],
         queryFn: async () => {
@@ -35,16 +36,27 @@ export function useDashboardData(token: string | null, historyDays: number = 7) 
         enabled: !!token
     })
 
+    // 4. Fetch All Positions (for MAE/MFE Analysis)
+    const allPositionsQuery = useQuery({
+        queryKey: ['dashboard', 'all_positions', token],
+        queryFn: async () => {
+            if (!token) throw new Error('No token')
+            return await positionsAPI.list(token) // No status filter = all
+        },
+        enabled: !!token
+    })
+
     // Combined Loading state
-    const isLoading = statsQuery.isLoading || historyQuery.isLoading || positionsQuery.isLoading
-    const error = statsQuery.error || historyQuery.error || positionsQuery.error
+    const isLoading = statsQuery.isLoading || historyQuery.isLoading || positionsQuery.isLoading || allPositionsQuery.isLoading
+    const error = statsQuery.error || historyQuery.error || positionsQuery.error || allPositionsQuery.error
 
     // Manual Refresh
     const refresh = async () => {
         await Promise.all([
             statsQuery.refetch(),
             historyQuery.refetch(),
-            positionsQuery.refetch()
+            positionsQuery.refetch(),
+            allPositionsQuery.refetch()
         ])
     }
 
@@ -58,7 +70,8 @@ export function useDashboardData(token: string | null, historyDays: number = 7) 
             errors: {
                 stats: statsQuery.error,
                 history: historyQuery.error,
-                positions: positionsQuery.error
+                positions: positionsQuery.error,
+                allPositions: allPositionsQuery.error
             },
             isLoading
         })
@@ -68,6 +81,7 @@ export function useDashboardData(token: string | null, historyDays: number = 7) 
         stats: statsQuery.data,
         pnlHistory: historyQuery.data || [],
         openPositions: positionsQuery.data || [],
+        allPositions: allPositionsQuery.data || [],
         isLoading,
         error: error ? (error as Error).message : null,
         refresh,

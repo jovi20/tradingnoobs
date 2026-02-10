@@ -8,9 +8,10 @@ from datetime import date, timedelta
 
 from database import get_db
 from models import User, WeeklyReport, UserSettings, SystemSetting, AISummary
-from schemas import WeeklyReportCreate, WeeklyReportResponse, AISummaryResponse
+from schemas import WeeklyReportCreate, WeeklyReportResponse, AISummaryResponse, AnalysisRequest, AnalysisResponse
 from services.auth_service import get_current_user
-from services.llm_service import generate_weekly_report, generate_journal_summary
+from services.llm_service import generate_weekly_report, generate_journal_summary, get_analysis_insight
+from services.analytics_service import AnalyticsService
 
 router = APIRouter(prefix="/api/insights", tags=["Insights"])
 
@@ -232,3 +233,39 @@ async def generate_summary(
     db.refresh(summary)
     
     return summary
+
+
+# ============== Advanced Analytics Endpoints ==============
+
+@router.post("/analyze", response_model=AnalysisResponse)
+async def analyze_trading_data(
+    request: AnalysisRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Perform advanced AI analysis on trading data.
+    """
+    # 1. Calculate Statistics
+    analytics_service = AnalyticsService(db)
+    raw_data = analytics_service.analyze(
+        user_id=current_user.id,
+        analysis_type=request.analysis_type.value,
+        start_date=request.start_date,
+        end_date=request.end_date
+    )
+    
+    # 2. Generate AI Insights
+    ai_insights = await get_analysis_insight(
+        db=db,
+        analysis_type=request.analysis_type.value,
+        data=raw_data
+    )
+    
+    from datetime import datetime
+    return AnalysisResponse(
+        analysis_type=request.analysis_type,
+        raw_data=raw_data,
+        ai_insights=ai_insights,
+        created_at=datetime.now()
+    )
