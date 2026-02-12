@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { TrendingUp, TrendingDown } from 'lucide-react'
 import { useTrendColor } from '@/hooks/useTrendColor'
 import { Position } from '@/lib/api'
+import { getCurrencySymbol } from '@/lib/symbolUtils'
 
 interface PositionCardProps {
     position: Position
@@ -11,6 +12,7 @@ export default function PositionCard({ position }: PositionCardProps) {
     const trendColor = useTrendColor()
     const pnl = position.status === 'OPEN' ? (Number(position.unrealized_pnl) || 0) : (Number(position.realized_pnl) || 0)
     const isPositive = pnl >= 0
+    const cs = getCurrencySymbol(position.asset_metadata?.currency)
 
     return (
         <Link href={`/positions/${position.id}`}>
@@ -37,11 +39,11 @@ export default function PositionCard({ position }: PositionCardProps) {
                 <div className="grid grid-cols-2 gap-y-1 gap-x-2 text-xs">
                     <div>
                         <p className="text-slate-500 dark:text-slate-400">均价</p>
-                        <p className="font-medium">${Number(position.average_entry_price || 0).toFixed(2)}</p>
+                        <p className="font-medium">{cs}{Number(position.average_entry_price || 0).toFixed(2)}</p>
                     </div>
                     <div>
                         <p className="text-slate-500 dark:text-slate-400">现价</p>
-                        <p className="font-medium">{position.current_price ? `$${Number(position.current_price).toFixed(2)}` : '-'}</p>
+                        <p className="font-medium">{position.current_price ? `${cs}${Number(position.current_price).toFixed(2)}` : '-'}</p>
                     </div>
                     <div>
                         <p className="text-slate-500 dark:text-slate-400">数量</p>
@@ -50,7 +52,7 @@ export default function PositionCard({ position }: PositionCardProps) {
                     <div>
                         <p className="text-slate-500 dark:text-slate-400">盈亏</p>
                         <p className={`font-bold ${isPositive ? trendColor.upColor : trendColor.downColor}`}>
-                            {isPositive ? '+' : ''}${pnl.toFixed(2)}
+                            {isPositive ? '+' : ''}{cs}{pnl.toFixed(2)}
                         </p>
                     </div>
                 </div>

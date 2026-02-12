@@ -271,6 +271,7 @@ class UserSettings(Base):
     # Theme
     theme = Column(String(20), default="system")  # light/dark/system
     up_color = Column(String(20), default="GREEN") # GREEN or RED
+    display_currency = Column(String(10), default="USD")  # 显示币种: USD/HKD/CNY/EUR/GBP
     
     # Exchange API Keys (encrypted in production)
     ibkr_host = Column(String(255), nullable=True)
@@ -400,11 +401,7 @@ class Position(Base):
     asset_metadata = relationship("AssetMetadata")
     batches = relationship("TradeBatch", back_populates="position", order_by="TradeBatch.time")
     
-    @property
-    def unrealized_pnl(self):
-        """Calculate unrealized P&L for open positions"""
-        # This would need current_price from market data
-        return None  # To be computed with live price
+
 
 
 class TradeBatch(Base):
@@ -482,4 +479,21 @@ class Transaction(Base):
 
     # Relationships
     trading_account = relationship("TradingAccount", back_populates="transactions")
+
+
+class AIAnalysisResult(Base):
+    """AI 分析结果持久化"""
+    __tablename__ = "ai_analysis_results"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    
+    analysis_type = Column(String(50), nullable=False) # e.g. "daily_summary", "time_analysis"
+    ai_insights = Column(Text, nullable=True)          # Markdown content
+    raw_data = Column(JSON, nullable=True)             # Chart data etc.
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    user = relationship("User")
 

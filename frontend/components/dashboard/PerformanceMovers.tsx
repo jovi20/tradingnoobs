@@ -1,6 +1,7 @@
 import { TrendingUp, TrendingDown } from 'lucide-react'
 import { useTrendColor } from '@/hooks/useTrendColor'
 import { PositionMover } from '@/lib/api'
+import { getCurrencySymbol } from '@/lib/symbolUtils'
 
 interface PerformanceMoversProps {
     top: PositionMover[]
@@ -18,7 +19,7 @@ export default function PerformanceMovers({ top, bottom }: PerformanceMoversProp
                 </div>
                 <div>
                     <h4 className="font-medium text-sm">{item.symbol}</h4>
-                    <p className="text-xs text-slate-500">${item.current_price?.toFixed(2)}</p>
+                    <p className="text-xs text-slate-500">{getCurrencySymbol(item.currency)}{item.current_price?.toFixed(2)}</p>
                 </div>
             </div>
             <span className={`font-bold text-sm ${type === 'top' ? trendColor.upColor : trendColor.downColor}`}>

@@ -15,6 +15,7 @@ import {
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { useAuth } from '@/contexts/AuthContext'
 import { dashboardAPI, positionsAPI, Position, DashboardStats } from '@/lib/api'
+import { getCurrencySymbol } from '@/lib/symbolUtils'
 import MarketStatus from '@/components/MarketStatus'
 import PortfolioSankey from '@/components/PortfolioSankey'
 import { useTrendColor } from '@/hooks/useTrendColor'
@@ -30,7 +31,7 @@ import RiskMetricsCard from '@/components/dashboard/RiskMetricsCard'
 import { MaeMfeScatterPlot } from '@/components/dashboard/MaeMfeScatterPlot'
 
 export default function DashboardPage() {
-    const { token, user } = useAuth()
+    const { token, user, settings } = useAuth()
     const router = useRouter()
     console.log('DashboardPage Rendered', { token: !!token })
     const trendColor = useTrendColor()
@@ -87,6 +88,7 @@ export default function DashboardPage() {
 
     const totalPnl = stats.total_pnl
     const isPositive = totalPnl >= 0
+    const cs = getCurrencySymbol(settings?.display_currency)
 
     return (
         <div className="space-y-6 pb-20 md:pb-6">
@@ -139,7 +141,7 @@ export default function DashboardPage() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard
                     title="总盈亏"
-                    value={`${isPositive ? '+' : ''}$${totalPnl.toLocaleString()}`}
+                    value={`${isPositive ? '+' : ''}${cs}${totalPnl.toLocaleString()}`}
                     icon={Wallet}
                     trend={isPositive ? 'up' : 'down'}
                     color={isPositive ? trendColor.upColor : trendColor.downColor}
@@ -188,7 +190,7 @@ export default function DashboardPage() {
                                         {periodPnl >= 0 ? '+' : ''}{periodPnl.toFixed(2)}%
                                     </p>
                                     <p className={`text-sm font-medium ${periodValue >= 0 ? trendColor.upColor : trendColor.downColor} opacity-80`}>
-                                        ({periodValue >= 0 ? '+' : ''}${Math.abs(periodValue).toLocaleString()})
+                                        ({periodValue >= 0 ? '+' : ''}{cs}{Math.abs(periodValue).toLocaleString()})
                                     </p>
                                 </div>
                                 <p className="text-xs text-slate-500 mt-0.5">{selectedPeriod}阶段盈亏 (Relative Change)</p>
@@ -349,7 +351,7 @@ export default function DashboardPage() {
                                         </div>
                                     </div>
                                     <div className="text-right shrink-0">
-                                        <span className="block font-medium">${acc.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                                        <span className="block font-medium">{cs}{acc.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                                         <span className="text-xs text-slate-400">{acc.percent}%</span>
                                     </div>
                                 </div>

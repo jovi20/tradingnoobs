@@ -828,11 +828,12 @@ async def export_positions_csv(
     
     # Write header
     writer.writerow([
-        'Position ID', 'Symbol', 'Name', 'Asset Class', 'Market', 'Sector', 
+        'Position ID', 'Symbol', 'Name', 'Asset Class', 'Asset Type', 'Market', 'Sector', 
         'Exchange/Broker', 'Account', 'Account Type',
         'Direction', 'Status', 
         'Total Quantity', 'Avg Entry Price', 'Realized PnL',
         'Opened At', 'Closed At', 'Position Review', 'Lessons',
+        'Planned Entry Price', 'Planned Stop Loss',
         'Batch ID', 'Batch Type', 'Batch Price', 'Batch Quantity',
         'Batch Time', 'Batch PnL', 'Batch Reason', 'Batch Emotion', 'Batch Confidence'
     ])
@@ -897,6 +898,7 @@ async def export_positions_csv(
                         pos.symbol,
                         asset_name,
                         asset_core_type,
+                        get_attr(pos, 'asset_type'), # Granular Asset Type
                         asset_market,
                         asset_sector,
                         get_attr(pos, 'exchange'),
@@ -911,6 +913,8 @@ async def export_positions_csv(
                         fmt_date(pos.closed_at),
                         get_attr(pos, 'trade_review'),
                         lessons_str,
+                        fmt_float(pos.planned_entry_price),
+                        fmt_float(pos.planned_stop_loss),
                         batch.id,
                         get_enum_value(batch.type),
                         fmt_float(batch.price),
@@ -941,7 +945,10 @@ async def export_positions_csv(
                     fmt_date(pos.opened_at),
                     fmt_date(pos.closed_at),
                     get_attr(pos, 'trade_review'),
+                    get_attr(pos, 'trade_review'),
                     lessons_str,
+                    fmt_float(pos.planned_entry_price),
+                    fmt_float(pos.planned_stop_loss),
                     '', '', '', '', '', '', '', '', ''
                 ])
         except Exception as e:
@@ -1014,9 +1021,9 @@ async def confirm_import(
 @router.get("/import/template")
 async def get_import_template():
     """Download CSV template"""
-    header = ["Time (YYYY-MM-DD HH:MM)", "Symbol", "Direction", "Action", "Price", "Quantity", "Strategy", "Emotion", "Confidence", "Reason", "Commission"]
-    example_open = ["2023-01-01 10:00", "AAPL", "LONG", "OPEN", "150.00", "100", "Strategy A", "Neutral", "4", "Entry Signal", "2.0"]
-    example_close = ["2023-01-05 14:00", "AAPL", "LONG", "CLOSE", "155.00", "50", "Strategy A", "Happy", "5", "Target Hit", "2.0"]
+    header = ["Time (YYYY-MM-DD HH:MM)", "Symbol", "Direction", "Action", "Price", "Quantity", "Planned Entry", "Planned SL", "Asset Type", "Strategy", "Emotion", "Confidence", "Reason", "Commission"]
+    example_open = ["2023-01-01 10:00", "AAPL", "LONG", "OPEN", "150.00", "100", "148.50", "145.00", "Stock", "Strategy A", "Neutral", "4", "Entry Signal", "2.0"]
+    example_close = ["2023-01-05 14:00", "AAPL", "LONG", "CLOSE", "155.00", "50", "", "", "", "Strategy A", "Happy", "5", "Target Hit", "2.0"]
     
     output = io.StringIO()
     writer = csv.writer(output)

@@ -74,6 +74,7 @@ export interface UserSettings {
     user_id: number
     theme: string
     up_color?: 'GREEN' | 'RED'
+    display_currency?: 'USD' | 'HKD' | 'CNY' | 'EUR' | 'GBP'
     ibkr_host?: string
     ibkr_port?: number
     ibkr_client_id?: number
@@ -119,6 +120,7 @@ export interface PositionMover {
     id: number
     symbol: string
     asset_type?: string
+    currency?: string
     change_percent: number
     current_price: number
 }
@@ -229,7 +231,7 @@ export interface TradingAccountCreate {
     broker: string
     account_type?: string
     currency: string
-    initial_balance: number
+    initial_balance?: number
     cash_balance?: number
     current_balance?: number
     total_assets?: number
@@ -447,6 +449,10 @@ export const insightsAPI = {
             body: JSON.stringify(data)
         }, token)
     },
+
+    getLatestAnalysis: async (token: string, type: string): Promise<AnalysisResponse | null> => {
+        return fetchAPI(`/api/insights/analyze/latest/${type}`, {}, token)
+    }
 }
 
 // ============== Dashboard API ==============

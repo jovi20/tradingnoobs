@@ -1,30 +1,51 @@
 version: '3.8'
 
 services:
+  # --- Reverse Proxy ---
+  caddy:
+    image: caddy:2-alpine
+    container_name: tradingnoobs-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - tradingnoobs
+
+  # --- Application Backend ---
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: tradingnoobs-backend
     restart: unless-stopped
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000" # Only expose to standard internal network
     environment:
       - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-postgres}@db:5432/tradingnoobs
       - SECRET_KEY=${SECRET_KEY}
-      - CORS_ORIGINS=https://${DOMAIN:-localhost}
+      - CORS_ORIGINS=https://${DOMAIN:-localhost},http://${DOMAIN:-localhost}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_API_URL=${LLM_API_URL:-}
+      - LLM_MODEL=${LLM_MODEL:-}
     depends_on:
       - db
     networks:
       - tradingnoobs
-      - web-proxy
-
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
 
+  # --- Application Frontend ---
   frontend:
     build:
       context: ./frontend
@@ -33,19 +54,19 @@ services:
         - NEXT_PUBLIC_API_URL=https://${DOMAIN:-localhost}/api
     container_name: tradingnoobs-frontend
     restart: unless-stopped
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     depends_on:
       - backend
     networks:
       - tradingnoobs
-      - web-proxy
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
 
+  # --- Database ---
   db:
     image: postgres:16-alpine
     container_name: tradingnoobs-db
@@ -64,11 +85,32 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # --- Database Backup ---
+  db-backup:
+    image: prodrigestivill/postgres-backup-local
+    restart: unless-stopped
+    environment:
+      - POSTGRES_HOST=db
+      - POSTGRES_DB=tradingnoobs
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
+      - SCHEDULE=@daily # Daily backup
+      - BACKUP_KEEP_DAYS=7 # Keep 7 daily backups
+      - BACKUP_KEEP_WEEKS=4 # Keep 4 weekly backups
+      - BACKUP_KEEP_MONTHS=6 # Keep 6 monthly backups
+      - HEALTHCHECK_PORT=8080
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      - db
+    networks:
+      - tradingnoobs
+
 networks:
   tradingnoobs:
     driver: bridge
-  web-proxy:
-    external: true
 
 volumes:
   postgres_data:
+  caddy_data:
+  caddy_config:

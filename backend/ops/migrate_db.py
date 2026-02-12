@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import os
 from sqlalchemy import text, inspect
 from database import engine
@@ -232,6 +236,37 @@ def migrate():
                 conn.commit()
         
         print("Phase 1 migration complete.")
+
+        # === Phase 2: MAE/MFE Analysis ===
+        if inspector.has_table('positions'):
+            if not column_exists('positions', 'max_price_during_hold'):
+                print("Adding max_price_during_hold to positions...")
+                conn.execute(text("ALTER TABLE positions ADD COLUMN max_price_during_hold NUMERIC(20, 8)"))
+                conn.commit()
+            
+            if not column_exists('positions', 'min_price_during_hold'):
+                print("Adding min_price_during_hold to positions...")
+                conn.execute(text("ALTER TABLE positions ADD COLUMN min_price_during_hold NUMERIC(20, 8)"))
+                conn.commit()
+
+        # === Phase 3: Assets & Liabilities ===
+        if inspector.has_table('trading_accounts'):
+            if not column_exists('trading_accounts', 'total_assets'):
+                print("Adding total_assets to trading_accounts...")
+                conn.execute(text("ALTER TABLE trading_accounts ADD COLUMN total_assets NUMERIC(20, 2) DEFAULT 0"))
+                conn.commit()
+            
+            if not column_exists('trading_accounts', 'total_liabilities'):
+                print("Adding total_liabilities to trading_accounts...")
+                conn.execute(text("ALTER TABLE trading_accounts ADD COLUMN total_liabilities NUMERIC(20, 2) DEFAULT 0"))
+                conn.commit()
+
+        # === Display Currency Setting ===
+        if inspector.has_table('user_settings'):
+            if not column_exists('user_settings', 'display_currency'):
+                print("Adding display_currency to user_settings...")
+                conn.execute(text("ALTER TABLE user_settings ADD COLUMN display_currency VARCHAR(10) DEFAULT 'USD'"))
+                conn.commit()
 
     print("Migration completed.")
 

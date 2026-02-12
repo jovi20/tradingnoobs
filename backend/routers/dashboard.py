@@ -8,10 +8,11 @@ from typing import Optional
 from datetime import date, timedelta
 
 from database import get_db
-from models import Trade, TradeStatus, User, Position, PositionStatus, TradingAccount, TradeBatch, BatchType
+from models import Trade, TradeStatus, User, Position, PositionStatus, TradingAccount, TradeBatch, BatchType, UserSettings
 from schemas import DashboardStats, AssetAllocation, PositionMover, AccountAllocation, PortfolioFlow, SankeyNode, SankeyLink
 from services.auth_service import get_current_user
 from services.market_data_service import MarketDataService
+from services.exchange_rate_service import get_exchange_rate, get_rates_batch
 import asyncio
 from models import DailySnapshot
 from services.metrics_service import MetricsService
@@ -27,6 +28,10 @@ async def get_dashboard_stats(
     db: Session = Depends(get_db)
 ):
     """Get dashboard statistics"""
+    # === 读取用户显示币种设置 ===
+    user_settings = db.query(UserSettings).filter(UserSettings.user_id == current_user.id).first()
+    display_currency = (user_settings.display_currency if user_settings and user_settings.display_currency else 'USD').upper()
+
     # Use Position table instead of Trade table (Legacy)
     query = db.query(Position).filter(Position.user_id == current_user.id)
     
@@ -96,6 +101,13 @@ async def get_dashboard_stats(
         TradingAccount.is_active == True
     ).all()
 
+    # === 预获取所有需要的汇率 ===
+    all_currencies = set()
+    for acc in accounts:
+        all_currencies.add((acc.currency or 'USD').upper())
+    # 汇率表: { "USD": 1.0, "HKD": 0.128, ... } 到 display_currency
+    fx_rates = await get_rates_batch(list(all_currencies), display_currency)
+
     # 3. Calculate Total Realized PnL per Account (from ALL positions, open & closed)
     # We need this to adjust the "Cash" balance
     realized_pnl_query = db.query(
@@ -121,6 +133,17 @@ async def get_dashboard_stats(
     metadata_results = results[:num_pos]
     quotes_results = results[num_pos:]
     
+    # === 补充标的原生币种到汇率表 (metadata 获取后) ===
+    asset_currencies_needed = set()
+    for m in metadata_results:
+        if not isinstance(m, Exception) and m and m.currency:
+            c = m.currency.value.upper()
+            if c not in fx_rates:
+                asset_currencies_needed.add(c)
+    if asset_currencies_needed:
+        extra_rates = await get_rates_batch(list(asset_currencies_needed), display_currency)
+        fx_rates.update(extra_rates)
+    
     # Data Containers for multi-dimensional allocation
     core_type_map = {'CASH': 0.0}
     market_map = {'CASH': 0.0}
@@ -128,11 +151,13 @@ async def get_dashboard_stats(
     
     movers_list = []
     
-    # Account Stats: { acc_id: { initial, realized, unrealized, cost_basis, market_value, obj } }
+    # Account Stats: { acc_id: { initial, realized, unrealized, cost_basis, market_value, obj, fx_rate } }
     account_stats = {}
     for acc in accounts:
         # Use cash_balance if available, else fallback logic
         current_cash = float(acc.cash_balance or 0)
+        acc_currency = (acc.currency or 'USD').upper()
+        acc_fx_rate = fx_rates.get(acc_currency, 1.0)
         account_stats[acc.id] = {
             'initial': float(acc.initial_balance or 0),
             'cash_balance': current_cash,
@@ -140,7 +165,9 @@ async def get_dashboard_stats(
             'unrealized': 0.0,
             'cost_basis': 0.0,
             'market_value': 0.0,
-            'obj': acc
+            'obj': acc,
+            'fx_rate': acc_fx_rate,  # 该账户币种到显示币种的汇率
+            'currency': acc_currency
         }
     
     # Process Open Positions
@@ -155,7 +182,14 @@ async def get_dashboard_stats(
         market = metadata.market.value if (metadata and metadata.market) else "UNKNOWN"
         risk_level = metadata.risk_level.value if (metadata and metadata.risk_level) else "MODERATE"
         
-        # determine price
+        # 获取该标的的原始币种（从 metadata 或所属账户）
+        asset_currency = (metadata.currency.value if (metadata and metadata.currency) else None)
+        if not asset_currency and pos.account_id in account_stats:
+            asset_currency = account_stats[pos.account_id]['currency']
+        asset_currency = (asset_currency or 'USD').upper()
+        pos_fx_rate = fx_rates.get(asset_currency, 1.0)
+        
+        # determine price (原生币种价格)
         entry_price = float(pos.average_entry_price or 0)
         current_price = entry_price # fallback
         change_pct = 0.0
@@ -167,35 +201,40 @@ async def get_dashboard_stats(
                 if pos.direction == 'SHORT':
                     change_pct = -change_pct
         
-        # Calculate Position Metrics
+        # Calculate Position Metrics (原生币种)
         qty = float(pos.total_quantity)
-        market_value = qty * current_price
-        cost_basis = qty * entry_price
-        unrealized_pnl = market_value - cost_basis
+        market_value_native = qty * current_price
+        cost_basis_native = qty * entry_price
+        unrealized_pnl_native = market_value_native - cost_basis_native
         if pos.direction == 'SHORT':
-             unrealized_pnl = (entry_price - current_price) * qty
-             market_value = abs(market_value)
+             unrealized_pnl_native = (entry_price - current_price) * qty
+             market_value_native = abs(market_value_native)
 
-        # Update Allocations
-        core_type_map[core_type] = core_type_map.get(core_type, 0.0) + market_value
-        market_map[market] = market_map.get(market, 0.0) + market_value
-        risk_level_map[risk_level] = risk_level_map.get(risk_level, 0.0) + market_value
+        # 换算到显示币种用于图表汇总
+        market_value_display = market_value_native * pos_fx_rate
+        unrealized_pnl_display = unrealized_pnl_native * pos_fx_rate
+
+        # Update Allocations (使用换算后的值)
+        core_type_map[core_type] = core_type_map.get(core_type, 0.0) + market_value_display
+        market_map[market] = market_map.get(market, 0.0) + market_value_display
+        risk_level_map[risk_level] = risk_level_map.get(risk_level, 0.0) + market_value_display
         
-        # Update Movers
+        # Update Movers (保持原生币种价格，不受显示币种影响)
         movers_list.append(PositionMover(
             id=pos.id,
             symbol=pos.symbol,
             asset_type=core_type,
+            currency=asset_currency,  # 标的原生币种
             change_percent=round(change_pct, 2),
-            current_price=current_price
+            current_price=current_price  # 原生价格
         ))
         
-        # Accumulate to Account Stats
+        # Accumulate to Account Stats (换算后)
         if pos.account_id in account_stats:
             stats = account_stats[pos.account_id]
-            stats['unrealized'] += unrealized_pnl
-            stats['unrealized_total'] = stats.get('unrealized_total', 0.0) + unrealized_pnl
-            stats['market_value'] += market_value # Accumulate market value of holdings
+            stats['unrealized'] += unrealized_pnl_display
+            stats['unrealized_total'] = stats.get('unrealized_total', 0.0) + unrealized_pnl_display
+            stats['market_value'] += market_value_display # Accumulate market value of holdings (换算后)
 
     # Final Aggregation & List Building
     total_portfolio_value = 0.0
@@ -203,7 +242,10 @@ async def get_dashboard_stats(
     
     for acc_id, stats in account_stats.items():
         acc_obj = stats['obj']
-        nav = stats['market_value'] + stats['cash_balance'] # Market Value of Positions + Cash
+        acc_fx = stats['fx_rate']
+        # Cash 也需要换算到显示币种
+        cash_display = stats['cash_balance'] * acc_fx
+        nav = stats['market_value'] + cash_display  # 换算后的 Market Value + Cash
         
         total_portfolio_value += nav
         account_allocation.append(AccountAllocation(
@@ -213,9 +255,8 @@ async def get_dashboard_stats(
             percent=0.0 
         ))
 
-    # Calculate Cash component for Allocations
-    # Now we sum up explicit cash balances from accounts
-    global_cash = sum(s['cash_balance'] for s in account_stats.values())
+    # Calculate Cash component for Allocations (换算后)
+    global_cash = sum(s['cash_balance'] * s['fx_rate'] for s in account_stats.values())
     
     core_type_map['CASH'] = global_cash
     market_map['CASH'] = global_cash
@@ -305,27 +346,31 @@ async def get_dashboard_stats(
                          else float(pos.average_entry_price or 0))
                 mkt_val = float(pos.total_quantity) * price
                 
+                # 获取该标的币种的汇率用于 Sankey 换算
                 metadata = metadata_results[i]
                 if isinstance(metadata, Exception): metadata = None
                 asset_type = metadata.core_type.value if (metadata and metadata.core_type) else "EQUITY"
-                asset_cat_name = f"{asset_type}" 
+                asset_cat_name = f"{asset_type}"
+                asset_cur = (metadata.currency.value if (metadata and metadata.currency) else stats['currency'])
+                pos_fx = fx_rates.get(asset_cur, 1.0)
+                mkt_val_display = mkt_val * pos_fx  # 换算到显示币种
                 
                 if pos.direction == 'LONG':
-                    val = mkt_val
+                    val = mkt_val_display
                     acc_longs += val
                     if asset_cat_name not in cat_holdings: cat_holdings[asset_cat_name] = {}
                     sym_name = f"{pos.symbol} (Long)"
                     cat_holdings[asset_cat_name][sym_name] = cat_holdings[asset_cat_name].get(sym_name, 0.0) + val
                 else:
-                    val = abs(mkt_val)
+                    val = abs(mkt_val_display)
                     acc_shorts += val
                     if asset_cat_name not in cat_holdings: cat_holdings[asset_cat_name] = {}
                     sym_name = f"{pos.symbol} (Short)"
                     cat_holdings[asset_cat_name][sym_name] = cat_holdings[asset_cat_name].get(sym_name, 0.0) + val
 
-        # Cash & Margin
-        # Now using explicit cash_balance
-        derived_cash = stats['cash_balance']
+        # Cash & Margin (换算到显示币种)
+        acc_fx = stats['fx_rate']
+        derived_cash = stats['cash_balance'] * acc_fx
         
         acc_cash_asset = 0.0
         acc_margin_liab = 0.0
@@ -478,9 +523,14 @@ async def get_dashboard_stats(
         print(f"Snapshot recording failed: {e}")
         # Don't block main response
 
-    # Calculate Total Portfolio PnL (Realized + Unrealized)
+    # Calculate Total Portfolio PnL (Realized + Unrealized) — 换算到显示币种
     total_unrealized = sum(s.get('unrealized_total', 0.0) for s in account_stats.values())
-    combined_total_pnl = total_pnl + total_unrealized
+    # realized PnL 也需根据各账户币种换算
+    total_realized_display = sum(
+        realized_pnl_map.get(aid, 0.0) * stats['fx_rate']
+        for aid, stats in account_stats.items()
+    )
+    combined_total_pnl = total_realized_display + total_unrealized
 
     # Calculate Risk Metrics (Sharpe, Sortino, Calmar, MaxDD)
     sharpe_ratio = None
@@ -567,13 +617,22 @@ async def get_pnl_history(
     ).order_by(DailySnapshot.date).all()
     
     # 3. Fetch Total Principal (Initial Balance) to calc PnL %
-    # Note: If user deposits more, we should optimally use Time-Weighted Return
-    # But for now, Simple Return on Current Principal is acceptable or Net Transfers adjusted
+    # 注意: initial_balance 需要按账户币种换算到 display_currency
+    user_settings = db.query(UserSettings).filter(UserSettings.user_id == current_user.id).first()
+    display_currency = (user_settings.display_currency if user_settings and user_settings.display_currency else 'USD').upper()
+    
     accounts = db.query(TradingAccount).filter(
         TradingAccount.user_id == current_user.id,
         TradingAccount.is_active == True
     ).all()
-    current_principal = sum(float(acc.initial_balance or 0) for acc in accounts)
+    
+    # 各账户初始资金按各自币种换算到 display_currency 后求和
+    acc_currencies = list(set((acc.currency or 'USD').upper() for acc in accounts))
+    fx_rates = await get_rates_batch(acc_currencies, display_currency)
+    current_principal = sum(
+        float(acc.initial_balance or 0) * fx_rates.get((acc.currency or 'USD').upper(), 1.0)
+        for acc in accounts
+    )
     
     # 4. Build Series
     result = []

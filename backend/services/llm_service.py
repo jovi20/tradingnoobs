@@ -3,6 +3,7 @@ Trading Noobs Backend - LLM Service for Weekly Reports
 """
 import httpx
 import json
+import os
 from typing import Optional, List, Dict, Any
 from datetime import date, timedelta
 from sqlalchemy.orm import Session
@@ -92,9 +93,9 @@ async def classify_asset_rich(db: Session, symbol: str, name: Optional[str] = No
     llm_api_key_setting = db.query(SystemSetting).filter(SystemSetting.key == 'llm_api_key').first()
     llm_model_setting = db.query(SystemSetting).filter(SystemSetting.key == 'llm_model').first()
     
-    llm_api_url = llm_api_url_setting.value if llm_api_url_setting else None
-    llm_api_key = llm_api_key_setting.value if llm_api_key_setting else None
-    llm_model = llm_model_setting.value if llm_model_setting else "gpt-4"
+    llm_api_url = llm_api_url_setting.value if llm_api_url_setting else os.getenv("LLM_API_URL")
+    llm_api_key = llm_api_key_setting.value if llm_api_key_setting else os.getenv("LLM_API_KEY")
+    llm_model = llm_model_setting.value if llm_model_setting else (os.getenv("LLM_MODEL") or "gpt-4")
 
     if not llm_api_url or not llm_api_key:
         return None
@@ -152,9 +153,9 @@ async def classify_asset(db: Session, symbol: str, exchange: Optional[str] = Non
     llm_api_key_setting = db.query(SystemSetting).filter(SystemSetting.key == 'llm_api_key').first()
     llm_model_setting = db.query(SystemSetting).filter(SystemSetting.key == 'llm_model').first()
     
-    llm_api_url = llm_api_url_setting.value if llm_api_url_setting else None
-    llm_api_key = llm_api_key_setting.value if llm_api_key_setting else None
-    llm_model = llm_model_setting.value if llm_model_setting else "gpt-4"
+    llm_api_url = llm_api_url_setting.value if llm_api_url_setting else os.getenv("LLM_API_URL")
+    llm_api_key = llm_api_key_setting.value if llm_api_key_setting else os.getenv("LLM_API_KEY")
+    llm_model = llm_model_setting.value if llm_model_setting else (os.getenv("LLM_MODEL") or "gpt-4")
 
     if not llm_api_url or not llm_api_key:
         return None
@@ -251,9 +252,9 @@ async def generate_weekly_report(
     llm_api_key_setting = db.query(SystemSetting).filter(SystemSetting.key == 'llm_api_key').first()
     llm_model_setting = db.query(SystemSetting).filter(SystemSetting.key == 'llm_model').first()
     
-    llm_api_url = llm_api_url_setting.value if llm_api_url_setting else None
-    llm_api_key = llm_api_key_setting.value if llm_api_key_setting else None
-    llm_model = llm_model_setting.value if llm_model_setting else "gpt-4"
+    llm_api_url = llm_api_url_setting.value if llm_api_url_setting else os.getenv("LLM_API_URL")
+    llm_api_key = llm_api_key_setting.value if llm_api_key_setting else os.getenv("LLM_API_KEY")
+    llm_model = llm_model_setting.value if llm_model_setting else (os.getenv("LLM_MODEL") or "gpt-4")
 
     if not llm_api_url or not llm_api_key:
         return None
@@ -366,9 +367,9 @@ async def generate_journal_summary(
     llm_api_key_setting = db.query(SystemSetting).filter(SystemSetting.key == 'llm_api_key').first()
     llm_model_setting = db.query(SystemSetting).filter(SystemSetting.key == 'llm_model').first()
     
-    llm_api_url = llm_api_url_setting.value if llm_api_url_setting else None
-    llm_api_key = llm_api_key_setting.value if llm_api_key_setting else None
-    llm_model = llm_model_setting.value if llm_model_setting else "gpt-4"
+    llm_api_url = llm_api_url_setting.value if llm_api_url_setting else os.getenv("LLM_API_URL")
+    llm_api_key = llm_api_key_setting.value if llm_api_key_setting else os.getenv("LLM_API_KEY")
+    llm_model = llm_model_setting.value if llm_model_setting else (os.getenv("LLM_MODEL") or "gpt-4")
 
     if not llm_api_url or not llm_api_key:
         raise Exception("LLM API 未配置，请联系管理员")
@@ -471,9 +472,9 @@ async def get_analysis_insight(
     llm_api_key_setting = db.query(SystemSetting).filter(SystemSetting.key == 'llm_api_key').first()
     llm_model_setting = db.query(SystemSetting).filter(SystemSetting.key == 'llm_model').first()
     
-    llm_api_url = llm_api_url_setting.value if llm_api_url_setting else None
-    llm_api_key = llm_api_key_setting.value if llm_api_key_setting else None
-    llm_model = llm_model_setting.value if llm_model_setting else "gpt-4"
+    llm_api_url = llm_api_url_setting.value if llm_api_url_setting else os.getenv("LLM_API_URL")
+    llm_api_key = llm_api_key_setting.value if llm_api_key_setting else os.getenv("LLM_API_KEY")
+    llm_model = llm_model_setting.value if llm_model_setting else (os.getenv("LLM_MODEL") or "gpt-4")
 
     if not llm_api_url or not llm_api_key:
         return "LLM not configured."

@@ -288,6 +288,7 @@ class AISummaryResponse(BaseModel):
 class UserSettingsUpdate(BaseModel):
     theme: Optional[str] = Field(None, pattern="^(light|dark|system)$")
     up_color: Optional[str] = Field(None, pattern="^(GREEN|RED)$")
+    display_currency: Optional[str] = Field(None, pattern="^(USD|HKD|CNY|EUR|GBP)$")
     ibkr_host: Optional[str] = None
     ibkr_port: Optional[int] = None
     ibkr_client_id: Optional[int] = None
@@ -304,6 +305,7 @@ class UserSettingsResponse(BaseModel):
     user_id: int
     theme: str
     up_color: str = "GREEN"
+    display_currency: str = "USD"
     ibkr_host: Optional[str]
     ibkr_port: Optional[int]
     ibkr_client_id: Optional[int]
@@ -371,6 +373,7 @@ class PositionMover(BaseModel):
     id: int
     symbol: str
     asset_type: Optional[str] = None
+    currency: Optional[str] = None  # 标的原生币种
     change_percent: float
     current_price: float
 

@@ -23,7 +23,7 @@ import { TransactionForm } from '@/components/TransactionForm'
 import { getCurrencySymbol } from '@/lib/symbolUtils'
 
 const ACCOUNT_TYPES = [
-    { value: 'Spot', label: '现货 (Spot)' },
+    { value: 'Spot', label: '现金 (Spot)' },
     { value: 'Margin', label: '保证金 (Margin)' },
     { value: 'Unified', label: '统一账户 (Unified)' },
 ]

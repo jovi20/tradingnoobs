@@ -54,7 +54,11 @@ class ImportService:
                 'cost': 'price', 'avg_price': 'price',
                 'amount': 'quantity', 'qty': 'quantity',
                 'comm': 'commission', 'fee': 'commission',
-                'review': 'reason', 'note': 'reason'
+                'comm': 'commission', 'fee': 'commission',
+                'review': 'reason', 'note': 'reason',
+                'plan entry': 'planned_entry_price', 'planned entry': 'planned_entry_price',
+                'plan sl': 'planned_stop_loss', 'planned sl': 'planned_stop_loss', 'sl': 'planned_stop_loss',
+                'asset type': 'asset_type', 'type': 'asset_type'
             }
             df.rename(columns=column_map, inplace=True)
             missing = required_cols - set(df.columns)
@@ -143,6 +147,24 @@ class ImportService:
         # New Fields for Enhanced Import
         parsed['strategy'] = str(row.get('strategy', '')).strip() if pd.notna(row.get('strategy')) else None
         parsed['emotion'] = str(row.get('emotion', '')).strip() if pd.notna(row.get('emotion')) else None
+        parsed['asset_type'] = str(row.get('asset_type', '')).strip() if pd.notna(row.get('asset_type')) else None
+        
+        # Planned Prices
+        try:
+             if pd.notna(row.get('planned_entry_price')):
+                 parsed['planned_entry_price'] = float(row['planned_entry_price'])
+             else:
+                 parsed['planned_entry_price'] = None
+        except:
+             parsed['planned_entry_price'] = None
+
+        try:
+             if pd.notna(row.get('planned_stop_loss')):
+                 parsed['planned_stop_loss'] = float(row['planned_stop_loss'])
+             else:
+                 parsed['planned_stop_loss'] = None
+        except:
+             parsed['planned_stop_loss'] = None
         
         # Confidence (1-5)
         if pd.notna(row.get('confidence')):
@@ -242,7 +264,7 @@ class ImportService:
                     account_id=account_id,
                     symbol=symbol,
                     exchange="Imported", # Default
-                    asset_type="EQUITY", # Default, can be refined later
+                    asset_type=data.get('asset_type') or "EQUITY", # Use imported type or default
                     direction=direction,
                     strategy_id=data.get('strategy_id'), # Link Strategy
                     status="OPEN",
@@ -250,7 +272,9 @@ class ImportService:
                     average_entry_price=0,
                     opened_at=data['entry_time'],
                     entry_emotion=data.get('emotion'), # Store initial emotion
-                    entry_confidence=data.get('confidence') # Store initial confidence
+                    entry_confidence=data.get('confidence'), # Store initial confidence
+                    planned_entry_price=data.get('planned_entry_price'),
+                    planned_stop_loss=data.get('planned_stop_loss')
                 )
                 self.db.add(position)
                 self.db.flush()

@@ -74,48 +74,50 @@ tradingnoobs/
 
 ### 2.1 环境准备
 1.  **安装 Docker & Docker Compose**.
-2.  **创建外部网络** (用于容器间通信):
-    ```bash
-    sudo docker network create web-proxy
-    ```
-3.  **设置 Swap** (建议 1G 内存 VPS 设置 2G Swap):
+2.  **设置 Swap** (建议 1G 内存 VPS 设置 2G Swap):
     ```bash
     sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
     sudo mkswap /swapfile && sudo swapon /swapfile
     ```
 
 ### 2.2 应用部署
-在项目根目录下：
+本项目提供 **All-in-One** 的 `docker-compose.yml`，包含前端、后端、数据库及 Caddy 网关。
+
 1.  **配置生产环境变量**:
     ```bash
+    cp .env.example .env
     nano .env
-    # 设置 DOMAIN, SECRET_KEY, DB_PASSWORD
+    
+    # --- 核心配置 (必须修改) ---
+    # DOMAIN: 部署的域名或 IP (不带协议头)，例如: 1.2.3.4 或 my-trading-app.com
+    DOMAIN=localhost
+    
+    # SECRET_KEY: 后端加密密钥，生成命令: openssl rand -hex 32
+    SECRET_KEY=change_this_to_a_secure_random_string
+    
+    # DB_PASSWORD: 数据库密码，请务必修改
+    DB_PASSWORD=secure_db_password
+    
+    # --- LLM 配置 (可选) ---
+    # 若配置了以下变量，后端将自动启用 AI 功能
+    LLM_API_KEY=sk-proj-...
+    LLM_API_URL=https://api.openai.com/v1  # 默认为官方 API，可改为中转地址
+    LLM_MODEL=gpt-4                        # 默认为 gpt-4
     ```
 2.  **启动服务**:
     ```bash
     sudo docker compose up -d --build
     ```
 
-### 2.3 网关配置 (Caddy)
-建议使用独立的 Caddy 容器作为反向代理网关。
-
-**Caddyfile 示例**:
-```caddy
-{$DOMAIN} {
-    handle {
-        reverse_proxy tradingnoobs-frontend:3000
-    }
-    handle /api/* {
-        reverse_proxy tradingnoobs-backend:8000
-    }
-    encode gzip
-}
-```
+### 2.3 网关配置
+`docker-compose.yml` 已集成 Caddy 服务，自动读取项目根目录下的 `Caddyfile`。
+-   **SSL**: Caddy 会自动为配置的域名申请 HTTPS 证书。
+-   **端口**: 仅暴露 80 和 443 端口，后端接口及前端服务均通过 Caddy 代理，不直接对外暴露。
 
 ### 2.4 数据库迁移
 当代码更新涉及数据库变更时执行：
 ```bash
-sudo docker exec -it tradingnoobs-backend python migrate_db.py
+sudo docker exec -it tradingnoobs-backend python ops/migrate_db.py
 ```
 
 ---
@@ -137,13 +139,52 @@ chmod +x backup_db.sh
 备份文件将保存在 `./backups` 目录。
 
 ### 3.3 用户管理
--   **提升管理员**:
+使用内置脚本进行管理（需进入后端容器）：
+
+1.  **列出用户**:
     ```bash
-    sudo docker exec -it tradingnoobs-backend python manage_users.py promote-admin user@example.com
+    sudo docker exec -it tradingnoobs-backend python ops/manage_users.py list-users
     ```
--   **重置密码**:
+
+2.  **创建用户/管理员**:
     ```bash
-    sudo docker exec -it tradingnoobs-backend python manage_users.py reset-password user@example.com new_password
+    # 创建普通用户
+    sudo docker exec -it tradingnoobs-backend python ops/manage_users.py create-user new@example.com password123
+    # 创建管理员
+    sudo docker exec -it tradingnoobs-backend python ops/manage_users.py create-user admin@example.com admin123 admin
+    ```
+
+3.  **重置密码**:
+    ```bash
+    sudo docker exec -it tradingnoobs-backend python ops/manage_users.py reset-password user@example.com new_password
+    ```
+
+4.  **封禁/解封用户**:
+    ```bash
+    sudo docker exec -it tradingnoobs-backend python ops/manage_users.py toggle-active user@example.com
+    ```
+
+### 3.4 定时任务 (Scheduled Tasks)
+
+#### 3.4.1 自动数据库备份
+`docker-compose.yml` 已内置 `db-backup` 服务，无需额外配置：
+-   **频率**: 默认每日备份 (`SCHEDULE=@daily`)。
+-   **保留策略**: 保留最近 7 天、4 周、6 个月的备份。
+-   **位置**: `./backups` 目录。
+-   **自定义**: 修改 `docker-compose.yml` 中的环境变量调整策略。
+
+#### 3.4.2 Python 库定时更新
+若需定期更新依赖库（如 `akshare` 获取最新接口），请在宿主机设置 Crontab。
+
+1.  **赋予脚本执行权限**:
+    ```bash
+    chmod +x update_libs.sh
+    ```
+2.  **设置 Crontab (例如每周一凌晨 3 点更新)**:
+    ```bash
+    crontab -e
+    # 添加如下行:
+    0 3 * * 1 /path/to/tradingnoobs/update_libs.sh >> /var/log/tradingnoobs_update.log 2>&1
     ```
 
 ---
@@ -420,4 +461,4 @@ OOM 最可能出现的场景
 
 ---
 
-> 文档最后更新时间: 2026-02-05
+> 文档最后更新时间: 2026-02-12

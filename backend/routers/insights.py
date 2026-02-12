@@ -7,7 +7,7 @@ from typing import List, Optional
 from datetime import date, timedelta
 
 from database import get_db
-from models import User, WeeklyReport, UserSettings, SystemSetting, AISummary
+from models import User, WeeklyReport, UserSettings, SystemSetting, AISummary, AIAnalysisResult
 from schemas import WeeklyReportCreate, WeeklyReportResponse, AISummaryResponse, AnalysisRequest, AnalysisResponse
 from services.auth_service import get_current_user
 from services.llm_service import generate_weekly_report, generate_journal_summary, get_analysis_insight
@@ -263,9 +263,44 @@ async def analyze_trading_data(
     )
     
     from datetime import datetime
+    
+    # 3. Persist Analysis Result
+    ai_result = AIAnalysisResult(
+        user_id=current_user.id,
+        analysis_type=request.analysis_type.value,
+        raw_data=raw_data,
+        ai_insights=ai_insights
+    )
+    db.add(ai_result)
+    db.commit()
+    db.refresh(ai_result)
+
     return AnalysisResponse(
         analysis_type=request.analysis_type,
         raw_data=raw_data,
         ai_insights=ai_insights,
-        created_at=datetime.now()
+        created_at=ai_result.created_at
+    )
+
+
+@router.get("/analyze/latest/{analysis_type}", response_model=Optional[AnalysisResponse])
+async def get_latest_analysis(
+    analysis_type: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get the latest analysis result for a specific type"""
+    result = db.query(AIAnalysisResult).filter(
+        AIAnalysisResult.user_id == current_user.id,
+        AIAnalysisResult.analysis_type == analysis_type
+    ).order_by(AIAnalysisResult.created_at.desc()).first()
+    
+    if not result:
+        return None
+        
+    return AnalysisResponse(
+        analysis_type=result.analysis_type,
+        raw_data=result.raw_data,
+        ai_insights=result.ai_insights,
+        created_at=result.created_at
     )

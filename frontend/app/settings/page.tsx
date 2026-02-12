@@ -43,6 +43,14 @@ const ACCOUNT_TYPES = [
     { value: 'Unified', label: '统一账户 (Unified)' },
 ]
 
+const CURRENCY_OPTIONS = [
+    { value: 'USD', label: 'USD - 美元' },
+    { value: 'HKD', label: 'HKD - 港币' },
+    { value: 'CNY', label: 'CNY - 人民币' },
+    { value: 'EUR', label: 'EUR - 欧元' },
+    { value: 'GBP', label: 'GBP - 英镑' },
+]
+
 export default function SettingsPage() {
     const { token, user, logout, refreshSettings } = useAuth()
     const { theme, setTheme } = useTheme()
@@ -78,7 +86,6 @@ export default function SettingsPage() {
         broker: '',
         account_type: '',
         currency: 'USD',
-        initial_balance: 0,
         description: ''
     })
 
@@ -176,6 +183,7 @@ export default function SettingsPage() {
             await settingsAPI.update(token, {
                 theme: theme || 'system',
                 up_color: settings.up_color || 'GREEN',
+                display_currency: settings.display_currency || 'USD',
                 ibkr_host: settings.ibkr_host || undefined,
                 ibkr_port: settings.ibkr_port || undefined,
                 ibkr_client_id: settings.ibkr_client_id || undefined,
@@ -234,9 +242,6 @@ export default function SettingsPage() {
             broker: '',
             account_type: '',
             currency: 'USD',
-            initial_balance: 0,
-            cash_balance: 0,
-            current_balance: 0,
             description: ''
         })
         setIsAccountFormOpen(true)
@@ -417,6 +422,27 @@ export default function SettingsPage() {
                                 <div className="w-4 h-4 rounded bg-emerald-500"></div>
                             </div>
                         </button>
+                    </div>
+                </div>
+
+                <div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-800">
+                    <h3 className="text-sm font-semibold mb-3 text-slate-900 dark:text-slate-200">显示币种</h3>
+                    <p className="text-xs text-slate-500 mb-3">Dashboard 图表将统一换算为此币种显示，持仓价格不受影响</p>
+                    <div className="grid grid-cols-5 gap-2">
+                        {CURRENCY_OPTIONS.map(({ value, label }) => (
+                            <button
+                                key={value}
+                                type="button"
+                                onClick={() => setSettings(prev => ({ ...prev, display_currency: value as any }))}
+                                className={`p-3 rounded-lg border-2 text-center transition-all ${(settings.display_currency || 'USD') === value
+                                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                                        : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                                    }`}
+                            >
+                                <div className="font-semibold text-sm">{value}</div>
+                                <div className="text-xs text-slate-500 mt-1">{label.split(' - ')[1]}</div>
+                            </button>
+                        ))}
                     </div>
                 </div>
             </div>
@@ -624,21 +650,15 @@ export default function SettingsPage() {
                                 </div>
                                 <div>
                                     <label className="label-text mb-1 block">币种</label>
-                                    <input
+                                    <select
                                         className="input text-sm"
                                         value={accountForm.currency}
                                         onChange={e => setAccountForm({ ...accountForm, currency: e.target.value })}
-                                        placeholder="USD"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="label-text mb-1 block">初始资金</label>
-                                    <input
-                                        type="number"
-                                        className="input text-sm"
-                                        value={accountForm.initial_balance || 0}
-                                        onChange={e => setAccountForm({ ...accountForm, initial_balance: parseFloat(e.target.value) })}
-                                    />
+                                    >
+                                        {CURRENCY_OPTIONS.map(c => (
+                                            <option key={c.value} value={c.value}>{c.label}</option>
+                                        ))}
+                                    </select>
                                 </div>
                             </div>
                             <div className="flex justify-end gap-2 pt-4">
