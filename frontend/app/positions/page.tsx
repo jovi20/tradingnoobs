@@ -99,6 +99,26 @@ export default function PositionsPage() {
         return account?.name || '-'
     }
 
+    const formatHoldingTime = (position: Position) => {
+        const start = new Date(position.opened_at).getTime()
+        const end = position.status === 'CLOSED' && position.closed_at
+            ? new Date(position.closed_at).getTime()
+            : Date.now()
+        const diffMs = end - start
+        if (diffMs < 0) return '-'
+
+        const minutes = Math.floor(diffMs / 60000)
+        const hours = Math.floor(diffMs / 3600000)
+        const days = Math.floor(diffMs / 86400000)
+        const months = Math.floor(days / 30)
+        const remainDays = days % 30
+
+        if (minutes < 60) return `${minutes}分钟`
+        if (hours < 24) return `${hours}小时`
+        if (days < 30) return `${days}天`
+        return remainDays > 0 ? `${months}个月${remainDays}天` : `${months}个月`
+    }
+
     // Helper to get categories for current dimension
     const getCategories = () => {
         switch (dimension) {
@@ -311,6 +331,12 @@ export default function PositionsPage() {
                                 </div>
 
                                 <div className="flex items-center justify-between md:justify-end gap-2 md:gap-6 w-full md:w-auto mt-2 md:mt-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100 dark:border-slate-800 md:border-none">
+                                    <div className="text-center md:text-right flex-1 md:flex-none">
+                                        <p className="text-xs text-slate-500">持仓时间</p>
+                                        <p className="font-medium text-sm md:text-base text-slate-700 dark:text-slate-300">
+                                            {formatHoldingTime(position)}
+                                        </p>
+                                    </div>
                                     <div className="text-center md:text-right flex-1 md:flex-none">
                                         <p className="text-xs text-slate-500">数量</p>
                                         <p className="font-medium text-sm md:text-base">

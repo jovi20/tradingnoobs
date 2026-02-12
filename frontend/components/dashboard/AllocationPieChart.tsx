@@ -17,11 +17,25 @@ export default function AllocationPieChart({ data, dimension }: AllocationPieCha
         return <div className="h-full flex items-center justify-center text-slate-500 min-h-[300px]">暂无数据</div>
     }
 
+    // Cross-dimension label map for keys that appear in all 3 allocation maps
+    // but don't belong to any single dimension's enum
+    const universalLabels: Record<string, string> = {
+        'CASH': '现金',
+        'EQUITY': '股票',
+        'UNKNOWN': '未分类',
+    }
+
     const chartData = data.map(item => {
-        let label = item.name;
-        if (dimension === 'CORE_TYPE') label = getCoreTypeLabel(item.name as any);
-        else if (dimension === 'MARKET') label = getMarketLabel(item.name as AssetMarket);
-        else if (dimension === 'RISK') label = getRiskLevelInfo(item.name as AssetRiskLevel).label;
+        // 1. Check universal labels first (handles CASH, EQUITY, etc. across all dimensions)
+        let label = universalLabels[item.name];
+
+        // 2. If not a universal key, use dimension-specific mapping
+        if (!label) {
+            if (dimension === 'CORE_TYPE') label = getCoreTypeLabel(item.name as any);
+            else if (dimension === 'MARKET') label = getMarketLabel(item.name as AssetMarket);
+            else if (dimension === 'RISK') label = getRiskLevelInfo(item.name as AssetRiskLevel).label;
+            else label = item.name;
+        }
 
         return {
             ...item,
