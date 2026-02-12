@@ -149,19 +149,19 @@ chmod +x backup_db.sh
 2.  **创建用户/管理员**:
     ```bash
     # 创建普通用户
-    sudo docker exec -it tradingnoobs-backend python ops/manage_users.py create-user new@example.com password123
+    sudo docker exec -it tradingnoobs-backend python ops/manage_users.py create-user [EMAIL_ADDRESS] password123
     # 创建管理员
-    sudo docker exec -it tradingnoobs-backend python ops/manage_users.py create-user admin@example.com admin123 admin
+    sudo docker exec -it tradingnoobs-backend python ops/manage_users.py create-user [EMAIL_ADDRESS] admin123 admin
     ```
 
 3.  **重置密码**:
     ```bash
-    sudo docker exec -it tradingnoobs-backend python ops/manage_users.py reset-password user@example.com new_password
+    sudo docker exec -it tradingnoobs-backend python ops/manage_users.py reset-password [EMAIL_ADDRESS] new_password
     ```
 
 4.  **封禁/解封用户**:
     ```bash
-    sudo docker exec -it tradingnoobs-backend python ops/manage_users.py toggle-active user@example.com
+    sudo docker exec -it tradingnoobs-backend python ops/manage_users.py toggle-active [EMAIL_ADDRESS]
     ```
 
 ### 3.4 定时任务 (Scheduled Tasks)
