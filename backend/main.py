@@ -41,7 +41,6 @@ app.add_middleware(
 
 # Include Routers
 app.include_router(auth.router)
-# app.include_router(trades.router)  # Deprecated
 app.include_router(strategies.router)
 app.include_router(dashboard.router)
 app.include_router(daily.router)
