@@ -1,307 +1,364 @@
-# 资深交易员账户持仓核心数据点与算法说明
+# 指标算法附录
 
-本文档整理了资深金融市场交易员在账户持仓管理中常用的核心数据点，并给出每个数据点的具体计算方法或算法示意。可直接作为风控/交易监控系统的指标设计参考。
+本文档只保留会直接指导实现、排查或验证的指标说明，并为每个指标标注当前状态：
+- `当前已实现`
+- `已部分实现`
+- `未来规划`
 
----
-
-## 1. 仓位基础数据（Position Basics）
-
-### 1.1 持仓数量（Number of Open Positions）
-- **定义**：当前账户中所有未平仓交易的数量。
-- **算法**：
-  - 设当前未平仓订单集合为 \(\{T_1, T_2, \dots, T_n\}\)。
-  - 持仓数量：\( N = n \)。
-  - 如只统计某一品种或方向，可增加过滤条件（如 `symbol == EURUSD` 或 `side == LONG`）。
+如果文档与代码不一致，以 `backend/routers/dashboard.py`、`backend/services/metrics_service.py`、`backend/routers/positions.py` 为准。
 
 ---
 
-### 1.2 平均成本（Average Entry Price）
-- **定义**：同一标的（同方向）所有持仓的加权平均入场价格。
-- **变量**：
-  - 第 \(i\) 笔交易入场价：\( P_i \)
-  - 第 \(i\) 笔交易数量（手数或股数）：\( Q_i \)
-- **算法**：
-\[
-P_{avg} = \frac{\sum_{i=1}^{n} P_i \cdot Q_i}{\sum_{i=1}^{n} Q_i}
-\]
-- 多空分开计算：多头使用多头集合，空头使用空头集合。
+## 1. 当前已实现
 
----
+### 1.1 未实现盈亏（Unrealized P&L）
 
-### 1.3 净头寸（Net Exposure）
-- **定义**：多空方向的净名义敞口，通常以账户权益百分比表示。
-- **变量**：
-  - 第 \(i\) 笔交易方向：\( s_i \in \{+1, -1\} \)（+1 为多头，-1 为空头）
-  - 第 \(i\) 笔交易数量（合约张数或股数）：\( Q_i \)
-  - 第 \(i\) 笔交易标的当前价格：\( P_i \)
-  - 合约乘数（如期货合约面值）：\( M_i \)
-  - 账户当前权益：\( E \)
-- **名义净敞口**：
+状态：`当前已实现`
+
+当前用途：
+- 首页看板
+- 持仓列表 / 详情
+- 账户净值估算
+
+基础公式：
+
 \[
-Exposure_{nominal} = \sum_{i=1}^{n} s_i \cdot Q_i \cdot P_i \cdot M_i
-\]
-- **净敞口占权益百分比**：
-\[
-Exposure_{\%} = \frac{Exposure_{nominal}}{E}
+Unrealized\ PnL = (P_{current} - P_{entry}) \times Q \times side\_multiplier
 \]
 
----
+其中：
+- 多头 `side_multiplier = 1`
+- 空头 `side_multiplier = -1`
 
-### 1.4 持仓时间（Holding Time）
-- **定义**：每笔持仓自开仓至当前的时间长度，可统计平均/最大值。
-- **变量**：
-  - 第 \(i\) 笔交易开仓时间：\( t^{open}_i \)
-  - 当前时间：\( t^{now} \)
-- **单笔持仓时间**：
+实现说明：
+- 实时价格来自 `MarketDataService`
+- 聚合逻辑主要位于 Dashboard 与账户路由
+
+### 1.2 胜率（Win Rate）
+
+状态：`当前已实现`
+
+基础公式：
+
 \[
-HT_i = t^{now} - t^{open}_i
-\]
-- **平均持仓时间**：
-\[
-HT_{avg} = \frac{1}{n} \sum_{i=1}^{n} HT_i
-\]
-- **最大持仓时间**：
-\[
-HT_{max} = \max_{1 \le i \le n} HT_i
+WinRate = \frac{Winning\ Trades}{Total\ Closed\ Trades}
 \]
 
----
+实现说明：
+- Dashboard 统计已平仓结果
+- AI 分析助手的分组统计也会复用胜率概念
 
-## 2. 风险指标（Risk Metrics）
+### 1.3 日收益序列（Daily Returns）
 
-### 2.1 单笔风险（Risk per Trade）
-- **定义**：在当前止损设置下，单笔交易最大可能亏损占账户权益的比例。
-- **变量**：
-  - 入场价：\( P_{entry} \)
-  - 止损价：\( P_{stop} \)
-  - 数量（手数/股数）：\( Q \)
-  - 合约乘数：\( M \)
-  - 账户权益：\( E \)
-- **单笔货币风险**：
+状态：`当前已实现`
+
+基础公式：
+
 \[
-Risk_{money} = |P_{entry} - P_{stop}| \cdot Q \cdot M
+R_t = \frac{E_t - E_{t-1}}{E_{t-1}}
 \]
-- **单笔风险百分比**：
-\[
-Risk_{\%} = \frac{Risk_{money}}{E}
-\]
-- **控制要求**：资深交易员通常设置 \(Risk_{\%} \le 1\%-2\%\)。
 
----
+其中：
+- \(E_t\) 为 `DailySnapshot.total_equity`
 
-### 2.2 组合风险/账户热度（Portfolio Risk / Heat）
-- **定义**：假设所有持仓同时打到止损时，账户总亏损占权益的比例。
-- **变量**：
-  - 第 \(i\) 笔持仓单笔货币风险：\( Risk_{money,i} \)
-  - 账户权益：\( E \)
-- **总货币风险**：
-\[
-Risk_{portfolio,money} = \sum_{i=1}^{n} Risk_{money,i}
-\]
-- **组合风险百分比**：
-\[
-Risk_{portfolio,\%} = \frac{Risk_{portfolio,money}}{E}
-\]
-- **控制要求**：常见上限为 5%-10%。
+实现说明：
+- `MetricsService.calculate_daily_returns`
+- 作为 Sharpe / Sortino / Calmar / Max Drawdown 的前置数据
 
----
+### 1.4 最大回撤（Max Drawdown）
 
-### 2.3 最大回撤（Max Drawdown）
-- **定义**：账户净值曲线从任一历史高点到之后任一低点的最大百分比跌幅。
-- **变量**：
-  - 时间序列上的账户净值：\(\{E_1, E_2, \dots, E_T\}\)
-  - 其中 \(E_t\) 为第 \(t\) 日（或任一时间粒度）的账户权益。
-- **运行最高净值**：
+状态：`当前已实现`
+
+基础公式：
+
 \[
-Peak_t = \max_{1 \le k \le t} E_k
+Peak_t = \max(E_1, \dots, E_t)
 \]
-- **当前回撤**：
+
 \[
 DD_t = \frac{E_t - Peak_t}{Peak_t}
 \]
-- **最大回撤**：
+
 \[
-MaxDD = \min_{1 \le t \le T} DD_t
+MaxDrawdown = \min(DD_t)
 \]
-（注意 \(MaxDD\) 为负值，通常报告其绝对值比例。）
+
+实现说明：
+- `MetricsService.calculate_max_drawdown`
+- Dashboard 已返回 `max_drawdown`
+
+### 1.5 夏普比率（Sharpe Ratio）
+
+状态：`当前已实现`
+
+基础公式：
+
+\[
+Sharpe = \frac{\bar{R} - R_f}{\sigma_R}
+\]
+
+当前实现约束：
+- 当前实现使用日收益序列
+- 风险自由利率简化处理
+- 返回值按年化口径输出
+
+实现入口：
+- `backend/services/metrics_service.py`
+- `backend/routers/dashboard.py`
+
+### 1.6 索提诺比率（Sortino Ratio）
+
+状态：`当前已实现`
+
+基础公式：
+
+\[
+Sortino = \frac{\bar{R} - R_f}{\sigma_{downside}}
+\]
+
+实现说明：
+- 仅使用下行波动率
+- 已在 Dashboard 返回
+
+### 1.7 Calmar Ratio
+
+状态：`当前已实现`
+
+基础公式：
+
+\[
+Calmar = \frac{Annualized\ Return}{MaxDrawdown}
+\]
+
+实现说明：
+- 当前通过 CAGR 与 Max Drawdown 组合计算
+- 已在 Dashboard 返回
+
+### 1.8 MAE / MFE
+
+状态：`当前已实现`
+
+定义：
+- `MAE`：持仓期间最大不利波动
+- `MFE`：持仓期间最大有利波动
+
+基础百分比公式：
+
+\[
+MAE\% = \frac{P_{min/max} - P_{entry}}{P_{entry}} \times 100
+\]
+
+\[
+MFE\% = \frac{P_{max/min} - P_{entry}}{P_{entry}} \times 100
+\]
+
+说明：
+- 多空方向会影响 `max_price_during_hold` 与 `min_price_during_hold` 的解释
+- 当前支持持仓详情展示和 Dashboard 散点图
+
+### 1.9 持仓时间分组绩效
+
+状态：`当前已实现`
+
+当前用途：
+- AI 分析助手 `holding_period`
+
+分桶逻辑：
+- 日内 `<1d`
+- `1-3d`
+- `3-7d`
+- `1-2w`
+- `2w+`
+
+分组统计输出：
+- `count`
+- `avg_pnl`
+- `total_pnl`
+- `win_rate`
 
 ---
 
-### 2.4 VaR（Value at Risk，风险价值）——历史模拟法简化算法
-- **定义**：在给定置信水平下（如 95%），未来一日（或某持有期）账户最大可能损失。
-- **算法步骤（历史模拟法示例）**：
-  1. 收集过去 \(N\) 日账户日收益率：\(r_1, r_2, \dots, r_N\)。
-  2. 将这些收益率从小到大排序：\(r_{(1)} \le r_{(2)} \le \dots \le r_{(N)}\)。
-  3. 选定置信度 \(\alpha\)（如 95%）。
-  4. 计算索引 \(k = \lfloor (1 - \alpha) \cdot N \rfloor\)。
-  5. 对应的最差收益率近似为：\(r_{worst} = r_{(k)}\)。
-  6. 以当前权益 \(E\) 计算 VaR：
+## 2. 已部分实现
+
+### 2.1 账户净值（NAV / Total Equity）
+
+状态：`已部分实现`
+
+基础公式：
+
 \[
-VaR_{\alpha} = - r_{worst} \cdot E
+NAV = Cash + Market\ Value
 \]
+
+说明：
+- 当前账户页会根据开放持仓和实时价格估算 `market_value` 与 `total_equity`
+- 但没有独立完整的账户级风险表
+
+### 2.2 净敞口（Net Exposure）
+
+状态：`已部分实现`
+
+基础公式：
+
+\[
+NetExposure = \sum s_i \times Q_i \times P_i
+\]
+
+说明：
+- 当前账户与看板内部已存在市场价值和多空处理逻辑
+- 但没有作为独立指标稳定暴露给前端，也没有形成快照表
+
+### 2.3 计划止损风险百分比
+
+状态：`已部分实现`
+
+当前用途：
+- 持仓详情中的 `drift_analysis.stop_loss_risk_pct`
+
+基础公式：
+
+\[
+Risk\% = \frac{|P_{entry} - P_{stop}|}{P_{entry}} \times 100
+\]
+
+说明：
+- 当前只服务于计划偏移分析
+- 还不是统一的组合风险口径
+
+### 2.4 佣金与费用统计
+
+状态：`已部分实现`
+
+说明：
+- 导入流程支持解析 `commission`
+- 交易流水支持费用类 `Transaction`
+- 但系统尚未形成统一的年度费用指标面板
+
+### 2.5 AI 分析助手中的策略/情绪/检查清单分组指标
+
+状态：`已部分实现`
+
+当前输出：
+- `count`
+- `avg_pnl`
+- `win_rate`
+
+说明：
+- 已用于 `strategy_health`、`emotion_pnl`、`checklist_effect`
+- 还没有形成更完整的稳定性指标，如 profit factor、R-multiple 分布
 
 ---
 
-### 2.5 持仓相关性（Position Correlation）
-- **定义**：不同标的/策略之间收益率的线性相关程度，用于评估集中风险。
-- **变量**：
-  - 标的 A 的收益率序列：\(\{x_1, x_2, \dots, x_T\}\)
-  - 标的 B 的收益率序列：\(\{y_1, y_2, \dots, y_T\}\)
-  - 平均值：\(\bar{x}, \bar{y}\)
-- **皮尔逊相关系数**：
-\[
-\rho_{A,B} = \frac{\sum_{t=1}^{T}(x_t - \bar{x})(y_t - \bar{y})}{\sqrt{\sum_{t=1}^{T}(x_t - \bar{x})^2} \cdot \sqrt{\sum_{t=1}^{T}(y_t - \bar{y})^2}}
-\]
-- **控制要求**：若组合中多数仓位相关系数 \(|\rho| > 0.7\)，需审视是否过度集中。
+## 3. 未来规划
 
----
+### 3.1 单笔风险（Risk per Trade）
 
-## 3. 绩效指标（Performance KPIs）
+状态：`未来规划`
 
-### 3.1 未实现盈亏（Unrealized P&L）
-- **定义**：当前持仓基于市场价格的浮动盈亏，总和可视为“浮动净值贡献”。
-- **变量**：
-  - 第 \(i\) 笔交易方向：\( s_i \in \{+1, -1\} \)
-  - 入场价：\( P^{entry}_i \)
-  - 当前价：\( P^{now}_i \)
-  - 数量：\( Q_i \)
-  - 合约乘数：\( M_i \)
-- **单笔未实现盈亏**：
+目标公式：
+
 \[
-UPL_i = s_i \cdot (P^{now}_i - P^{entry}_i) \cdot Q_i \cdot M_i
-\]
-- **总未实现盈亏**：
-\[
-UPL_{total} = \sum_{i=1}^{n} UPL_i
+Risk_{money} = |P_{entry} - P_{stop}| \times Q \times M
 \]
 
----
-
-### 3.2 胜率（Win Rate）
-- **定义**：在一段统计周期内，盈利交易笔数占总交易笔数的比例。
-- **变量**：
-  - 盈利笔数：\(N_{win}\)
-  - 总笔数：\(N_{total}\)
-- **算法**：
 \[
-WinRate = \frac{N_{win}}{N_{total}}
+Risk_{\%} = \frac{Risk_{money}}{Equity}
 \]
 
----
+当前缺口：
+- 没有统一持久化字段
+- 没有在所有持仓上稳定计算和展示
 
-### 3.3 平均风险回报比（Average Risk-Reward Ratio）
-- **定义**：平均盈利金额与平均亏损金额的比值，反映每承担 1 单位亏损风险可换取多少盈利。
-- **变量**：
-  - 第 \(i\) 笔盈利交易盈利：\(G_i > 0\)
-  - 第 \(j\) 笔亏损交易亏损绝对值：\(L_j > 0\)
-  - 盈利笔数：\(N_G\)
-  - 亏损笔数：\(N_L\)
-- **平均盈利与平均亏损**：
+### 3.2 组合风险 / 账户热度（Portfolio Risk / Heat）
+
+状态：`未来规划`
+
+目标公式：
+
 \[
-G_{avg} = \frac{\sum_{i=1}^{N_G} G_i}{N_G}, \quad L_{avg} = \frac{\sum_{j=1}^{N_L} L_j}{N_L}
-\]
-- **风险回报比**：
-\[
-RR = \frac{G_{avg}}{L_{avg}}
+PortfolioRisk = \sum Risk_{money, i}
 \]
 
----
+\[
+PortfolioRisk\% = \frac{PortfolioRisk}{Equity}
+\]
 
-### 3.4 夏普比率（Sharpe Ratio）
-- **定义**：风险调整后收益指标，衡量每承担一单位波动风险可获得多少超额收益。
-- **变量**：
-  - 周期收益率序列：\(\{R_1, R_2, \dots, R_T\}\)
-  - 无风险利率：\(R_f\)（可近似为 0，或使用国债收益率）
-  - 超额收益：\(R_t - R_f\)
-- **算法**：
-  1. 计算超额收益均值：
-\[
-\bar{R} = \frac{1}{T} \sum_{t=1}^{T} (R_t - R_f)
-\]
-  2. 计算超额收益标准差：
-\[
-\sigma_R = \sqrt{\frac{1}{T-1} \sum_{t=1}^{T} \big((R_t - R_f) - \bar{R}\big)^2}
-\]
-  3. 夏普比率：
-\[
-Sharpe = \frac{\bar{R}}{\sigma_R}
-\]
-- 若使用日收益率，可将年化夏普近似为：\(Sharpe_{annual} = Sharpe_{daily} \cdot \sqrt{252}\)。
+对应路线图：
+- `TODO.md` Phase 3
 
----
+### 3.3 VaR（Value at Risk）
+
+状态：`未来规划`
+
+目标思路：
+- 基于历史收益分布或历史模拟法
+
+当前缺口：
+- 没有风险时间序列模型
+- 没有单独风险快照持久化
+
+### 3.4 相关性矩阵（Correlation Matrix）
+
+状态：`未来规划`
+
+目标公式：
+
+\[
+Corr(A, B) = \frac{Cov(A, B)}{\sigma_A \sigma_B}
+\]
+
+当前缺口：
+- 没有相关性持久化表
+- 没有稳定的历史价格窗口管理
 
 ### 3.5 利润因子（Profit Factor）
-- **定义**：总盈利与总亏损的比值，反映策略整体赚钱效率。
-- **变量**：
-  - 所有盈利交易总盈利：\(G_{total}\)
-  - 所有亏损交易总亏损绝对值：\(L_{total}\)
-- **算法**：
+
+状态：`未来规划`
+
+目标公式：
+
 \[
-ProfitFactor = \frac{G_{total}}{L_{total}}
+ProfitFactor = \frac{Gross\ Profit}{|Gross\ Loss|}
 \]
-- 一般认为 \(ProfitFactor > 1.5\) 较为健康，\(> 2\) 较优秀。
+
+### 3.6 佣金占收益比
+
+状态：`未来规划`
+
+目标公式：
+
+\[
+CommissionToProfit = \frac{Commission}{Realized\ Profit}
+\]
+
+### 3.7 保证金相关指标
+
+状态：`未来规划`
+
+包括：
+- `margin_used`
+- `margin_available`
+- `margin_level_pct`
+
+说明：
+- 当前账户模型里没有形成完整的保证金交易计算链路
 
 ---
 
-## 4. 账户整体数据（Account-Level Metrics）
+## 4. 指标与代码映射
 
-### 4.1 可用保证金比例（Available Margin %）
-- **定义**：当前账户可用保证金占账户权益的比例，用于评估距离爆仓风险的安全边际。
-- **变量**：
-  - 账户权益：\(E\)
-  - 已用保证金：\(Margin_{used}\)
-- **可用保证金**：
-\[
-Margin_{avail} = E - Margin_{used}
-\]
-- **可用保证金比例**：
-\[
-Margin_{avail,\%} = \frac{Margin_{avail}}{E}
-\]
-- 部分券商也直接给出 “保证金水平”：\(MarginLevel = \frac{E}{Margin_{used}}\)，通常要求 \(MarginLevel > 200\%\)。
+| 指标组 | 当前主要代码位置 |
+|--------|------------------|
+| 风险调整收益指标 | `backend/services/metrics_service.py` |
+| Dashboard 汇总返回 | `backend/routers/dashboard.py` |
+| MAE/MFE 计算与展示 | `backend/routers/positions.py` / `frontend/components/dashboard/MaeMfeScatterPlot.tsx` |
+| AI 分析助手分组统计 | `backend/services/analytics_service.py` |
+| 持仓计划偏移风险 | `backend/routers/positions.py` |
 
 ---
 
-### 4.2 持仓利息/费用（Swap / Commission）
-- **定义**：因隔夜持仓、融资融券等产生的利息成本，以及交易手续费的累计值。
-- **变量**：
-  - 第 \(i\) 笔交易产生的总手续费：\(Comm_i\)
-  - 第 \(i\) 笔交易累计利息/隔夜费：\(Swap_i\)
-- **总手续费与总利息**：
-\[
-Comm_{total} = \sum_{i} Comm_i, \quad Swap_{total} = \sum_{i} Swap_i
-\]
-- 可进一步按周期统计（如按日、周、月分组求和）。
+## 5. 使用规则
 
----
-
-### 4.3 佣金占 YTD 收益比例（Commission to YTD Profit Ratio）
-- **定义**：年度内累计佣金与年度累计净利润之比，用于衡量交易“摩擦成本”占比。
-- **变量**：
-  - 年初至今总佣金：\(Comm_{YTD}\)
-  - 年初至今净利润（含已实现盈亏与已结算费用）：\(Profit_{YTD}\)
-- **算法**：
-\[
-Ratio_{Comm2Profit} = \frac{Comm_{YTD}}{Profit_{YTD}}
-\]
-- 经验上希望该比例低于 1%-2%，否则可能交易过度频繁或费用过高。
-
----
-
-## 5. 实际落地建议
-
-1. **统一时间粒度**：
-   - 风险类指标（最大回撤、VaR、夏普等）建议以日维度计算，方便与行业标准比较。
-   - 交易类指标（胜率、利润因子等）可按“笔数维度”统计，再按月/季度汇总。
-
-2. **指标分层**：
-   - **持仓层**：未实现盈亏、单笔风险、持仓时间、平仓盈亏等。
-   - **策略层**：胜率、平均风险回报比、利润因子、策略回撤等。
-   - **账户层**：最大回撤、夏普比率、可用保证金比例、YTD 收益与费用结构等。
-
-3. **预警机制**：
-   - 单笔风险超过阈值（如 2%）发出警报。
-   - 组合风险超过 8%-10% 时禁止新开仓，只允许减仓。
-   - 最大回撤触达预设“熔断线”（如 10%-15%）时强制降杠杆或暂停交易复盘。
-
-该文档可直接作为交易/风控系统开发中的指标说明书基础，如需可在此基础上扩展为更详细的技术规格（包括字段类型、数据源接口、刷新频率等）。
+- 新增指标时，先确定它属于“当前已实现 / 已部分实现 / 未来规划”哪一类。
+- 如果指标已经对外返回，必须在本附录中给出最小公式与代码入口。
+- 如果指标只是产品设想，不要写成“当前字段”或“当前看板指标”。

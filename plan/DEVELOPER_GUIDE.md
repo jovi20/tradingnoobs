@@ -1,464 +1,332 @@
-# Trading Noobs 开发者与运维指南
+# Trading Noobs 主开发文档
 
-本文档集成了项目的开发配置、部署流程、运维维护、功能计划及性能优化指南，旨在为开发者和运维人员提供全方位的技术参考。
+本文档是 `plan/` 目录下的唯一主开发文档，用于描述项目定位、架构、模块现状、开发入口与附录索引。
+
+文档约定：
+- 本文档是当前实现的权威说明。
+- [TODO.md](./TODO.md) 是唯一执行清单，只记录任务状态与阶段。
+- 专题细节拆分到附录：
+  - [market_data_sources.md](./market_data_sources.md)
+  - [trading-metrics.md](./trading-metrics.md)
+  - [trading-fields-design.md](./trading-fields-design.md)
+- [顶层设计.md](./顶层设计.md) 已降级为历史草案，不再作为当前方案依据。
 
 ---
 
-## 🏗️ 1. 开发环境搭建 (Development Setup)
+## 1. 项目定位与文档约定
 
-### 1.1 获取代码
-```bash
-git clone <repo-url>
-cd tradingnoobs
+`Trading Noobs` 是一个面向交易者的交易日志、复盘与分析系统，当前代码库已经覆盖以下主线能力：
+- 多账户交易记录与持仓管理
+- 策略管理与交易前检查清单
+- 看板统计、MAE/MFE、风险调整收益指标
+- AI 周报、随笔摘要与分析助手
+- 多市场行情接入与资产元数据识别
+- CSV/Excel 导入、CSV 导出、管理员系统设置
+
+本文档默认读者是项目内部开发者。目标不是介绍产品卖点，而是帮助开发者快速回答以下问题：
+- 系统现在到底实现到了哪里
+- 每个模块由哪些后端路由和前端页面承载
+- 数据模型的边界是什么
+- 行情、指标、字段设计应该去看哪份附录
+- 本地开发和部署入口在哪里
+
+---
+
+## 2. 技术架构与目录职责
+
+### 2.1 技术栈
+
+| 层级 | 当前实现 |
+|------|----------|
+| 前端 | Next.js 14, React 18, TypeScript, Tailwind CSS, React Query, Recharts |
+| 后端 | FastAPI, SQLAlchemy, Pydantic |
+| 数据库 | 开发默认 SQLite，部署默认 PostgreSQL |
+| 外部服务 | Finnhub, AKShare, Binance, 可配置 OpenAI 兼容 LLM 接口 |
+| 部署 | Docker Compose + Caddy |
+
+### 2.2 关键目录
+
+| 路径 | 职责 |
+|------|------|
+| `backend/main.py` | 后端入口，注册所有 FastAPI router |
+| `backend/routers/` | API 路由层，定义接口边界 |
+| `backend/services/` | 业务逻辑层，如行情、导入、指标、AI 分析 |
+| `backend/models.py` | SQLAlchemy 持久化模型 |
+| `backend/schemas.py` | Pydantic 请求/响应模型 |
+| `frontend/app/` | Next.js App Router 页面入口 |
+| `frontend/components/` | 页面复用组件 |
+| `frontend/lib/api.ts` | 前端 API 封装与共享类型 |
+| `plan/` | 内部文档、路线图与专题附录 |
+
+### 2.3 运行时结构
+
+后端当前注册的主要路由：
+- `/api/auth`
+- `/api/accounts`
+- `/api/positions`
+- `/api/strategies`
+- `/api/dashboard`
+- `/api/insights`
+- `/api/journal`
+- `/api/daily`
+- `/api/settings`
+- `/api/admin`
+- `/api/market`
+- `/api/accounts/{account_id}/transactions`
+
+前端当前主要页面：
+- `/` 看板
+- `/positions` 持仓列表
+- `/positions/[id]` 持仓详情
+- `/positions/new` 新建持仓
+- `/positions/import` 批量导入
+- `/strategies` 策略管理
+- `/insights` AI 洞察
+- `/daily` 每日总结
+- `/settings` 设置
+- `/login` / `/register`
+
+---
+
+## 3. 核心业务模块现状
+
+状态定义：
+- `已实现`：代码和基础前后端流程已经落地，可直接使用
+- `部分实现`：主链路已存在，但仍缺关键展示、扩展能力或可配置项
+- `规划中`：已进入 TODO，但仓库中尚无完整能力
+
+| 模块 | 状态 | 当前说明 |
+|------|------|----------|
+| 认证与用户基础 | `已实现` | 注册、登录、JWT 鉴权、当前用户信息读取 |
+| 交易账户与资金记录 | `已实现` | 账户 CRUD、实时 NAV 计算、账户交易流水 |
+| 持仓与批次管理 | `已实现` | 建仓、加减仓、平仓、持仓详情、批次记录、导出 CSV |
+| 策略与检查清单 | `部分实现` | 策略 CRUD、检查清单编辑与开仓确认已完成；部分列表/看板展示仍待补 |
+| 计划偏移与执行质量 | `已实现` | 计划入场/止损/止盈、偏移分析、详情页展示 |
+| Dashboard 与绩效分析 | `部分实现` | 核心看板、Sharpe/Sortino/Calmar、Max Drawdown、MAE/MFE 已完成；组合风险与预警未完成 |
+| Journal / Daily / AI Summary | `已实现` | 随笔、每日总结、AI 摘要主流程已落地 |
+| Insights / AI 分析助手 | `部分实现` | 周报、分析助手、结果持久化已实现；日期范围选择器仍缺 |
+| 市场数据与资产识别 | `已实现` | A 股 / 港股 / 美股 / Crypto / 外汇 / 基金的行情查询与资产元数据识别已接入 |
+| 批量导入导出 | `部分实现` | CSV/Excel 导入与 CSV 模板下载已实现；PDF 导出未完成 |
+| 管理员系统设置 | `部分实现` | 系统级 LLM / Finnhub 设置、LLM 连通性测试已实现；运维能力仍不足 |
+| 风控预警系统 | `规划中` | Phase 3 目标，尚未形成独立服务与前端展示 |
+
+### 3.1 当前已落地的核心实现
+
+- `Positions`
+  - 路由：`backend/routers/positions.py`
+  - 页面：`frontend/app/positions/*`
+  - 关键能力：持仓汇总、批次追加、计划偏移分析、MAE/MFE 分析、导入导出
+- `Dashboard`
+  - 路由：`backend/routers/dashboard.py`
+  - 页面：`frontend/app/page.tsx`
+  - 关键能力：资产分布、收益统计、风险调整收益指标、权益曲线、MAE/MFE 图表
+- `Insights`
+  - 路由：`backend/routers/insights.py`
+  - 页面：`frontend/app/insights/page.tsx`
+  - 关键能力：周报生成、AI 摘要、分析助手、分析结果缓存与持久化
+- `Market Data`
+  - 服务：`backend/services/market_data_service.py`
+  - Provider：`backend/services/providers/*`
+  - 关键能力：行情路由、缓存、回退、资产元数据探测
+
+### 3.2 当前主要未完成项
+
+以 [TODO.md](./TODO.md) 为准，当前开发重心仍集中在：
+- Phase 3：组合风险监控、单日亏损上限、实时预警
+- Phase 4：PDF 报告导出
+- Phase 5：AI 分析助手的日期范围选择与进一步完善
+- Phase 6：管理员运维能力补齐
+
+---
+
+## 4. 数据模型与关键接口边界
+
+完整字段请以 [trading-fields-design.md](./trading-fields-design.md)、`backend/models.py`、`backend/schemas.py` 为准。这里仅描述当前实现的核心边界，避免把未来设计误当成现状。
+
+### 4.1 当前核心实体
+
+| 实体 | 当前作用 |
+|------|----------|
+| `User` | 用户主体，关联策略、账户、持仓、周报、设置 |
+| `TradingAccount` | 交易账户标签，存放券商、币种、初始资金、现金余额 |
+| `Transaction` | 账户层资金流水，如入金、出金、费用、利息 |
+| `Strategy` | 策略定义，包含规则文本与 `checklist_items` |
+| `Position` | 持仓汇总记录，承载方向、状态、计划价、复盘信息、MAE/MFE |
+| `TradeBatch` | 单笔建仓/加仓/减仓/平仓批次，包含情绪、原因、信心、退出 PnL |
+| `AssetMetadata` | 资产元数据，承载市场、核心类型、币种、风险级别等 |
+| `DailySnapshot` | 每日权益快照，为 PnL 历史和部分风险指标提供基础 |
+| `DailySummary` | 每日总结 |
+| `JournalEntry` | 用户随笔 |
+| `AISummary` | AI 周度摘要结果 |
+| `WeeklyReport` | AI 周报 |
+| `AIAnalysisResult` | AI 分析助手结果缓存与持久化 |
+| `UserSettings` | 用户级显示与 API 偏好设置 |
+| `SystemSetting` | 管理员级全局设置，如 LLM/Finnhub Key |
+
+### 4.2 当前 API 边界
+
+当前更适合作为系统边界理解的接口：
+- `POST /api/positions`
+  - 创建持仓，并同时写入首个 entry batch
+  - 支持策略、检查清单、计划价格
+- `POST /api/positions/{id}/batches`
+  - 追加交易批次，驱动持仓状态和已实现盈亏变化
+- `GET /api/dashboard/stats`
+  - 返回首页看板聚合统计与风险调整指标
+- `POST /api/insights/analyze`
+  - 返回高级分析结果，并持久化到 `AIAnalysisResult`
+- `POST /api/positions/import/upload`
+  - 解析 CSV/Excel 并生成预览
+- `POST /api/positions/import/confirm`
+  - 按选中行正式写入持仓与批次
+
+### 4.3 当前设计边界
+
+- 当前系统的“持仓”是聚合概念，真实的成交行为通过 `TradeBatch` 承载。
+- 当前风险指标以 Dashboard 聚合计算为主，还没有独立的风险快照表或预警表实现。
+- 当前分析助手已经有结果持久化，但还不是完整分析平台；它依赖现有持仓和批次数据。
+- 字段附录中涉及的账户风险表、相关性矩阵表、预警表属于未来设计，不代表已落库。
+
+---
+
+## 5. 市场数据接入概览
+
+详细 provider 说明请查看 [market_data_sources.md](./market_data_sources.md)。这里只保留开发中最常用的概览。
+
+| 资产类别 | 当前主来源 | 主要配置 | 当前说明 |
+|----------|------------|----------|----------|
+| A 股 | AKShare | 无需 Key | 主要通过 `akshare_provider.py` 获取，必要时回退 YFinance |
+| 港股 | AKShare / akshare-one | 无需 Key | 5 位港股代码或 HK 交易所路由到港股逻辑 |
+| 美股 | Finnhub | `SystemSetting.finnhub_api_key` | 主来源为 Finnhub，部分历史/兜底逻辑会使用 YFinance |
+| 加密货币 | Binance | 公共行情无需 Key | `binance-connector` 获取 ticker 与 K 线 |
+| 基金 | AKShare | 无需 Key | ETF、LOF、场外基金按代码模式和 AKShare 接口处理 |
+| 外汇 | AKShare | 无需 Key | 6 位字母对默认识别为外汇，存在回退逻辑 |
+| 资产元数据 | 规则 + LLM | `SystemSetting.llm_*` | 用于补全 `AssetMetadata`，不是行情主来源 |
+
+开发时需要注意：
+- `MarketDataService` 内部有 60 秒级缓存。
+- AKShare provider 会主动清理代理环境变量，避免访问国内源异常。
+- Finnhub Key 读取自系统设置，不是用户设置。
+- 行情接入说明必须与代码实现保持一致，禁止在文档中写“理想供应商”。
+
+---
+
+## 6. 开发环境与本地启动
+
+### 6.1 前置要求
+
+- Python 3.10+
+- Node.js 18+
+- npm
+- 可选：Docker / Docker Compose
+
+### 6.2 推荐启动方式
+
+Windows 推荐直接使用根目录脚本：
+
+```powershell
+./start.ps1
 ```
 
-### 1.2 后端开发环境 (Backend)
-基于 FastAPI 和 Python 3.10+。
+Linux / macOS 可参考：
+
+```bash
+./start.sh
+```
+
+`start.ps1` 会做这些事情：
+- 检查 Python 与 Node
+- 自动创建 `backend/venv`
+- 安装后端依赖
+- 如果 `backend/.env` 不存在则自动创建默认开发配置
+- 安装前端依赖
+- 分别启动后端和前端
+
+### 6.3 手动启动方式
+
+后端：
 
 ```bash
 cd backend
-# 创建虚拟环境
 python -m venv venv
-# 激活环境
-source venv/bin/activate      # Linux/macOS
-# venv\Scripts\activate       # Windows
-
-# 安装依赖
+source venv/bin/activate
 pip install -r requirements.txt
-
-# 配置环境变量
-cp .env.example .env
-# 编辑 .env 配置数据库和 API Key
-```
-
-**启动开发服务器**:
-```bash
 uvicorn main:app --reload
 ```
-访问文档: `http://localhost:8000/docs`
 
-### 1.3 前端开发环境 (Frontend)
-基于 Next.js 14 和 TypeScript。
+前端：
 
 ```bash
 cd frontend
-# 安装依赖
 npm install
-
-# 启动开发服务器
 npm run dev
 ```
-访问应用: `http://localhost:3000`
 
-### 1.4 项目结构
-```
-tradingnoobs/
-├── backend/                 # FastAPI 后端
-│   ├── routers/             # API 路由 (业务入口)
-│   ├── services/            # 核心业务逻辑 (LLM, 行情等)
-│   ├── models.py            # SQLAlchemy 数据模型
-│   └── schemas.py           # Pydantic 数据验证
-├── frontend/                # Next.js 前端
-│   ├── app/                 # App Router 页面
-│   ├── components/          # React 组件
-│   └── lib/                 # 工具库与 API 封装
-├── docker-compose.yml       # 容器编排配置
-└── Caddyfile                # 反向代理配置
-```
+默认访问地址：
+- 前端：`http://localhost:3000`
+- 后端：`http://localhost:8000`
+- OpenAPI：`http://localhost:8000/docs`
 
----
+### 6.4 本地配置说明
 
-## 🚀 2. 部署指南 (Deployment)
+后端配置入口：`backend/config.py`
 
-针对 VPS 环境（包括 ARM 架构），推荐使用 Docker + Caddy 分离部署方案。
+当前最常用环境变量：
+- `DATABASE_URL`
+- `SECRET_KEY`
+- `CORS_ORIGINS`
+- `LLM_API_URL`
+- `LLM_API_KEY`
+- `LLM_MODEL`
 
-### 2.1 环境准备
-1.  **安装 Docker & Docker Compose**.
-2.  **设置 Swap** (建议 1G 内存 VPS 设置 2G Swap):
-    ```bash
-    sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
-    sudo mkswap /swapfile && sudo swapon /swapfile
-    ```
+注意：
+- 仓库当前没有稳定维护的 `.env.example`；开发启动主要依赖 `start.ps1` 自动生成最小 `.env`。
+- 生产环境变量更多由 `docker-compose.yml` 注入。
 
-### 2.2 应用部署
-本项目提供 **All-in-One** 的 `docker-compose.yml`，包含前端、后端、数据库及 Caddy 网关。
+### 6.5 部署入口
 
-1.  **配置生产环境变量**:
-    ```bash
-    cp .env.example .env
-    nano .env
-    
-    # --- 核心配置 (必须修改) ---
-    # DOMAIN: 部署的域名或 IP (不带协议头)，例如: 1.2.3.4 或 my-trading-app.com
-    DOMAIN=localhost
-    
-    # SECRET_KEY: 后端加密密钥，生成命令: openssl rand -hex 32
-    SECRET_KEY=change_this_to_a_secure_random_string
-    
-    # DB_PASSWORD: 数据库密码，请务必修改
-    DB_PASSWORD=secure_db_password
-    
-    # --- LLM 配置 (可选) ---
-    # 若配置了以下变量，后端将自动启用 AI 功能
-    LLM_API_KEY=sk-proj-...
-    LLM_API_URL=https://api.openai.com/v1  # 默认为官方 API，可改为中转地址
-    LLM_MODEL=gpt-4                        # 默认为 gpt-4
-    ```
-2.  **启动服务**:
-    ```bash
-    sudo docker compose up -d --build
-    ```
+主部署入口仍然是：
+- `docker-compose.yml`
+- `Caddyfile`
 
-### 2.3 网关配置
-`docker-compose.yml` 已集成 Caddy 服务，自动读取项目根目录下的 `Caddyfile`。
--   **SSL**: Caddy 会自动为配置的域名申请 HTTPS 证书。
--   **端口**: 仅暴露 80 和 443 端口，后端接口及前端服务均通过 Caddy 代理，不直接对外暴露。
-
-### 2.4 数据库迁移
-当代码更新涉及数据库变更时执行：
-```bash
-sudo docker exec -it tradingnoobs-backend python ops/migrate_db.py
-```
+当前文档范围不展开详细运维手册，仅保留这两个事实：
+- 生产默认使用 PostgreSQL
+- Caddy 负责统一对外暴露前后端服务
 
 ---
 
-## 🔧 3. 运维指南 (Operations)
+## 7. 当前开发状态与路线图
 
-### 3.1 常用命令
--   **查看状态**: `sudo docker compose ps`
--   **查看日志**: `sudo docker compose logs -f`
--   **资源监控**: `sudo docker stats`
--   **清理空间**: `sudo docker system prune -f`
+执行细节以 [TODO.md](./TODO.md) 为准，这里只保留阶段级摘要，避免维护第二套路线图。
 
-### 3.2 数据库备份
-使用内置脚本进行备份：
-```bash
-chmod +x backup_db.sh
-./backup_db.sh
-```
-备份文件将保存在 `./backups` 目录。
+| 阶段 | 当前状态 | 说明 |
+|------|----------|------|
+| Phase 1 交易规划模块 | `部分完成` | 后端、开仓清单、计划偏移已落地；部分列表/看板展示待补 |
+| Phase 2 绩效分析增强 | `已实现` | 风险调整收益指标和 MAE/MFE 已进入主流程 |
+| Phase 3 风控预警系统 | `规划中` | 尚未建立风险预警服务与前端面板 |
+| Phase 4 数据导入导出 | `部分完成` | CSV/Excel 导入已完成，PDF 导出未做 |
+| Phase 5 AI 高级分析中心 | `部分完成` | 分析助手主链路已落地，仍需补日期范围等体验层功能 |
+| Phase 6 运维及测试任务 | `规划中` | 管理员运维能力与配套测试仍需梳理 |
 
-### 3.3 用户管理
-使用内置脚本进行管理（需进入后端容器）：
-
-1.  **列出用户**:
-    ```bash
-    sudo docker exec -it tradingnoobs-backend python ops/manage_users.py list-users
-    ```
-
-2.  **创建用户/管理员**:
-    ```bash
-    # 创建普通用户
-    sudo docker exec -it tradingnoobs-backend python ops/manage_users.py create-user [EMAIL_ADDRESS] password123
-    # 创建管理员
-    sudo docker exec -it tradingnoobs-backend python ops/manage_users.py create-user [EMAIL_ADDRESS] admin123 admin
-    ```
-
-3.  **重置密码**:
-    ```bash
-    sudo docker exec -it tradingnoobs-backend python ops/manage_users.py reset-password [EMAIL_ADDRESS] new_password
-    ```
-
-4.  **封禁/解封用户**:
-    ```bash
-    sudo docker exec -it tradingnoobs-backend python ops/manage_users.py toggle-active [EMAIL_ADDRESS]
-    ```
-
-### 3.4 定时任务 (Scheduled Tasks)
-
-#### 3.4.1 自动数据库备份
-`docker-compose.yml` 已内置 `db-backup` 服务，无需额外配置：
--   **频率**: 默认每日备份 (`SCHEDULE=@daily`)。
--   **保留策略**: 保留最近 7 天、4 周、6 个月的备份。
--   **位置**: `./backups` 目录。
--   **自定义**: 修改 `docker-compose.yml` 中的环境变量调整策略。
-
-#### 3.4.2 Python 库定时更新
-若需定期更新依赖库（如 `akshare` 获取最新接口），请在宿主机设置 Crontab。
-
-1.  **赋予脚本执行权限**:
-    ```bash
-    chmod +x update_libs.sh
-    ```
-2.  **设置 Crontab (例如每周一凌晨 3 点更新)**:
-    ```bash
-    crontab -e
-    # 添加如下行:
-    0 3 * * 1 /path/to/tradingnoobs/update_libs.sh >> /var/log/tradingnoobs_update.log 2>&1
-    ```
+路线图使用规则：
+- 是否已完成，以代码和 `TODO.md` 勾选项共同判断
+- 本文档不维护独立任务数量
+- 任何新增 Phase 或模块，先更新 `TODO.md`，再同步本节摘要
 
 ---
 
-## 🗺️ 4. 功能规划与状态 (Roadmap)
-
-### ✅ 已完成功能 (Completed)
--   **用户认证**: 注册、登录、JWT 鉴权。
--   **交易记录**: 包含开平仓、心理记录、CSV 导出。
--   **看板**: 盈亏统计、胜率分析。
--   **行情集成**: 连接 Finnhub (美股)、Binance (Crypto)、AkShare (A/港股)。
--   **AI 洞察**: 基于 LLM 的自动周报生成。
--   **设置**: 账户管理、API Key 配置。
--   **资产分类系统**: 利用 LLM 智能细分资产类型 (Equity, ETF, Bond, etc.)。
-
-### 🚧 开发中 (In Progress)
-
-
-### 📋 待开发 (Todo)
--   **P2**: 截图上传功能 (用于复盘)。
--   **P2**: 资金管理模块 (出入金记录)。
--   **P2**: 风险控制提醒 (回撤/仓位告警)。
--   **P2**: 自动化同步 (IBKR / Binance 自动导入)。
-
----
-
-## ⚡ 5. 性能优化与架构审查 (Critical Review)
-
-### 🚨 已知风险 (High Priority)
-1.  **阻塞式 I/O**: `MarketDataService` 中的部分同步请求可能阻塞 Event Loop。
-    -   *解决方案*: 使用 `run_in_threadpool` 或迁移至 `httpx` 异步客户端。
-2.  **内存占用 (OOM)**: 大量交易记录加载到内存可能导致低配 VPS 崩溃。
-    -   *解决方案*: 尽可能使用 SQL 聚合查询 (`func.sum`, `func.count`) 代替应用层计算。
-
-### ⚠️ 优化建议
-1.  **数据库优化**: 为 `trades` 表的 `pnl` 添加持久化列（已部分实施），并添加 `(user_id, entry_time)` 复合索引。
-2.  **构建优化**: 避免在低配 VPS 上进行 `npm run build`，建议本地构建 Docker 镜像后推送。
-
-###
-你是一名对 ARM 架构、低配 VPS、生存级性能极度敏感的资深全栈工程师 / SRE / 架构审查官，需要审查一个 ToC 交易日志记录系统 的代码。
-
-部署环境（必须作为前提）：
-
-架构：ARM（非 x86）
-
-CPU：2 核
-
-内存：1GB
-
-磁盘：普通 SSD（非高 IOPS）
-
-单机部署、单实例
-
-阶段：
-
-MVP（可以不优雅，但不能浪费资源）
-
-最高原则（必须反复对照）：
-
-在 ARM + 1G 内存环境下，
-任何“额外抽象 / 通用方案 / 可扩展设计”都是性能负债
-能删就删，能同步就别异步，能直写就别绕层
-
-一、ARM 架构一票否决项（发现即判不合格）
-
-请重点检查是否存在以下情况：
-
-❌ 架构级问题
-
-微服务 / Sidecar / 多进程模型
-
-Node + Java / 多运行时混用
-
-依赖 x86 优化明显但 ARM 表现一般 的组件
-
-高 GC 压力语言 + 大对象模型（未做限制）
-
-❌ 资源浪费行为
-
-JVM / Node 默认配置直接使用
-
-使用高内存 Web 框架却只做 CRUD
-
-引入但几乎不用的重型依赖
-
-👉 一旦发现，请直接标记：
-「❌ 不适合 ARM 2C / 1G VPS，上线即高风险」
-
-二、进程模型与并发策略（ARM 特别关注）
-
-请分析：
-
-实际运行时会启动多少线程 / Worker
-
-是否存在：
-
-线程数 > CPU 核数数倍
-
-无上限线程池 / goroutine / promise
-
-是否存在 CPU 竞争导致：
-
-上下文切换过多
-
-tail latency 激增
-
-请判断：
-
-在 CPU 满载 时，系统是否还能正常写日志
-
-三、交易日志写入路径（绝对核心）
-
-请从 CPU + 内存 + IO 三个角度审查交易日志写入：
-
-1️⃣ CPU
-
-是否有：
-
-复杂金额计算
-
-高频时间格式化
-
-JSON 深度序列化
-
-是否在写入前做过度校验
-
-2️⃣ 内存
-
-是否构建完整日志对象后再写库
-
-是否存在中间 DTO / VO / Mapper
-
-是否有写入队列但未限制长度
-
-3️⃣ IO
-
-是否同步写数据库
-
-是否多次 flush / commit
-
-是否写库同时打日志
-
-请明确指出：
-
-最慢的一步在哪里
-
-是否能在 ARM 2C 下稳定支撑 ToC 峰值写入
-
-四、数据库设计（假设 IO 是最大瓶颈）
-
-以「磁盘慢、缓存小」为前提审查：
-
-必须检查
-
-每个接口的 SQL 数量
-
-是否存在：
-
-order by + limit 但索引不命中
-
-count(*) 扫描大表
-
-是否为日志表：
-
-明确按时间查询
-
-严格控制字段数量
-
-请回答
-
-删掉哪些字段 / 索引反而更快
-
-是否存在“为了未来需求而预留”的设计（应删）
-
-五、内存生存能力（1GB 极限）
-
-请以 长时间运行（7×24） 为前提判断：
-
-常驻内存大小估算
-
-峰值内存是否接近 OOM
-
-是否存在：
-
-无上限缓存
-
-内存中聚合交易数据
-
-前端分页过大导致响应体膨胀
-
-请给出：
-
-OOM 最可能出现的场景
-
-六、前端对 ARM VPS 的“间接杀伤”
-
-请从服务器视角审查前端行为：
-
-是否存在：
-
-自动刷新 / 轮询
-
-大列表无限滚动
-
-同一页面多接口并发请求
-
-是否允许前端指定过大的 pageSize
-
-请指出：
-
-哪些前端行为在 ARM VPS 上是致命的
-
-七、日志、监控与系统噪音
-
-在普通 SSD + ARM CPU 下：
-
-是否在热路径打印日志
-
-是否日志级别过高
-
-是否引入 Prometheus / APM 等高消耗组件
-
-请评估：
-
-日志与监控是否会 比业务本身更耗资源
-
-八、最终生存结论（必须给出）
-
-请明确回答：
-
-该系统是否能在 ARM 2C / 1G VPS 上稳定运行
-
-最先压垮系统的 3 个点（按概率排序）
-
-如果只允许修改 20% 代码，最优先动哪里
-
-是否建议：
-
-立即上线
-
-降级功能后上线
-
-暂缓上线
-
-结论必须直接、冷酷、基于现实，不允许“理论上可行”。
-
-🔧 可选增强指令（按需加）
-
-👉 更真实压力
-
-“假设高峰期写入 QPS = 平均的 5 倍”
-
-👉 极限生存
-
-“假设 VPS 内存只剩 700MB 可用”
-
-👉 砍功能模式
-
-“必须删除一个功能以换性能，请给出建议”
-###
----
-
-## 🛠️ 6. 开发辅助脚本 (Utility Scripts)
-项目根目录下包含多个 Python 脚本，用于调试行情接口和数据结构：
-
-### 6.1 行情验证
--   `test_assets.py`: 测试多品种行情获取（ETF、开放式基金、北交所股票）。
--   `test_robust.py`: 健壮性测试，验证针对易失败标的（如部分 ETF）的异常处理和降级机制。
--   `test_simple.py`: 快速冒烟测试，仅验证 A股龙头（如茅台）和主流 ETF 的连通性。
-
-### 6.2 调试工具
--   `debug_akshare.py`: 绕过业务逻辑，直接调用 `akshare` 库函数，用于排查上游 API 变更或网络问题。
--   `debug_cols.py`: 打印 `akshare` 返回 DataFrame 的所有列名，用于修复因字段名变更（如 `基金代码` vs `代码`）导致的代码错误。
-
----
-
-> 文档最后更新时间: 2026-02-12
+## 8. 文档索引与附录链接
+
+建议阅读顺序：
+1. 本文档：总体架构、现状与开发入口
+2. [TODO.md](./TODO.md)：当前任务与阶段状态
+3. [market_data_sources.md](./market_data_sources.md)：行情接入与 provider 说明
+4. [trading-metrics.md](./trading-metrics.md)：指标算法与实现状态
+5. [trading-fields-design.md](./trading-fields-design.md)：现状字段与未来扩展边界
+6. [顶层设计.md](./顶层设计.md)：历史草案，仅供追溯早期思路
+
+维护原则：
+- 主文档负责“当前真实实现”
+- TODO 负责“当前要做什么”
+- 附录负责“专题细节”
+- 历史草案不再承载当前决策
