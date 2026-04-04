@@ -56,7 +56,7 @@
 | `frontend/app/` | Next.js App Router 页面入口 |
 | `frontend/components/` | 页面复用组件 |
 | `frontend/lib/api.ts` | 前端 API 封装与共享类型 |
-| `plan/` | 内部文档、路线图与专题附录 |
+| `docs/` | 内部文档、路线图与专题附录 |
 
 ### 2.3 运行时结构
 
@@ -323,7 +323,6 @@ npm run dev
 3. [market_data_sources.md](./market_data_sources.md)：行情接入与 provider 说明
 4. [trading-metrics.md](./trading-metrics.md)：指标算法与实现状态
 5. [trading-fields-design.md](./trading-fields-design.md)：现状字段与未来扩展边界
-6. [顶层设计.md](./顶层设计.md)：历史草案，仅供追溯早期思路
 
 维护原则：
 - 主文档负责“当前真实实现”

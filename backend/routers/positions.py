@@ -2,7 +2,6 @@
 Trading Noobs Backend - Positions Router
 Handles Position CRUD and Batch operations
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.encoders import jsonable_encoder

@@ -8,7 +8,7 @@ from typing import Optional
 from datetime import date, timedelta
 
 from database import get_db
-from models import Trade, TradeStatus, User, Position, PositionStatus, TradingAccount, TradeBatch, BatchType, UserSettings
+from models import User, Position, PositionStatus, TradingAccount, TradeBatch, BatchType, UserSettings
 from schemas import DashboardStats, AssetAllocation, PositionMover, AccountAllocation, PortfolioFlow, SankeyNode, SankeyLink
 from services.auth_service import get_current_user
 from services.market_data_service import MarketDataService
