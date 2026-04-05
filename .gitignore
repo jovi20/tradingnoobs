@@ -68,3 +68,5 @@ htmlcov/
 .pytest_cache/
 .mypy_cache/
 
+# Codex visual companion temp files
+.superpowers/

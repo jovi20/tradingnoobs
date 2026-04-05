@@ -1,9 +1,10 @@
 # Trading Noobs 主开发文档
 
-本文档是 `plan/` 目录下的唯一主开发文档，用于描述项目定位、架构、模块现状、开发入口与附录索引。
+本文档是 `docs/` 目录下的唯一主开发文档，用于描述项目定位、架构、模块现状、开发入口与附录索引。
 
 文档约定：
 - 本文档是当前实现的权威说明。
+- [current-state-baseline.md](./current-state-baseline.md) 是进入架构讨论前的现状审计基线，集中记录“已做/未做/优点/短板”。
 - [TODO.md](./TODO.md) 是唯一执行清单，只记录任务状态与阶段。
 - 专题细节拆分到附录：
   - [market_data_sources.md](./market_data_sources.md)
@@ -78,12 +79,14 @@
 - `/` 看板
 - `/positions` 持仓列表
 - `/positions/[id]` 持仓详情
+- `/positions/[id]/add-batch` 持仓加仓 / 平仓
 - `/positions/new` 新建持仓
 - `/positions/import` 批量导入
 - `/strategies` 策略管理
 - `/insights` AI 洞察
-- `/daily` 每日总结
-- `/settings` 设置
+- `/daily` 每日总结 + 随笔
+- `/settings` 设置总入口
+- `/settings/accounts/[id]` 账户详情与资金流水
 - `/login` / `/register`
 
 ---
@@ -103,11 +106,11 @@
 | 策略与检查清单 | `部分实现` | 策略 CRUD、检查清单编辑与开仓确认已完成；部分列表/看板展示仍待补 |
 | 计划偏移与执行质量 | `已实现` | 计划入场/止损/止盈、偏移分析、详情页展示 |
 | Dashboard 与绩效分析 | `部分实现` | 核心看板、Sharpe/Sortino/Calmar、Max Drawdown、MAE/MFE 已完成；组合风险与预警未完成 |
-| Journal / Daily / AI Summary | `已实现` | 随笔、每日总结、AI 摘要主流程已落地 |
+| Journal / Daily / AI Summary | `已实现` | 随笔已集成到 `Daily` 页面中，每日总结与 AI 摘要主流程已落地 |
 | Insights / AI 分析助手 | `部分实现` | 周报、分析助手、结果持久化已实现；日期范围选择器仍缺 |
 | 市场数据与资产识别 | `已实现` | A 股 / 港股 / 美股 / Crypto / 外汇 / 基金的行情查询与资产元数据识别已接入 |
 | 批量导入导出 | `部分实现` | CSV/Excel 导入与 CSV 模板下载已实现；PDF 导出未完成 |
-| 管理员系统设置 | `部分实现` | 系统级 LLM / Finnhub 设置、LLM 连通性测试已实现；运维能力仍不足 |
+| 管理员系统设置 | `部分实现` | 系统级 LLM / Finnhub 设置、LLM 连通性测试已实现；CLI 运维脚本已存在，但后台运维能力仍不足 |
 | 风控预警系统 | `规划中` | Phase 3 目标，尚未形成独立服务与前端展示 |
 
 ### 3.1 当前已落地的核心实现
@@ -280,8 +283,9 @@ npm run dev
 - `LLM_MODEL`
 
 注意：
-- 仓库当前没有稳定维护的 `.env.example`；开发启动主要依赖 `start.ps1` 自动生成最小 `.env`。
+- 仓库当前有 `backend/.env.example`，但内容仍偏最小化开发配置；生产环境仍应以显式环境变量或部署配置为准。
 - 生产环境变量更多由 `docker-compose.yml` 注入。
+- 当前数据库 schema 主要由 `Base.metadata.create_all()` 和 `backend/ops/migrate_db.py` 维护；虽然依赖中已安装 `alembic`，但仓库内还没有稳定维护的 Alembic 迁移链。
 
 ### 6.5 部署入口
 
@@ -318,11 +322,12 @@ npm run dev
 ## 8. 文档索引与附录链接
 
 建议阅读顺序：
-1. 本文档：总体架构、现状与开发入口
-2. [TODO.md](./TODO.md)：当前任务与阶段状态
-3. [market_data_sources.md](./market_data_sources.md)：行情接入与 provider 说明
-4. [trading-metrics.md](./trading-metrics.md)：指标算法与实现状态
-5. [trading-fields-design.md](./trading-fields-design.md)：现状字段与未来扩展边界
+1. [current-state-baseline.md](./current-state-baseline.md)：当前代码审计基线
+2. 本文档：总体架构、现状与开发入口
+3. [TODO.md](./TODO.md)：当前任务与阶段状态
+4. [market_data_sources.md](./market_data_sources.md)：行情接入与 provider 说明
+5. [trading-metrics.md](./trading-metrics.md)：指标算法与实现状态
+6. [trading-fields-design.md](./trading-fields-design.md)：现状字段与未来扩展边界
 
 维护原则：
 - 主文档负责“当前真实实现”
