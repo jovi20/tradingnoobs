@@ -1,58 +1,58 @@
-# Trading Noobs Platform Foundation Design
+# Trading Noobs 平台底座设计
 
-> Status: Approved in collaborative design discussion on 2026-04-06. This document is the architecture baseline for the next implementation-planning step.
+> 状态：已在 2026-04-06 的协作式设计讨论中确认。本文件是下一步 implementation planning 的架构基线。
 
-## Goal
+## 目标
 
-Build a hosted B2C trading journal platform foundation that is stable enough for production launch, supports roughly 1000 users on a single ARM VPS, and leaves clean upgrade paths for future App clients, a richer charting system, a market-data middle layer, and later AI monetization.
+构建一个面向托管式 B2C 交易日志产品的平台底座，使其能够支撑正式上线，适配单台 ARM VPS 上约 1000 用户量级的运行需求，并为未来的 App 客户端、更丰富的图表系统、市场数据中间层，以及后续 AI 商业化能力预留清晰的升级路径。
 
-## Design Summary
+## 设计摘要
 
-The recommended shape is a `module-first monolith` deployed on one VPS with `Docker Compose`, backed by `PostgreSQL` as the single system of record, `Redis` for cache and async coordination, a separate `worker` process for heavy jobs, and a schema-first charting/data contract that keeps future Web and App clients decoupled from specific UI libraries.
+推荐的整体形态是：在单台 VPS 上通过 `Docker Compose` 部署一个 `模块优先的单体系统（module-first monolith）`，以 `PostgreSQL` 作为唯一系统事实源，以 `Redis` 负责缓存与异步协调，并引入独立的 `worker` 进程处理重任务。同时，图表和分析数据应采用 `schema-first` 的契约方式，避免未来 Web 和 App 客户端被某一个具体 UI 图表库绑死。
 
-The system should optimize for:
+这个系统应优先优化以下目标：
 
-- Data correctness in core trading records
-- Recoverability and migration discipline
-- Explicit domain boundaries instead of large mixed routers/services
-- Good UX on the Web now and clean App reuse later
-- Controlled long-term expansion into market-data history, content ingestion, and AI workflows
+- 核心交易记录的数据正确性
+- 可恢复性与迁移纪律
+- 清晰的领域边界，避免继续把职责堆进大型 router / service
+- 当前 Web 端的良好使用体验，以及未来 App 端的平滑复用
+- 对市场数据历史、内容采集与 AI 工作流的可控长期扩展
 
-## Constraints
+## 约束条件
 
-### Product constraints
+### 产品约束
 
-- Hosted by the product owner; users access only Web now, App later
-- AI is a future monetization point, but not the first implementation priority
-- Content/news/SEC features are initially a light information collection and display module, not a heavy research platform
+- 产品由项目方统一托管；用户当前只通过 Web 访问，后续再扩展到 App
+- AI 是未来的商业化方向之一，但不是当前最优先的实现目标
+- 新闻 / SEC / 文件类能力在首阶段定位为轻量的信息收集与展示模块，而不是重型研究平台
 
-### Infrastructure constraints
+### 基础设施约束
 
-- Single VPS for launch
-- ARM, 4 CPU / 24 GB RAM
-- `Docker Compose` deployment
-- Current assumed scale: around 1000 users
-- Market data freshness target: minute-level, not tick-level
-- AI analysis target: batch analysis over user trade records, not real-time asset inference
+- 首发阶段使用单台 VPS
+- 机器规格为 ARM，4 CPU / 24 GB RAM
+- 部署方式为 `Docker Compose`
+- 当前假设的规模约为 1000 用户
+- 行情更新目标为分钟级，而不是 tick 级
+- AI 分析目标是对用户交易记录做批处理分析，而不是对标的做实时推理
 
-### Data constraints
+### 数据约束
 
-- `PostgreSQL` is the only supported database for development and production
-- Market data is important and can be retained long term, but is not core user truth
-- Market data and derived data must be designed to be refillable/recomputable
+- 开发与生产统一使用 `PostgreSQL`
+- 市场数据很重要，也允许长期保留，但它不是用户核心真相数据
+- 市场数据与衍生数据必须被设计为可回填 / 可重算
 
-## Recommended Runtime Topology
+## 推荐的运行时拓扑
 
 ```mermaid
 flowchart TD
-    U[Users]
-    WEB[Next.js Web App]
+    U[用户]
+    WEB[Next.js Web 应用]
     CADDY[Caddy]
-    API[FastAPI API App]
+    API[FastAPI API 应用]
     WORKER[Worker]
     REDIS[(Redis)]
     PG[(PostgreSQL)]
-    OBJ[Object Storage Compatible Layer]
+    OBJ[对象存储兼容层]
 
     U --> WEB
     WEB --> CADDY
@@ -66,24 +66,24 @@ flowchart TD
     WORKER --> OBJ
 ```
 
-## Recommended Technology Selections
+## 推荐技术选型
 
-| Area | Recommendation | Why |
-|------|----------------|-----|
-| Web client | `Next.js` | Keep current investment and improve architecture, not rewrite the client |
-| Chart rendering | `ECharts` | Better expressiveness and UX headroom than the current chart setup |
-| Backend API | `FastAPI` | Good fit for typed modular API and worker-friendly Python ecosystem |
-| Main DB | `PostgreSQL` | Strong correctness, transactions, indexing, and future extension options |
-| DB migration | `Alembic` | Required to replace ad hoc schema evolution |
-| Cache / coordination | `Redis` | Cache, idempotency support, queue state, rate-limit helpers |
-| Async jobs | `Worker` process backed by Redis | Keep heavy AI, market refill, aggregation, and ingestion work out of request path |
-| Object/file storage | S3-compatible layer later | Required for future screenshots, report outputs, raw files, and content artifacts |
-| Chart contract | Schema-first server output | Lets Web and future App render charts independently |
-| Market DB evolution | `Timescale-ready`, not `Timescale-first` | Keep migration path open without overcomplicating launch |
+| 领域 | 推荐方案 | 原因 |
+|------|----------|------|
+| Web 客户端 | `Next.js` | 延续当前投入，重点优化架构而不是重写前端 |
+| 图表渲染 | `ECharts` | 表达能力和交互体验上限高于当前图表体系 |
+| 后端 API | `FastAPI` | 适合做类型明确的模块化 API，也适合 Python 异步任务生态 |
+| 主数据库 | `PostgreSQL` | 数据正确性、事务能力、索引能力和后续扩展能力都更强 |
+| 数据库迁移 | `Alembic` | 必须替换当前临时式 schema 演进方式 |
+| 缓存 / 协调 | `Redis` | 用于缓存、幂等辅助、队列状态、限流辅助 |
+| 异步任务 | 基于 Redis 的独立 `worker` 进程 | 将 AI、行情回填、预聚合、内容采集等重任务移出请求链路 |
+| 对象 / 文件存储 | 后续引入 S3 兼容层 | 为截图、报表导出、原始文件、内容工件做准备 |
+| 图表契约 | 服务端输出 schema-first 图表协议 | 让 Web 和未来 App 能独立渲染 |
+| 行情数据库演进 | `Timescale-ready`，而不是 `Timescale-first` | 提前保留迁移路径，但不在首发阶段过度复杂化 |
 
-## Internal Module Boundaries
+## 内部模块边界
 
-The system remains one deployable application, but code and data boundaries should be split by domain.
+系统整体仍然是一个可部署单元，但代码结构与数据边界必须按领域拆开。
 
 ```mermaid
 flowchart LR
@@ -108,30 +108,30 @@ flowchart LR
     CONTENT --> AI
 ```
 
-### Module responsibilities
+### 模块职责
 
-| Module | Responsibility |
-|--------|----------------|
-| `core` | config, auth, permissions, sessions, audit, jobs, observability |
-| `trading` | accounts, positions, events, ledger, strategies, daily review, notes |
-| `market-data` | providers, quote history, asset identity, refill jobs, coverage tracking |
-| `analytics` | dashboard metrics, chart schemas, materialized read models, reporting views |
-| `ai` | prompt registry, model providers, batch jobs, insight results |
-| `content` | news/file ingestion, content metadata, extraction, summary, symbol linkage |
-| `admin` | platform settings, user operations, maintenance, feature flags, health views |
+| 模块 | 职责 |
+|------|------|
+| `core` | config、auth、permissions、sessions、audit、jobs、observability |
+| `trading` | accounts、positions、events、ledger、strategies、daily review、notes |
+| `market-data` | provider abstraction、quote history、asset identity、refill jobs、coverage tracking |
+| `analytics` | dashboard metrics、chart schemas、materialized read models、reporting views |
+| `ai` | prompt registry、model providers、batch jobs、insight results |
+| `content` | news/file ingestion、content metadata、extraction、summary、symbol linkage |
+| `admin` | platform settings、user operations、maintenance、feature flags、health views |
 
-## Database Design Principles
+## 数据库设计原则
 
-The database should not be a single mixed warehouse. It should be one `PostgreSQL` system split into six logical domains, ideally as separate schemas.
+数据库不应该继续作为一个“所有数据都混在一起的仓库”。它应当是一套单一 `PostgreSQL` 系统，但在逻辑上拆成六个明确的数据域，最好对应独立 schema，而不是都继续放在 `public` 下。
 
 ```mermaid
 flowchart TB
-    CORE[core<br/>user truth]
-    REF[reference<br/>stable shared master data]
-    MARKET[market<br/>quotes and bars]
-    DERIVED[derived<br/>recomputable read models]
-    AUDIT[audit<br/>append-only operational trail]
-    CONTENT[content<br/>news/files/ingestion]
+    CORE[core<br/>用户真相数据]
+    REF[reference<br/>稳定共享主数据]
+    MARKET[market<br/>行情与 K 线]
+    DERIVED[derived<br/>可重算读模型]
+    AUDIT[audit<br/>追加式运行轨迹]
+    CONTENT[content<br/>新闻/文件/采集]
 
     REF --> CORE
     REF --> MARKET
@@ -143,75 +143,75 @@ flowchart TB
     CONTENT --> AUDIT
 ```
 
-### Domain meanings
+### 各域含义
 
-| Domain | Meaning |
-|--------|---------|
-| `core` | Canonical user-facing trading truth |
-| `reference` | Shared master data and slow-moving classifications |
-| `market` | Retained market history and snapshots, refillable from upstream |
-| `derived` | Recomputable chart/read-model/cache outputs |
-| `audit` | Security, admin, job, and change trail |
-| `content` | Information ingestion and display layer for news/files/SEC content |
+| 数据域 | 含义 |
+|--------|------|
+| `core` | 面向用户的交易真相数据 |
+| `reference` | 共享主数据与低频变化分类数据 |
+| `market` | 长期保留的行情历史与快照，可从上游回填 |
+| `derived` | 图表读模型、缓存、预聚合、可重算结果 |
+| `audit` | 安全、后台、任务、变更与操作轨迹 |
+| `content` | 新闻 / 文件 / SEC 内容的采集与展示层 |
 
-### Critical rules
+### 关键规则
 
-1. `core` is truth; other domains must not become upstream truth for `core`.
-2. `market`, `derived`, and `content` can retain large volumes, but their rebuild/retention policies must stay separate from `core`.
-3. UI features, AI, and content views must read through service/domain interfaces, not hardcode physical table assumptions.
-4. Future time-series evolution must affect only the `market` domain, not `core`.
+1. `core` 是真相层，其他域不能反向成为 `core` 的上游真相来源。
+2. `market`、`derived`、`content` 可以长期保留大量数据，但它们的保留、回填、重建策略必须和 `core` 分开。
+3. UI、AI、内容模块必须通过服务层 / 领域接口读取数据，不能把物理表结构直接写死在业务里。
+4. 将来如果演进到时序增强能力，只允许影响 `market` 域，不能波及 `core`。
 
-## Data Correctness Rules
+## 数据正确性规则
 
-### Core truth model
+### 核心真相模型
 
-Core trading data should follow an `event truth + aggregate state` design:
+核心交易数据应采用 `事件真相 + 聚合状态` 的设计方式：
 
-- Truth-like records:
-  - position events
-  - account ledger entries
-  - audit records
-  - job execution records
-- Aggregate/current state records:
-  - trading positions
-  - account balances
-  - portfolio snapshots
-  - derived dashboard/chart results
+- 更接近真相的记录：
+  - `position_events`
+  - `account_ledger_entries`
+  - `audit` 记录
+  - `job_executions`
+- 当前态 / 聚合态记录：
+  - `trading_positions`
+  - 账户余额与净值
+  - `portfolio_snapshots`
+  - Dashboard / 图表衍生结果
 
-### Required integrity rules
+### 必须落地的完整性规则
 
-- Primary keys on every core table
-- Strong foreign keys inside `core`
-- Explicit unique constraints for identity and idempotency
-- Decimal/fixed numeric types for prices, quantities, and monetary values
-- Restricted enum/state transitions
-- Soft-delete or status-based disable for critical entities instead of hard delete
-- Idempotent writes for imports, jobs, file ingestion, and retries
+- 每张 `core` 表都必须有主键
+- `core` 内部使用强外键
+- 身份、幂等、唯一业务规则必须落库，不靠代码约定
+- 价格、数量、金额全部使用定点数值类型
+- 枚举值、状态流转、方向、类型必须受限
+- 核心实体优先软删除或状态禁用，不直接硬删除
+- 导入、异步任务、文件采集、重试写入都必须支持幂等
 
-## Recoverability Rules
+## 可恢复性规则
 
-### Migration discipline
+### 迁移纪律
 
-- Production schema changes must go through `Alembic`
-- `create_all()` is not acceptable as an online migration strategy
-- Complex migrations must use staged rollout:
-  - add new structure
-  - backfill
-  - switch reads/writes
-  - remove deprecated structure later
+- 生产 schema 变更必须走 `Alembic`
+- `create_all()` 不能作为线上迁移方案
+- 复杂迁移必须采用分阶段策略：
+  - 先加新结构
+  - 再回填
+  - 再切换读写路径
+  - 最后移除旧结构
 
-### Backup and restore discipline
+### 备份与恢复纪律
 
-- Daily logical backups
-- Volume-level snapshot strategy
-- Strong recommendation: keep at least one backup copy off-box
-- Strong recommendation: prepare for WAL/PITR-class recovery later
-- Recovery drills must be part of normal operating practice
+- 每日逻辑备份
+- 卷级快照策略
+- 强烈建议至少保留一份异地备份
+- 强烈建议未来支持基于 WAL / PITR 的恢复能力
+- 恢复演练必须成为常规运维动作的一部分
 
-### Recovery priority
+### 恢复优先级
 
-| Priority | Domain |
-|----------|--------|
+| 优先级 | 数据域 |
+|--------|--------|
 | `P0` | `core` |
 | `P1` | `reference` |
 | `P1` | `audit` |
@@ -219,16 +219,16 @@ Core trading data should follow an `event truth + aggregate state` design:
 | `P2` | `content` |
 | `P3` | `derived` |
 
-This reflects the key product rule: user trade truth must survive even if market or derived data must later be rebuilt.
+这体现了本产品最核心的一条原则：用户的交易真相必须保住；即使行情和衍生结果需要后补，也不能丢真相。
 
-## Naming Model Improvements
+## 命名模型优化
 
-The current naming should be adjusted to make relationships explicit.
+当前命名需要做收敛，使表之间的逻辑关系更直观。
 
-### Recommended primary renames
+### 推荐的核心重命名
 
-| Current | Recommended |
-|---------|-------------|
+| 当前命名 | 推荐命名 |
+|---------|----------|
 | `Position` | `TradingPosition` |
 | `TradeBatch` | `PositionEvent` |
 | `Transaction` | `AccountLedgerEntry` |
@@ -240,18 +240,18 @@ The current naming should be adjusted to make relationships explicit.
 | `JournalEntry` | `DailyNote` |
 | `DailySummary` | `TradingDayReview` |
 
-### Why these matter
+### 这些命名为什么更清晰
 
-- `PositionEvent` is clearer than `TradeBatch`, which sounds like import/batch processing
-- `AccountLedgerEntry` distinguishes account cash movement from position events
-- `AssetMaster` makes it clear this is shared asset identity data, not incidental metadata
-- `PortfolioSnapshot` clarifies the tracked subject better than a purely frequency-based name
+- `PositionEvent` 比 `TradeBatch` 更准确，因为后者很像导入批次或批处理任务
+- `AccountLedgerEntry` 能清楚区分“账户资金流水”和“持仓变化事件”
+- `AssetMaster` 更贴近“统一资产主数据”，而不只是零散 metadata
+- `PortfolioSnapshot` 说明它记录的是“组合快照”，而不只是“按日的某个表”
 
-## Recommended Table Strategy by Domain
+## 按数据域划分的表策略
 
 ### `core`
 
-Keep or evolve into:
+建议保留或演进为：
 
 - `users`
 - `user_preferences`
@@ -266,7 +266,7 @@ Keep or evolve into:
 
 ### `reference`
 
-Keep or evolve into:
+建议保留或演进为：
 
 - `asset_master`
 - `asset_aliases`
@@ -277,7 +277,7 @@ Keep or evolve into:
 
 ### `market`
 
-Add/evolve into:
+建议新增或演进为：
 
 - `market_symbols`
 - `quote_snapshots`
@@ -288,7 +288,7 @@ Add/evolve into:
 
 ### `derived`
 
-Add/evolve into:
+建议新增或演进为：
 
 - `portfolio_snapshots`
 - `dashboard_cache`
@@ -298,7 +298,7 @@ Add/evolve into:
 
 ### `audit`
 
-Add/evolve into:
+建议新增或演进为：
 
 - `audit_logs`
 - `admin_actions`
@@ -308,7 +308,7 @@ Add/evolve into:
 
 ### `content`
 
-Add/evolve into:
+建议新增或演进为：
 
 - `content_sources`
 - `content_documents`
@@ -317,204 +317,207 @@ Add/evolve into:
 - `content_extractions`
 - `content_summaries`
 
-## Normalization vs Denormalization Rules
+## 规范化与反规范化边界
 
-| Domain | Bias |
-|--------|------|
-| `core` | Strong normalization |
-| `reference` | Strong normalization |
-| `market` | Mild denormalization for time-range queries |
-| `derived` | Intentional denormalization, but always recomputable |
-| `content` | Mixed: normalized relationships plus semi-structured extraction payloads |
-| `audit` | Append-oriented, mostly immutable records |
+| 数据域 | 建议倾向 |
+|--------|----------|
+| `core` | 强规范化 |
+| `reference` | 强规范化 |
+| `market` | 以时序查询友好为目标的轻度反规范化 |
+| `derived` | 主动反规范化，但必须可重算 |
+| `content` | 关系结构规范化 + 抽取结果半结构化 |
+| `audit` | 追加写为主，记录尽量不可变 |
 
-### JSON usage guidance
+### JSON 使用原则
 
-Prefer JSON mainly in:
+建议把 JSON 主要用在：
 
 - `derived`
 - `content`
-- selected `audit` payloads
+- 部分 `audit` 载荷
 
-Avoid growing JSON usage inside `core` unless data is truly not operationally queried, validated, or audited.
+不建议继续扩大 JSON 在 `core` 中的使用范围，除非该数据确实不会被业务查询、校验、统计或审计。
 
-## User and Authentication Foundation
+## 用户与认证底座
 
-The current simple `users` approach is not enough for the desired future feature set.
+当前只有简单 `users` 表的做法，不足以支撑后续想要补齐的认证能力。
 
-### User/auth model direction
+### 用户 / 认证模型方向
 
-Keep `users` as the user subject table, then add:
+保留 `users` 作为用户主体表，并新增：
 
 - `user_credentials`
 - `user_sessions`
 - `user_identities`
 - `auth_tokens`
 
-### User identity recommendations
+### 用户标识建议
 
-Use dual identifiers:
+采用双标识策略：
 
-- `users.id` as internal `bigint`
-- `users.public_id` as external `uuid`
+- `users.id` 作为内部 `bigint`
+- `users.public_id` 作为对外 `uuid`
 
-This allows efficient joins internally and safer public/client-facing identifiers externally.
+这样既能保持内部 join 与索引效率，也能为外部接口、App 和分享链接提供更安全的公开标识。
 
-### Minimal fields to add soon
+### 近期就应补上的字段
 
 - `public_id`
 - `status`
 - `email_normalized`
 - `last_login_at`
 
-### Registration and auth policy framework
+### 注册与认证策略框架
 
-Plan for platform-configurable registration modes:
+建议平台支持可配置的注册模式：
 
 - `open`
 - `invite_only`
 - `approval_required`
 - `closed`
 
-And policy inputs such as:
+并支持类似以下策略输入：
 
-- allowed email domains
-- email verification requirement
-- invite quota
+- 允许注册的邮箱域名
+- 是否要求邮箱验证
+- 邀请额度
 
-This lets registration restrictions evolve without redesigning the auth data model.
+这样未来要调整注册限制时，不需要重新设计认证数据模型。
 
-## Cross-Cutting Platform Capabilities
+## 横切平台能力
 
-These are required even at the 1000-user stage.
+即使只是 1000 用户量级，这些能力也应该作为平台底座的一部分提前补上。
 
-### Identity and security
+### 身份与安全
 
-- sessions
-- password reset
-- email verification
-- registration restrictions
-- future SSO/provider login support
+- 会话管理
+- 密码重置
+- 邮箱验证
+- 注册限制
+- 未来 SSO / 第三方登录支持
 
-### Credential/config governance
+### 配置与凭据治理
 
-- platform settings separated from credentials
-- masked and encrypted secrets
-- audit trail for config changes
-- provider enable/disable controls
+- 平台配置与密钥分离
+- 敏感信息掩码显示与加密存储
+- 配置变更审计轨迹
+- provider 启停控制
 
-### Jobs and idempotency
+### Job、重试与幂等
 
-- async jobs for AI, market refill, content ingestion, pre-aggregation
-- retry tracking
-- failure payload capture
-- idempotency keys for sensitive writes
+- AI 任务
+- 行情回填
+- 内容采集
+- 预聚合任务
+- 重试跟踪
+- 失败载荷记录
+- 敏感写操作的幂等键
 
-### Audit and provenance
+### 审计与数据血缘
 
-- who changed platform settings
-- which job generated an insight
-- which provider populated market/content data
-- why a user/session/action failed or was blocked
+- 谁改了平台配置
+- 哪个 job 生成了某条 insight
+- 哪个 provider 填充了 market / content 数据
+- 为什么某次用户 / 会话 / 动作失败或被阻断
 
-### Backup/restore/migration discipline
+### 备份、恢复与迁移纪律
 
-- scheduled backups
-- restore drills
-- strict migration workflow
+- 定时备份
+- 恢复演练
+- 严格迁移流程
 
-### Observability
+### 可观测性
 
-- structured logs
-- request logs
-- job logs
-- health endpoints
-- error visibility
-- slow query awareness
+- 结构化日志
+- 请求日志
+- 任务日志
+- 健康检查
+- 错误可见性
+- 慢查询可见性
 
-## App Compatibility Guidance
+## App 兼容性原则
 
-This architecture is App-compatible if the platform treats APIs and chart contracts as reusable product interfaces rather than Web-only implementation details.
+只要平台把 API 与图表契约当成产品级复用接口，而不是仅服务 Web 页面，这套架构就对未来 iOS / Android 是友好的。
 
-### Reusable for future iOS/Android
+### 可被未来 App 复用的部分
 
-- auth and user model
-- trading domain APIs
-- market-data APIs
-- analytics/chart schemas
-- AI job/result schemas
+- 身份与认证模型
+- 交易域 API
+- 市场数据 API
+- 分析与图表 schema
+- AI 任务与结果 schema
 
-### Not directly reusable
+### 不能直接复用的部分
 
-- current Next.js page implementations
-- direct chart-library-specific client rendering
+- 当前的 Next.js 页面实现
+- 直接绑定具体图表库的前端渲染逻辑
 
-### Required principle
+### 必须坚持的原则
 
-Build `schema-first chart contracts` and `domain-first APIs`, then let Web and future App render them separately.
+构建 `schema-first` 的图表契约，以及 `domain-first` 的业务 API；Web 和 App 各自渲染，而不是共享页面实现。
 
-## Content Module Positioning
+## 内容模块定位
 
-The planned news/SEC/file feature should start as a light module inside the main system, not as a separate product.
+规划中的新闻 / SEC / 文件功能，首阶段应定位为主系统内的轻量模块，而不是独立产品。
 
-Recommended stance:
+推荐定位如下：
 
-- independent domain boundary
-- same deployment for now
-- same database instance, separate schema/table family
-- future path to independent subsystem if it grows into a research workspace
+- 有独立的领域边界
+- 当前先与主系统同部署
+- 当前先与主系统共用同一个数据库实例，但独立 schema / 表族
+- 若未来成长为研究工作台，再演进成独立子系统
 
-## Evolution Path
+## 演进路径
 
-### Phase 1: Foundation reset
+### Phase 1：基础底座重置
 
-- Formalize schema boundaries
-- Adopt `Alembic`
-- Rename/evolve core entities
-- Add Redis + worker
-- Separate config, jobs, audit, and auth support tables
+- 正式定义 schema 边界
+- 接入 `Alembic`
+- 重命名 / 演进核心实体
+- 引入 Redis + worker
+- 拆出配置、任务、审计、认证支撑表
 
-### Phase 2: Market-data and analytics structure
+### Phase 2：市场数据与分析结构化
 
-- Build market-data middle layer boundaries
-- Move chart logic to analytics schemas and chart contracts
-- Introduce retained market history tables
+- 建立市场数据中间层边界
+- 将图表逻辑下沉到 analytics schema 与图表契约
+- 引入长期保留的行情历史表
 
-### Phase 3: Content module
+### Phase 3：内容模块
 
-- Add light information ingestion/display domain
-- Keep it separate from trading truth
+- 增加轻量信息采集与展示域
+- 保持其与交易真相数据解耦
 
-### Phase 4: AI hardening
+### Phase 4：AI 强化
 
 - Prompt registry
 - provider abstraction
-- result/version tracking
-- future metering hooks
+- 结果与版本跟踪
+- 为未来计量能力预留挂点
 
-### Phase 5: Optional future splits
+### Phase 5：未来可选拆分
 
-- `market` domain can move toward Timescale-style time-series extension
-- `content` can become an independent subsystem
-- App clients can reuse stable APIs and chart contracts
+- `market` 域可进一步演进到类 Timescale 的时序增强能力
+- `content` 域可进一步演进成独立子系统
+- App 客户端可直接复用稳定的 API 与图表契约
 
-## Decisions Captured in This Design
+## 本设计已确认的关键决策
 
-- Choose module-first monolith over early microservices
-- Choose `PostgreSQL` as the only DB for dev and prod
-- Choose `ECharts` for richer Web chart UX
-- Keep market data long-term, but treat it as refillable rather than user truth
-- Keep content/news/SEC as an internal module first, not a separate product
-- Prepare market-data domain to be `Timescale-ready`
-- Normalize `core` and `reference`; denormalize `derived` by design
-- Redesign user/auth tables now at the framework level, even if all auth features are not implemented immediately
+- 选择模块优先的单体，而不是过早微服务化
+- 选择 `PostgreSQL` 作为开发与生产的唯一数据库
+- 选择 `ECharts` 以获得更强的图表表达能力与 Web 体验
+- 市场数据长期保留，但视为可回填数据，而不是用户真相数据
+- 新闻 / 内容 / SEC 功能先作为内部模块，不单独做产品
+- 提前把市场数据域设计成 `Timescale-ready`
+- `core` 与 `reference` 倾向强规范化；`derived` 允许按读模型主动反规范化
+- 用户 / 认证骨架现在就重构到位，即使不是所有认证功能都立刻实现
 
-## Open Implementation Questions
+## 待 implementation planning 再定的事项
 
-These are deferred to implementation planning, not blockers for this design:
+以下问题留到 implementation planning 阶段明确，不阻塞当前设计：
 
-- Exact async job library choice
-- Exact secret encryption strategy
-- Exact storage choice for future raw content files
-- Exact rollout order for renaming current ORM models and tables
-- Exact analytics/chart schema format and versioning rules
+- 异步任务库的具体选型
+- 密钥加密的具体实现方案
+- 原始文件内容未来落对象存储的具体技术选型
+- 当前 ORM 模型与表重命名的具体 rollout 顺序
+- analytics / chart schema 的具体格式与版本策略
