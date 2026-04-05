@@ -7,7 +7,7 @@ from typing import List
 from datetime import date
 
 from database import get_db
-from models import DailySummary, User, Trade
+from models import DailySummary, User
 from schemas import DailySummaryCreate, DailySummaryUpdate, DailySummaryResponse
 from services.auth_service import get_current_user
 

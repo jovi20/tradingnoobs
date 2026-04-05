@@ -8,33 +8,6 @@ export const API_BASE = rawBase.replace(/\/api$/, '')
 
 // ============== Types ==============
 
-export interface Trade {
-    id: number
-    user_id: number
-    account_id?: number
-    strategy_id?: number
-    symbol: string
-    exchange: string
-    entry_price: number
-    quantity: number
-    entry_time: string
-    current_price?: number
-    exit_price?: number
-    exit_time?: string
-    status: 'OPEN' | 'CLOSED'
-    entry_reason?: string
-    entry_emotion?: string
-    entry_confidence?: number
-    exit_reason?: string
-    exit_emotion?: string
-    trade_review?: string
-    screenshots: string[]
-    lessons: string[]
-    rating?: number
-    created_at: string
-    pnl?: number
-    pnl_percent?: number
-}
 
 export interface Strategy {
     id: number
@@ -311,50 +284,6 @@ export const authAPI = {
     },
 }
 
-// ============== Trades API ==============
-
-export const tradesAPI = {
-    list: async (token: string, params?: { status?: string; symbol?: string; sort_by?: string; order?: string }) => {
-        const searchParams = new URLSearchParams()
-        if (params?.status) searchParams.append('status', params.status)
-        if (params?.symbol) searchParams.append('symbol', params.symbol)
-        if (params?.sort_by) searchParams.append('sort_by', params.sort_by)
-        if (params?.order) searchParams.append('order', params.order)
-        const query = searchParams.toString()
-        return fetchAPI(`/api/trades${query ? `?${query}` : ''}`, {}, token)
-    },
-
-    get: async (token: string, id: number) => {
-        return fetchAPI(`/api/trades/${id}`, {}, token)
-    },
-
-    create: async (token: string, data: any) => {
-        return fetchAPI('/api/trades', {
-            method: 'POST',
-            body: JSON.stringify(data),
-        }, token)
-    },
-
-    update: async (token: string, id: number, data: any) => {
-        return fetchAPI(`/api/trades/${id}`, {
-            method: 'PATCH',
-            body: JSON.stringify(data),
-        }, token)
-    },
-
-    close: async (token: string, id: number, data: any) => {
-        return fetchAPI(`/api/trades/${id}/close`, {
-            method: 'POST',
-            body: JSON.stringify(data),
-        }, token)
-    },
-
-    delete: async (token: string, id: number) => {
-        return fetchAPI(`/api/trades/${id}`, {
-            method: 'DELETE',
-        }, token)
-    },
-}
 
 // ============== Strategies API ==============
 

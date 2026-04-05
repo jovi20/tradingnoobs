@@ -10,9 +10,6 @@ from enum import Enum
 
 # ============== Enums ==============
 
-class TradeStatusEnum(str, Enum):
-    OPEN = "OPEN"
-    CLOSED = "CLOSED"
 
 
 class StrategyStatusEnum(str, Enum):
@@ -109,73 +106,6 @@ class TokenData(BaseModel):
     user_id: Optional[int] = None
 
 
-# ============== Trade Schemas ==============
-
-class TradeCreate(BaseModel):
-    symbol: str = Field(..., max_length=50)
-    exchange: Optional[str] = Field(None, max_length=50) # Derived from Account if not provided
-    account_id: int = Field(...) # Required now
-    entry_price: Decimal = Field(..., gt=0)
-    quantity: Decimal = Field(..., gt=0)
-    entry_time: datetime
-    status: TradeStatusEnum = TradeStatusEnum.OPEN  # 交易状态：OPEN(持仓中) 或 CLOSED(已平仓)
-    strategy_id: Optional[int] = None
-    entry_reason: Optional[str] = None
-    entry_emotion: Optional[str] = None
-    entry_confidence: Optional[int] = Field(None, ge=1, le=5)
-    # 可选的平仓信息（当 status=CLOSED 时使用）
-    exit_price: Optional[Decimal] = Field(None, gt=0)
-    exit_time: Optional[datetime] = None
-    exit_reason: Optional[str] = None
-
-
-
-class TradeClose(BaseModel):
-    exit_price: Decimal = Field(..., gt=0)
-    exit_reason: Optional[str] = None
-    exit_emotion: Optional[str] = None
-    trade_review: Optional[str] = None
-    screenshots: Optional[List[str]] = []
-    lessons: Optional[List[str]] = []
-    rating: Optional[int] = Field(None, ge=1, le=5)
-
-
-class TradeUpdate(BaseModel):
-    entry_reason: Optional[str] = None
-    entry_emotion: Optional[str] = None
-    entry_confidence: Optional[int] = Field(None, ge=1, le=5)
-    current_price: Optional[Decimal] = None
-
-
-class TradeResponse(BaseModel):
-    id: int
-    user_id: int
-    account_id: Optional[int]
-    strategy_id: Optional[int]
-    symbol: str
-    exchange: str
-    entry_price: Decimal
-    quantity: Decimal
-    entry_time: datetime
-    current_price: Optional[float]
-    exit_price: Optional[Decimal]
-    exit_time: Optional[datetime]
-    status: TradeStatusEnum
-    entry_reason: Optional[str]
-    entry_emotion: Optional[str]
-    entry_confidence: Optional[int]
-    exit_reason: Optional[str]
-    exit_emotion: Optional[str]
-    trade_review: Optional[str]
-    screenshots: List[str]
-    lessons: List[str]
-    rating: Optional[int]
-    created_at: datetime
-    pnl: Optional[float] = None
-    pnl_percent: Optional[float] = None
-    
-    class Config:
-        from_attributes = True
 
 
 # ============== Strategy Schemas ==============

@@ -11,9 +11,6 @@ from database import Base
 import enum
 
 
-class TradeStatus(str, enum.Enum):
-    OPEN = "OPEN"
-    CLOSED = "CLOSED"
 
 
 class StrategyStatus(str, enum.Enum):
@@ -104,7 +101,6 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relationships
-    trades = relationship("Trade", back_populates="user")
     strategies = relationship("Strategy", back_populates="user")
     settings = relationship("UserSettings", back_populates="user", uselist=False)
     daily_summaries = relationship("DailySummary", back_populates="user")
@@ -116,68 +112,6 @@ class User(Base):
     ai_summaries = relationship("AISummary", back_populates="user")
 
 
-class Trade(Base):
-    __tablename__ = "trades"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    account_id = Column(Integer, ForeignKey("trading_accounts.id"), nullable=True) # New: Link to Account
-    strategy_id = Column(Integer, ForeignKey("strategies.id"), nullable=True)
-    
-    # Basic Info
-    symbol = Column(String(50), nullable=False, index=True)
-    exchange = Column(String(50), nullable=False)
-    
-    # Entry Info
-    entry_price = Column(Numeric(20, 8), nullable=False)  # Cost basis including fees
-    quantity = Column(Numeric(20, 8), nullable=False)
-    entry_time = Column(DateTime(timezone=True), nullable=False)
-    
-    # Exit/Current Info
-    current_price = Column(Numeric(20, 8), nullable=True)
-    exit_price = Column(Numeric(20, 8), nullable=True)
-    exit_time = Column(DateTime(timezone=True), nullable=True)
-    status = Column(SQLEnum(TradeStatus), default=TradeStatus.OPEN, index=True)
-    
-    # Decision Records (Entry)
-    entry_reason = Column(Text, nullable=True)
-    entry_emotion = Column(String(50), nullable=True)
-    entry_confidence = Column(Integer, nullable=True)  # 1-5
-    
-    # Exit Review
-    exit_reason = Column(Text, nullable=True)
-    exit_emotion = Column(String(50), nullable=True)
-    trade_review = Column(Text, nullable=True)  # Markdown
-    screenshots = Column(JSON, default=list)  # List of URLs
-    lessons = Column(JSON, default=list)  # List of tags
-    rating = Column(Integer, nullable=True)  # 1-5
-    
-    # Calculated PnL (Persisted for performance)
-    pnl = Column(Numeric(20, 8), nullable=True)
-    pnl_percent = Column(Numeric(10, 4), nullable=True)
-    
-    # Timestamps
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
-    # Relationships
-    user = relationship("User", back_populates="trades")
-    strategy = relationship("Strategy", back_populates="trades")
-    trading_account = relationship("TradingAccount") # One-to-Many from Account to Trades
-    
-    # Indices for performance
-    __table_args__ = (
-        Index('idx_user_entry_time', 'user_id', 'entry_time'),
-    )
-    
-    def calculate_pnl(self):
-        """Logic to calculate and update pnl/pnl_percent columns"""
-        price = self.exit_price if self.status == TradeStatus.CLOSED else self.current_price
-        if price and self.entry_price:
-            self.pnl = (float(price) - float(self.entry_price)) * float(self.quantity)
-            if float(self.entry_price) > 0:
-                self.pnl_percent = ((float(price) - float(self.entry_price)) / float(self.entry_price)) * 100
-        return self.pnl
 
 
 class Strategy(Base):
@@ -202,7 +136,6 @@ class Strategy(Base):
     
     # Relationships
     user = relationship("User", back_populates="strategies")
-    trades = relationship("Trade", back_populates="strategy")
 
 
 class DailySummary(Base):

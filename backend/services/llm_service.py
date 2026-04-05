@@ -8,7 +8,7 @@ from typing import Optional, List, Dict, Any
 from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
-from models import Trade, TradeStatus, UserSettings, WeeklyReport, SystemSetting, TradeBatch, Position, BatchType
+from models import UserSettings, WeeklyReport, SystemSetting, TradeBatch, Position, BatchType
 
 
 MUNGER_PROMPT = """你是一位投资分析师，精通查理·芒格的投资哲学。请根据以下一周的交易记录，生成交易洞察报告。
