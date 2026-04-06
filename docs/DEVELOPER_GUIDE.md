@@ -1,10 +1,11 @@
-# Trading Noobs 主开发文档
+# Trading Noobs 当前代码库指南
 
-本文档是 `docs/` 目录下的唯一主开发文档，用于描述项目定位、架构、模块现状、开发入口与附录索引。
+本文档用于描述当前代码库的真实实现、运行入口、模块现状与附录索引，不再承担“目标架构设计稿”的职责。
 
 文档约定：
-- 本文档是当前实现的权威说明。
-- [current-state-baseline.md](./current-state-baseline.md) 是进入架构讨论前的现状审计基线，集中记录“已做/未做/优点/短板”。
+- [superpowers/specs/2026-04-06-platform-foundation-design.md](./superpowers/specs/2026-04-06-platform-foundation-design.md) 是当前唯一目标架构来源。
+- 本文档是当前代码实现与运行方式的说明。
+- [current-state-baseline.md](./current-state-baseline.md) 是 2026-04-05 的历史审计基线，不再作为长期主真相来源持续维护。
 - [TODO.md](./TODO.md) 是唯一执行清单，只记录任务状态与阶段。
 - 专题细节拆分到附录：
   - [market_data_sources.md](./market_data_sources.md)
@@ -322,15 +323,16 @@ npm run dev
 ## 8. 文档索引与附录链接
 
 建议阅读顺序：
-1. [current-state-baseline.md](./current-state-baseline.md)：当前代码审计基线
-2. 本文档：总体架构、现状与开发入口
+1. [superpowers/specs/2026-04-06-platform-foundation-design.md](./superpowers/specs/2026-04-06-platform-foundation-design.md)：目标架构与设计结论
+2. 本文档：当前代码实现、现状与开发入口
 3. [TODO.md](./TODO.md)：当前任务与阶段状态
-4. [market_data_sources.md](./market_data_sources.md)：行情接入与 provider 说明
+4. [market_data_sources.md](./market_data_sources.md)：当前行情接入与 provider 说明
 5. [trading-metrics.md](./trading-metrics.md)：指标算法与实现状态
-6. [trading-fields-design.md](./trading-fields-design.md)：现状字段与未来扩展边界
+6. [trading-fields-design.md](./trading-fields-design.md)：当前 / 实施中的字段边界
 
 维护原则：
-- 主文档负责“当前真实实现”
-- TODO 负责“当前要做什么”
+- `spec` 负责“目标架构与未来设计”
+- 本文档负责“当前真实实现与运行方式”
+- `TODO` 负责“当前要做什么”
 - 附录负责“专题细节”
-- 历史草案不再承载当前决策
+- 历史基线只保留背景与审计价值

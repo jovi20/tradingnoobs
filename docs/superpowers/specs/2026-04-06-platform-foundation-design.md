@@ -45,22 +45,24 @@
 
 ```mermaid
 flowchart TD
-    U[用户]
-    WEB[Next.js Web 应用]
+    U[用户浏览器]
     CADDY[Caddy]
+    WEB[Next.js Web 应用]
     API[FastAPI API 应用]
     WORKER[Worker]
     REDIS[(Redis)]
     PG[(PostgreSQL)]
     OBJ[对象存储兼容层]
 
-    U --> WEB
-    WEB --> CADDY
-    CADDY --> API
+    U --> CADDY
+    CADDY -->|/*| WEB
+    CADDY -->|/api/*| API
+    WEB -->|SSR / 数据获取| API
     API --> PG
     API --> REDIS
     API --> OBJ
-    API --> WORKER
+    API -.->|enqueue| REDIS
+    WORKER -.->|dequeue| REDIS
     WORKER --> PG
     WORKER --> REDIS
     WORKER --> OBJ
@@ -102,10 +104,10 @@ flowchart LR
     CORE --> CONTENT
     CORE --> ADMIN
     MARKET --> ANALYTICS
-    MARKET --> CONTENT
     TRADING --> ANALYTICS
     TRADING --> AI
     CONTENT --> AI
+    CONTENT -.->|symbol linkage via reference| MARKET
 ```
 
 ### 模块职责
@@ -194,6 +196,8 @@ flowchart TB
 
 - 生产 schema 变更必须走 `Alembic`
 - `create_all()` 不能作为线上迁移方案
+- 多 schema 采用“单 `Alembic env` + 统一迁移链”方案
+- `Alembic` 配置需支持 `include_schemas=True`
 - 复杂迁移必须采用分阶段策略：
   - 先加新结构
   - 再回填
@@ -758,6 +762,11 @@ V1 按至少 `B` 级别设计：
 - 错误码与错误消息分离
 - 图表标题 / 空状态 / 质量提示预留 i18n 支持
 - AI 输出默认跟随当前用户 locale，不单独维护 `preferred_ai_output_language`
+- V1 支持语言收敛为：
+  - 简体中文
+  - 繁体中文
+  - 英文
+- i18n 基础设施需预留未来扩展更多语言的能力
 
 ### 用户账户配置重构
 
@@ -887,12 +896,50 @@ V1 按至少 `B` 级别设计：
 - 所有重任务都要支持幂等
 - 前端可查询任务状态
 
+### 外部依赖熔断与降级
+
+对于市场数据 provider、AI provider、IBKR API、内容抓取源，统一采用轻量熔断策略：
+
+- 连续失败达到阈值后，短时间熔断
+- 熔断期间优先返回缓存 / stale 数据，并标记 `data_quality=degraded`
+- 熔断恢复后允许重新进入主备 provider 选择流程
+- 熔断事件写入审计或 provider 健康记录
+
 ### 关键并发控制示例
 
 - 同一 `asset_id + timeframe` 的回填任务不能并发
 - 同一 `broker_connection` 的同步任务不能并发
 - 同一 `content_source` 的抓取任务不能并发
 - 同一用户同一分析范围的 AI 任务不能并发
+
+## API 版本与安全基线
+
+### API 版本策略
+
+建议从 Phase 1 起统一采用：
+
+- `/api/v1/...`
+
+并明确：
+
+- Web 与未来 App 共用版本化 API
+- REST API、chart schema、AI 输出 schema 各自独立版本化
+- 旧版本废弃必须保留过渡窗口
+
+### 限流与滥用防护
+
+V1 至少落地基础限流：
+
+- 全局 API 按用户限流
+- Auth 端点按 IP 限流
+- 市场数据端点按用户限流
+- AI 端点按用户与时间窗限流
+- 导入端点单独限流
+
+建议实现：
+
+- FastAPI middleware
+- Redis 计数器 / 滑动窗口
 
 ## AI 分析中台
 
@@ -1108,6 +1155,12 @@ AI 输出语言默认跟随用户当前 locale，不再单独维护 AI 语言偏
 - 任务健康状态
 - 数据新鲜度状态
 
+### 结构化日志优先级
+
+结构化日志应进入 Phase 1，而不是后置优化项。
+
+当前代码库中已有较多 `print()` 和宽泛异常捕获，因此应尽早统一替换为结构化日志与标准错误码。
+
 ## App 兼容性原则
 
 只要平台把 API 与图表契约当成产品级复用接口，而不是仅服务 Web 页面，这套架构就对未来 iOS / Android 是友好的。
@@ -1249,3 +1302,34 @@ AI 输出语言默认跟随用户当前 locale，不再单独维护 AI 语言偏
   - 业务数据备份与恢复流程
 - `Migration / Release / Rollback Workflow`
   - 应用发布、数据库迁移与回滚流程
+
+## 测试与质量保障基线
+
+V1 架构必须明确最小测试边界：
+
+- 单元测试：
+  - `core` 域关键业务逻辑
+  - analytics 纯计算逻辑
+- 集成测试：
+  - 关键 API 路径
+  - 数据库交互
+  - provider adapter 最小契约
+- 迁移测试：
+  - `Alembic upgrade`
+  - 关键 schema 校验
+- 前端关键流程测试：
+  - 登录
+  - 新建 / 编辑 position
+  - 关键设置页
+  - 关键图表页面
+
+## Derived 刷新策略
+
+`derived` 域需要明确刷新触发矩阵：
+
+| 读模型 / 结果 | 触发条件 | 延迟容忍 |
+|---------------|----------|----------|
+| `portfolio_snapshots` | 每日定时 + 手动触发 | `T+1` |
+| `dashboard_cache` | 交易事件后异步刷新 | `< 5 min` |
+| `chart_materializations` | 按需生成 + TTL 缓存 | `< 10 min` |
+| `analysis_results` | AI 任务完成时生成 | 任务级 |

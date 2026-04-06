@@ -6,6 +6,7 @@
 - 完成状态
 
 设计说明、架构说明和专题细节请查看：
+- [superpowers/specs/2026-04-06-platform-foundation-design.md](./superpowers/specs/2026-04-06-platform-foundation-design.md)
 - [DEVELOPER_GUIDE.md](./DEVELOPER_GUIDE.md)
 - [market_data_sources.md](./market_data_sources.md)
 - [trading-metrics.md](./trading-metrics.md)
