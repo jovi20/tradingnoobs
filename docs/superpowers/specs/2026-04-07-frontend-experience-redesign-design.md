@@ -1,143 +1,361 @@
-# Trading Noobs Frontend Experience Redesign
+# Trading Noobs 前端体验重构设计
 
-> Date: 2026-04-07
-> Status: Approved design baseline for implementation planning
-> Scope: User-facing frontend experience redesign, information architecture reset, design system foundation, and frontend adaptation strategy for the new platform foundation
-
----
-
-## 1. Background
-
-Trading Noobs is no longer just a transaction log with a few analytics screens. The backend foundation is moving toward a proper trading truth model, AI workflow platform, chart schema layer, and clearer user/admin boundaries. The frontend should not remain a thin layer on top of early-stage routes and ad hoc DTOs.
-
-This redesign treats the user-facing product as a new-generation experience rather than a visual polish pass.
-
-The redesign assumes the current platform is still in a pre-production stage:
-
-- previous trial data is not considered protected production history
-- old frontend conventions do not require long-term compatibility
-- the product may hard-cut to a new user-facing information architecture
+> 日期：2026-04-07
+> 状态：已确认的设计基线，可进入 implementation planning
+> 范围：用户侧前端体验重构、信息架构重置、设计系统底座，以及为平台底座升级准备的前端适配策略
 
 ---
 
-## 2. Design Goals
+## 1. 文档定位
 
-The redesign should achieve the following:
+这不是一次“换皮”或“顺手优化样式”的设计说明，而是一次前端产品体验重构说明。
 
-1. Make the product feel like a decision review workbench rather than a generic trading dashboard.
-2. Make the default entry point answer "what happened recently?" before "what is my aggregate state?"
-3. Elevate decision quality, execution drift, emotion, and review quality to the same importance level as PnL.
-4. Separate user flows from admin flows in both navigation and visual identity.
-5. Support fast mobile capture and comfortable desktop analysis without forcing both surfaces into the same density model.
-6. Introduce a frontend architecture that can absorb backend contract changes without every page breaking.
+本设计文档解决的是以下问题：
 
----
+- 用户首页应该先看到什么
+- `Dashboard`、时间线、单笔详情三者的职责如何重新分工
+- 新前端应该呈现什么产品气质
+- 移动端和桌面端应该分别优先服务什么场景
+- 前端如何在后端核心模型升级时保持可演进，而不是页面全面爆炸
 
-## 3. Product Positioning
+本设计默认建立在当前平台仍处于 pre-production 阶段这一前提上：
 
-### 3.1 Primary Product Identity
-
-The new frontend should be positioned as:
-
-- a decision review workbench
-- a timeline-first trading journal
-- an AI-assisted review companion
-
-It should not feel like:
-
-- a broker terminal
-- a generic SaaS admin panel
-- a content-heavy magazine product
-
-### 3.2 Core User Promise
-
-The product should help a user answer three questions clearly:
-
-1. What have I been doing lately?
-2. How good were those decisions and executions?
-3. What patterns should I repeat or avoid next?
+- 之前试运行数据不视为必须保留的正式历史
+- 旧前端交互与旧页面结构不要求长期兼容
+- 前端可以围绕新的平台底座和新的产品定位进行 hard cutover
 
 ---
 
-## 4. Experience Principles
+## 2. 背景
 
-### 4.1 Timeline-First
+### 2.1 为什么现在要重构前端
 
-The default home should be the event timeline, not the macro dashboard.
+Trading Noobs 已经不再只是一个“记录交易 + 看几个统计图”的小工具。
 
-### 4.2 Review-Centric
+随着平台底座升级，后端正在向以下方向演进：
 
-PnL remains important, but review completion, plan drift, checklist discipline, and emotional context must be first-class signals.
+- 更清晰的交易真相模型
+- 更正式的 AI workflow 与审计链路
+- 更明确的 user/admin 边界
+- 更稳定的 chart schema 与 derived read model
 
-### 4.3 Progressive Disclosure
+如果前端继续维持当前的页面结构和页面职责分配，就会出现两个问题：
 
-Users should see concise summaries first and expand only when they need deeper reasoning, AI context, or lifecycle detail.
+1. 新后端已经不是旧产品语义，但前端还在用旧产品方式展示它
+2. 页面会越来越像“功能堆叠”，而不是一个有中心思想的产品
 
-### 4.4 Thread Continuity
+因此，这次重构的目标不是“把页面做得更漂亮”，而是“把产品重心重新摆正”。
 
-A trade must read as a continuous story from `OPEN` to `AI insight`, not as disconnected records across unrelated pages.
+### 2.2 当前前端实现现状
 
-### 4.5 AI as Copilot
+从当前代码结构看，前端已经具备一套可运行产品，但仍明显处于早期形态：
 
-AI should appear as contextual analysis, summaries, and prompts for reflection. It should not dominate the main interface as a full-screen chat-first surface.
+- 采用 `Next.js App Router`
+- 样式以 `Tailwind CSS + app/globals.css` 为主
+- 主题切换通过 `next-themes`
+- 图表主要使用 `Recharts`
+- 全局壳子使用单一 `RootLayout + Navbar`
+- 页面主要集中在 `frontend/app/`
+- 页面直接依赖 `frontend/lib/api.ts` 中的 DTO，缺少独立的 adapter / view model 层
 
-### 4.6 Mobile Capture, Desktop Analysis
+当前视觉语言也较统一，但辨识度仍偏“早期 SaaS 产品”：
 
-Mobile should optimize for quick recording, lightweight review, and daily follow-up. Desktop should optimize for deep analysis, comparison, and structured review work.
+- 主色系以 `slate` 为主
+- 全局背景采用浅深渐变
+- 局部使用 glassmorphism 风格
+- 卡片、按钮、表单、状态标签已经形成基础体系
+- 但整体仍偏通用，不足以支撑“决策复盘工作台”的定位
+
+### 2.3 当前页面盘点
+
+下面是当前前端主要页面与它们当前承担的职责，用于说明为什么需要重构信息架构。
+
+#### 2.3.1 首页 / 看板 `/`
+
+当前首页本质上是一个 dashboard 页面。
+
+主要内容包括：
+
+- 快捷操作入口
+- 市场状态模块
+- 总盈亏、胜率、盈亏比、持仓数量等统计卡
+- 盈亏曲线
+- 资金流向 Sankey
+- 分配图、风险指标、持仓卡片等
+
+当前特征：
+
+- 默认落点就是宏观看板
+- 更像“总览页”，不是“最近发生了什么”的入口
+- 桌面与移动都围绕 dashboard 密度来组织
+
+建议配图：
+
+- 配图 1：当前首页桌面截图
+- 配图 2：当前首页移动端截图
+
+#### 2.3.2 交易页 `/positions`
+
+当前交易页承担的是“交易列表 + 筛选 + 批次展开”的职责。
+
+主要内容包括：
+
+- 顶部标题与“批量导入 / 新增交易”
+- 多维分类切换，如底层类别、市场、风险等级
+- 状态与账户筛选
+- 交易列表
+- 展开后查看批次细节
+
+当前特征：
+
+- 更像管理页或列表页
+- 适合找记录，但不适合承载“决策时间线”
+- 用户看到的是“仓位对象集合”，不是“事件流”
+
+建议配图：
+
+- 配图 3：当前交易列表页桌面截图
+
+#### 2.3.3 单笔交易详情 `/positions/[id]`
+
+当前单笔详情页已经很丰富，但仍然偏“字段详情页 + 操作页”。
+
+主要内容包括：
+
+- 顶部返回、删除、加/平仓操作
+- 汇总卡：数量、均价、当前价、已实现/未实现盈亏、开仓日期
+- 资产属性卡
+- MAE/MFE 与价格极值卡
+- 计划执行偏移分析
+- checklist 响应
+- trade batches 列表与编辑
+
+当前特征：
+
+- 信息丰富，但主叙事主线不够强
+- 用户看到的是一组模块，而不是一条完整生命周期线程
+- 更像“某笔交易的资料柜”，还不是“某笔交易的故事线”
+
+建议配图：
+
+- 配图 4：当前单笔详情页桌面截图
+
+#### 2.3.4 洞察页 `/insights`
+
+当前洞察页已经明显在往“AI 内容页”方向走。
+
+主要内容包括：
+
+- 顶部 hero 区
+- 周报列表
+- 每日摘要
+- AI 分析助手
+- Recharts 图表
+- Markdown 洞察内容
+
+当前特征：
+
+- 视觉风格比其他页更强
+- AI 内容权重已经比较高
+- 但它和首页、交易详情的关系还比较松散
+
+建议配图：
+
+- 配图 5：当前洞察页截图
+
+#### 2.3.5 设置页 `/settings`
+
+当前设置页承担了过多职责。
+
+主要内容包括：
+
+- 用户偏好设置
+- API / 密钥设置
+- 账户管理
+- 导出数据
+- 如果是管理员，还会看到系统级设置
+
+当前特征：
+
+- 用户设置与管理员能力混放
+- 信息边界不清晰
+- 不利于后续拆分 user/admin shell
+
+建议配图：
+
+- 配图 6：当前设置页截图
+
+#### 2.3.6 全局导航与页面外壳
+
+当前全局导航由 `Navbar` 提供，桌面端与移动端共享同一组导航项：
+
+- 看板
+- 交易
+- 策略
+- 日历
+- AI 洞察
+- 设置
+
+同时：
+
+- 登录与注册页隐藏导航
+- 桌面使用顶部导航
+- 移动端使用底部导航
+- 整个产品共享同一个 `RootLayout`
+
+当前特征：
+
+- 已有统一导航感
+- 但页面壳层级较浅，尚未形成“用户工作台”和“管理后台”的彻底分离
+
+建议配图：
+
+- 配图 7：当前桌面顶栏截图
+- 配图 8：当前移动底部导航截图
+
+### 2.4 当前前端的主要问题
+
+综合来看，当前前端的主要问题有 6 类：
+
+1. 默认首页是 dashboard，而不是事件与复盘入口
+2. 交易列表和交易详情仍然更像数据管理，而不是决策叙事
+3. 用户设置与管理员能力混在同一产品面里
+4. AI 洞察、交易记录、复盘信息之间缺少统一主线
+5. 视觉系统虽统一，但产品辨识度仍偏普通 SaaS
+6. 页面直接绑定 API DTO，难以承受后端后续的大模型切换
 
 ---
 
-## 5. Information Architecture
+## 3. 设计目标
 
-### 5.1 User Navigation
+本次重构需要同时满足以下目标：
 
-The user-facing top-level navigation should be:
+1. 让产品从“交易后台”转向“决策复盘工作台”
+2. 让默认入口先回答“最近发生了什么”，再回答“整体状态如何”
+3. 让决策质量、执行偏移、情绪、复盘完成度与 PnL 拥有同级地位
+4. 明确拆开 user flows 与 admin flows
+5. 同时照顾移动端快速记录与桌面端深度分析
+6. 引入前端适配层，避免页面直接承压后端领域模型变化
 
-- `Timeline`
+---
+
+## 4. 产品定位
+
+### 4.1 产品主身份
+
+新的用户侧前端应被定义为：
+
+- 决策复盘工作台
+- timeline-first 的交易日志产品
+- 由 AI 辅助的交易反思环境
+
+它不应该看起来像：
+
+- 券商终端
+- 通用管理后台
+- 纯内容阅读型产品
+
+### 4.2 核心用户承诺
+
+用户打开产品后，应该能够快速回答三个问题：
+
+1. 我最近到底在做什么
+2. 我的决策与执行质量怎么样
+3. 我下一步应该重复什么、避免什么
+
+---
+
+## 5. 体验原则
+
+### 5.1 Timeline-First
+
+默认首页必须是时间线，而不是 Dashboard。
+
+### 5.2 Review-Centric
+
+Pnl 依然重要，但不是唯一主角。复盘、纪律、计划偏移、情绪信息必须被同样认真对待。
+
+### 5.3 Progressive Disclosure
+
+首页先看摘要，展开后再看 thesis、checklist、AI 结论，避免一上来信息爆炸。
+
+### 5.4 Thread Continuity
+
+同一笔交易应从 `OPEN` 一路串到 `AI insight`，形成连续线程，而不是散落在多个互不相关的模块里。
+
+### 5.5 AI as Copilot
+
+AI 是辅助判断和总结的 sidecar，不是首页主角，不做聊天框霸屏式体验。
+
+### 5.6 Mobile Capture, Desktop Analysis
+
+移动端优先服务：
+
+- 快速记录
+- 轻量浏览
+- 盘后补充
+- 每日复盘
+
+桌面端优先服务：
+
+- 深度分析
+- 多模块比较
+- 生命周期阅读
+- 管理与配置
+
+---
+
+## 6. 信息架构
+
+### 6.1 用户侧一级导航
+
+新的用户侧一级导航建议固定为：
+
+- `时间线`
 - `Dashboard`
-- `Positions`
-- `Strategies`
-- `Insights`
-- `Settings`
+- `持仓`
+- `策略`
+- `洞察`
+- `设置`
 
-### 5.2 Role of Each Section
+### 6.2 各页面职责
 
-`Timeline`
+`时间线`
 
-- default landing page
-- answers "what happened recently?"
-- centered on event flow, review prompts, and narrative continuity
+- 默认首页
+- 回答“最近发生了什么”
+- 承载事件流、复盘提醒、AI 摘要、轻量上下文
 
 `Dashboard`
 
-- macro overview page
-- answers "what is my overall state?"
-- centered on portfolio, exposure, performance, risk, freshness, and summaries
+- 独立宏观总览页
+- 回答“整体状态怎么样”
+- 承载净值、回撤、分布、风险、freshness、AI 周摘要
 
-`Positions`
+`持仓`
 
-- inventory and management surface
-- answers "what objects are currently active or completed?"
+- 对象管理页
+- 回答“我有哪些进行中或已完成的交易对象”
 
-`Strategies`
+`策略`
 
-- discipline and framework surface
-- answers "how are my strategies, checklists, and rules performing?"
+- 纪律与方法页
+- 回答“我的策略、规则和 checklist 表现如何”
 
-`Insights`
+`洞察`
 
-- AI and analysis surface
-- answers "what patterns and summaries has the system detected?"
+- AI 与分析结果页
+- 回答“系统从我的数据里发现了什么模式”
 
-`Settings`
+`设置`
 
-- user preferences, accounts, connections, and personal configuration
+- 用户偏好、账户、连接与个人配置
 
-### 5.3 Admin Separation
+### 6.3 Admin 独立化
 
-Admin must not live inside user navigation.
+Admin 不应继续留在用户产品导航中。
 
-Admin should move to a separate route family and shell, such as:
+应独立为单独 route family，例如：
 
 - `/admin/platform`
 - `/admin/users`
@@ -146,36 +364,36 @@ Admin should move to a separate route family and shell, such as:
 - `/admin/ai`
 - `/admin/ops`
 
-This separation is architectural, visual, and mental. The user product should not feel contaminated by operational tooling.
+这不仅是路由拆分，也是视觉、心智和权限边界拆分。
 
 ---
 
-## 6. Core Surface Definitions
+## 7. 核心页面定义
 
-### 6.1 Timeline Home
+### 7.1 时间线首页
 
-Timeline is the primary home screen.
+时间线是新的默认首页。
 
-Its job is to present a chronological decision stream made of event cards, review cards, AI summary cards, and context modules.
+它不是“交易列表页”，而是“决策事件流”。
 
-#### Desktop Structure
+#### 桌面端结构
 
-- left: stable navigation
-- center top: compact weekly summary strip
-- center middle: filters and view controls
-- center main: event timeline
-- right: contextual side rail
+- 左侧：稳定主导航
+- 中上：本周概览条
+- 中部：筛选条与视角切换
+- 中主栏：事件流
+- 右栏：上下文面板
 
-#### Mobile Structure
+#### 移动端结构
 
-- top: page title plus compact weekly summary
-- middle: filter chips plus single-column event stream
-- bottom: persistent primary navigation
-- side rail content moved into drawers or bottom sheets
+- 顶部：页面标题与轻量摘要
+- 中部：筛选 chips + 单列时间线
+- 底部：一级导航
+- 右栏信息转移为抽屉或 bottom sheet
 
-#### Event Types on Timeline
+#### 时间线事件类型
 
-Timeline should support at minimum:
+首页至少支持：
 
 - `OPEN`
 - `ADD`
@@ -184,54 +402,52 @@ Timeline should support at minimum:
 - `REVIEW_COMPLETED`
 - `AI_INSIGHT`
 - `CHECKLIST_MISS`
-- low-frequency system alerts such as data freshness or sync issues
+- 数据新鲜度、同步异常等低频系统事件
 
-#### Event Card Structure
+#### 事件卡结构
 
-Each timeline card should contain:
+每张事件卡应至少包含：
 
-- event header: timestamp, event type, symbol or entity, result signal
-- summary line: one-sentence explanation
-- metadata row: account, strategy, emotion, confidence, tags
-- expandable section: thesis, invalidation, checklist snapshot, drift notes, AI commentary, deep link
+- 头部：时间、事件类型、标的/对象、影响值
+- 摘要：一句话说明发生了什么
+- 元数据：账户、策略、情绪、信心、标签
+- 展开区：thesis、invalidation、checklist、偏移、AI 注释、深链入口
 
-Timeline should feel like a decision archive in motion, not a table with cards around it.
+首页应看起来像“决策档案在流动”，而不是“表格卡片化”。
 
-### 6.2 Dashboard
+### 7.2 Dashboard
 
-Dashboard remains important, but it becomes a macro cockpit rather than the default home.
+Dashboard 必须保留，但不再是默认首页。
 
-Its job is to explain aggregate state, not recent events.
+它的职责是解释聚合状态，而不是最近事件。
 
-It should prioritize:
+应重点承载：
 
 - equity curve
 - drawdown
-- realized vs unrealized composition
-- exposure and allocation
-- strategy health
-- account distribution
+- realized / unrealized 结构
+- 风险暴露
+- 策略健康度
+- 账户与持仓分布
 - risk views
 - data freshness
-- AI weekly summary
+- AI 周摘要
 
-On mobile, Dashboard may become a lighter summary surface instead of a full-density analytical workstation.
+移动端可以把 Dashboard 降级为摘要型总览，不强求和桌面端同密度等价。
 
-### 6.3 Position Detail
+### 7.3 单笔详情页
 
-Position detail should become a lifecycle thread page rather than a generic details-plus-tabs page.
+单笔详情页必须从“字段页”升级为“生命周期线程页”。
 
-It should tell the complete story of a trade:
+它需要回答：
 
-- why it was opened
-- what changed over time
-- where the plan drifted
-- how the result emerged
-- what was learned
+- 为什么开这笔交易
+- 中途发生了什么变化
+- 哪一步偏离了原计划
+- 结果是怎么形成的
+- 最终学到了什么
 
-#### Position Detail Structure
-
-Main thread sections:
+#### 主线程建议结构
 
 - `OPEN`
 - `ADD`
@@ -240,193 +456,179 @@ Main thread sections:
 - `REVIEW`
 - `AI conclusion`
 
-Context rail sections:
+#### 右侧分析栏建议结构
 
-- result summary
-- execution quality
-- discipline and checklist profile
-- emotion trajectory
+- 结果摘要
+- 执行质量
+- 纪律画像与 checklist 命中
+- 情绪轨迹
 - review verdict
 - AI key takeaways
 
-The detail page should optimize for narrative continuity, not field dumping.
+这个页面的重点是“讲清楚一笔交易的一生”，而不是把字段全部列出来。
 
-### 6.4 Zero-Data Home
+### 7.4 零数据首页
 
-New users must not see a blank dashboard or empty analytics panels.
+新用户不能看到空白 dashboard，也不能看到大片“暂无数据”。
 
-The home screen zero state should use a mixed onboarding model:
+首页零状态应采用混合型 onboarding：
 
-- left: step-by-step getting started actions
-- right: preview of what the product will eventually show
+- 左侧：开始使用路径
+- 右侧：未来体验预览
 
-Suggested onboarding actions:
+推荐引导动作：
 
-- add account
-- record first trade
-- import trade history
-- create first strategy
+- 添加账户
+- 录入第一笔交易
+- 导入历史记录
+- 创建第一条策略
 
-Suggested preview cards:
+推荐预览卡片：
 
-- example timeline event
-- example completed review
-- example AI insight
+- 示例时间线事件
+- 示例复盘卡
+- 示例 AI 洞察卡
 
-Once the first real event exists, the home page should automatically switch to the real timeline mode.
-
----
-
-## 7. Visual Direction
-
-### 7.1 Overall Tone
-
-The visual tone should be:
-
-- calm
-- precise
-- editorial in hierarchy but tool-like in structure
-- serious without looking sterile
-
-The redesign should avoid a default startup SaaS look.
-
-### 7.2 Material and Surfaces
-
-The current glassy feel should be replaced with a more grounded surface model:
-
-- paper-like light surfaces
-- fine borders
-- subtle depth
-- disciplined highlights
-
-The interface should feel like a work surface or dossier, not a glowing control center.
-
-### 7.3 Color Strategy
-
-The palette should be light-first and neutral-first.
-
-Suggested direction:
-
-- base backgrounds: warm white, soft mineral gray, muted graphite
-- neutral text: charcoal and softened black
-- positive: deep green
-- negative: brick red
-- AI and insight: indigo or deep teal
-- caution: amber
-
-Color should communicate state and emphasis, not decorate every region.
-
-### 7.4 Typography
-
-Typography should separate interface language from reflective reading.
-
-Recommended structure:
-
-- UI font: `IBM Plex Sans` with `Noto Sans SC`
-- numeric and code font: `IBM Plex Mono`
-- selective editorial heading font: `Noto Serif SC` or a similar restrained serif for large narrative headings only
-
-This creates a distinction between:
-
-- operational UI
-- analytical data
-- reflective narrative content
-
-### 7.5 Motion
-
-Motion should be meaningful and sparse.
-
-Recommended motion patterns:
-
-- page-enter stagger for timeline cards
-- subtle expand/collapse for card detail
-- drawer and bottom-sheet motion for mobile context
-- no constant pulsing or ornamental animation
-
-Motion should reinforce structure and state change.
+一旦产生第一条真实事件，首页自动切换为真实时间线模式。
 
 ---
 
-## 8. Responsive Strategy
+## 8. 视觉方向
 
-### 8.1 User Product
+### 8.1 整体气质
 
-The user-facing product should be mobile-first in flow design.
+新的视觉方向应是：
 
-This means:
+- 冷静
+- 克制
+- 有判断力
+- 兼具工具感与复盘叙事感
 
-- fast access to timeline
-- easy quick-capture actions
-- compact review prompts
-- lightweight AI summaries
+产品不能继续停留在“普通 SaaS + 金融数据”气质上。
 
-### 8.2 Deep Analysis and Admin
+### 8.2 材质与表面
 
-Deep analysis surfaces and admin surfaces should be desktop-first.
+建议从当前的玻璃感与大面积渐变感中退出来，转向更稳定的工作台材质：
 
-This includes:
+- 更像纸面与工作台的底色
+- 更细的边框层次
+- 更克制的阴影
+- 局部强调，而不是整页发光
+
+### 8.3 颜色策略
+
+建议采用 light-first、neutral-first 的色彩策略：
+
+- 基础底色：暖白、矿物灰、石墨黑
+- 中性文本：炭灰与柔和黑
+- 盈利：深绿
+- 亏损：砖红
+- AI / insight：靛蓝或深青
+- warning：琥珀
+
+颜色负责传达状态和判断，不负责装饰整页。
+
+### 8.4 字体系统
+
+建议把“操作 UI”“数据”“复盘叙事”分成三层字形角色：
+
+- UI 字体：`IBM Plex Sans` + `Noto Sans SC`
+- 数字/代码：`IBM Plex Mono`
+- 少量叙事标题：`Noto Serif SC` 或同类克制衬线
+
+这样可以把界面工具感和复盘阅读感同时建立起来。
+
+### 8.5 动效
+
+动效应稀疏、明确、服务结构：
+
+- 时间线卡片进入的轻量 stagger
+- 卡片展开/收起
+- 移动端抽屉与 bottom sheet
+- 不做持续 pulsing 或装饰性晃动
+
+---
+
+## 9. 响应式策略
+
+### 9.1 用户主产品
+
+用户主产品按 mobile-first 设计流来规划。
+
+这意味着：
+
+- 时间线
+- 快速记录
+- 补情绪 / 补复盘
+- 轻量 AI 摘要
+
+这些必须先保证移动体验。
+
+### 9.2 深分析与 Admin
+
+深分析与 admin surface 按 desktop-first 设计。
+
+这包括：
 
 - Dashboard
-- heavy chart comparison
-- rich filtering
-- provider and job operations
-- admin consoles
+- 重图表比较
+- 复杂筛选
+- provider/job/ops 视图
+- 管理后台
 
-This split is intentional and should be explicit in implementation planning.
+### 9.3 布局规则
 
-### 8.3 Layout Rule
+桌面端：
 
-Desktop:
+- 稳定左导航
+- 中央主工作区
+- 右侧上下文栏
 
-- stable left navigation
-- central work surface
-- optional persistent right context rail
+移动端：
 
-Mobile:
-
-- top summary
-- single-column content stream
-- drawer- or sheet-based contextual content
-- bottom navigation for primary user routes
+- 顶部摘要
+- 单列内容流
+- 抽屉 / bottom sheet 承接上下文
+- 底部一级导航
 
 ---
 
-## 9. Design System Scope
+## 10. 设计系统范围
 
-This redesign requires a real design system baseline rather than isolated page restyling.
+这次重构必须伴随真正的设计系统底座，而不是只重写页面。
 
-### 9.1 Tokens
+### 10.1 Token 层
 
-Must define:
+至少应统一：
 
-- colors
-- typography
-- spacing
-- radii
-- borders
-- shadows
-- motion durations
-- breakpoints
+- 颜色
+- 字体
+- 间距
+- 圆角
+- 边框
+- 阴影
+- 动效时长
+- 断点
 
-### 9.2 Primitive Components
+### 10.2 Primitive 组件层
 
-Must define:
+至少应统一：
 
-- buttons
-- inputs
-- selects
-- badges
+- button
+- input
+- select
+- badge
 - tabs
-- cards
-- drawers
-- bottom sheets
-- empty states
-- loading skeletons
-- warnings and freshness banners
+- card
+- drawer
+- bottom sheet
+- empty state
+- skeleton
+- stale/error/warning banner
 
-### 9.3 Domain Components
+### 10.3 Domain 组件层
 
-Must define:
+至少应统一：
 
 - timeline event card
 - review card
@@ -436,9 +638,9 @@ Must define:
 - chart container
 - filter bar
 
-### 9.4 State Patterns
+### 10.4 状态模式
 
-Every major page must consistently support:
+所有核心页都应支持一致的：
 
 - zero state
 - loading state
@@ -448,43 +650,35 @@ Every major page must consistently support:
 
 ---
 
-## 10. Frontend Architecture Strategy
+## 11. 前端架构策略
 
-The redesigned frontend must not bind pages directly to raw backend DTOs.
+### 11.1 必须引入 adapter / view model 层
 
-### 10.1 Required Layering
+前端不能再让页面直接依赖后端原始 DTO。
 
-Recommended structure:
+这是本次重构的硬要求。
 
-- `app/` for routing and page shells
-- `features/` for product-domain modules
-- `components/primitives/` for low-level UI elements
-- `components/system/` for shells and structural UI
-- `components/domain/` for trading-specific components
-- `lib/contracts/` for adapters, mappers, and schema-aligned view models
+适配层至少要负责：
 
-### 10.2 Adapter Requirement
+- 标准化 API 返回
+- 将 raw DTO 映射成页面 view model
+- 吸收领域命名变化，例如 `Position -> TradingPosition`
+- 为后续 chart schema 接入预留稳定边界
 
-The frontend must introduce a contract adaptation layer between API responses and view components.
+### 11.2 推荐目录方向
 
-This layer should:
+建议向以下结构演进：
 
-- normalize backend payloads
-- map raw DTOs into stable page view models
-- absorb backend naming changes such as `Position -> TradingPosition`
-- support future chart schema migration
+- `app/`：仅路由入口与页面壳
+- `features/`：按产品领域拆分
+- `components/primitives/`
+- `components/system/`
+- `components/domain/`
+- `lib/contracts/`：adapter、mapper、schema-aligned view models
 
-This is mandatory because the platform foundation redesign will continue changing core domain contracts.
+### 11.3 路由家族
 
-### 10.3 Route Families
-
-The route tree should evolve toward:
-
-- user routes
-- admin routes
-- shared shells
-
-Suggested direction:
+建议形成清晰的 route family：
 
 - `app/(user)/timeline`
 - `app/(user)/dashboard`
@@ -496,122 +690,122 @@ Suggested direction:
 
 ---
 
-## 11. Implementation Phasing
+## 12. 实施分期
 
-### Phase 1: Shell and Design System
+### Phase 1：Shell 与设计系统
 
-Deliver:
+先落地：
 
-- new navigation shell
-- user/admin route separation
+- 新导航壳
+- user/admin route family 分离
 - token system
 - typography system
 - primitive components
-- state components
-- initial API adapter layer
+- 页面状态组件
+- adapter 层雏形
 
-Outcome:
+目标：
 
-- the new product skeleton exists before major page migration begins
+- 页面还没全迁完，但新的产品骨架已成立
 
-### Phase 2: Timeline-First User Core
+### Phase 2：Timeline-first 核心体验
 
-Deliver:
+再落地：
 
-- new timeline home
-- zero-data mixed onboarding home
-- lifecycle-style position detail page
-- quick-capture and review entry points
-- mobile navigation and context drawers
+- 新时间线首页
+- 零数据首页
+- 生命周期式单笔详情页
+- 快速记录与复盘入口
+- 移动端底部导航与上下文抽屉
 
-Outcome:
+目标：
 
-- the primary user experience becomes real and coherent
+- 用户主体验先成立
 
-### Phase 3: Dashboard and Insights
+### Phase 3：Dashboard 与 Insights
 
-Deliver:
+再落地：
 
-- new dashboard
-- insights surface
+- 新 Dashboard
+- 洞察页
 - chart container system
-- chart schema adaptation
-- freshness and risk context modules
+- chart schema 适配
+- freshness 与 risk context
 
-Outcome:
+目标：
 
-- the system gains an understandable macro view and analysis layer
+- 产品从“能记录”升级为“能理解整体状态”
 
-### Phase 4: Secondary Product Surfaces
+### Phase 4：Secondary Surfaces
 
-Deliver:
+最后落地：
 
-- redesigned positions index
-- redesigned strategies surface
-- redesigned settings
-- admin-facing shell alignment
-- motion and polish pass
+- 持仓页重构
+- 策略页重构
+- 设置页重构
+- admin 前台壳统一
+- 微动效与视觉 polish
 
-Outcome:
+目标：
 
-- the rest of the application catches up to the new product language
-
----
-
-## 12. Frozen Decisions for Planning
-
-The following decisions should be treated as frozen before writing the implementation plan:
-
-- default home is `Timeline`, not `Dashboard`
-- `Dashboard` remains a first-class page but is not the default landing surface
-- zero-data home uses a mixed onboarding-plus-preview model
-- user-facing product is mobile-first in flow design
-- deep analysis and admin surfaces are desktop-first
-- position detail is lifecycle-thread based, not tab-dump based
-- AI is a sidecar intelligence layer, not the main interface center
-- frontend must use an adapter or view-model layer rather than direct page binding to raw backend payloads
-- user and admin experiences must live in separate shells and route families
+- 次级页面统一进入新产品语言
 
 ---
 
-## 13. Out of Scope for This Design
+## 13. 进入 implementation planning 前的冻结项
 
-The following are intentionally not specified in full detail here:
+以下内容建议视为冻结项：
 
-- final chart schema JSON structure
-- exact backend endpoint payloads
-- animation implementation details
-- component library choice beyond the desired architecture direction
-- full admin information architecture
-
-These belong in the implementation plan or later technical specs.
-
----
-
-## 14. Success Criteria
-
-The redesign should be considered successful when:
-
-- a new user immediately understands what the product is for
-- an active user can open the app and understand recent trading behavior from the home screen
-- a completed trade reads as a coherent lifecycle story
-- the dashboard feels like a macro cockpit, not a duplicated homepage
-- mobile capture flows feel fast and natural
-- desktop analysis feels structured and calm
-- backend contract changes can be absorbed by adapters instead of forcing page-by-page breakage
+- 默认首页是 `时间线`，不是 `Dashboard`
+- `Dashboard` 保留，但不是默认落点
+- 零数据首页采用“引导 + 预览”的混合模式
+- 用户主产品是 mobile-first
+- 深分析与 admin 是 desktop-first
+- 单笔详情采用生命周期线程结构，而不是 tab 拼盘
+- AI 是 sidecar intelligence，不是主界面中心
+- 前端必须引入 adapter / view model 层
+- user 与 admin 必须分离 shell 和 route family
 
 ---
 
-## 15. Summary
+## 14. 当前文档暂不展开的内容
 
-This redesign redefines the frontend from a page collection into a coherent product system.
+以下内容暂不在本设计文档中写死：
 
-The center of gravity moves:
+- 最终 chart schema JSON 细节
+- 具体后端 endpoint payload
+- 动效实现细节
+- 最终组件库选型
+- admin 全信息架构
 
-- from dashboard-first to timeline-first
-- from PnL-only to decision-quality-aware
-- from raw pages to structured surfaces
-- from ad hoc styling to a deliberate design system
-- from direct DTO coupling to adaptable frontend contracts
+这些更适合进入 implementation plan 或后续技术 spec。
 
-The product should feel like a serious, reflective, decision review environment built for traders who want to improve how they think, not just record what they did.
+---
+
+## 15. 成功标准
+
+这次前端重构成功的标志应是：
+
+- 新用户一进入就知道这个产品是干什么的
+- 有交易数据的用户打开首页就能理解最近行为轨迹
+- 一笔交易能够被读成完整生命周期故事
+- Dashboard 看起来像宏观驾驶舱，而不是重复首页
+- 移动端记录与复盘是顺手的
+- 桌面端分析与比较是平静、有结构的
+- 后端契约继续变化时，主要由 adapter 层承压，而不是页面全面碎裂
+
+---
+
+## 16. 总结
+
+这次前端重构的本质，是把前端从“页面集合”升级成“有清晰中心思想的产品系统”。
+
+产品重心将从：
+
+- dashboard-first 转向 timeline-first
+- pnl-only 转向 decision-quality-aware
+- 页面堆叠转向 surface-driven product design
+- 通用样式转向有辨识度的设计系统
+- DTO 直连转向可演进的前端契约层
+
+最终目标不是让页面更花，而是让 Trading Noobs 变成一个真正帮助用户复盘决策、理解模式、提升交易认知的工作台。
