@@ -72,7 +72,7 @@ cd backend && ../.venv313/bin/python -m unittest discover -s tests
 Result:
 
 ```text
-Ran 56 tests in 4.183s
+Ran 57 tests in 4.457s
 OK
 ```
 
@@ -152,7 +152,7 @@ accounting service: 4 OK
 legacy truth sync: 5 OK
 legacy batch router recalculation: 1 OK
 public-id leaf routes: 2 OK
-public-id route group: 4 OK
+public-id route group: 5 OK
 ```
 
 Scope covered:
@@ -165,6 +165,7 @@ Scope covered:
 - Import confirmation no longer precomputes exit PnL before recalculation; batch PnL is assigned by the centralized FIFO path.
 - Account route market value/NAV now uses signed mark-to-market values so short positions enter account equity as liabilities.
 - Account and dashboard cash read paths now prefer `initial_balance + AccountLedgerEntry` when an opening balance exists, with legacy `cash_balance` fallback for accounts that do not yet have complete ledger history.
+- Account create now writes an `OPENING_BALANCE` `AccountLedgerEntry` for non-zero `initial_balance`, and the cash read model uses that ledger entry without double-counting `initial_balance`.
 
 C2 + C5 truth-first detail entry and evidence/AI sidecar regression:
 
@@ -212,12 +213,12 @@ Reason:
 - `/api/positions/{id}/truth-lifecycle` remains labeled as the legacy migration bridge.
 - `/api/timeline/home` now has bridge-level `limit` / `cursor` support over stabilized timeline event cards.
 - `AccountLedgerEntry` foundation is landed with migration, legacy realized PnL bridge, transaction cash bridge, and lifecycle `cash_effects` consumption.
-- Account cash balance/read models now have a ledger-derived read path for accounts with an opening balance; formal opening-balance / cash-adjustment write entries still need a follow-up before final hard cutover.
-- C4 FIFO core is started: `trading_accounting_service` handles long/short FIFO realized PnL, fee netting, remaining open-lot cost basis, mark-to-market unrealized calculations, and signed account market values; legacy truth sync, legacy batch router/import recalculation, positions open-position display, dashboard open-position aggregation, account NAV routes, and cash read models now use centralized accounting/ledger helpers.
+- Account cash balance/read models now have a ledger-derived read path for accounts with an opening balance; account create writes formal opening-balance ledger entries, while cash-adjustment/dividend write entries still need a follow-up before final hard cutover.
+- C4 FIFO core is started: `trading_accounting_service` handles long/short FIFO realized PnL, fee netting, remaining open-lot cost basis, mark-to-market unrealized calculations, and signed account market values; legacy truth sync, legacy batch router/import recalculation, positions open-position display, dashboard open-position aggregation, account NAV routes, cash read models, and account opening-balance ledger writes now use centralized accounting/ledger helpers.
 - Post-boundary `C2 + C5` slice continued: single-trade detail can load `TradingPosition.public_id` lifecycle directly, render truth lifecycle as the primary narrative, surface evidence refs, and show AI sidecar artifacts when the backend returns them.
 - Truth event narrative write slice added: `PATCH /api/trading-positions/{position_public_id}/events/{event_public_id}` updates reason / emotion / confidence / thesis / invalidation / planned exit / sizing / checklist / note on `PositionEvent`; frontend API client exposes `updateTradingPositionEventNarrative`, and detail UI now has a dedicated truth narrative editor using it.
 - Legacy edit/review/batch/MAE controls are still present only as migration tools; they still depend on legacy DTOs and should not be treated as final truth write paths.
-- The next implementation slice should continue `C4` by adding formal opening-balance / cash-adjustment ledger write paths before moving price/quantity/batch operations onto `TradingPosition / PositionEvent` write paths.
+- The next implementation slice should continue `C4` by adding formal cash-adjustment/dividend ledger write paths before moving price/quantity/batch operations onto `TradingPosition / PositionEvent` write paths.
 
 ## Next Checkpoint Criteria
 
@@ -225,7 +226,7 @@ Reason:
 - Public-id-only lifecycle behavior has a failing test first, then passing implementation.
 - Timeline `limit` / `cursor` behavior has a failing test first, then passing implementation.
 - C3 AccountLedgerEntry foundation has model, migration, sync, route, and lifecycle regressions.
-- C4 FIFO accounting service has pure service, legacy truth sync, legacy batch router/import recalculation, positions open-position, dashboard mark-to-market, account signed market value, and ledger-derived cash read-model regressions; formal opening-balance / cash-adjustment write paths remain pending.
+- C4 FIFO accounting service has pure service, legacy truth sync, legacy batch router/import recalculation, positions open-position, dashboard mark-to-market, account signed market value, ledger-derived cash read-model, and opening-balance ledger write regressions; formal cash-adjustment/dividend write paths remain pending.
 - C2 + C5 truth-first detail entry plus evidence/AI sidecar display has frontend adapter regressions and a documented build limitation if frontend dependencies are absent.
 - C2 + C5 truth event narrative write route has backend router regressions and an explicit boundary: narrative fields only, no price/quantity/PnL recalculation before C4.
 - Frontend adapter tests remain green.

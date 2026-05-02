@@ -8,7 +8,10 @@ from typing import List
 from database import get_db
 from models import Position, PositionStatus, TradingAccount, User
 from schemas import TradingAccountCreate, TradingAccountUpdate, TradingAccountResponse
-from services.account_ledger_service import calculate_account_cash_balance_read_model
+from services.account_ledger_service import (
+    calculate_account_cash_balance_read_model,
+    sync_opening_balance_to_account_ledger,
+)
 from services.auth_service import get_current_user
 from services.market_data_service import MarketDataService
 from services.public_id_service import resolve_trading_account
@@ -102,8 +105,14 @@ async def create_account(
         description=account_data.description
     )
     db.add(account)
+    db.flush()
+    sync_opening_balance_to_account_ledger(db, account=account)
     db.commit()
     db.refresh(account)
+    cash_balance = calculate_account_cash_balance_read_model(db, account=account)
+    setattr(account, 'cash_balance', cash_balance)
+    setattr(account, 'market_value', Decimal("0"))
+    setattr(account, 'total_equity', cash_balance)
     return account
 
 

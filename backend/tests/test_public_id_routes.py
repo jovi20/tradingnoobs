@@ -175,6 +175,27 @@ class PublicIdRouteTests(unittest.TestCase):
         self.assertEqual(Decimal(str(payload["cash_balance"])), Decimal("975"))
         self.assertEqual(Decimal(str(payload["total_equity"])), Decimal("975"))
 
+    def test_account_create_writes_opening_balance_ledger_entry(self):
+        create_response = self.client.post(
+            "/api/accounts",
+            json={
+                "name": "Opening Ledger",
+                "broker": "IBKR",
+                "currency": "USD",
+                "initial_balance": "1000",
+            },
+        )
+
+        self.assertEqual(create_response.status_code, 201)
+        payload = create_response.json()
+        ledger_entry = self.db.query(AccountLedgerEntry).filter(
+            AccountLedgerEntry.account_id == payload["id"],
+            AccountLedgerEntry.source == "OPENING_BALANCE",
+        ).one()
+        self.assertEqual(ledger_entry.entry_type, AccountLedgerEntryType.CASH_ADJUSTMENT)
+        self.assertEqual(ledger_entry.amount, Decimal("1000"))
+        self.assertEqual(Decimal(str(payload["cash_balance"])), Decimal("1000"))
+
     def test_positions_list_and_get_include_and_accept_public_id(self):
         list_response = self.client.get("/api/positions")
         self.assertEqual(list_response.status_code, 200)

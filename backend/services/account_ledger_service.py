@@ -4,6 +4,7 @@ Trading Noobs Backend - Account Ledger Service
 from __future__ import annotations
 
 from decimal import Decimal
+from datetime import datetime, timezone
 import uuid
 
 from sqlalchemy.orm import Session
@@ -74,6 +75,48 @@ def sync_transaction_to_account_ledger(
     return ledger_entry
 
 
+def sync_opening_balance_to_account_ledger(
+    db: Session,
+    *,
+    account: TradingAccount,
+) -> AccountLedgerEntry | None:
+    opening_balance = Decimal(str(account.initial_balance or 0))
+    if opening_balance == 0:
+        return None
+
+    if account.id is None:
+        db.flush()
+
+    source_run_id = account.public_id or str(account.id)
+    ledger_entry = (
+        db.query(AccountLedgerEntry)
+        .filter(
+            AccountLedgerEntry.account_id == account.id,
+            AccountLedgerEntry.source == "OPENING_BALANCE",
+        )
+        .first()
+    )
+    if not ledger_entry:
+        ledger_entry = AccountLedgerEntry(
+            public_id=_deterministic_ledger_public_id(f"account:{source_run_id}:opening_balance")
+        )
+        db.add(ledger_entry)
+
+    ledger_entry.user_id = account.user_id
+    ledger_entry.account_id = account.id
+    ledger_entry.entry_type = AccountLedgerEntryType.CASH_ADJUSTMENT
+    ledger_entry.occurred_at = account.created_at or datetime.now(timezone.utc)
+    ledger_entry.currency = account.currency or "USD"
+    ledger_entry.amount = opening_balance
+    ledger_entry.amount_account_ccy = opening_balance
+    ledger_entry.fx_rate_to_account_ccy = Decimal("1")
+    ledger_entry.source = "OPENING_BALANCE"
+    ledger_entry.source_run_id = source_run_id
+    ledger_entry.description = "Opening cash balance"
+    db.flush()
+    return ledger_entry
+
+
 def delete_transaction_ledger_entries(db: Session, *, transaction: Transaction) -> None:
     db.query(AccountLedgerEntry).filter(
         AccountLedgerEntry.transaction_id == transaction.id
@@ -93,6 +136,7 @@ def calculate_account_cash_balance_read_model(db: Session, *, account: TradingAc
         .filter(AccountLedgerEntry.account_id == account.id)
         .all()
     )
+    has_opening_balance_ledger = any(entry.source == "OPENING_BALANCE" for entry in ledger_entries)
     ledger_total = sum(
         (
             Decimal(str(entry.amount_account_ccy))
@@ -101,6 +145,9 @@ def calculate_account_cash_balance_read_model(db: Session, *, account: TradingAc
         )
         for entry in ledger_entries
     )
+
+    if has_opening_balance_ledger:
+        return ledger_total
 
     if account.initial_balance is not None:
         return Decimal(str(account.initial_balance)) + ledger_total
