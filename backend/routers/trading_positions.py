@@ -10,10 +10,11 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import PositionEvent, PositionEventType, User
-from schemas import TradingPositionDividendCreate, TradingPositionEventNarrativeUpdate
+from schemas import TradingPositionDividendCreate, TradingPositionEventNarrativeUpdate, TradingPositionTradeEventCreate
 from services.account_ledger_service import sync_dividend_event_to_account_ledger
 from services.auth_service import get_current_user
 from services.trading_position_read_service import build_trading_position_lifecycle_payload, resolve_truth_position_by_public_id
+from services.trading_position_write_service import append_truth_trade_event
 
 router = APIRouter(prefix="/api/trading-positions", tags=["Trading Positions"])
 
@@ -80,6 +81,39 @@ def update_trading_position_event_narrative(
 
     updated_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
     return _lifecycle_response(updated_position, source="MANUAL")
+
+
+@router.post("/{position_public_id}/events", status_code=201)
+def create_trading_position_trade_event(
+    position_public_id: str,
+    payload: TradingPositionTradeEventCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    truth_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
+    if not truth_position:
+        raise HTTPException(status_code=404, detail="Trading position not found")
+
+    append_truth_trade_event(
+        db,
+        position=truth_position,
+        event_type=PositionEventType(payload.event_type.value),
+        quantity=payload.quantity,
+        price=payload.price,
+        currency=payload.currency,
+        occurred_at=payload.occurred_at,
+        fee_amount=payload.fee_amount,
+        fee_currency=payload.fee_currency,
+        fx_rate_to_account_ccy=payload.fx_rate_to_account_ccy,
+        reason=payload.reason,
+        emotion=payload.emotion,
+        confidence=payload.confidence,
+        note=payload.note,
+    )
+    db.commit()
+
+    updated_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
+    return _lifecycle_response(updated_position, source="MANUAL", status_code=201)
 
 
 @router.post("/{position_public_id}/dividends", status_code=201)

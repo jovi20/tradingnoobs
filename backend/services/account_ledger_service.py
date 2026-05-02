@@ -16,6 +16,7 @@ from models import (
     Transaction,
     TransactionType,
     TradingAccount,
+    TradingPosition,
 )
 
 
@@ -186,6 +187,55 @@ def sync_dividend_event_to_account_ledger(
     ledger_entry.source = "POSITION_EVENT"
     ledger_entry.source_run_id = event.public_id
     ledger_entry.description = event.note or "Dividend"
+    db.flush()
+    return ledger_entry
+
+
+def sync_realized_pnl_event_to_account_ledger(
+    db: Session,
+    *,
+    event: PositionEvent,
+    position: TradingPosition,
+) -> AccountLedgerEntry | None:
+    if event.id is None:
+        db.flush()
+
+    ledger_entry = (
+        db.query(AccountLedgerEntry)
+        .filter(
+            AccountLedgerEntry.position_event_id == event.id,
+            AccountLedgerEntry.entry_type == AccountLedgerEntryType.REALIZED_PNL,
+        )
+        .first()
+    )
+    realized_pnl = Decimal(str(event.realized_pnl_net or 0))
+
+    if realized_pnl == 0:
+        if ledger_entry:
+            db.delete(ledger_entry)
+            db.flush()
+        return None
+
+    if not ledger_entry:
+        ledger_entry = AccountLedgerEntry(
+            public_id=_deterministic_ledger_public_id(f"position_event:{event.public_id}:realized_pnl")
+        )
+        db.add(ledger_entry)
+
+    fx_rate = Decimal(str(event.fx_rate_to_account_ccy or 1))
+    ledger_entry.user_id = event.user_id
+    ledger_entry.account_id = event.account_id
+    ledger_entry.position_id = position.id
+    ledger_entry.position_event_id = event.id
+    ledger_entry.entry_type = AccountLedgerEntryType.REALIZED_PNL
+    ledger_entry.occurred_at = event.event_time
+    ledger_entry.currency = event.currency or position.base_currency or "USD"
+    ledger_entry.amount = realized_pnl
+    ledger_entry.amount_account_ccy = realized_pnl * fx_rate
+    ledger_entry.fx_rate_to_account_ccy = fx_rate
+    ledger_entry.source = "POSITION_EVENT"
+    ledger_entry.source_run_id = event.public_id
+    ledger_entry.description = f"{position.instrument.contract_symbol} realized PnL" if position.instrument else "Realized PnL"
     db.flush()
     return ledger_entry
 

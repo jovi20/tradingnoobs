@@ -159,6 +159,67 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
 
         return sync_legacy_position_to_truth(self.db, legacy_position.id)
 
+    def _seed_open_synced_position(self):
+        account = TradingAccount(
+            user_id=self.user.id,
+            public_id="acct-open-public-id",
+            name="IBKR Open",
+            broker="IBKR",
+            currency="USD",
+            is_active=True,
+        )
+        self.db.add(account)
+
+        metadata = AssetMetadata(
+            symbol="MSFT",
+            name="Microsoft",
+            core_type="STOCK",
+            market="US",
+            currency="USD",
+            instrument="Spot",
+        )
+        self.db.add(metadata)
+        self.db.commit()
+        self.db.refresh(account)
+
+        legacy_position = Position(
+            user_id=self.user.id,
+            account_id=account.id,
+            public_id="legacy-open-position",
+            symbol="MSFT",
+            exchange="NASDAQ",
+            asset_type="EQUITY",
+            direction=PositionDirection.LONG,
+            status=PositionStatus.OPEN,
+            total_quantity=Decimal("5"),
+            average_entry_price=Decimal("180"),
+            realized_pnl=Decimal("0"),
+            opened_at=datetime(2026, 4, 1, 9, 30, tzinfo=timezone.utc),
+            trade_review="",
+            checklist_responses={"pre_market": True},
+            asset_metadata_symbol="MSFT",
+        )
+        self.db.add(legacy_position)
+        self.db.commit()
+        self.db.refresh(legacy_position)
+
+        self.db.add(
+            TradeBatch(
+                public_id="batch-open-msft",
+                position_id=legacy_position.id,
+                type=BatchType.ENTRY,
+                price=Decimal("180"),
+                quantity=Decimal("5"),
+                time=datetime(2026, 4, 1, 9, 30, tzinfo=timezone.utc),
+                reason="Initial trend entry",
+                emotion="Prepared",
+                confidence=4,
+            )
+        )
+        self.db.commit()
+
+        return sync_legacy_position_to_truth(self.db, legacy_position.id)
+
     def test_lifecycle_route_returns_position_summary_and_thread(self):
         truth_position = self._seed_synced_position()
 
@@ -276,6 +337,51 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         ).one()
         self.assertEqual(ledger_entry.entry_type, AccountLedgerEntryType.DIVIDEND)
         self.assertEqual(ledger_entry.amount, Decimal("12.50000000"))
+        self.assertEqual(ledger_entry.currency, "USD")
+
+    def test_trade_event_write_replays_fifo_and_creates_realized_pnl_ledger_entry(self):
+        truth_position = self._seed_open_synced_position()
+
+        response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events",
+            json={
+                "event_type": "REDUCE",
+                "quantity": "2",
+                "price": "210",
+                "currency": "USD",
+                "occurred_at": "2026-04-03T15:30:00+00:00",
+                "fee_amount": "1.00",
+                "reason": "Scale out into strength",
+                "emotion": "Calm",
+                "confidence": 5,
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        payload = response.json()
+        self.assertEqual(payload["meta"]["source"], "MANUAL")
+        self.assertEqual(Decimal(str(payload["data"]["position_summary"]["realized_pnl_gross"])), Decimal("60"))
+        self.assertEqual(Decimal(str(payload["data"]["position_summary"]["realized_pnl_net"])), Decimal("59"))
+        self.assertEqual(Decimal(str(payload["data"]["position_summary"]["total_fees"])), Decimal("1"))
+        node_types = [node["node_type"] for node in payload["data"]["lifecycle_thread"]["nodes"]]
+        self.assertEqual(node_types, ["OPEN", "REDUCE"])
+
+        self.db.expire_all()
+        trade_event = self.db.query(PositionEvent).filter(
+            PositionEvent.position_id == truth_position.id,
+            PositionEvent.event_type == PositionEventType.REDUCE,
+        ).one()
+        self.assertEqual(trade_event.quantity, Decimal("2.00000000"))
+        self.assertEqual(trade_event.price, Decimal("210.00000000"))
+        self.assertEqual(trade_event.fee_amount, Decimal("1.00000000"))
+        self.assertEqual(trade_event.realized_pnl_gross, Decimal("60.00000000"))
+        self.assertEqual(trade_event.realized_pnl_net, Decimal("59.00000000"))
+
+        ledger_entry = self.db.query(AccountLedgerEntry).filter(
+            AccountLedgerEntry.position_event_id == trade_event.id,
+        ).one()
+        self.assertEqual(ledger_entry.entry_type, AccountLedgerEntryType.REALIZED_PNL)
+        self.assertEqual(ledger_entry.amount, Decimal("59.00000000"))
         self.assertEqual(ledger_entry.currency, "USD")
 
 

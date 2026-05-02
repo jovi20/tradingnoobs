@@ -822,6 +822,27 @@ class TradingPositionDividendCreate(BaseModel):
     note: Optional[str] = None
 
 
+class TradingPositionTradeEventTypeEnum(str, Enum):
+    ADD = "ADD"
+    REDUCE = "REDUCE"
+    CLOSE = "CLOSE"
+
+
+class TradingPositionTradeEventCreate(BaseModel):
+    event_type: TradingPositionTradeEventTypeEnum
+    quantity: Decimal = Field(..., gt=0)
+    price: Decimal = Field(..., gt=0)
+    currency: str = Field(default="USD", max_length=10)
+    occurred_at: datetime
+    fee_amount: Decimal = Field(default=Decimal("0"), ge=0)
+    fee_currency: Optional[str] = Field(default=None, max_length=10)
+    fx_rate_to_account_ccy: Decimal = Field(default=Decimal("1"), gt=0)
+    reason: Optional[str] = None
+    emotion: Optional[str] = None
+    confidence: Optional[int] = Field(None, ge=1, le=5)
+    note: Optional[str] = None
+
+
 class TradeBatchResponse(BaseModel):
     id: int
     public_id: str
