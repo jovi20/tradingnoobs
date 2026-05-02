@@ -1,0 +1,129 @@
+import os
+import tempfile
+import unittest
+
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from database import Base, get_db
+from main import app
+from models import AuthToken, User, UserCredential, UserSession
+
+
+class AuthSessionTrackingTests(unittest.TestCase):
+    def setUp(self):
+        fd, self.db_path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        self.engine = create_engine(
+            f"sqlite:///{self.db_path}",
+            connect_args={"check_same_thread": False},
+        )
+        self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
+        Base.metadata.create_all(bind=self.engine)
+
+        def override_get_db():
+            db = self.SessionLocal()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        app.dependency_overrides[get_db] = override_get_db
+        self.client = TestClient(app)
+
+    def tearDown(self):
+        app.dependency_overrides.clear()
+        self.engine.dispose()
+        if os.path.exists(self.db_path):
+            os.remove(self.db_path)
+
+    def test_login_creates_user_credential_session_and_token_records(self):
+        register_response = self.client.post(
+            "/api/auth/register",
+            json={
+                "email": "Trader@Example.com",
+                "password": "password123",
+                "invite_code": "bigme",
+            },
+        )
+        self.assertEqual(register_response.status_code, 201)
+
+        login_response = self.client.post(
+            "/api/auth/login",
+            data={
+                "username": "TRADER@example.com",
+                "password": "password123",
+            },
+        )
+        self.assertEqual(login_response.status_code, 200)
+
+        db = self.SessionLocal()
+        try:
+            user = db.query(User).filter(User.email_normalized == "trader@example.com").one()
+            credential = db.query(UserCredential).filter(UserCredential.user_id == user.id).one()
+            session = db.query(UserSession).filter(UserSession.user_id == user.id).one()
+            token = db.query(AuthToken).filter(AuthToken.user_id == user.id).one()
+        finally:
+            db.close()
+
+        self.assertEqual(credential.password_hash, user.hashed_password)
+        self.assertIsNone(session.revoked_at)
+        self.assertEqual(session.status, "ACTIVE")
+        self.assertEqual(token.session_id, session.id)
+        self.assertEqual(token.token_type, "bearer")
+        self.assertIsNone(token.revoked_at)
+        self.assertIsNotNone(user.last_login_at)
+
+    def test_logout_revokes_token_and_session_and_blocks_me(self):
+        self.client.post(
+            "/api/auth/register",
+            json={
+                "email": "Trader@Example.com",
+                "password": "password123",
+                "invite_code": "bigme",
+            },
+        )
+
+        login_response = self.client.post(
+            "/api/auth/login",
+            data={
+                "username": "TRADER@example.com",
+                "password": "password123",
+            },
+        )
+        token = login_response.json()["access_token"]
+
+        me_response = self.client.get(
+            "/api/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        self.assertEqual(me_response.status_code, 200)
+
+        logout_response = self.client.post(
+            "/api/auth/logout",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        self.assertEqual(logout_response.status_code, 204)
+
+        me_after_logout = self.client.get(
+            "/api/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        self.assertEqual(me_after_logout.status_code, 401)
+
+        db = self.SessionLocal()
+        try:
+            user = db.query(User).filter(User.email_normalized == "trader@example.com").one()
+            session = db.query(UserSession).filter(UserSession.user_id == user.id).one()
+            auth_token = db.query(AuthToken).filter(AuthToken.user_id == user.id).one()
+        finally:
+            db.close()
+
+        self.assertEqual(session.status, "REVOKED")
+        self.assertIsNotNone(session.revoked_at)
+        self.assertIsNotNone(auth_token.revoked_at)
+
+
+if __name__ == "__main__":
+    unittest.main()

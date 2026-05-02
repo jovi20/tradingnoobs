@@ -1,4 +1,5 @@
-import { dashboardAPI, positionsAPI, DashboardStats, Position } from '@/lib/api'
+import { dashboardAPI, positionsAPI, DashboardStats } from '@/lib/api'
+import { adaptPositions, PositionViewModel } from '@/lib/adapters/trading'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
 
@@ -31,7 +32,8 @@ export function useDashboardData(token: string | null, historyDays: number = 7) 
         queryKey: ['dashboard', 'open_positions', token],
         queryFn: async () => {
             if (!token) throw new Error('No token')
-            return await positionsAPI.list(token, { status: 'OPEN' })
+            const positions = await positionsAPI.list(token, { status: 'OPEN' })
+            return adaptPositions(positions)
         },
         enabled: !!token
     })
@@ -41,7 +43,8 @@ export function useDashboardData(token: string | null, historyDays: number = 7) 
         queryKey: ['dashboard', 'all_positions', token],
         queryFn: async () => {
             if (!token) throw new Error('No token')
-            return await positionsAPI.list(token) // No status filter = all
+            const positions = await positionsAPI.list(token) // No status filter = all
+            return adaptPositions(positions)
         },
         enabled: !!token
     })
@@ -80,8 +83,8 @@ export function useDashboardData(token: string | null, historyDays: number = 7) 
     return {
         stats: statsQuery.data,
         pnlHistory: historyQuery.data || [],
-        openPositions: positionsQuery.data || [],
-        allPositions: allPositionsQuery.data || [],
+        openPositions: (positionsQuery.data || []) as PositionViewModel[],
+        allPositions: (allPositionsQuery.data || []) as PositionViewModel[],
         isLoading,
         error: error ? (error as Error).message : null,
         refresh,

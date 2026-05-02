@@ -1,11 +1,11 @@
 import Link from 'next/link'
 import { TrendingUp, TrendingDown } from 'lucide-react'
 import { useTrendColor } from '@/hooks/useTrendColor'
-import { Position } from '@/lib/api'
+import { PositionViewModel } from '@/lib/adapters/trading'
 import { getCurrencySymbol } from '@/lib/symbolUtils'
 
 interface PositionCardProps {
-    position: Position
+    position: PositionViewModel
 }
 
 export default function PositionCard({ position }: PositionCardProps) {
@@ -15,7 +15,7 @@ export default function PositionCard({ position }: PositionCardProps) {
     const cs = getCurrencySymbol(position.asset_metadata?.currency)
 
     return (
-        <Link href={`/positions/${position.id}`}>
+        <Link href={`/positions/${position.routeId}`}>
             <div className="card p-2 hover:scale-[1.01] transition-transform cursor-pointer border-transparent hover:border-slate-200 dark:hover:border-slate-700">
                 <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center space-x-2">

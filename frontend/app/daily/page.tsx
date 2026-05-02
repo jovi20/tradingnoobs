@@ -16,7 +16,8 @@ import {
     Send
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { positionsAPI, marketAPI, journalAPI, Position, TradeBatch, MarketCalendar, MarketHoliday, JournalEntry } from '@/lib/api'
+import { positionsAPI, marketAPI, journalAPI, MarketCalendar, MarketHoliday, JournalEntry } from '@/lib/api'
+import { adaptPositions, PositionViewModel, TradeBatchViewModel } from '@/lib/adapters/trading'
 import { useTrendColor } from '@/hooks/useTrendColor'
 import { getCurrencySymbol } from '@/lib/symbolUtils'
 
@@ -24,8 +25,8 @@ const weekDays = ['日', '一', '二', '三', '四', '五', '六']
 
 // 当日交易批次（包含所属 Position 信息）
 interface DayBatch {
-    batch: TradeBatch
-    position: Position
+    batch: TradeBatchViewModel
+    position: PositionViewModel
 }
 
 interface DayData {
@@ -43,7 +44,7 @@ export default function DailyPage() {
     const { token } = useAuth()
     const trendColor = useTrendColor()
     const [currentDate, setCurrentDate] = useState(new Date())
-    const [positions, setPositions] = useState<Position[]>([])
+    const [positions, setPositions] = useState<PositionViewModel[]>([])
     const [calendar, setCalendar] = useState<MarketCalendar | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [selectedDate, setSelectedDate] = useState<Date | null>(new Date()) // 默认今天
@@ -67,7 +68,7 @@ export default function DailyPage() {
                     marketAPI.calendar(token, 'US', year, month + 1),
                     marketAPI.calendar(token, 'HK', year, month + 1)
                 ])
-                setPositions(positionsData)
+                setPositions(adaptPositions(positionsData))
 
                 // Merge Calendars
                 const mergedCalendar: MarketCalendar = {
@@ -120,7 +121,7 @@ export default function DailyPage() {
                 console.error(err)
                 try {
                     const positionsData = await positionsAPI.list(token)
-                    setPositions(positionsData)
+                    setPositions(adaptPositions(positionsData))
                 } catch { }
             } finally {
                 setIsLoading(false)
@@ -501,7 +502,7 @@ export default function DailyPage() {
                             {selectedDayData.batches.length > 0 ? (
                                 <div className="space-y-2">
                                     {selectedDayData.batches.map(({ batch, position }) => (
-                                        <Link key={batch.id} href={`/positions/${position.id}`}>
+                                        <Link key={batch.id} href={`/positions/${position.routeId}`}>
                                             <div className="card p-4 hover:scale-[1.02] transition-transform cursor-pointer">
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex items-center space-x-3">

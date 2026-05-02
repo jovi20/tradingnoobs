@@ -26,7 +26,11 @@ from schemas import (
     ImportPreviewResponse, ImportConfirmRequest
 )
 from models import AssetCoreType, AssetMarket, AssetRiskLevel, AssetCurrency
+from models import TradingPosition
 from services.market_data_service import MarketDataService
+from services.public_id_service import resolve_position, resolve_trade_batch, resolve_trading_account
+from services.legacy_truth_sync_service import sync_legacy_position_to_truth
+from services.trading_position_read_service import build_trading_position_lifecycle_payload
 import asyncio
 
 router = APIRouter(prefix="/api/positions", tags=["positions"])
@@ -220,6 +224,7 @@ async def list_positions(
         pos_dict = {
 
             'id': pos.id,
+            'public_id': pos.public_id,
             'account_id': pos.account_id,
             'symbol': pos.symbol,
             'exchange': pos.exchange,
@@ -306,19 +311,21 @@ async def list_positions(
 
 @router.get("/{position_id}", response_model=PositionResponse)
 async def get_position(
-    position_id: int,
+    position_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Get a single position with all batches"""
     from sqlalchemy.orm import joinedload
-    position = db.query(Position).options(
-        joinedload(Position.batches),
-        joinedload(Position.asset_metadata)
-    ).filter(
-        Position.id == position_id,
-        Position.user_id == current_user.id
-    ).first()
+    position = resolve_position(db, current_user.id, position_id)
+    if position:
+        position = db.query(Position).options(
+            joinedload(Position.batches),
+            joinedload(Position.asset_metadata)
+        ).filter(
+            Position.id == position.id,
+            Position.user_id == current_user.id
+        ).first()
     
     if not position:
         raise HTTPException(status_code=404, detail="Position not found")
@@ -358,6 +365,7 @@ async def get_position(
     # Convert to response dict manually to include drift_analysis
     response = {
         "id": position.id,
+        "public_id": position.public_id,
         "user_id": position.user_id,
         "account_id": position.account_id,
         "strategy_id": position.strategy_id,
@@ -394,6 +402,35 @@ async def get_position(
     }
     
     return JSONResponse(content=jsonable_encoder(response))
+
+
+@router.get("/{position_id}/truth-lifecycle")
+async def get_position_truth_lifecycle(
+    position_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    legacy_position = resolve_position(db, current_user.id, position_id)
+    if not legacy_position:
+        raise HTTPException(status_code=404, detail="Position not found")
+
+    truth_position = sync_legacy_position_to_truth(db, legacy_position.id)
+    data = build_trading_position_lifecycle_payload(truth_position)
+    return JSONResponse(
+        content=jsonable_encoder(
+            {
+                "data": data,
+                "meta": {
+                    "as_of": truth_position.updated_at or truth_position.created_at,
+                    "generated_at": truth_position.updated_at or truth_position.created_at,
+                    "freshness": "FRESH",
+                    "source": "DERIVED",
+                    "maturity": "EARLY_SIGNAL",
+                    "value_status": "FINAL",
+                },
+            }
+        )
+    )
 
 
 @router.post("", response_model=PositionResponse, status_code=status.HTTP_201_CREATED)
@@ -472,16 +509,13 @@ async def create_position(
 
 @router.patch("/{position_id}", response_model=PositionResponse)
 async def update_position(
-    position_id: int,
+    position_id: str,
     position_data: PositionUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Update position review fields"""
-    position = db.query(Position).filter(
-        Position.id == position_id,
-        Position.user_id == current_user.id
-    ).first()
+    position = resolve_position(db, current_user.id, position_id)
     
     if not position:
         raise HTTPException(status_code=404, detail="Position not found")
@@ -528,21 +562,18 @@ async def update_position(
 
 @router.delete("/{position_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_position(
-    position_id: int,
+    position_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Delete a position and all its batches"""
-    position = db.query(Position).filter(
-        Position.id == position_id,
-        Position.user_id == current_user.id
-    ).first()
+    position = resolve_position(db, current_user.id, position_id)
     
     if not position:
         raise HTTPException(status_code=404, detail="Position not found")
     
     # Delete all batches first
-    db.query(TradeBatch).filter(TradeBatch.position_id == position_id).delete()
+    db.query(TradeBatch).filter(TradeBatch.position_id == position.id).delete()
     db.delete(position)
     db.commit()
 
@@ -551,15 +582,12 @@ async def delete_position(
 
 @router.get("/{position_id}/batches", response_model=List[TradeBatchResponse])
 async def list_batches(
-    position_id: int,
+    position_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """List all batches for a position"""
-    position = db.query(Position).filter(
-        Position.id == position_id,
-        Position.user_id == current_user.id
-    ).first()
+    position = resolve_position(db, current_user.id, position_id)
     
     if not position:
         raise HTTPException(status_code=404, detail="Position not found")
@@ -569,16 +597,13 @@ async def list_batches(
 
 @router.post("/{position_id}/batches", response_model=TradeBatchResponse, status_code=status.HTTP_201_CREATED)
 async def add_batch(
-    position_id: int,
+    position_id: str,
     batch_data: TradeBatchCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Add a new batch (entry or exit) to a position"""
-    position = db.query(Position).filter(
-        Position.id == position_id,
-        Position.user_id == current_user.id
-    ).first()
+    position = resolve_position(db, current_user.id, position_id)
     
     if not position:
         raise HTTPException(status_code=404, detail="Position not found")
@@ -600,7 +625,7 @@ async def add_batch(
                 pnl = (position.average_entry_price - batch_data.price) * batch_data.quantity
     
     batch = TradeBatch(
-        position_id=position_id,
+        position_id=position.id,
         type=BatchType[batch_data.type.value],
         price=batch_data.price,
         quantity=batch_data.quantity,
@@ -623,15 +648,12 @@ async def add_batch(
 
 @router.delete("/batches/{batch_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_batch(
-    batch_id: int,
+    batch_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Delete a batch from a position"""
-    batch = db.query(TradeBatch).join(Position).filter(
-        TradeBatch.id == batch_id,
-        Position.user_id == current_user.id
-    ).first()
+    batch = resolve_trade_batch(db, current_user.id, batch_id)
     
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
@@ -654,16 +676,13 @@ async def delete_batch(
 
 @router.patch("/batches/{batch_id}", response_model=TradeBatchResponse)
 async def update_batch(
-    batch_id: int,
+    batch_id: str,
     batch_data: TradeBatchUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Update a trade batch and recalculate position"""
-    batch = db.query(TradeBatch).join(Position).filter(
-        TradeBatch.id == batch_id,
-        Position.user_id == current_user.id
-    ).first()
+    batch = resolve_trade_batch(db, current_user.id, batch_id)
     
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
@@ -694,15 +713,19 @@ async def update_batch(
 @router.get("/check/{symbol}", response_model=Optional[PositionListResponse])
 async def check_open_position(
     symbol: str,
-    account_id: int,
+    account_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Check if user has an open position for the given symbol and account"""
+    account = resolve_trading_account(db, current_user.id, account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
     position = db.query(Position).filter(
         Position.user_id == current_user.id,
         Position.symbol == symbol.upper(),
-        Position.account_id == account_id,
+        Position.account_id == account.id,
         Position.status == PositionStatus.OPEN
     ).first()
     
@@ -714,15 +737,12 @@ async def check_open_position(
 
 @router.post("/{position_id}/analyze", response_model=PositionResponse)
 async def analyze_position(
-    position_id: int,
+    position_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Analyze position for MAE/MFE using historical data"""
-    position = db.query(Position).filter(
-        Position.id == position_id,
-        Position.user_id == current_user.id
-    ).first()
+    position = resolve_position(db, current_user.id, position_id)
     
     if not position:
         raise HTTPException(status_code=404, detail="Position not found")
@@ -767,6 +787,7 @@ async def analyze_position(
     
     response = {
         "id": position.id,
+        "public_id": position.public_id,
         "user_id": position.user_id,
         "account_id": position.account_id,
         "strategy_id": position.strategy_id,
@@ -1039,4 +1060,3 @@ async def get_import_template():
     )
     response.headers["Content-Disposition"] = "attachment; filename=trade_import_template.csv"
     return response
-

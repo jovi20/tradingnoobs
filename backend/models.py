@@ -3,12 +3,13 @@ Trading Noobs Backend - Database Models
 """
 from sqlalchemy import (
     Column, Integer, String, Text, Boolean, DateTime, Date,
-    ForeignKey, Numeric, JSON, Enum as SQLEnum, Index
+    ForeignKey, Numeric, JSON, Enum as SQLEnum, Index, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
 import enum
+import uuid
 
 
 
@@ -71,6 +72,50 @@ class AssetRiskLevel(str, enum.Enum):
     HEDGE = "HEDGE"
 
 
+class TradeInstrumentType(str, enum.Enum):
+    SPOT = "SPOT"
+    EQUITY_OPTION = "EQUITY_OPTION"
+
+
+class TradingPositionStatus(str, enum.Enum):
+    OPEN = "OPEN"
+    CLOSED = "CLOSED"
+    ARCHIVED = "ARCHIVED"
+    ERROR = "ERROR"
+
+
+class TradingPositionSide(str, enum.Enum):
+    LONG = "LONG"
+    SHORT = "SHORT"
+
+
+class PositionEventType(str, enum.Enum):
+    OPEN = "OPEN"
+    ADD = "ADD"
+    REDUCE = "REDUCE"
+    CLOSE = "CLOSE"
+    DIVIDEND = "DIVIDEND"
+    FEE = "FEE"
+    CASH_ADJUSTMENT = "CASH_ADJUSTMENT"
+    STOCK_SPLIT = "STOCK_SPLIT"
+    TRANSFER_IN = "TRANSFER_IN"
+    TRANSFER_OUT = "TRANSFER_OUT"
+    OPTION_EXERCISE = "OPTION_EXERCISE"
+    OPTION_ASSIGNMENT = "OPTION_ASSIGNMENT"
+    OPTION_EXPIRY = "OPTION_EXPIRY"
+    REVERSAL = "REVERSAL"
+    MANUAL_ADJUSTMENT = "MANUAL_ADJUSTMENT"
+
+
+class AccountLedgerEntryType(str, enum.Enum):
+    DEPOSIT = "DEPOSIT"
+    WITHDRAWAL = "WITHDRAWAL"
+    DIVIDEND = "DIVIDEND"
+    FEE = "FEE"
+    CASH_ADJUSTMENT = "CASH_ADJUSTMENT"
+    REALIZED_PNL = "REALIZED_PNL"
+
+
 class AssetMetadata(Base):
     """标的元数据表 - 存储资产的多维属性"""
     __tablename__ = "asset_metadata"
@@ -90,14 +135,63 @@ class AssetMetadata(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
+class AssetMaster(Base):
+    __tablename__ = "asset_master"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    canonical_code = Column(String(100), unique=True, index=True, nullable=False)
+    display_symbol = Column(String(50), nullable=False)
+    name = Column(String(150), nullable=False)
+    asset_type = Column(String(50), nullable=False)
+    quote_currency = Column(String(10), nullable=True)
+    country_code = Column(String(10), nullable=True)
+    status = Column(String(20), nullable=False, default="ACTIVE")
+    sector = Column(String(100), nullable=True)
+    industry = Column(String(100), nullable=True)
+    metadata_json = Column(JSON, default=dict)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    instruments = relationship("TradeInstrument", back_populates="asset", cascade="all, delete-orphan")
+
+
+class TradeInstrument(Base):
+    __tablename__ = "trade_instruments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    asset_id = Column(Integer, ForeignKey("asset_master.id"), nullable=False)
+    instrument_type = Column(SQLEnum(TradeInstrumentType), nullable=False, default=TradeInstrumentType.SPOT)
+    display_name = Column(String(150), nullable=False)
+    contract_symbol = Column(String(100), nullable=False)
+    option_type = Column(String(20), nullable=True)
+    strike_price = Column(Numeric(20, 8), nullable=True)
+    expiration_date = Column(Date, nullable=True)
+    multiplier = Column(Numeric(20, 8), nullable=True)
+    settlement_type = Column(String(20), nullable=True)
+    status = Column(String(20), nullable=False, default="ACTIVE")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    asset = relationship("AssetMaster", back_populates="instruments")
+    positions = relationship("TradingPosition", back_populates="instrument")
+
+
 class User(Base):
     __tablename__ = "users"
     
     id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
     email = Column(String(255), unique=True, index=True, nullable=False)
+    email_normalized = Column(String(255), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
+    status = Column(String(20), default="ACTIVE", nullable=False)
     is_active = Column(Boolean, default=True)
     role = Column(String, default="user")  # user, admin
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
+    locale = Column(String(20), nullable=True)
+    timezone = Column(String(50), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relationships
@@ -110,6 +204,80 @@ class User(Base):
     daily_snapshots = relationship("DailySnapshot", back_populates="user")
     journal_entries = relationship("JournalEntry", back_populates="user")
     ai_summaries = relationship("AISummary", back_populates="user")
+    credentials = relationship("UserCredential", back_populates="user", uselist=False)
+    sessions = relationship("UserSession", back_populates="user")
+    identities = relationship("UserIdentity", back_populates="user")
+    auth_tokens = relationship("AuthToken", back_populates="user")
+    truth_positions = relationship("TradingPosition", back_populates="user")
+    position_events_v2 = relationship("PositionEvent", back_populates="user")
+    account_ledger_entries = relationship("AccountLedgerEntry", back_populates="user")
+
+
+class UserCredential(Base):
+    __tablename__ = "user_credentials"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    password_updated_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User", back_populates="credentials")
+
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    status = Column(String(20), nullable=False, default="ACTIVE")
+    ip_address = Column(String(64), nullable=True)
+    user_agent = Column(String(512), nullable=True)
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User", back_populates="sessions")
+    auth_tokens = relationship("AuthToken", back_populates="session")
+
+
+class UserIdentity(Base):
+    __tablename__ = "user_identities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    provider = Column(String(50), nullable=False)
+    provider_user_id = Column(String(255), nullable=False)
+    email = Column(String(255), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User", back_populates="identities")
+
+    __table_args__ = (
+        UniqueConstraint("provider", "provider_user_id", name="uq_user_identities_provider_user"),
+    )
+
+
+class AuthToken(Base):
+    __tablename__ = "auth_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    session_id = Column(Integer, ForeignKey("user_sessions.id"), nullable=False)
+    token_jti = Column(String(64), unique=True, index=True, nullable=False)
+    token_type = Column(String(20), nullable=False, default="bearer")
+    issued_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="auth_tokens")
+    session = relationship("UserSession", back_populates="auth_tokens")
 
 
 
@@ -248,6 +416,7 @@ class TradingAccount(Base):
     __tablename__ = "trading_accounts"
     
     id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     
     name = Column(String(100), nullable=False)  # 账户名称，如 "IBKR主账户"
@@ -267,6 +436,8 @@ class TradingAccount(Base):
     # Relationships
     user = relationship("User", back_populates="trading_accounts")
     transactions = relationship("Transaction", back_populates="trading_account", cascade="all, delete-orphan")
+    truth_positions = relationship("TradingPosition", back_populates="account")
+    ledger_entries = relationship("AccountLedgerEntry", back_populates="account")
 
 
 class SystemSetting(Base):
@@ -279,11 +450,169 @@ class SystemSetting(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
+class PlatformSetting(Base):
+    __tablename__ = "platform_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String(100), unique=True, index=True, nullable=False)
+    value = Column(Text, nullable=True)
+    description = Column(String(255), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class IntegrationCredential(Base):
+    __tablename__ = "integration_credentials"
+
+    id = Column(Integer, primary_key=True, index=True)
+    provider_key = Column(String(50), nullable=False)
+    credential_key = Column(String(100), nullable=False)
+    secret_ciphertext = Column(Text, nullable=False)
+    description = Column(String(255), nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("provider_key", "credential_key", name="uq_integration_credentials_provider_key"),
+    )
+
+
+class FeatureFlag(Base):
+    __tablename__ = "feature_flags"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String(100), unique=True, index=True, nullable=False)
+    enabled = Column(Boolean, default=False, nullable=False)
+    actor_targets = Column(JSON, default=list)
+    rollout_percentage = Column(Integer, nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    description = Column(String(255), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class TradingPosition(Base):
+    __tablename__ = "trading_positions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    account_id = Column(Integer, ForeignKey("trading_accounts.id"), nullable=False)
+    instrument_id = Column(Integer, ForeignKey("trade_instruments.id"), nullable=False)
+    strategy_id = Column(Integer, ForeignKey("strategies.id"), nullable=True)
+    status = Column(SQLEnum(TradingPositionStatus), nullable=False, default=TradingPositionStatus.OPEN)
+    side = Column(SQLEnum(TradingPositionSide), nullable=False)
+    opened_at = Column(DateTime(timezone=True), nullable=False)
+    closed_at = Column(DateTime(timezone=True), nullable=True)
+    opening_event_id = Column(Integer, nullable=True)
+    closing_event_id = Column(Integer, nullable=True)
+    base_currency = Column(String(10), nullable=False)
+    cost_basis_method = Column(String(20), nullable=False, default="FIFO")
+    quantity_opened = Column(Numeric(20, 8), nullable=True, default=0)
+    quantity_closed = Column(Numeric(20, 8), nullable=True, default=0)
+    avg_open_price = Column(Numeric(20, 8), nullable=True)
+    avg_close_price = Column(Numeric(20, 8), nullable=True)
+    realized_pnl_gross = Column(Numeric(20, 8), nullable=True, default=0)
+    realized_pnl_net = Column(Numeric(20, 8), nullable=True, default=0)
+    total_fees = Column(Numeric(20, 8), nullable=True, default=0)
+    holding_period_seconds = Column(Integer, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
+
+    user = relationship("User", back_populates="truth_positions")
+    account = relationship("TradingAccount", back_populates="truth_positions")
+    instrument = relationship("TradeInstrument", back_populates="positions")
+    strategy = relationship("Strategy")
+    events = relationship("PositionEvent", back_populates="position", order_by="PositionEvent.event_time")
+    ledger_entries = relationship("AccountLedgerEntry", back_populates="position", order_by="AccountLedgerEntry.occurred_at")
+
+
+class PositionEvent(Base):
+    __tablename__ = "position_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    position_id = Column(Integer, ForeignKey("trading_positions.id"), nullable=False)
+    account_id = Column(Integer, ForeignKey("trading_accounts.id"), nullable=False)
+    instrument_id = Column(Integer, ForeignKey("trade_instruments.id"), nullable=False)
+    event_type = Column(SQLEnum(PositionEventType), nullable=False)
+    event_time = Column(DateTime(timezone=True), nullable=False)
+    side_effect = Column(String(20), nullable=True)
+    quantity = Column(Numeric(20, 8), nullable=True)
+    price = Column(Numeric(20, 8), nullable=True)
+    currency = Column(String(10), nullable=True)
+    gross_amount = Column(Numeric(20, 8), nullable=True)
+    fee_amount = Column(Numeric(20, 8), nullable=True)
+    fee_currency = Column(String(10), nullable=True)
+    fx_rate_to_account_ccy = Column(Numeric(20, 8), nullable=True)
+    realized_pnl_gross = Column(Numeric(20, 8), nullable=True)
+    realized_pnl_net = Column(Numeric(20, 8), nullable=True)
+    broker_exec_id = Column(String(255), nullable=True)
+    external_order_id = Column(String(255), nullable=True)
+    input_source = Column(String(50), nullable=True)
+    source_run_id = Column(String(100), nullable=True)
+    reason = Column(Text, nullable=True)
+    emotion = Column(String(50), nullable=True)
+    confidence = Column(Integer, nullable=True)
+    thesis = Column(Text, nullable=True)
+    edge_source = Column(Text, nullable=True)
+    disconfirming_evidence = Column(Text, nullable=True)
+    invalidation_rule = Column(Text, nullable=True)
+    expected_holding_period = Column(String(100), nullable=True)
+    planned_exit_rule = Column(Text, nullable=True)
+    sizing_rationale = Column(Text, nullable=True)
+    checklist_snapshot = Column(JSON, nullable=True)
+    note = Column(Text, nullable=True)
+    is_adjustment = Column(Boolean, nullable=False, default=False)
+    reverses_event_id = Column(Integer, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User", back_populates="position_events_v2")
+    position = relationship("TradingPosition", back_populates="events")
+    account = relationship("TradingAccount")
+    instrument = relationship("TradeInstrument")
+    ledger_entries = relationship("AccountLedgerEntry", back_populates="position_event")
+
+
+class AccountLedgerEntry(Base):
+    __tablename__ = "account_ledger_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    account_id = Column(Integer, ForeignKey("trading_accounts.id"), nullable=False)
+    position_id = Column(Integer, ForeignKey("trading_positions.id"), nullable=True)
+    position_event_id = Column(Integer, ForeignKey("position_events.id"), nullable=True)
+    transaction_id = Column(Integer, ForeignKey("transactions.id"), nullable=True)
+    entry_type = Column(SQLEnum(AccountLedgerEntryType), nullable=False)
+    occurred_at = Column(DateTime(timezone=True), nullable=False)
+    currency = Column(String(10), nullable=False)
+    amount = Column(Numeric(20, 8), nullable=False)
+    amount_account_ccy = Column(Numeric(20, 8), nullable=True)
+    fx_rate_to_account_ccy = Column(Numeric(20, 8), nullable=True)
+    source = Column(String(50), nullable=True)
+    source_run_id = Column(String(100), nullable=True)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User", back_populates="account_ledger_entries")
+    account = relationship("TradingAccount", back_populates="ledger_entries")
+    position = relationship("TradingPosition", back_populates="ledger_entries")
+    position_event = relationship("PositionEvent", back_populates="ledger_entries")
+    transaction = relationship("Transaction", back_populates="ledger_entries")
+
+
 class Position(Base):
     """持仓记录 - 汇总同标的的交易批次"""
     __tablename__ = "positions"
     
     id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     account_id = Column(Integer, ForeignKey("trading_accounts.id"), nullable=True)
     strategy_id = Column(Integer, ForeignKey("strategies.id"), nullable=True)
@@ -342,6 +671,7 @@ class TradeBatch(Base):
     __tablename__ = "trade_batches"
     
     id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
     position_id = Column(Integer, ForeignKey("positions.id"), nullable=False)
     
     type = Column(SQLEnum(BatchType), nullable=False)  # ENTRY or EXIT
@@ -398,6 +728,7 @@ class Transaction(Base):
     __tablename__ = "transactions"
 
     id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
     account_id = Column(Integer, ForeignKey("trading_accounts.id"), nullable=False)
     
     type = Column(SQLEnum(TransactionType), nullable=False)
@@ -412,6 +743,7 @@ class Transaction(Base):
 
     # Relationships
     trading_account = relationship("TradingAccount", back_populates="transactions")
+    ledger_entries = relationship("AccountLedgerEntry", back_populates="transaction")
 
 
 class AIAnalysisResult(Base):
@@ -429,4 +761,3 @@ class AIAnalysisResult(Base):
     
     # Relationships
     user = relationship("User")
-

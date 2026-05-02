@@ -20,7 +20,10 @@ import {
     Award
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { positionsAPI, Position, TradeBatch } from '@/lib/api'
+import { positionsAPI } from '@/lib/api'
+import { adaptPosition, PositionViewModel, TradeBatchViewModel } from '@/lib/adapters/trading'
+import { adaptLifecycleDetail, LifecycleDetailViewModel } from '@/lib/adapters/lifecycle'
+import { TruthLifecyclePreview } from '@/components/positions/domain/TruthLifecyclePreview'
 
 import {
     getCoreTypeLabel,
@@ -41,15 +44,16 @@ export default function PositionDetailPage() {
     const { token } = useAuth()
     const router = useRouter()
     const params = useParams()
-    const positionId = parseInt(params.id as string)
+    const positionId = params.id as string
 
-    const [position, setPosition] = useState<Position | null>(null)
+    const [position, setPosition] = useState<PositionViewModel | null>(null)
+    const [truthLifecycle, setTruthLifecycle] = useState<LifecycleDetailViewModel | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState('')
     const [isDeleting, setIsDeleting] = useState(false)
 
     // Batch Edit State
-    const [editingBatch, setEditingBatch] = useState<TradeBatch | null>(null)
+    const [editingBatch, setEditingBatch] = useState<TradeBatchViewModel | null>(null)
     const [isSavingBatch, setIsSavingBatch] = useState(false)
     const [editForm, setEditForm] = useState({
         price: 0,
@@ -82,10 +86,14 @@ export default function PositionDetailPage() {
 
     useEffect(() => {
         const fetchPosition = async () => {
-            if (!token || isNaN(positionId)) return
+            if (!token || !positionId) return
             try {
-                const data = await positionsAPI.get(token, positionId)
-                setPosition(data)
+                const [data, truthData] = await Promise.all([
+                    positionsAPI.get(token, positionId),
+                    positionsAPI.getTruthLifecycle(token, positionId).catch(() => null),
+                ])
+                setPosition(adaptPosition(data))
+                setTruthLifecycle(truthData ? adaptLifecycleDetail(truthData) : null)
             } catch (err: any) {
                 setError(err.message || '加载失败')
             } finally {
@@ -101,7 +109,7 @@ export default function PositionDetailPage() {
 
         setIsDeleting(true)
         try {
-            await positionsAPI.delete(token, position.id)
+            await positionsAPI.delete(token, position.routeId)
             router.push('/positions')
         } catch (err: any) {
             setError(err.message || '删除失败')
@@ -109,7 +117,7 @@ export default function PositionDetailPage() {
         }
     }
 
-    const openEditModal = (batch: TradeBatch) => {
+    const openEditModal = (batch: TradeBatchViewModel) => {
         setEditingBatch(batch)
         setEditForm({
             price: Number(batch.price),
@@ -124,7 +132,7 @@ export default function PositionDetailPage() {
         if (!token || !editingBatch || !position) return
         setIsSavingBatch(true)
         try {
-            await positionsAPI.updateBatch(token, editingBatch.id, {
+            await positionsAPI.updateBatch(token, editingBatch.routeId, {
                 price: editForm.price,
                 quantity: editForm.quantity,
                 time: new Date(editForm.time).toISOString(),
@@ -132,8 +140,12 @@ export default function PositionDetailPage() {
                 confidence: editForm.confidence
             })
             // Refresh position data
-            const updated = await positionsAPI.get(token, position.id)
-            setPosition(updated)
+            const [updated, truthData] = await Promise.all([
+                positionsAPI.get(token, position.routeId),
+                positionsAPI.getTruthLifecycle(token, position.routeId).catch(() => null),
+            ])
+            setPosition(adaptPosition(updated))
+            setTruthLifecycle(truthData ? adaptLifecycleDetail(truthData) : null)
             setEditingBatch(null)
         } catch (err: any) {
             alert(err.message || '更新失败')
@@ -165,7 +177,7 @@ export default function PositionDetailPage() {
             // BUT implementation plan says: Enhance `update_position` to allow updating `asset_metadata`.
             // So we pass metadata in the body.
 
-            await positionsAPI.update(token, position.id, {
+            await positionsAPI.update(token, position.routeId, {
                 asset_metadata: {
                     core_type: metadataForm.core_type,
                     market: metadataForm.market,
@@ -175,8 +187,12 @@ export default function PositionDetailPage() {
                 }
             })
 
-            const updated = await positionsAPI.get(token, position.id)
-            setPosition(updated)
+            const [updated, truthData] = await Promise.all([
+                positionsAPI.get(token, position.routeId),
+                positionsAPI.getTruthLifecycle(token, position.routeId).catch(() => null),
+            ])
+            setPosition(adaptPosition(updated))
+            setTruthLifecycle(truthData ? adaptLifecycleDetail(truthData) : null)
             setEditingMetadata(false)
         } catch (err: any) {
             alert(err.message || '更新失败')
@@ -189,8 +205,12 @@ export default function PositionDetailPage() {
         if (!token || !position) return
         setIsAnalyzing(true)
         try {
-            const updated = await positionsAPI.analyze(token, position.id)
-            setPosition(updated)
+            const [updated, truthData] = await Promise.all([
+                positionsAPI.analyze(token, position.routeId),
+                positionsAPI.getTruthLifecycle(token, position.routeId).catch(() => null),
+            ])
+            setPosition(adaptPosition(updated))
+            setTruthLifecycle(truthData ? adaptLifecycleDetail(truthData) : null)
         } catch (err: any) {
             alert(err.message || '分析失败')
         } finally {
@@ -202,12 +222,16 @@ export default function PositionDetailPage() {
         if (!token || !position) return
         setIsSavingExtremes(true)
         try {
-            await positionsAPI.update(token, position.id, {
+            await positionsAPI.update(token, position.routeId, {
                 max_price_during_hold: extremesForm.max_price,
                 min_price_during_hold: extremesForm.min_price
             })
-            const updated = await positionsAPI.get(token, position.id)
-            setPosition(updated)
+            const [updated, truthData] = await Promise.all([
+                positionsAPI.get(token, position.routeId),
+                positionsAPI.getTruthLifecycle(token, position.routeId).catch(() => null),
+            ])
+            setPosition(adaptPosition(updated))
+            setTruthLifecycle(truthData ? adaptLifecycleDetail(truthData) : null)
             setEditingExtremes(false)
         } catch (err: any) {
             alert(err.message || '更新失败')
@@ -272,7 +296,7 @@ export default function PositionDetailPage() {
                 <div className="flex gap-2 shrink-0">
                     {isOpen && (
                         <Link
-                            href={`/positions/${position.id}/add-batch`}
+                            href={`/positions/${position.routeId}/add-batch`}
                             className="btn btn-primary flex items-center gap-1 px-3 md:px-4"
                         >
                             <Plus className="w-4 h-4" />
@@ -293,6 +317,10 @@ export default function PositionDetailPage() {
                     </button>
                 </div>
             </div>
+
+            {truthLifecycle && (
+                <TruthLifecyclePreview lifecycle={truthLifecycle} />
+            )}
 
             {/* Summary Card */}
             <div className="card overflow-hidden">

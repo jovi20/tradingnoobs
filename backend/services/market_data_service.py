@@ -13,9 +13,10 @@ from typing import Dict, Any, Optional, List
 import asyncio
 from fastapi.concurrency import run_in_threadpool
 
-from models import SystemSetting, AssetMetadata, AssetCoreType, AssetMarket, AssetCurrency, AssetRiskLevel
+from models import AssetMetadata, AssetCoreType, AssetMarket, AssetCurrency, AssetRiskLevel
 from services.providers import akshare_provider, binance_provider
 from services.llm_service import classify_asset, classify_asset_rich
+from services.platform_config_service import get_finnhub_api_key
 
 # Cache TTL in seconds (1 minute)
 CACHE_TTL_SECONDS = 60
@@ -67,11 +68,9 @@ class MarketDataService:
     def _get_finnhub_client(self):
         """Lazy load Finnhub client"""
         if self._finnhub_client is None:
-            setting = self.db.query(SystemSetting).filter(
-                SystemSetting.key == 'finnhub_api_key'
-            ).first()
-            if setting and setting.value:
-                self._finnhub_client = finnhub.Client(api_key=setting.value)
+            api_key = get_finnhub_api_key(self.db)
+            if api_key:
+                self._finnhub_client = finnhub.Client(api_key=api_key)
         return self._finnhub_client
 
     def detect_asset_type(self, symbol: str, exchange: Optional[str] = None) -> str:

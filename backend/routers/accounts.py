@@ -10,6 +10,7 @@ from models import TradingAccount, User
 from schemas import TradingAccountCreate, TradingAccountUpdate, TradingAccountResponse
 from services.auth_service import get_current_user
 from services.market_data_service import MarketDataService
+from services.public_id_service import resolve_trading_account
 from models import TradingAccount, User, Position, PositionStatus
 import asyncio
 from decimal import Decimal
@@ -118,15 +119,12 @@ async def create_account(
 
 @router.get("/{account_id}", response_model=TradingAccountResponse)
 async def get_account(
-    account_id: int,
+    account_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Get a specific trading account"""
-    account = db.query(TradingAccount).filter(
-        TradingAccount.id == account_id,
-        TradingAccount.user_id == current_user.id
-    ).first()
+    account = resolve_trading_account(db, current_user.id, account_id)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 
@@ -177,16 +175,13 @@ async def get_account(
 
 @router.patch("/{account_id}", response_model=TradingAccountResponse)
 async def update_account(
-    account_id: int,
+    account_id: str,
     account_data: TradingAccountUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Update a trading account"""
-    account = db.query(TradingAccount).filter(
-        TradingAccount.id == account_id,
-        TradingAccount.user_id == current_user.id
-    ).first()
+    account = resolve_trading_account(db, current_user.id, account_id)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
     
@@ -201,15 +196,12 @@ async def update_account(
 
 @router.delete("/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_account(
-    account_id: int,
+    account_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Delete a trading account"""
-    account = db.query(TradingAccount).filter(
-        TradingAccount.id == account_id,
-        TradingAccount.user_id == current_user.id
-    ).first()
+    account = resolve_trading_account(db, current_user.id, account_id)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
     

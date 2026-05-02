@@ -1,18 +1,21 @@
 """
 Trading Noobs Backend - Authentication Router
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from jose import JWTError
 
 from database import get_db
 from schemas import UserCreate, UserResponse, Token
 from services.auth_service import (
     authenticate_user,
-    create_user,
-    create_access_token,
     get_user_by_email,
-    get_current_user
+    get_current_user,
+    create_authenticated_session,
+    create_user,
+    oauth2_scheme,
+    revoke_access_token,
 )
 from models import User, UserSettings, Strategy
 from app_config.default_strategies import DEFAULT_STRATEGIES
@@ -65,7 +68,11 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(
+    request: Request,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db),
+):
     """Login and get access token"""
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
@@ -75,7 +82,12 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    access_token = create_access_token(data={"sub": str(user.id)})
+    access_token = create_authenticated_session(
+        db=db,
+        user=user,
+        user_agent=request.headers.get("user-agent"),
+        ip_address=request.client.host if request.client else None,
+    )
     return {"access_token": access_token, "token_type": "bearer"}
 
 
@@ -83,3 +95,20 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 async def get_me(current_user: User = Depends(get_current_user)):
     """Get current user info"""
     return current_user
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+):
+    """Revoke the current access token and its session."""
+    try:
+        revoke_access_token(db, token)
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

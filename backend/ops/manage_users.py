@@ -11,12 +11,12 @@ import sys
 from sqlalchemy.orm import Session
 from database import SessionLocal
 from models import User
-from services.auth_service import get_password_hash
+from services.auth_service import get_password_hash, normalize_email
 
 def promote_admin(email: str):
     db: Session = SessionLocal()
     try:
-        user = db.query(User).filter(User.email == email.lower().strip()).first()
+        user = db.query(User).filter(User.email_normalized == normalize_email(email)).first()
         if not user:
             print(f"Error: User with email {email} not found.")
             return
@@ -33,7 +33,7 @@ def promote_admin(email: str):
 def reset_password(email: str, new_password: str):
     db: Session = SessionLocal()
     try:
-        user = db.query(User).filter(User.email == email.lower().strip()).first()
+        user = db.query(User).filter(User.email_normalized == normalize_email(email)).first()
         if not user:
             print(f"Error: User with email {email} not found.")
             return
@@ -64,14 +64,17 @@ def list_users():
 def create_user(email: str, password: str, role: str = "user"):
     db: Session = SessionLocal()
     try:
-        existing = db.query(User).filter(User.email == email.lower().strip()).first()
+        normalized = normalize_email(email)
+        existing = db.query(User).filter(User.email_normalized == normalized).first()
         if existing:
             print(f"Error: User {email} already exists.")
             return
 
         user = User(
             email=email.lower().strip(),
+            email_normalized=normalized,
             hashed_password=get_password_hash(password),
+            status="ACTIVE",
             role=role,
             is_active=True
         )
@@ -87,7 +90,7 @@ def create_user(email: str, password: str, role: str = "user"):
 def toggle_active(email: str):
     db: Session = SessionLocal()
     try:
-        user = db.query(User).filter(User.email == email.lower().strip()).first()
+        user = db.query(User).filter(User.email_normalized == normalize_email(email)).first()
         if not user:
             print(f"Error: User {email} not found.")
             return
@@ -139,4 +142,3 @@ if __name__ == "__main__":
         toggle_active(sys.argv[2])
     else:
         print(f"Unknown command: {command}")
-

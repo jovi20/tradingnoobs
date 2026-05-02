@@ -7,11 +7,12 @@ from typing import List, Optional
 from datetime import date, timedelta
 
 from database import get_db
-from models import User, WeeklyReport, UserSettings, SystemSetting, AISummary, AIAnalysisResult
+from models import User, WeeklyReport, AISummary, AIAnalysisResult
 from schemas import WeeklyReportCreate, WeeklyReportResponse, AISummaryResponse, AnalysisRequest, AnalysisResponse
 from services.auth_service import get_current_user
 from services.llm_service import generate_weekly_report, generate_journal_summary, get_analysis_insight
 from services.analytics_service import AnalyticsService
+from services.platform_config_service import get_llm_runtime_config
 
 router = APIRouter(prefix="/api/insights", tags=["Insights"])
 
@@ -52,11 +53,8 @@ async def generate_report(
     db: Session = Depends(get_db)
 ):
     """Generate a new weekly report using LLM"""
-    # Check if LLM is configured (System Settings)
-    llm_api_url = db.query(SystemSetting).filter(SystemSetting.key == 'llm_api_url').first()
-    llm_api_key = db.query(SystemSetting).filter(SystemSetting.key == 'llm_api_key').first()
-    
-    if not llm_api_url or not llm_api_url.value or not llm_api_key or not llm_api_key.value:
+    llm_config = get_llm_runtime_config(db)
+    if not llm_config["api_url"] or not llm_config["api_key"]:
         raise HTTPException(
             status_code=400,
             detail="System LLM API not configured. Please contact admin."
@@ -108,11 +106,8 @@ async def generate_current_week_report(
     week_start = today - timedelta(days=today.weekday())
     week_end = week_start + timedelta(days=6)
     
-    # Check if LLM is configured (System Settings)
-    llm_api_url = db.query(SystemSetting).filter(SystemSetting.key == 'llm_api_url').first()
-    llm_api_key = db.query(SystemSetting).filter(SystemSetting.key == 'llm_api_key').first()
-    
-    if not llm_api_url or not llm_api_url.value or not llm_api_key or not llm_api_key.value:
+    llm_config = get_llm_runtime_config(db)
+    if not llm_config["api_url"] or not llm_config["api_key"]:
         raise HTTPException(
             status_code=400,
             detail="System LLM API not configured. Please contact admin."
@@ -195,11 +190,8 @@ async def generate_summary(
             detail="今日已生成总结，每天只能生成一次"
         )
     
-    # 检查 LLM 配置
-    llm_api_url = db.query(SystemSetting).filter(SystemSetting.key == 'llm_api_url').first()
-    llm_api_key = db.query(SystemSetting).filter(SystemSetting.key == 'llm_api_key').first()
-    
-    if not llm_api_url or not llm_api_url.value or not llm_api_key or not llm_api_key.value:
+    llm_config = get_llm_runtime_config(db)
+    if not llm_config["api_url"] or not llm_config["api_key"]:
         raise HTTPException(
             status_code=400,
             detail="System LLM API not configured. Please contact admin."

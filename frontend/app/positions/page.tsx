@@ -17,7 +17,8 @@ import {
     Upload
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { positionsAPI, Position, TradeBatch, accountsAPI, TradingAccount } from '@/lib/api'
+import { positionsAPI, TradeBatch } from '@/lib/api'
+import { PositionViewModel, TradingAccountViewModel } from '@/lib/adapters/trading'
 import { useTrendColor } from '@/hooks/useTrendColor'
 import CustomSelect from '@/components/CustomSelect'
 import {
@@ -99,7 +100,7 @@ export default function PositionsPage() {
         return account?.name || '-'
     }
 
-    const formatHoldingTime = (position: Position) => {
+    const formatHoldingTime = (position: PositionViewModel) => {
         const start = new Date(position.opened_at).getTime()
         const end = position.status === 'CLOSED' && position.closed_at
             ? new Date(position.closed_at).getTime()
@@ -391,14 +392,14 @@ export default function PositionsPage() {
                                         <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">交易批次</h3>
                                         <div className="flex items-center gap-2">
                                             <Link
-                                                href={`/positions/${position.id}/add-batch?type=ENTRY`}
+                                                href={`/positions/${position.routeId}/add-batch?type=ENTRY`}
                                                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-all shadow-sm active:scale-95"
                                             >
                                                 <ArrowUpCircle className="w-3.5 h-3.5" />
                                                 <span>加仓</span>
                                             </Link>
                                             <Link
-                                                href={`/positions/${position.id}/add-batch?type=EXIT`}
+                                                href={`/positions/${position.routeId}/add-batch?type=EXIT`}
                                                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 text-xs font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-all shadow-sm active:scale-95"
                                             >
                                                 <ArrowDownCircle className="w-3.5 h-3.5" />
@@ -471,7 +472,7 @@ export default function PositionsPage() {
                                     </div>
                                     <div className="mt-4 flex justify-end">
                                         <Link
-                                            href={`/positions/${position.id}`}
+                                            href={`/positions/${position.routeId}`}
                                             className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-semibold hover:opacity-90 transition-all active:scale-95 shadow-md shadow-slate-200 dark:shadow-none"
                                         >
                                             <span>查看详情</span>

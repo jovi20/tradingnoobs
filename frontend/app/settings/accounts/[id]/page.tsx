@@ -16,9 +16,10 @@ import {
     Key
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { accountsAPI, TradingAccount, TradingAccountCreate, Transaction } from '@/lib/api'
+import { accountsAPI, TradingAccountCreate } from '@/lib/api'
 import { TransactionList } from '@/components/TransactionList'
 import { TransactionForm } from '@/components/TransactionForm'
+import { adaptTradingAccount, adaptTransactions, TradingAccountViewModel, TransactionViewModel } from '@/lib/adapters/trading'
 
 import { getCurrencySymbol } from '@/lib/symbolUtils'
 
@@ -33,8 +34,8 @@ export default function AccountDetailPage({ params }: { params: { id: string } }
     const router = useRouter()
     const { token } = useAuth()
 
-    const [account, setAccount] = useState<TradingAccount | null>(null)
-    const [transactions, setTransactions] = useState<Transaction[]>([])
+    const [account, setAccount] = useState<TradingAccountViewModel | null>(null)
+    const [transactions, setTransactions] = useState<TransactionViewModel[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
     const [saved, setSaved] = useState(false)
@@ -56,13 +57,12 @@ export default function AccountDetailPage({ params }: { params: { id: string } }
             if (!token || !id) return
             try {
                 setIsLoading(true)
-                const accountId = parseInt(id)
                 const [accountData, txsData] = await Promise.all([
-                    accountsAPI.get(token, accountId),
-                    accountsAPI.getTransactions(token, accountId)
+                    accountsAPI.get(token, id),
+                    accountsAPI.getTransactions(token, id)
                 ])
-                setAccount(accountData)
-                setTransactions(txsData)
+                setAccount(adaptTradingAccount(accountData))
+                setTransactions(adaptTransactions(txsData))
                 setForm({
                     name: accountData.name,
                     broker: accountData.broker,
@@ -89,8 +89,8 @@ export default function AccountDetailPage({ params }: { params: { id: string } }
         setError('')
         setIsSaving(true)
         try {
-            const updated = await accountsAPI.update(token, account.id, form)
-            setAccount(updated)
+            const updated = await accountsAPI.update(token, account.routeId, form)
+            setAccount(adaptTradingAccount(updated))
             setSaved(true)
             setTimeout(() => setSaved(false), 3000)
         } catch (err: any) {
@@ -103,7 +103,7 @@ export default function AccountDetailPage({ params }: { params: { id: string } }
     const handleDelete = async () => {
         if (!token || !account || !confirm('确定要删除这个账户吗？此操作不可撤销，且会影响相关仓位统计。')) return
         try {
-            await accountsAPI.delete(token, account.id)
+            await accountsAPI.delete(token, account.routeId)
             router.push('/settings')
         } catch (err: any) {
             setError(err.message || '删除失败')
@@ -114,11 +114,11 @@ export default function AccountDetailPage({ params }: { params: { id: string } }
         if (!token || !account) return
         try {
             const [accountData, txsData] = await Promise.all([
-                accountsAPI.get(token, account.id),
-                accountsAPI.getTransactions(token, account.id)
+                accountsAPI.get(token, account.routeId),
+                accountsAPI.getTransactions(token, account.routeId)
             ])
-            setAccount(accountData)
-            setTransactions(txsData)
+            setAccount(adaptTradingAccount(accountData))
+            setTransactions(adaptTransactions(txsData))
         } catch (err) {
             console.error('Failed to refresh data:', err)
         }
@@ -237,12 +237,12 @@ export default function AccountDetailPage({ params }: { params: { id: string } }
                             <div>
                                 <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-4">记录新流水</h3>
                                 <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-                                    <TransactionForm
-                                        token={token!}
-                                        accountId={account.id}
-                                        currency={account.currency}
-                                        onSuccess={refreshData}
-                                        onCancel={() => { }}
+                                        <TransactionForm
+                                            token={token!}
+                                            accountId={account.routeId}
+                                            currency={account.currency}
+                                            onSuccess={refreshData}
+                                            onCancel={() => { }}
                                     />
                                 </div>
                             </div>

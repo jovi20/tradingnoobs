@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     
     # Environment
     env_name: str = "development"  # development / production
+    auto_create_schema: Optional[bool] = None
 
     class Config:
         env_file = ".env"

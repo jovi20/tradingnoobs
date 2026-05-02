@@ -1,3 +1,5 @@
+import type { LifecycleDetailResponse, TimelineHomeResponse } from './read-models'
+
 /**
  * Trading Noobs Frontend - API Client
  */
@@ -155,6 +157,7 @@ export interface DailySummary {
 
 export interface TradingAccount {
     id: number
+    public_id: string
     user_id: number
     name: string
     broker: string
@@ -174,6 +177,7 @@ export interface TradingAccount {
 
 export interface Transaction {
     id: number
+    public_id: string
     account_id: number
     type: 'DEPOSIT' | 'WITHDRAWAL' | 'INTEREST' | 'FEE' | 'TRANSFER_IN' | 'TRANSFER_OUT'
     amount: number
@@ -193,9 +197,14 @@ export interface TransactionCreate {
 
 export interface User {
     id: number
+    public_id: string
     email: string
+    status: string
     is_active: boolean
     role: string
+    last_login_at?: string
+    locale?: string
+    timezone?: string
     created_at: string
 }
 
@@ -281,6 +290,12 @@ export const authAPI = {
 
     me: async (token: string) => {
         return fetchAPI('/auth/me', {}, token)
+    },
+
+    logout: async (token: string): Promise<void> => {
+        await fetchAPI('/auth/logout', {
+            method: 'POST',
+        }, token)
     },
 }
 
@@ -396,6 +411,20 @@ export const dashboardAPI = {
     },
 }
 
+export const timelineAPI = {
+    home: async (
+        token: string,
+        params?: {
+            view?: 'ALL' | 'TRADING' | 'REVIEW' | 'AI' | 'EXCEPTION'
+        }
+    ): Promise<TimelineHomeResponse> => {
+        const searchParams = new URLSearchParams()
+        if (params?.view) searchParams.append('view', params.view)
+        const query = searchParams.toString()
+        return fetchAPI(`/api/timeline/home${query ? `?${query}` : ''}`, {}, token)
+    },
+}
+
 // ============== Daily API ==============
 
 export const dailyAPI = {
@@ -470,7 +499,7 @@ export const accountsAPI = {
         return fetchAPI('/api/accounts', {}, token)
     },
 
-    get: async (token: string, id: number): Promise<TradingAccount> => {
+    get: async (token: string, id: number | string): Promise<TradingAccount> => {
         return fetchAPI(`/api/accounts/${id}`, {}, token)
     },
 
@@ -481,32 +510,32 @@ export const accountsAPI = {
         }, token)
     },
 
-    update: async (token: string, id: number, data: Partial<TradingAccountCreate> & { is_active?: boolean }): Promise<TradingAccount> => {
+    update: async (token: string, id: number | string, data: Partial<TradingAccountCreate> & { is_active?: boolean }): Promise<TradingAccount> => {
         return fetchAPI(`/api/accounts/${id}`, {
             method: 'PATCH',
             body: JSON.stringify(data),
         }, token)
     },
 
-    delete: async (token: string, id: number): Promise<void> => {
+    delete: async (token: string, id: number | string): Promise<void> => {
         return fetchAPI(`/api/accounts/${id}`, {
             method: 'DELETE',
         }, token)
     },
 
     // Transactions
-    getTransactions: async (token: string, accountId: number): Promise<Transaction[]> => {
+    getTransactions: async (token: string, accountId: number | string): Promise<Transaction[]> => {
         return fetchAPI(`/api/accounts/${accountId}/transactions`, {}, token)
     },
 
-    createTransaction: async (token: string, accountId: number, data: TransactionCreate): Promise<Transaction> => {
+    createTransaction: async (token: string, accountId: number | string, data: TransactionCreate): Promise<Transaction> => {
         return fetchAPI(`/api/accounts/${accountId}/transactions`, {
             method: 'POST',
             body: JSON.stringify(data),
         }, token)
     },
 
-    deleteTransaction: async (token: string, id: number): Promise<void> => {
+    deleteTransaction: async (token: string, id: number | string): Promise<void> => {
         return fetchAPI(`/api/transactions/${id}`, {
             method: 'DELETE',
         }, token)
@@ -517,6 +546,39 @@ export interface SystemSetting {
     key: string
     value: string | null
     description: string | null
+    updated_at: string | null
+}
+
+export interface PlatformSetting {
+    id: number
+    key: string
+    value: string | null
+    description: string | null
+    created_at: string | null
+    updated_at: string | null
+}
+
+export interface IntegrationCredential {
+    id: number
+    provider_key: string
+    credential_key: string
+    masked_value: string | null
+    description: string | null
+    is_active: boolean
+    is_configured: boolean
+    created_at: string | null
+    updated_at: string | null
+}
+
+export interface FeatureFlag {
+    id: number
+    key: string
+    enabled: boolean
+    actor_targets: string[]
+    rollout_percentage: number | null
+    expires_at: string | null
+    description: string | null
+    created_at: string | null
     updated_at: string | null
 }
 
@@ -536,6 +598,58 @@ export const adminAPI = {
         return fetchAPI('/api/admin/test-llm', {
             method: 'POST'
         }, token)
+    },
+
+    listPlatformSettings: async (token: string): Promise<PlatformSetting[]> => {
+        return fetchAPI('/api/admin/platform/settings', {}, token)
+    },
+
+    upsertPlatformSetting: async (
+        token: string,
+        key: string,
+        data: { value?: string; description?: string }
+    ): Promise<PlatformSetting> => {
+        return fetchAPI(`/api/admin/platform/settings/${key}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        }, token)
+    },
+
+    listIntegrationCredentials: async (token: string): Promise<IntegrationCredential[]> => {
+        return fetchAPI('/api/admin/platform/integrations', {}, token)
+    },
+
+    upsertIntegrationCredential: async (
+        token: string,
+        providerKey: string,
+        credentialKey: string,
+        data: { secret_value: string; description?: string; is_active?: boolean }
+    ): Promise<IntegrationCredential> => {
+        return fetchAPI(`/api/admin/platform/integrations/${providerKey}/${credentialKey}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        }, token)
+    },
+
+    listFeatureFlags: async (token: string): Promise<FeatureFlag[]> => {
+        return fetchAPI('/api/admin/platform/feature-flags', {}, token)
+    },
+
+    upsertFeatureFlag: async (
+        token: string,
+        key: string,
+        data: {
+            enabled: boolean
+            actor_targets?: string[]
+            rollout_percentage?: number | null
+            expires_at?: string | null
+            description?: string
+        }
+    ): Promise<FeatureFlag> => {
+        return fetchAPI(`/api/admin/platform/feature-flags/${key}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        }, token)
     }
 }
 
@@ -543,6 +657,7 @@ export const adminAPI = {
 
 export interface TradeBatch {
     id: number
+    public_id: string
     position_id: number
     type: 'ENTRY' | 'EXIT'
     price: number
@@ -557,6 +672,7 @@ export interface TradeBatch {
 
 export interface Position {
     id: number
+    public_id: string
     user_id: number
     account_id?: number
     strategy_id?: number
@@ -664,8 +780,12 @@ export const positionsAPI = {
         return fetchAPI(`/api/positions${query ? `?${query}` : ''}`, {}, token)
     },
 
-    get: async (token: string, id: number): Promise<Position> => {
+    get: async (token: string, id: number | string): Promise<Position> => {
         return fetchAPI(`/api/positions/${id}`, {}, token)
+    },
+
+    getTruthLifecycle: async (token: string, id: number | string): Promise<LifecycleDetailResponse> => {
+        return fetchAPI(`/api/positions/${id}/truth-lifecycle`, {}, token)
     },
 
     create: async (token: string, data: PositionCreate): Promise<Position> => {
@@ -675,43 +795,43 @@ export const positionsAPI = {
         }, token)
     },
 
-    update: async (token: string, id: number, data: Partial<Position>): Promise<Position> => {
+    update: async (token: string, id: number | string, data: Partial<Position>): Promise<Position> => {
         return fetchAPI(`/api/positions/${id}`, {
             method: 'PATCH',
             body: JSON.stringify(data),
         }, token)
     },
 
-    delete: async (token: string, id: number): Promise<void> => {
+    delete: async (token: string, id: number | string): Promise<void> => {
         return fetchAPI(`/api/positions/${id}`, {
             method: 'DELETE',
         }, token)
     },
 
-    checkOpen: async (token: string, symbol: string, accountId: number): Promise<Position | null> => {
+    checkOpen: async (token: string, symbol: string, accountId: number | string): Promise<Position | null> => {
         return fetchAPI(`/api/positions/check/${symbol}?account_id=${accountId}`, {}, token)
     },
 
-    analyze: async (token: string, id: number): Promise<Position> => {
+    analyze: async (token: string, id: number | string): Promise<Position> => {
         return fetchAPI(`/api/positions/${id}/analyze`, {
             method: 'POST',
         }, token)
     },
 
     // Batch operations
-    addBatch: (token: string, positionId: number, data: BatchCreate): Promise<TradeBatch> =>
+    addBatch: (token: string, positionId: number | string, data: BatchCreate): Promise<TradeBatch> =>
         fetchAPI(`/api/positions/${positionId}/batches`, {
             method: 'POST',
             body: JSON.stringify(data)
         }, token),
 
-    updateBatch: (token: string, batchId: number, data: Partial<BatchCreate>): Promise<TradeBatch> =>
+    updateBatch: (token: string, batchId: number | string, data: Partial<BatchCreate>): Promise<TradeBatch> =>
         fetchAPI(`/api/positions/batches/${batchId}`, {
             method: 'PATCH',
             body: JSON.stringify(data)
         }, token),
 
-    deleteBatch: (token: string, batchId: number): Promise<void> => {
+    deleteBatch: (token: string, batchId: number | string): Promise<void> => {
         return fetchAPI(`/api/positions/batches/${batchId}`, {
             method: 'DELETE',
         }, token)
@@ -846,5 +966,3 @@ export const marketAPI = {
         }
     }
 }
-
-

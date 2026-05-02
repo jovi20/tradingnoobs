@@ -1,4 +1,5 @@
-import { positionsAPI, accountsAPI, Position, TradingAccount } from '@/lib/api'
+import { positionsAPI, accountsAPI } from '@/lib/api'
+import { adaptPositions, adaptTradingAccounts, PositionViewModel, TradingAccountViewModel } from '@/lib/adapters/trading'
 import { useQuery } from '@tanstack/react-query'
 
 interface UsePositionsDataProps {
@@ -9,13 +10,21 @@ interface UsePositionsDataProps {
     categoryFilter: string
 }
 
+interface UsePositionsDataResult {
+    positions: PositionViewModel[]
+    accounts: TradingAccountViewModel[]
+    isLoading: boolean
+    error: string | null
+    refresh: () => Promise<void>
+}
+
 export function usePositionsData({
     token,
     statusFilter,
     accountFilter,
     dimension,
     categoryFilter
-}: UsePositionsDataProps) {
+}: UsePositionsDataProps): UsePositionsDataResult {
 
     // 1. Fetch Positions with Filters
     console.log('usePositionsData hook called', { token: !!token, statusFilter, accountFilter, dimension, categoryFilter })
@@ -36,7 +45,8 @@ export function usePositionsData({
                 if (dimension === 'RISK') params.risk_level = categoryFilter
             }
 
-            return await positionsAPI.list(token, params)
+            const positions = await positionsAPI.list(token, params)
+            return adaptPositions(positions)
         },
         enabled: !!token,
         placeholderData: (previousData) => previousData // Keep displaying previous data while fetching new filter results
@@ -47,7 +57,8 @@ export function usePositionsData({
         queryKey: ['accounts', token],
         queryFn: async () => {
             if (!token) throw new Error('No token')
-            return await accountsAPI.list(token)
+            const accounts = await accountsAPI.list(token)
+            return adaptTradingAccounts(accounts)
         },
         enabled: !!token
     })

@@ -12,7 +12,7 @@ interface AuthContextType {
     isAuthenticated: boolean
     login: (email: string, password: string) => Promise<void>
     register: (email: string, password: string, invite_code: string) => Promise<void>
-    logout: () => void
+    logout: () => Promise<void>
     refreshSettings: () => Promise<void>
 }
 
@@ -64,7 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (!token && !isPublicPath) {
                 router.push('/login')
             } else if (token && isPublicPath) {
-                router.push('/')
+                router.push('/timeline')
             }
         }
     }, [token, isLoading, pathname, router])
@@ -85,7 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.error('Failed to fetch settings', e)
         }
 
-        router.push('/')
+        router.push('/timeline')
     }
 
     const refreshSettings = async () => {
@@ -104,10 +104,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await login(email, password)
     }
 
-    const logout = () => {
+    const logout = async () => {
+        if (token) {
+            try {
+                await authAPI.logout(token)
+            } catch (error) {
+                console.error('Failed to revoke auth session on logout', error)
+            }
+        }
         localStorage.removeItem(TOKEN_KEY)
         setToken(null)
         setUser(null)
+        setSettings(null)
         router.push('/login')
     }
 

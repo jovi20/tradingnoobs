@@ -11,7 +11,8 @@ import {
     Layers,
     LogOut,
     User,
-    Briefcase
+    Briefcase,
+    Clock3
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useTheme } from 'next-themes'
@@ -19,7 +20,8 @@ import { ThemeToggle } from './ThemeToggle'
 import { useAuth } from '@/contexts/AuthContext'
 
 const navItems = [
-    { href: '/', label: '看板', icon: LayoutDashboard },
+    { href: '/timeline', label: '时间线', icon: Clock3 },
+    { href: '/dashboard', label: '看板', icon: LayoutDashboard },
     { href: '/positions', label: '交易', icon: Briefcase },
     { href: '/strategies', label: '策略', icon: Layers },
     { href: '/daily', label: '日历', icon: Calendar },
@@ -48,7 +50,7 @@ export function Navbar() {
                 <div className="container mx-auto px-4">
                     <div className="flex items-center justify-between h-16">
                         {/* Logo */}
-                        <Link href="/" className="flex items-center space-x-2 group">
+                        <Link href="/timeline" className="flex items-center space-x-2 group">
                             <div className="relative w-9 h-9">
                                 <img
                                     src={mounted && (theme === 'dark' || resolvedTheme === 'dark') ? '/logo-white.png' : '/logo-black.png'}

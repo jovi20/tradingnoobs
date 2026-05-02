@@ -2,7 +2,7 @@
 Trading Noobs Backend - Pydantic Schemas
 """
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, List
+from typing import Generic, List, Optional, TypeVar
 from datetime import datetime, date
 from decimal import Decimal
 from enum import Enum
@@ -70,6 +70,272 @@ class AssetRiskLevelEnum(str, Enum):
     HEDGE = "HEDGE"
 
 
+class FreshnessStatusEnum(str, Enum):
+    FRESH = "FRESH"
+    DELAYED = "DELAYED"
+    STALE = "STALE"
+    DEGRADED = "DEGRADED"
+
+
+class DataSourceEnum(str, Enum):
+    MANUAL = "MANUAL"
+    IMPORTED = "IMPORTED"
+    SYNCED = "SYNCED"
+    DERIVED = "DERIVED"
+    AI_GENERATED = "AI_GENERATED"
+
+
+class MaturityEnum(str, Enum):
+    INSUFFICIENT_SAMPLE = "INSUFFICIENT_SAMPLE"
+    EARLY_SIGNAL = "EARLY_SIGNAL"
+    STABLE = "STABLE"
+
+
+class ValueStatusEnum(str, Enum):
+    ESTIMATED = "ESTIMATED"
+    FINAL = "FINAL"
+
+
+class TimelineHomePageStateEnum(str, Enum):
+    ZERO = "ZERO"
+    EMPTY_CONFIGURED = "EMPTY_CONFIGURED"
+    SMALL_DATA = "SMALL_DATA"
+    READY = "READY"
+
+
+class TimelineViewEnum(str, Enum):
+    ALL = "ALL"
+    TRADING = "TRADING"
+    REVIEW = "REVIEW"
+    AI = "AI"
+    EXCEPTION = "EXCEPTION"
+
+
+class ReviewInboxKindEnum(str, Enum):
+    MISSING_THESIS = "MISSING_THESIS"
+    MISSING_REVIEW = "MISSING_REVIEW"
+    CHECKLIST_MISS = "CHECKLIST_MISS"
+    LOSING_STREAK = "LOSING_STREAK"
+    DATA_STALE = "DATA_STALE"
+    SYNC_EXCEPTION = "SYNC_EXCEPTION"
+
+
+class InboxSeverityEnum(str, Enum):
+    INFO = "INFO"
+    NOTICE = "NOTICE"
+    WARNING = "WARNING"
+    CRITICAL = "CRITICAL"
+
+
+class RecommendedActionKindEnum(str, Enum):
+    OPEN_POSITION_DETAIL = "OPEN_POSITION_DETAIL"
+    START_REVIEW = "START_REVIEW"
+    COMPLETE_THESIS = "COMPLETE_THESIS"
+    OPEN_SYNC_STATUS = "OPEN_SYNC_STATUS"
+    OPEN_INSIGHT = "OPEN_INSIGHT"
+
+
+class LinkedObjectTypeEnum(str, Enum):
+    TRADING_POSITION = "TRADING_POSITION"
+    POSITION_EVENT = "POSITION_EVENT"
+    ACCOUNT = "ACCOUNT"
+    INSIGHT_ARTIFACT = "INSIGHT_ARTIFACT"
+
+
+class TimelineGroupTypeEnum(str, Enum):
+    DAY = "DAY"
+    WEEK_BUCKET = "WEEK_BUCKET"
+
+
+class TimelineEventTypeEnum(str, Enum):
+    OPEN = "OPEN"
+    ADD = "ADD"
+    REDUCE = "REDUCE"
+    CLOSE = "CLOSE"
+    REVIEW_COMPLETED = "REVIEW_COMPLETED"
+    AI_INSIGHT = "AI_INSIGHT"
+    CHECKLIST_MISS = "CHECKLIST_MISS"
+    LOSING_STREAK_ALERT = "LOSING_STREAK_ALERT"
+    DATA_STALE = "DATA_STALE"
+    SYNC_EXCEPTION = "SYNC_EXCEPTION"
+
+
+T = TypeVar("T")
+
+
+class TrustMeta(BaseModel):
+    as_of: str
+    generated_at: Optional[str] = None
+    freshness: FreshnessStatusEnum
+    source: DataSourceEnum
+    maturity: Optional[MaturityEnum] = None
+    value_status: Optional[ValueStatusEnum] = None
+    source_refs: List[str] = Field(default_factory=list)
+    note: Optional[str] = None
+
+
+class ReadModelEnvelope(BaseModel, Generic[T]):
+    data: T
+    meta: TrustMeta
+
+
+class SummaryBar(BaseModel):
+    period_label: str
+    trade_count: int
+    review_completion_rate: Optional[float] = None
+    net_equity_change: Optional[float] = None
+    priority_alert_count: int
+    trust: Optional[TrustMeta] = None
+
+
+class ReviewInboxCounts(BaseModel):
+    total: int
+    high_priority: int
+
+
+class ReviewInboxAction(BaseModel):
+    kind: RecommendedActionKindEnum
+    label: str
+    href: str
+
+
+class LinkedObjectRef(BaseModel):
+    object_type: LinkedObjectTypeEnum
+    public_id: str
+    label: str
+    href: str
+
+
+class ReviewInboxItem(BaseModel):
+    public_id: str
+    kind: ReviewInboxKindEnum
+    severity: InboxSeverityEnum
+    summary: str
+    reason: str
+    recommended_action: ReviewInboxAction
+    linked_object: LinkedObjectRef
+    due_at: Optional[str] = None
+    occurred_at: str
+    trust: Optional[TrustMeta] = None
+
+
+class ReviewInbox(BaseModel):
+    counts: ReviewInboxCounts
+    items: List[ReviewInboxItem] = Field(default_factory=list)
+    trust: Optional[TrustMeta] = None
+
+
+class TimelineImpactValue(BaseModel):
+    amount: Optional[float] = None
+    currency: Optional[str] = None
+    percentage: Optional[float] = None
+
+
+class TimelineInstrumentRef(BaseModel):
+    asset_label: str
+    instrument_label: str
+    symbol: str
+    href: str
+
+
+class TimelineAccountRef(BaseModel):
+    public_id: str
+    label: str
+
+
+class ExecutionDriftSummary(BaseModel):
+    has_drift: bool
+    entry_drift_pct: Optional[float] = None
+    execution_quality: Optional[str] = None
+
+
+class TimelineAiAnnotation(BaseModel):
+    artifact_public_id: str
+    summary: str
+    href: str
+
+
+class TimelineEventCard(BaseModel):
+    event_public_id: str
+    thread_public_id: str
+    event_type: TimelineEventTypeEnum
+    occurred_at: str
+    headline: str
+    summary: str
+    impact_value: Optional[TimelineImpactValue] = None
+    instrument: TimelineInstrumentRef
+    account: Optional[TimelineAccountRef] = None
+    tags: List[str] = Field(default_factory=list)
+    emotion: Optional[str] = None
+    confidence: Optional[float] = None
+    checklist_summary: Optional[str] = None
+    thesis_excerpt: Optional[str] = None
+    invalidation_excerpt: Optional[str] = None
+    execution_drift: Optional[ExecutionDriftSummary] = None
+    ai_annotation: Optional[TimelineAiAnnotation] = None
+    href: str
+    trust: Optional[TrustMeta] = None
+
+
+class TimelineGroup(BaseModel):
+    group_key: str
+    group_label: str
+    group_type: TimelineGroupTypeEnum
+    items: List[TimelineEventCard] = Field(default_factory=list)
+
+
+class TimelineFeed(BaseModel):
+    active_view: TimelineViewEnum
+    next_cursor: Optional[str] = None
+    groups: List[TimelineGroup] = Field(default_factory=list)
+    trust: Optional[TrustMeta] = None
+
+
+class WeeklyDisciplineSnapshot(BaseModel):
+    headline: str
+    summary: str
+    trust: Optional[TrustMeta] = None
+
+
+class ContextRailSelectedObject(BaseModel):
+    object_type: LinkedObjectTypeEnum
+    public_id: str
+    title: str
+    subtitle: Optional[str] = None
+    href: str
+
+
+class ContextRailQuickFilter(BaseModel):
+    key: str
+    label: str
+    active: bool
+
+
+class RelatedContextItem(BaseModel):
+    label: str
+    href: str
+
+
+class ContextRail(BaseModel):
+    selected_object: Optional[ContextRailSelectedObject] = None
+    weekly_discipline_snapshot: Optional[WeeklyDisciplineSnapshot] = None
+    quick_filters: List[ContextRailQuickFilter] = Field(default_factory=list)
+    related_items: List[RelatedContextItem] = Field(default_factory=list)
+    trust: Optional[TrustMeta] = None
+
+
+class TimelineHomeData(BaseModel):
+    page_state: TimelineHomePageStateEnum
+    summary_bar: SummaryBar
+    review_inbox: ReviewInbox
+    timeline: TimelineFeed
+    context_rail: ContextRail
+
+
+class TimelineHomeResponse(ReadModelEnvelope[TimelineHomeData]):
+    pass
+
+
 # ============== Auth Schemas ==============
 
 class UserCreate(BaseModel):
@@ -89,8 +355,13 @@ class UserBase(BaseModel):
 
 class UserResponse(UserBase):
     id: int
+    public_id: str
+    status: str
     is_active: bool
     role: str
+    last_login_at: Optional[datetime] = None
+    locale: Optional[str] = None
+    timezone: Optional[str] = None
     created_at: datetime
     
     class Config:
@@ -382,6 +653,7 @@ class TradingAccountUpdate(BaseModel):
 
 class TradingAccountResponse(BaseModel):
     id: int
+    public_id: str
     user_id: int
     name: str
     broker: str
@@ -416,6 +688,7 @@ class TransactionCreate(TransactionBase):
 
 class TransactionResponse(TransactionBase):
     id: int
+    public_id: str
     account_id: int
     created_at: datetime
     updated_at: Optional[datetime]
@@ -436,6 +709,70 @@ class SystemSettingUpdate(BaseModel):
     description: Optional[str] = None
 
 class SystemSettingResponse(SystemSettingBase):
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class PlatformSettingBase(BaseModel):
+    key: str = Field(..., max_length=100)
+    value: Optional[str] = None
+    description: Optional[str] = None
+
+
+class PlatformSettingUpdate(BaseModel):
+    value: Optional[str] = None
+    description: Optional[str] = None
+
+
+class PlatformSettingResponse(PlatformSettingBase):
+    id: int
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class IntegrationCredentialUpdate(BaseModel):
+    secret_value: str = Field(..., min_length=1)
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class IntegrationCredentialResponse(BaseModel):
+    id: int
+    provider_key: str
+    credential_key: str
+    masked_value: Optional[str] = None
+    description: Optional[str] = None
+    is_active: bool
+    is_configured: bool
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class FeatureFlagUpdate(BaseModel):
+    enabled: bool
+    actor_targets: List[str] = []
+    rollout_percentage: Optional[int] = Field(None, ge=0, le=100)
+    expires_at: Optional[datetime] = None
+    description: Optional[str] = None
+
+
+class FeatureFlagResponse(BaseModel):
+    id: int
+    key: str
+    enabled: bool
+    actor_targets: List[str] = []
+    rollout_percentage: Optional[int] = None
+    expires_at: Optional[datetime] = None
+    description: Optional[str] = None
+    created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
     class Config:
@@ -465,6 +802,7 @@ class TradeBatchUpdate(BaseModel):
 
 class TradeBatchResponse(BaseModel):
     id: int
+    public_id: str
     position_id: int
     type: BatchTypeEnum
     price: Decimal
@@ -542,6 +880,7 @@ class PositionUpdate(BaseModel):
 
 class PositionResponse(BaseModel):
     id: int
+    public_id: str
     user_id: int
     account_id: Optional[int]
     strategy_id: Optional[int]
@@ -586,6 +925,7 @@ class PositionResponse(BaseModel):
 class PositionListResponse(BaseModel):
     """Lighter response for list view (without batches)"""
     id: int
+    public_id: str
     account_id: Optional[int]
     symbol: str
     exchange: str
@@ -627,4 +967,3 @@ class ImportConfirmRequest(BaseModel):
     file_token: str
     account_id: Optional[int] = None # Target account if not specified in file
     selected_indices: Optional[List[int]] = None # If None, import all valid rows
-

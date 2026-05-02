@@ -1,19 +1,20 @@
 import { useState } from 'react'
-import { Transaction, accountsAPI } from '@/lib/api'
+import { accountsAPI } from '@/lib/api'
+import { TransactionViewModel } from '@/lib/adapters/trading'
 import { Trash2, ArrowUpRight, ArrowDownLeft, ArrowRight } from 'lucide-react'
 import { format } from 'date-fns'
 import { getCurrencySymbol } from '@/lib/symbolUtils'
 
 interface TransactionListProps {
     token: string
-    transactions: Transaction[]
-    onDelete: (id: number) => void
+    transactions: TransactionViewModel[]
+    onDelete: (id: string) => void
 }
 
 export function TransactionList({ token, transactions, onDelete }: TransactionListProps) {
-    const [deletingId, setDeletingId] = useState<number | null>(null)
+    const [deletingId, setDeletingId] = useState<string | null>(null)
 
-    const handleDelete = async (id: number) => {
+    const handleDelete = async (id: string) => {
         if (!confirm('确定要删除这条流水吗？账户余额将被冲回。')) return
 
         setDeletingId(id)
@@ -95,8 +96,8 @@ export function TransactionList({ token, transactions, onDelete }: TransactionLi
                             {tx.amount > 0 ? '+' : tx.amount < 0 ? '-' : ''}{formatAmount(tx.amount, tx.currency)}
                         </div>
                         <button
-                            onClick={() => handleDelete(tx.id)}
-                            disabled={deletingId === tx.id}
+                            onClick={() => handleDelete(tx.routeId)}
+                            disabled={deletingId === tx.routeId}
                             className="text-muted-foreground hover:text-red-500 transition-colors p-1"
                         >
                             <Trash2 className="h-4 w-4" />

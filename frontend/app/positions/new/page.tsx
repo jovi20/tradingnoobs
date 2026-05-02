@@ -13,8 +13,9 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import {
     positionsAPI, accountsAPI, strategiesAPI, marketAPI,
-    TradingAccount, Strategy, Position, PositionCreate, BatchCreate, SymbolValidation, ChecklistItem
+    Strategy, PositionCreate, BatchCreate, SymbolValidation, ChecklistItem
 } from '@/lib/api'
+import { adaptPosition, adaptTradingAccounts, PositionViewModel, TradingAccountViewModel } from '@/lib/adapters/trading'
 import {
     detectSymbolType, getAssetTypeColor, getAssetTypeLabel, SymbolDetection,
     getCoreTypeLabel, getMarketLabel, getRiskLevelInfo,
@@ -30,14 +31,14 @@ export default function NewPositionPage() {
     const { token } = useAuth()
     const router = useRouter()
 
-    const [accounts, setAccounts] = useState<TradingAccount[]>([])
+    const [accounts, setAccounts] = useState<TradingAccountViewModel[]>([])
     const [strategies, setStrategies] = useState<Strategy[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState('')
 
     // Existing position check
-    const [existingPosition, setExistingPosition] = useState<Position | null>(null)
+    const [existingPosition, setExistingPosition] = useState<PositionViewModel | null>(null)
     const [showExistingPrompt, setShowExistingPrompt] = useState(false)
 
     // Symbol validation
@@ -82,7 +83,7 @@ export default function NewPositionPage() {
                     accountsAPI.list(token),
                     strategiesAPI.list(token)
                 ])
-                setAccounts(accountsData)
+                setAccounts(adaptTradingAccounts(accountsData))
                 setStrategies(strategiesData.filter((s: Strategy) => s.status === 'ACTIVE'))
                 if (accountsData.length > 0) {
                     setForm(prev => ({ ...prev, account_id: accountsData[0].id }))
@@ -112,7 +113,7 @@ export default function NewPositionPage() {
             try {
                 const existing = await positionsAPI.checkOpen(token, form.symbol, form.account_id)
                 if (existing) {
-                    setExistingPosition(existing)
+                    setExistingPosition(adaptPosition(existing))
                     setShowExistingPrompt(true)
                 } else {
                     setExistingPosition(null)
@@ -274,8 +275,8 @@ export default function NewPositionPage() {
                 confidence: form.entry_confidence
             }
 
-            await positionsAPI.addBatch(token, existingPosition.id, batchData)
-            router.push(`/positions/${existingPosition.id}`)
+            await positionsAPI.addBatch(token, existingPosition.routeId, batchData)
+            router.push(`/positions/${existingPosition.routeId}`)
         } catch (err: any) {
             setError(err.message || '加仓失败')
         } finally {

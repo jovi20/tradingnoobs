@@ -4,7 +4,7 @@ import { Loader2, Plus } from 'lucide-react'
 
 interface TransactionFormProps {
     token: string
-    accountId: number
+    accountId: number | string
     currency: string
     onSuccess: () => void
     onCancel: () => void

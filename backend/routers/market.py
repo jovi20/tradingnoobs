@@ -10,6 +10,7 @@ from database import get_db
 from routers.auth import get_current_user
 from models import User
 from services.market_data_service import MarketDataService
+from services.platform_config_service import get_finnhub_api_key
 
 router = APIRouter(prefix="/api/market", tags=["market"])
 
@@ -89,12 +90,8 @@ async def get_market_calendar(
     返回指定市场、年月的交易日和节假日
     """
     from services.market_calendar import MarketCalendarService
-    from models import UserSettings
     
-    # 获取用户的 Finnhub API Key
-    settings = db.query(UserSettings).filter(UserSettings.user_id == current_user.id).first()
-    finnhub_key = settings.finnhub_api_key if settings else None
+    finnhub_key = get_finnhub_api_key(db)
     
     service = MarketCalendarService(finnhub_api_key=finnhub_key)
     return service.get_calendar(market, year, month)
-
