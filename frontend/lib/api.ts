@@ -756,6 +756,21 @@ export interface BatchCreate {
     confidence?: number
 }
 
+export interface TradingPositionEventNarrativeUpdate {
+    reason?: string
+    emotion?: string
+    confidence?: number
+    thesis?: string
+    edge_source?: string
+    disconfirming_evidence?: string
+    invalidation_rule?: string
+    expected_holding_period?: string
+    planned_exit_rule?: string
+    sizing_rationale?: string
+    checklist_snapshot?: Record<string, boolean>
+    note?: string
+}
+
 // ============== Positions API ==============
 
 export const positionsAPI = {
@@ -790,6 +805,18 @@ export const positionsAPI = {
 
     getTradingPositionLifecycle: async (token: string, positionPublicId: string): Promise<LifecycleDetailResponse> => {
         return fetchAPI(`/api/trading-positions/${positionPublicId}/lifecycle`, {}, token)
+    },
+
+    updateTradingPositionEventNarrative: async (
+        token: string,
+        positionPublicId: string,
+        eventPublicId: string,
+        data: TradingPositionEventNarrativeUpdate
+    ): Promise<LifecycleDetailResponse> => {
+        return fetchAPI(`/api/trading-positions/${positionPublicId}/events/${eventPublicId}`, {
+            method: 'PATCH',
+            body: JSON.stringify(data),
+        }, token)
     },
 
     create: async (token: string, data: PositionCreate): Promise<Position> => {

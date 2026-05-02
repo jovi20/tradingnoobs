@@ -72,7 +72,7 @@ cd backend && ../.venv313/bin/python -m unittest discover -s tests
 Result:
 
 ```text
-Ran 46 tests in 3.887s
+Ran 48 tests in 4.403s
 OK
 ```
 
@@ -91,9 +91,16 @@ cd backend && ../.venv313/bin/python -m unittest discover -s tests -p test_tradi
 Result:
 
 ```text
-Ran 2 tests in 0.130s
+Ran 4 tests in 0.260s
 OK
 ```
+
+Scope covered:
+
+- Lifecycle read route remains `TradingPosition.public_id` only.
+- Truth event narrative PATCH uses `TradingPosition.public_id` + `PositionEvent.public_id`.
+- Narrative / C5 fields update on `position_events` and return an updated lifecycle envelope with `meta.source = MANUAL`.
+- Internal numeric event ids are rejected by the truth event write route.
 
 Timeline cursor/limit regression:
 
@@ -174,8 +181,9 @@ Reason:
 - `AccountLedgerEntry` foundation is landed with migration, legacy realized PnL bridge, transaction cash bridge, and lifecycle `cash_effects` consumption.
 - Account cash balance/read models are not yet fully ledger-derived; keep this as a C4/accounting-service follow-up.
 - Post-boundary `C2 + C5` slice continued: single-trade detail can load `TradingPosition.public_id` lifecycle directly, render truth lifecycle as the primary narrative, surface evidence refs, and show AI sidecar artifacts when the backend returns them.
+- Truth event narrative write slice added: `PATCH /api/trading-positions/{position_public_id}/events/{event_public_id}` updates reason / emotion / confidence / thesis / invalidation / planned exit / sizing / checklist / note on `PositionEvent`; frontend API client exposes `updateTradingPositionEventNarrative`.
 - Legacy edit/review/batch/MAE controls are still present only as migration tools; they still depend on legacy DTOs and should not be treated as final truth write paths.
-- The next implementation slice should move edit/review/batch operations onto `TradingPosition / PositionEvent` write paths, or proceed to `C4` accounting service if we want to centralize cost/FIFO/fee/FX before more UI write work.
+- The next implementation slice should wire the detail UI narrative editor to the truth event write route, then proceed to `C4` accounting service before moving price/quantity/batch operations onto `TradingPosition / PositionEvent` write paths.
 
 ## Next Checkpoint Criteria
 
@@ -184,5 +192,6 @@ Reason:
 - Timeline `limit` / `cursor` behavior has a failing test first, then passing implementation.
 - C3 AccountLedgerEntry foundation has model, migration, sync, route, and lifecycle regressions.
 - C2 + C5 truth-first detail entry plus evidence/AI sidecar display has frontend adapter regressions and a documented build limitation if frontend dependencies are absent.
+- C2 + C5 truth event narrative write route has backend router regressions and an explicit boundary: narrative fields only, no price/quantity/PnL recalculation before C4.
 - Frontend adapter tests remain green.
 - Stage boundary commit exists on `dev`; next checkpoint should record each focused slice commit separately for `main` vs `dev` review.

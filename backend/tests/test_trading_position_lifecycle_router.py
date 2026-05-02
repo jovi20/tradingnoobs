@@ -14,6 +14,8 @@ from models import (
     AssetMetadata,
     BatchType,
     Position,
+    PositionEvent,
+    PositionEventType,
     PositionDirection,
     PositionStatus,
     TradeBatch,
@@ -178,6 +180,67 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         truth_position = self._seed_synced_position()
 
         response = self.client.get(f"/api/trading-positions/{truth_position.id}/lifecycle")
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_event_narrative_patch_updates_truth_event_and_returns_lifecycle(self):
+        truth_position = self._seed_synced_position()
+        opening_event = self.db.query(PositionEvent).filter(
+            PositionEvent.position_id == truth_position.id,
+            PositionEvent.event_type == PositionEventType.OPEN,
+        ).one()
+
+        response = self.client.patch(
+            f"/api/trading-positions/{truth_position.public_id}/events/{opening_event.public_id}",
+            json={
+                "reason": "Updated breakout thesis",
+                "emotion": "Focused",
+                "confidence": 5,
+                "thesis": "Breakout continuation after earnings reset",
+                "invalidation_rule": "Lose prior day low",
+                "planned_exit_rule": "Scale out above 2R",
+                "sizing_rationale": "Half risk until confirmation",
+                "checklist_snapshot": {"pre_market": True, "risk_check": True},
+                "note": "Narrative-only truth event update.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["meta"]["source"], "MANUAL")
+        self.assertEqual(payload["data"]["position_summary"]["public_id"], truth_position.public_id)
+        self.assertEqual(payload["data"]["thesis_block"]["thesis"], "Breakout continuation after earnings reset")
+        self.assertEqual(payload["data"]["thesis_block"]["invalidation_rule"], "Lose prior day low")
+        self.assertEqual(payload["data"]["thesis_block"]["planned_exit_rule"], "Scale out above 2R")
+        self.assertEqual(payload["data"]["thesis_block"]["sizing_rationale"], "Half risk until confirmation")
+        checklist = payload["data"]["thesis_block"]["checklist_snapshot"]
+        self.assertEqual(checklist, [
+            {"label": "pre_market", "checked": True},
+            {"label": "risk_check", "checked": True},
+        ])
+        first_node = payload["data"]["lifecycle_thread"]["nodes"][0]
+        self.assertEqual(first_node["node_public_id"], opening_event.public_id)
+        self.assertEqual(first_node["summary"], "Updated breakout thesis")
+        self.assertEqual(first_node["emotion"], "Focused")
+        self.assertEqual(first_node["confidence"], 5)
+
+        self.db.expire_all()
+        persisted = self.db.query(PositionEvent).filter(PositionEvent.id == opening_event.id).one()
+        self.assertEqual(persisted.reason, "Updated breakout thesis")
+        self.assertEqual(persisted.thesis, "Breakout continuation after earnings reset")
+        self.assertEqual(persisted.checklist_snapshot, {"pre_market": True, "risk_check": True})
+
+    def test_event_narrative_patch_rejects_internal_event_id(self):
+        truth_position = self._seed_synced_position()
+        opening_event = self.db.query(PositionEvent).filter(
+            PositionEvent.position_id == truth_position.id,
+            PositionEvent.event_type == PositionEventType.OPEN,
+        ).one()
+
+        response = self.client.patch(
+            f"/api/trading-positions/{truth_position.public_id}/events/{opening_event.id}",
+            json={"reason": "Should not accept numeric ids"},
+        )
 
         self.assertEqual(response.status_code, 404)
 

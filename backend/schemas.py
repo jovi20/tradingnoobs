@@ -800,6 +800,21 @@ class TradeBatchUpdate(BaseModel):
     confidence: Optional[int] = Field(None, ge=1, le=5)
 
 
+class TradingPositionEventNarrativeUpdate(BaseModel):
+    reason: Optional[str] = None
+    emotion: Optional[str] = None
+    confidence: Optional[int] = Field(None, ge=1, le=5)
+    thesis: Optional[str] = None
+    edge_source: Optional[str] = None
+    disconfirming_evidence: Optional[str] = None
+    invalidation_rule: Optional[str] = None
+    expected_holding_period: Optional[str] = None
+    planned_exit_rule: Optional[str] = None
+    sizing_rationale: Optional[str] = None
+    checklist_snapshot: Optional[dict] = None
+    note: Optional[str] = None
+
+
 class TradeBatchResponse(BaseModel):
     id: int
     public_id: str
