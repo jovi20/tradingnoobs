@@ -458,6 +458,8 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         self.assertEqual(Decimal(str(payload["data"]["position_summary"]["realized_pnl_net"])), Decimal("0"))
         node_types = [node["node_type"] for node in payload["data"]["lifecycle_thread"]["nodes"]]
         self.assertEqual(node_types, ["OPEN", "REDUCE", "REVERSAL"])
+        reversal_node = payload["data"]["lifecycle_thread"]["nodes"][-1]
+        self.assertEqual(reversal_node["reverses_event_public_id"], reduce_event.public_id)
         cash_effects = payload["data"]["ledger_summary"]["cash_effects"]
         self.assertEqual([entry["entry_type"] for entry in cash_effects], ["REALIZED_PNL", "REALIZED_PNL"])
         self.assertEqual(Decimal(str(cash_effects[0]["amount"])), Decimal("59.0"))

@@ -51,6 +51,14 @@ export interface LifecycleNarrativeDraft {
     checklistSnapshot: Record<string, boolean>
 }
 
+export interface LifecycleReversalAction {
+    canReverse: boolean
+    eventPublicId: string | null
+    nodeType?: 'ADD' | 'REDUCE' | 'CLOSE'
+    label: string
+    reason: string
+}
+
 export function adaptLifecycleDetail(response: LifecycleDetailResponse): LifecycleDetailViewModel {
     const summary = response.data.position_summary
     const thesis = response.data.thesis_block
@@ -181,5 +189,43 @@ export function getLifecycleNarrativeDraft(lifecycle: LifecycleDetailViewModel):
         checklistSnapshot: Object.fromEntries(
             (lifecycle.checklistSnapshot || []).map((item) => [item.label, Boolean(item.checked)])
         ),
+    }
+}
+
+export function getLifecycleReversalAction(input: Pick<LifecycleDetailViewModel, 'nodes'>): LifecycleReversalAction {
+    const reversibleTypes = new Set(['ADD', 'REDUCE', 'CLOSE'])
+    const reversedEventPublicIds = new Set(
+        input.nodes
+            .filter((node) => node.node_type === 'REVERSAL' && node.reverses_event_public_id)
+            .map((node) => String(node.reverses_event_public_id))
+    )
+    const latestReversibleNode = [...input.nodes]
+        .reverse()
+        .find((node) => reversibleTypes.has(node.node_type) && !reversedEventPublicIds.has(node.node_public_id))
+
+    if (latestReversibleNode) {
+        return {
+            canReverse: true,
+            eventPublicId: latestReversibleNode.node_public_id,
+            nodeType: latestReversibleNode.node_type as 'ADD' | 'REDUCE' | 'CLOSE',
+            label: '撤销最新 truth 事件',
+            reason: '将追加 REVERSAL 节点并重放 FIFO，不会静默改写历史事件。',
+        }
+    }
+
+    if (input.nodes.some((node) => node.node_type === 'OPEN')) {
+        return {
+            canReverse: false,
+            eventPublicId: null,
+            label: '暂无可撤销事件',
+            reason: 'OPEN 事件需要 position void/archive 语义，当前不可撤销。',
+        }
+    }
+
+    return {
+        canReverse: false,
+        eventPublicId: null,
+        label: '暂无可撤销事件',
+        reason: '当前 lifecycle 还没有可撤销的 truth trade event。',
     }
 }

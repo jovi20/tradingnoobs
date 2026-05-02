@@ -786,6 +786,11 @@ export interface TradingPositionTradeEventCreate {
     note?: string
 }
 
+export interface TradingPositionTradeEventReverseCreate {
+    occurred_at: string
+    note?: string
+}
+
 // ============== Positions API ==============
 
 export const positionsAPI = {
@@ -840,6 +845,18 @@ export const positionsAPI = {
         data: TradingPositionTradeEventCreate
     ): Promise<LifecycleDetailResponse> => {
         return fetchAPI(`/api/trading-positions/${positionPublicId}/events`, {
+            method: 'POST',
+            body: JSON.stringify(data),
+        }, token)
+    },
+
+    reverseTradingPositionTradeEvent: async (
+        token: string,
+        positionPublicId: string,
+        eventPublicId: string,
+        data: TradingPositionTradeEventReverseCreate
+    ): Promise<LifecycleDetailResponse> => {
+        return fetchAPI(`/api/trading-positions/${positionPublicId}/events/${eventPublicId}/reverse`, {
             method: 'POST',
             body: JSON.stringify(data),
         }, token)

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import {
   adaptLifecycleDetail,
   getLifecycleCashEffectSummary,
+  getLifecycleReversalAction,
   getLifecyclePreviewBadge,
   getLifecyclePreviewSummary,
   getLifecyclePreviewTrustSummary,
@@ -237,6 +238,71 @@ test('lifecycle detail summaries make evidence and AI sidecar auditable', () => 
       ],
     }),
     '1 条 AI 结论 · 2 条证据'
+  )
+})
+
+test('getLifecycleReversalAction only exposes the latest unreversed truth trade event', () => {
+  assert.deepEqual(
+    getLifecycleReversalAction({
+      nodes: [
+        {
+          node_public_id: 'evt-open',
+          node_type: 'OPEN',
+          occurred_at: '2026-04-01T09:30:00Z',
+          title: 'MSFT OPEN',
+          summary: 'Initial entry',
+        },
+        {
+          node_public_id: 'evt-reduce',
+          node_type: 'REDUCE',
+          occurred_at: '2026-04-03T15:30:00Z',
+          title: 'MSFT REDUCE',
+          summary: 'Scale out',
+        },
+      ],
+    }),
+    {
+      canReverse: true,
+      eventPublicId: 'evt-reduce',
+      nodeType: 'REDUCE',
+      label: '撤销最新 truth 事件',
+      reason: '将追加 REVERSAL 节点并重放 FIFO，不会静默改写历史事件。',
+    },
+  )
+
+  assert.deepEqual(
+    getLifecycleReversalAction({
+      nodes: [
+        {
+          node_public_id: 'evt-open',
+          node_type: 'OPEN',
+          occurred_at: '2026-04-01T09:30:00Z',
+          title: 'MSFT OPEN',
+          summary: 'Initial entry',
+        },
+        {
+          node_public_id: 'evt-reduce',
+          node_type: 'REDUCE',
+          occurred_at: '2026-04-03T15:30:00Z',
+          title: 'MSFT REDUCE',
+          summary: 'Scale out',
+        },
+        {
+          node_public_id: 'evt-reversal',
+          node_type: 'REVERSAL',
+          occurred_at: '2026-04-04T12:00:00Z',
+          title: 'MSFT REVERSAL',
+          summary: 'Broker correction',
+          reverses_event_public_id: 'evt-reduce',
+        },
+      ],
+    }),
+    {
+      canReverse: false,
+      eventPublicId: null,
+      label: '暂无可撤销事件',
+      reason: 'OPEN 事件需要 position void/archive 语义，当前不可撤销。',
+    },
   )
 })
 

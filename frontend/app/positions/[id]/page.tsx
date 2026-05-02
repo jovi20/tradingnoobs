@@ -18,7 +18,8 @@ import {
     Target,
     MessageSquare,
     Award,
-    Wrench
+    Wrench,
+    RotateCcw
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { positionsAPI } from '@/lib/api'
@@ -32,6 +33,7 @@ import {
 import {
     adaptLifecycleDetail,
     getLifecycleNarrativeDraft,
+    getLifecycleReversalAction,
     type LifecycleDetailViewModel,
     type LifecycleNarrativeDraft,
 } from '@/lib/adapters/lifecycle'
@@ -110,6 +112,7 @@ export default function PositionDetailPage() {
     })
     const [editingTruthNarrative, setEditingTruthNarrative] = useState(false)
     const [isSavingTruthNarrative, setIsSavingTruthNarrative] = useState(false)
+    const [isReversingTruthEvent, setIsReversingTruthEvent] = useState(false)
     const [truthNarrativeForm, setTruthNarrativeForm] = useState<LifecycleNarrativeDraft>(emptyTruthNarrativeForm)
 
     useEffect(() => {
@@ -320,6 +323,35 @@ export default function PositionDetailPage() {
         }
     }
 
+    const handleReverseLatestTruthEvent = async () => {
+        if (!token || !truthLifecycle) return
+        const reversalAction = getLifecycleReversalAction(truthLifecycle)
+        if (!reversalAction.canReverse || !reversalAction.eventPublicId) {
+            setError(reversalAction.reason)
+            return
+        }
+        if (!window.confirm(`确定要撤销最新 ${reversalAction.nodeType} truth event 吗？系统会追加 REVERSAL 节点，而不是静默删除历史事件。`)) return
+
+        setIsReversingTruthEvent(true)
+        try {
+            const updatedLifecycle = await positionsAPI.reverseTradingPositionTradeEvent(
+                token,
+                truthLifecycle.truthPositionPublicId,
+                reversalAction.eventPublicId,
+                {
+                    occurred_at: new Date().toISOString(),
+                    note: `Manual reversal from position detail for ${reversalAction.nodeType}`,
+                }
+            )
+            setTruthLifecycle(adaptLifecycleDetail(updatedLifecycle))
+            setError('')
+        } catch (err: any) {
+            alert(err.message || '撤销 truth event 失败')
+        } finally {
+            setIsReversingTruthEvent(false)
+        }
+    }
+
     if (isLoading) {
         return (
             <div className="flex items-center justify-center py-20">
@@ -355,6 +387,7 @@ export default function PositionDetailPage() {
     )
     const legacyBatchMutationState = getLegacyBatchMutationState(Boolean(truthLifecycle))
     const legacyDeleteState = getLegacyPositionDeleteState(Boolean(truthLifecycle))
+    const truthReversalAction = truthLifecycle ? getLifecycleReversalAction(truthLifecycle) : null
 
     return (
         <div className="space-y-6 pb-20 md:pb-6">
@@ -429,17 +462,38 @@ export default function PositionDetailPage() {
                             </h2>
                             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300">
                                 这里只编辑 reason、emotion、confidence、thesis、invalidation、planned exit、sizing 和 note。
-                                价格、数量、PnL 仍留在 legacy migration tools，等 C4 accounting service 后再迁。
+                                价格、数量和 PnL 通过 truth trade event 写入；撤销只允许最新 active 的 ADD/REDUCE/CLOSE，并通过 REVERSAL 节点保留审计轨迹。
                             </p>
+                            {truthReversalAction && (
+                                <p className="mt-2 text-xs text-cyan-700/80 dark:text-cyan-200/80">
+                                    {truthReversalAction.reason}
+                                </p>
+                            )}
                         </div>
-                        <button
-                            type="button"
-                            onClick={openTruthNarrativeModal}
-                            className="btn btn-primary flex shrink-0 items-center justify-center gap-2"
-                        >
-                            <Edit3 className="h-4 w-4" />
-                            编辑 truth narrative
-                        </button>
+                        <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+                            <button
+                                type="button"
+                                onClick={openTruthNarrativeModal}
+                                className="btn btn-primary flex items-center justify-center gap-2"
+                            >
+                                <Edit3 className="h-4 w-4" />
+                                编辑 truth narrative
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleReverseLatestTruthEvent}
+                                disabled={!truthReversalAction?.canReverse || isReversingTruthEvent}
+                                title={truthReversalAction?.reason}
+                                className="btn btn-secondary flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                {isReversingTruthEvent ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    <RotateCcw className="h-4 w-4" />
+                                )}
+                                {truthReversalAction?.label || '暂无可撤销事件'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

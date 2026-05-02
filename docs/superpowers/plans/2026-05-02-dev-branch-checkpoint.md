@@ -35,8 +35,8 @@ node --experimental-strip-types --test frontend/tests/*.test.mts
 Result:
 
 ```text
-tests 21
-pass 21
+tests 23
+pass 23
 fail 0
 ```
 
@@ -72,7 +72,7 @@ cd backend && ../.venv313/bin/python -m unittest discover -s tests
 Result:
 
 ```text
-Ran 68 tests in 5.296s
+Ran 68 tests in 5.239s
 OK
 LLM Test Success: {'ok': True}
 ```
@@ -188,8 +188,8 @@ node --experimental-strip-types --test frontend/tests/*.test.mts
 Result:
 
 ```text
-tests 16
-pass 16
+tests 23
+pass 23
 fail 0
 ```
 
@@ -202,8 +202,9 @@ Scope covered:
 - Detail UI exposes a separate truth narrative editor that writes C5 narrative fields to `PositionEvent` and refreshes lifecycle.
 - Frontend API client exposes `createTradingPositionTradeEvent`, and batch form mapping sends ENTRY as `ADD`, partial EXIT as `REDUCE`, and full EXIT as `CLOSE`.
 - `add-batch` and new-position existing-holding add flows write `TradingPosition / PositionEvent` first when a truth lifecycle can be resolved, with legacy batch fallback for migration data.
-- Legacy `Position / TradeBatch` detail edit controls become read-only migration badges when truth lifecycle is available; backend latest-event reversal now exists, while frontend exposure and broader manual adjustment semantics still need a follow-up slice.
+- Legacy `Position / TradeBatch` detail edit controls become read-only migration badges when truth lifecycle is available; backend latest-event reversal and guarded frontend exposure now exist, while broader historical reversal and manual adjustment semantics still need a follow-up slice.
 - Legacy whole-position delete is disabled once truth lifecycle is available, so destructive mutation waits for a formal truth reversal/adjustment operation.
+- Frontend API client exposes `reverseTradingPositionTradeEvent`, lifecycle adapter exposes `getLifecycleReversalAction`, and the detail page only enables reversal for the latest unreversed `ADD / REDUCE / CLOSE` event surfaced by the truth lifecycle.
 
 Build limitation:
 
@@ -245,9 +246,9 @@ OK
 - Post-boundary `C2 + C5` slice continued: single-trade detail can load `TradingPosition.public_id` lifecycle directly, render truth lifecycle as the primary narrative, surface evidence refs, and show AI sidecar artifacts when the backend returns them.
 - Truth event narrative write slice added: `PATCH /api/trading-positions/{position_public_id}/events/{event_public_id}` updates reason / emotion / confidence / thesis / invalidation / planned exit / sizing / checklist / note on `PositionEvent`; frontend API client exposes `updateTradingPositionEventNarrative`, and detail UI now has a dedicated truth narrative editor using it.
 - Frontend trade event write slice started: `add-batch` and new-position existing-holding add flows resolve truth lifecycle and call `POST /api/trading-positions/{position_public_id}/events`; unresolved migration data falls back to legacy batch routes.
-- Legacy review/batch/MAE controls are still present only as migration tools; batch edit is read-only and whole-position delete is protected when truth lifecycle is available, while frontend reversal exposure and manual adjustment semantics still need follow-up.
+- Legacy review/batch/MAE controls are still present only as migration tools; batch edit is read-only and whole-position delete is protected when truth lifecycle is available, while guarded frontend latest-event reversal exposure is now wired and manual adjustment semantics still need follow-up.
 - Truth trade event write slice started: `POST /api/trading-positions/{position_public_id}/events` can append manual `ADD / REDUCE / CLOSE` events to an existing `TradingPosition`; current regression covers `ADD` FIFO replay without cash ledger, `REDUCE` FIFO replay, full `CLOSE` status transition, partial `CLOSE` 422, closed-position `ADD` rejection, realized PnL ledger sync, and latest active event reversal through `POST /api/trading-positions/{position_public_id}/events/{event_public_id}/reverse`.
-- The next implementation slice should expose guarded frontend reversal affordances or implement formal manual adjustment semantics; broader historical/non-latest reversal remains intentionally blocked until its UX and accounting rules are explicit.
+- The next implementation slice should implement formal manual adjustment semantics; broader historical/non-latest reversal remains intentionally blocked until its UX and accounting rules are explicit.
 
 ## Next Checkpoint Criteria
 
@@ -255,7 +256,7 @@ OK
 - Public-id-only lifecycle behavior has a failing test first, then passing implementation.
 - Timeline `limit` / `cursor` behavior has a failing test first, then passing implementation.
 - C3 AccountLedgerEntry foundation has model, migration, sync, route, and lifecycle regressions.
-- C4 FIFO accounting service has pure service, legacy truth sync, legacy batch router/import recalculation, positions open-position, dashboard mark-to-market, account signed market value, ledger-derived cash read-model, opening-balance ledger write, manual cash-adjustment write, dividend ledger write, ADD/REDUCE/CLOSE truth trade-event write regressions, and latest active trade-event reversal regressions; frontend add/reduce/close creation is truth-first with legacy fallback, legacy batch edit is read-only and whole-position delete is protected when truth lifecycle exists, while frontend reversal exposure and manual adjustment semantics remain pending.
+- C4 FIFO accounting service has pure service, legacy truth sync, legacy batch router/import recalculation, positions open-position, dashboard mark-to-market, account signed market value, ledger-derived cash read-model, opening-balance ledger write, manual cash-adjustment write, dividend ledger write, ADD/REDUCE/CLOSE truth trade-event write regressions, latest active trade-event reversal regressions, and guarded frontend reversal exposure; frontend add/reduce/close creation is truth-first with legacy fallback, legacy batch edit is read-only and whole-position delete is protected when truth lifecycle exists, while manual adjustment semantics remain pending.
 - C2 + C5 truth-first detail entry plus evidence/AI sidecar display has frontend adapter regressions and a documented build limitation if frontend dependencies are absent.
 - C2 + C5 truth event narrative write route has backend router regressions and an explicit boundary: narrative fields stay on the narrative PATCH route; price/quantity/PnL recalculation belongs to the trade-event POST route.
 - Frontend adapter tests remain green.

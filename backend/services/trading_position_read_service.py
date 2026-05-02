@@ -65,6 +65,7 @@ def build_trading_position_lifecycle_payload(truth_position: TradingPosition) ->
     opening_event = next((event for event in truth_position.events if event.event_type == PositionEventType.OPEN), None)
     checklist_snapshot = opening_event.checklist_snapshot or {} if opening_event else {}
     cash_effects = _ledger_cash_effects(truth_position)
+    event_public_ids_by_id = {event.id: event.public_id for event in truth_position.events}
 
     lifecycle_thread = []
     for event in truth_position.events:
@@ -76,6 +77,11 @@ def build_trading_position_lifecycle_payload(truth_position: TradingPosition) ->
                 "title": f"{truth_position.instrument.contract_symbol} {event.event_type.value}",
                 "summary": event.reason or event.note or event.event_type.value,
                 "related_event_public_id": event.public_id,
+                "reverses_event_public_id": (
+                    event_public_ids_by_id.get(event.reverses_event_id)
+                    if event.reverses_event_id
+                    else None
+                ),
                 "quantities": {
                     "quantity": event.quantity,
                     "price": event.price,

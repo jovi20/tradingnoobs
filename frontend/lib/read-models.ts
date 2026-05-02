@@ -203,7 +203,7 @@ export interface TimelineHomeData {
 export type TimelineHomeResponse = ReadModelEnvelope<TimelineHomeData>
 
 export type LifecycleReviewStatus = 'OPEN' | 'CLOSED_PENDING_REVIEW' | 'REVIEWED'
-export type LifecycleNodeType = 'OPEN' | 'ADD' | 'REDUCE' | 'CLOSE' | 'REVIEW' | 'AI_CONCLUSION'
+export type LifecycleNodeType = 'OPEN' | 'ADD' | 'REDUCE' | 'CLOSE' | 'REVERSAL' | 'REVIEW' | 'AI_CONCLUSION'
 
 export interface LifecyclePositionSummary {
     public_id: string
@@ -254,6 +254,7 @@ export interface LifecycleNode {
     title: string
     summary: string
     related_event_public_id?: string
+    reverses_event_public_id?: string | null
     quantities?: {
         quantity?: number
         price?: number
