@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from models import (
     AccountLedgerEntry,
     AccountLedgerEntryType,
+    PositionEvent,
     Transaction,
     TransactionType,
     TradingAccount,
@@ -148,6 +149,43 @@ def sync_cash_balance_adjustment_to_account_ledger(
         description=description or "Manual cash balance adjustment",
     )
     db.add(ledger_entry)
+    db.flush()
+    return ledger_entry
+
+
+def sync_dividend_event_to_account_ledger(
+    db: Session,
+    *,
+    event: PositionEvent,
+) -> AccountLedgerEntry:
+    if event.id is None:
+        db.flush()
+
+    ledger_entry = (
+        db.query(AccountLedgerEntry)
+        .filter(AccountLedgerEntry.position_event_id == event.id)
+        .first()
+    )
+    if not ledger_entry:
+        ledger_entry = AccountLedgerEntry(
+            public_id=_deterministic_ledger_public_id(f"position_event:{event.public_id}:dividend")
+        )
+        db.add(ledger_entry)
+
+    dividend_amount = Decimal(str(event.gross_amount or 0))
+    ledger_entry.user_id = event.user_id
+    ledger_entry.account_id = event.account_id
+    ledger_entry.position_id = event.position_id
+    ledger_entry.position_event_id = event.id
+    ledger_entry.entry_type = AccountLedgerEntryType.DIVIDEND
+    ledger_entry.occurred_at = event.event_time
+    ledger_entry.currency = event.currency or "USD"
+    ledger_entry.amount = dividend_amount
+    ledger_entry.amount_account_ccy = dividend_amount * Decimal(str(event.fx_rate_to_account_ccy or 1))
+    ledger_entry.fx_rate_to_account_ccy = Decimal(str(event.fx_rate_to_account_ccy or 1))
+    ledger_entry.source = "POSITION_EVENT"
+    ledger_entry.source_run_id = event.public_id
+    ledger_entry.description = event.note or "Dividend"
     db.flush()
     return ledger_entry
 

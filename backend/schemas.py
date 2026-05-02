@@ -815,6 +815,13 @@ class TradingPositionEventNarrativeUpdate(BaseModel):
     note: Optional[str] = None
 
 
+class TradingPositionDividendCreate(BaseModel):
+    amount: Decimal = Field(..., gt=0)
+    currency: str = Field(default="USD", max_length=10)
+    occurred_at: datetime
+    note: Optional[str] = None
+
+
 class TradeBatchResponse(BaseModel):
     id: int
     public_id: str

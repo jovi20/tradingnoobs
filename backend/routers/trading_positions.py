@@ -9,18 +9,20 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import PositionEvent, User
-from schemas import TradingPositionEventNarrativeUpdate
+from models import PositionEvent, PositionEventType, User
+from schemas import TradingPositionDividendCreate, TradingPositionEventNarrativeUpdate
+from services.account_ledger_service import sync_dividend_event_to_account_ledger
 from services.auth_service import get_current_user
 from services.trading_position_read_service import build_trading_position_lifecycle_payload, resolve_truth_position_by_public_id
 
 router = APIRouter(prefix="/api/trading-positions", tags=["Trading Positions"])
 
 
-def _lifecycle_response(truth_position, source: str = "DERIVED") -> JSONResponse:
+def _lifecycle_response(truth_position, source: str = "DERIVED", status_code: int = 200) -> JSONResponse:
     data = build_trading_position_lifecycle_payload(truth_position)
 
     return JSONResponse(
+        status_code=status_code,
         content=jsonable_encoder(
             {
                 "data": data,
@@ -78,3 +80,36 @@ def update_trading_position_event_narrative(
 
     updated_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
     return _lifecycle_response(updated_position, source="MANUAL")
+
+
+@router.post("/{position_public_id}/dividends", status_code=201)
+def create_trading_position_dividend(
+    position_public_id: str,
+    payload: TradingPositionDividendCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    truth_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
+    if not truth_position:
+        raise HTTPException(status_code=404, detail="Trading position not found")
+
+    event = PositionEvent(
+        user_id=current_user.id,
+        position_id=truth_position.id,
+        account_id=truth_position.account_id,
+        instrument_id=truth_position.instrument_id,
+        event_type=PositionEventType.DIVIDEND,
+        event_time=payload.occurred_at,
+        currency=payload.currency,
+        gross_amount=payload.amount,
+        fx_rate_to_account_ccy=1,
+        input_source="MANUAL",
+        note=payload.note,
+    )
+    db.add(event)
+    db.flush()
+    sync_dividend_event_to_account_ledger(db, event=event)
+    db.commit()
+
+    updated_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
+    return _lifecycle_response(updated_position, source="MANUAL", status_code=201)

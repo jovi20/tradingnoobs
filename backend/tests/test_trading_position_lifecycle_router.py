@@ -11,6 +11,8 @@ from sqlalchemy.orm import sessionmaker
 from database import Base, get_db
 from main import app
 from models import (
+    AccountLedgerEntry,
+    AccountLedgerEntryType,
     AssetMetadata,
     BatchType,
     Position,
@@ -243,6 +245,38 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 404)
+
+    def test_dividend_event_write_creates_truth_event_and_ledger_entry(self):
+        truth_position = self._seed_synced_position()
+
+        response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/dividends",
+            json={
+                "amount": "12.50",
+                "currency": "USD",
+                "occurred_at": "2026-04-04T12:00:00+00:00",
+                "note": "Quarterly dividend",
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        payload = response.json()
+        self.assertEqual(payload["meta"]["source"], "MANUAL")
+        self.assertEqual(Decimal(str(payload["data"]["ledger_summary"]["total_dividends"])), Decimal("12.5"))
+
+        dividend_event = self.db.query(PositionEvent).filter(
+            PositionEvent.position_id == truth_position.id,
+            PositionEvent.event_type == PositionEventType.DIVIDEND,
+        ).one()
+        self.assertEqual(dividend_event.gross_amount, Decimal("12.50000000"))
+        self.assertEqual(dividend_event.note, "Quarterly dividend")
+
+        ledger_entry = self.db.query(AccountLedgerEntry).filter(
+            AccountLedgerEntry.position_event_id == dividend_event.id,
+        ).one()
+        self.assertEqual(ledger_entry.entry_type, AccountLedgerEntryType.DIVIDEND)
+        self.assertEqual(ledger_entry.amount, Decimal("12.50000000"))
+        self.assertEqual(ledger_entry.currency, "USD")
 
 
 if __name__ == "__main__":
