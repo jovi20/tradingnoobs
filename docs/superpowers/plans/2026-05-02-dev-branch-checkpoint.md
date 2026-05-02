@@ -72,7 +72,7 @@ cd backend && ../.venv313/bin/python -m unittest discover -s tests
 Result:
 
 ```text
-Ran 51 tests in 4.094s
+Ran 52 tests in 4.063s
 OK
 ```
 
@@ -140,6 +140,8 @@ C4 FIFO accounting service regressions:
 ```bash
 cd backend && ../.venv313/bin/python -m unittest discover -s tests -p test_trading_accounting_service.py
 cd backend && ../.venv313/bin/python -m unittest discover -s tests -p test_legacy_truth_sync.py
+cd backend && ../.venv313/bin/python -m unittest discover -s tests -p test_position_accounting_recalculation.py
+cd backend && ../.venv313/bin/python -m unittest discover -s tests -p test_public_id_leaf_routes.py
 ```
 
 Result:
@@ -147,6 +149,8 @@ Result:
 ```text
 accounting service: 2 OK
 legacy truth sync: 5 OK
+legacy batch router recalculation: 1 OK
+public-id leaf routes: 2 OK
 ```
 
 Scope covered:
@@ -154,6 +158,7 @@ Scope covered:
 - FIFO lot matching for long and short positions.
 - Summary-level fee netting.
 - Legacy truth sync derives truth aggregate PnL, event realized PnL, and ledger amount from FIFO event replay instead of legacy `realized_pnl`.
+- Legacy `Position / TradeBatch` recalculation now uses the same FIFO service for batch PnL, open quantity, realized PnL, and remaining open-lot cost basis.
 
 C2 + C5 truth-first detail entry and evidence/AI sidecar regression:
 
@@ -202,11 +207,11 @@ Reason:
 - `/api/timeline/home` now has bridge-level `limit` / `cursor` support over stabilized timeline event cards.
 - `AccountLedgerEntry` foundation is landed with migration, legacy realized PnL bridge, transaction cash bridge, and lifecycle `cash_effects` consumption.
 - Account cash balance/read models are not yet fully ledger-derived; keep this as a C4/accounting-service follow-up.
-- C4 FIFO core is started: `trading_accounting_service` handles long/short FIFO realized PnL and fee netting, and legacy truth sync now uses it for truth aggregates, event realized PnL, and ledger amount.
+- C4 FIFO core is started: `trading_accounting_service` handles long/short FIFO realized PnL and fee netting; legacy truth sync now uses it for truth aggregates, event realized PnL, and ledger amount; legacy batch router/import recalculation now uses it for `Position / TradeBatch` aggregates.
 - Post-boundary `C2 + C5` slice continued: single-trade detail can load `TradingPosition.public_id` lifecycle directly, render truth lifecycle as the primary narrative, surface evidence refs, and show AI sidecar artifacts when the backend returns them.
 - Truth event narrative write slice added: `PATCH /api/trading-positions/{position_public_id}/events/{event_public_id}` updates reason / emotion / confidence / thesis / invalidation / planned exit / sizing / checklist / note on `PositionEvent`; frontend API client exposes `updateTradingPositionEventNarrative`, and detail UI now has a dedicated truth narrative editor using it.
 - Legacy edit/review/batch/MAE controls are still present only as migration tools; they still depend on legacy DTOs and should not be treated as final truth write paths.
-- The next implementation slice should continue `C4` by wiring dashboard/open-position unrealized/import/batch-router calculations to `trading_accounting_service` before moving price/quantity/batch operations onto `TradingPosition / PositionEvent` write paths.
+- The next implementation slice should continue `C4` by wiring dashboard/open-position unrealized calculations to `trading_accounting_service` before moving price/quantity/batch operations onto `TradingPosition / PositionEvent` write paths.
 
 ## Next Checkpoint Criteria
 
@@ -214,7 +219,7 @@ Reason:
 - Public-id-only lifecycle behavior has a failing test first, then passing implementation.
 - Timeline `limit` / `cursor` behavior has a failing test first, then passing implementation.
 - C3 AccountLedgerEntry foundation has model, migration, sync, route, and lifecycle regressions.
-- C4 FIFO accounting service has pure service and legacy truth sync regressions, with dashboard/import/router integration still pending.
+- C4 FIFO accounting service has pure service, legacy truth sync, and legacy batch router/import recalculation regressions, with dashboard/open-position unrealized integration still pending.
 - C2 + C5 truth-first detail entry plus evidence/AI sidecar display has frontend adapter regressions and a documented build limitation if frontend dependencies are absent.
 - C2 + C5 truth event narrative write route has backend router regressions and an explicit boundary: narrative fields only, no price/quantity/PnL recalculation before C4.
 - Frontend adapter tests remain green.

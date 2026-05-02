@@ -40,6 +40,7 @@ class PositionAccountingSummary:
     quantity_closed: Decimal
     open_quantity: Decimal
     avg_open_price: Decimal
+    remaining_avg_open_price: Decimal
     avg_close_price: Decimal
     realized_pnl_gross: Decimal
     realized_pnl_net: Decimal
@@ -140,7 +141,9 @@ def calculate_fifo_position_accounting(
         )
 
     open_quantity = sum((lot.quantity for lot in lots), Decimal("0"))
+    remaining_open_notional = sum((lot.quantity * lot.price for lot in lots), Decimal("0"))
     avg_open_price = opened_notional / quantity_opened if quantity_opened else Decimal("0")
+    remaining_avg_open_price = remaining_open_notional / open_quantity if open_quantity else Decimal("0")
     avg_close_price = closed_notional / quantity_closed if quantity_closed else Decimal("0")
 
     return PositionAccountingSummary(
@@ -148,6 +151,7 @@ def calculate_fifo_position_accounting(
         quantity_closed=quantity_closed,
         open_quantity=open_quantity,
         avg_open_price=avg_open_price,
+        remaining_avg_open_price=remaining_avg_open_price,
         avg_close_price=avg_close_price,
         realized_pnl_gross=realized_gross_total,
         realized_pnl_net=realized_gross_total - total_fees,

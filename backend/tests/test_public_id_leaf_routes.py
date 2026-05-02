@@ -1,7 +1,7 @@
 import os
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -51,6 +51,7 @@ class PublicIdLeafRouteTests(unittest.TestCase):
         self.db.commit()
         self.db.refresh(self.account)
 
+        opened_at = datetime.now(timezone.utc)
         self.position = Position(
             user_id=self.user.id,
             account_id=self.account.id,
@@ -61,7 +62,7 @@ class PublicIdLeafRouteTests(unittest.TestCase):
             status=PositionStatus.OPEN,
             total_quantity=1,
             average_entry_price=100,
-            opened_at=datetime.now(timezone.utc),
+            opened_at=opened_at,
         )
         self.db.add(self.position)
         self.db.commit()
@@ -73,7 +74,7 @@ class PublicIdLeafRouteTests(unittest.TestCase):
             type="EXIT",
             price=110,
             quantity=1,
-            time=datetime.now(timezone.utc),
+            time=opened_at + timedelta(minutes=1),
             reason="Partial exit",
             pnl=10,
         )
@@ -85,7 +86,7 @@ class PublicIdLeafRouteTests(unittest.TestCase):
             type="ENTRY",
             price=101,
             quantity=1,
-            time=datetime.now(timezone.utc),
+            time=opened_at,
             reason="Second entry",
         )
         self.db.add(self.second_batch)

@@ -31,6 +31,7 @@ from services.market_data_service import MarketDataService
 from services.public_id_service import resolve_position, resolve_trade_batch, resolve_trading_account
 from services.legacy_truth_sync_service import sync_legacy_position_to_truth
 from services.trading_position_read_service import build_trading_position_lifecycle_payload
+from services.trading_accounting_service import AccountingEvent, calculate_fifo_position_accounting
 import asyncio
 
 router = APIRouter(prefix="/api/positions", tags=["positions"])
@@ -38,9 +39,8 @@ router = APIRouter(prefix="/api/positions", tags=["positions"])
 
 def recalculate_position(position: Position, db: Session):
     """
-    Recalculate position aggregates after batch changes using Moving Average Cost.
-    - Exits realize PnL based on current average cost but do not change the average cost.
-    - Entries average into the remaining quantity basis.
+    Recalculate legacy position aggregates after batch changes using the shared
+    FIFO accounting service.
     """
     # Sort batches chronologically (handle mixed timezone-aware and naive datetimes)
     def get_sortable_time(batch):
@@ -51,40 +51,41 @@ def recalculate_position(position: Position, db: Session):
         if hasattr(t, 'tzinfo') and t.tzinfo is not None:
             return t.replace(tzinfo=None)
         return t
+
+    def enum_value(value):
+        return value.value if hasattr(value, "value") else str(value)
     
     batches = sorted(position.batches, key=get_sortable_time)
-    
-    current_qty = Decimal('0')
-    avg_price = Decimal('0')
-    realized_pnl = Decimal('0')
+    batch_event_ids: dict[TradeBatch, str] = {}
+    accounting_events: list[AccountingEvent] = []
+
+    for index, batch in enumerate(batches):
+        event_public_id = batch.public_id or (str(batch.id) if batch.id else f"legacy-batch-{index}")
+        batch_event_ids[batch] = event_public_id
+        accounting_events.append(
+            AccountingEvent(
+                public_id=event_public_id,
+                event_type="ADD" if enum_value(batch.type) == BatchType.ENTRY.value else "REDUCE",
+                quantity=Decimal(str(batch.quantity)),
+                price=Decimal(str(batch.price)),
+            )
+        )
+
+    summary = calculate_fifo_position_accounting(
+        accounting_events,
+        side=enum_value(position.direction),
+    )
 
     for batch in batches:
-        qty = Decimal(str(batch.quantity))
-        price = Decimal(str(batch.price))
-        
-        if batch.type == BatchType.ENTRY:
-            # New Average = (Old Qty * Old Avg + New Qty * New Price) / Total Qty
-            new_qty = current_qty + qty
-            if new_qty > 0:
-                avg_price = (current_qty * avg_price + qty * price) / new_qty
-            current_qty = new_qty
-            # Entry batches don't have PnL
-            batch.pnl = Decimal('0')
-        else:  # EXIT
-            # Calculate PnL for this exit batch relative to CURRENT avg_price
-            if position.direction == PositionDirection.LONG:
-                batch_pnl = (price - avg_price) * qty
-            else:  # SHORT
-                batch_pnl = (avg_price - price) * qty
-            
-            batch.pnl = batch_pnl
-            realized_pnl += batch_pnl
-            current_qty -= qty
+        result = summary.event_results.get(batch_event_ids[batch])
+        if not result:
+            continue
+        batch.pnl = result.realized_pnl_gross
 
     # Update Position attributes
-    position.total_quantity = current_qty
-    position.average_entry_price = avg_price
-    position.realized_pnl = realized_pnl
+    position.total_quantity = summary.open_quantity
+    position.average_entry_price = summary.remaining_avg_open_price if summary.open_quantity > 0 else summary.avg_open_price
+    position.realized_pnl = summary.realized_pnl_gross
     
     # Auto-close if quantity is <= 0
     if position.total_quantity <= 0:
