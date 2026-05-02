@@ -791,6 +791,14 @@ export interface TradingPositionTradeEventReverseCreate {
     note?: string
 }
 
+export interface TradingPositionManualAdjustmentCreate {
+    amount: number
+    currency?: string
+    occurred_at: string
+    fx_rate_to_account_ccy?: number
+    note?: string
+}
+
 // ============== Positions API ==============
 
 export const positionsAPI = {
@@ -857,6 +865,17 @@ export const positionsAPI = {
         data: TradingPositionTradeEventReverseCreate
     ): Promise<LifecycleDetailResponse> => {
         return fetchAPI(`/api/trading-positions/${positionPublicId}/events/${eventPublicId}/reverse`, {
+            method: 'POST',
+            body: JSON.stringify(data),
+        }, token)
+    },
+
+    createTradingPositionManualAdjustment: async (
+        token: string,
+        positionPublicId: string,
+        data: TradingPositionManualAdjustmentCreate
+    ): Promise<LifecycleDetailResponse> => {
+        return fetchAPI(`/api/trading-positions/${positionPublicId}/adjustments`, {
             method: 'POST',
             body: JSON.stringify(data),
         }, token)

@@ -114,6 +114,14 @@ export default function PositionDetailPage() {
     const [isSavingTruthNarrative, setIsSavingTruthNarrative] = useState(false)
     const [isReversingTruthEvent, setIsReversingTruthEvent] = useState(false)
     const [truthNarrativeForm, setTruthNarrativeForm] = useState<LifecycleNarrativeDraft>(emptyTruthNarrativeForm)
+    const [editingManualAdjustment, setEditingManualAdjustment] = useState(false)
+    const [isSavingManualAdjustment, setIsSavingManualAdjustment] = useState(false)
+    const [manualAdjustmentForm, setManualAdjustmentForm] = useState({
+        amount: 0,
+        currency: 'USD',
+        occurred_at: new Date().toISOString(),
+        note: '',
+    })
 
     useEffect(() => {
         const fetchPosition = async () => {
@@ -352,6 +360,46 @@ export default function PositionDetailPage() {
         }
     }
 
+    const openManualAdjustmentModal = () => {
+        if (!truthLifecycle) return
+        setManualAdjustmentForm({
+            amount: 0,
+            currency: position?.asset_metadata?.currency || truthLifecycle.cashEffects[0]?.currency || 'USD',
+            occurred_at: new Date().toISOString(),
+            note: '',
+        })
+        setEditingManualAdjustment(true)
+    }
+
+    const handleCreateManualAdjustment = async () => {
+        if (!token || !truthLifecycle) return
+        if (!Number.isFinite(manualAdjustmentForm.amount) || manualAdjustmentForm.amount === 0) {
+            alert('Adjustment amount 不能为 0。')
+            return
+        }
+
+        setIsSavingManualAdjustment(true)
+        try {
+            const updatedLifecycle = await positionsAPI.createTradingPositionManualAdjustment(
+                token,
+                truthLifecycle.truthPositionPublicId,
+                {
+                    amount: manualAdjustmentForm.amount,
+                    currency: manualAdjustmentForm.currency,
+                    occurred_at: manualAdjustmentForm.occurred_at,
+                    note: manualAdjustmentForm.note,
+                }
+            )
+            setTruthLifecycle(adaptLifecycleDetail(updatedLifecycle))
+            setEditingManualAdjustment(false)
+            setError('')
+        } catch (err: any) {
+            alert(err.message || '记录 cash adjustment 失败')
+        } finally {
+            setIsSavingManualAdjustment(false)
+        }
+    }
+
     if (isLoading) {
         return (
             <div className="flex items-center justify-center py-20">
@@ -492,6 +540,14 @@ export default function PositionDetailPage() {
                                     <RotateCcw className="h-4 w-4" />
                                 )}
                                 {truthReversalAction?.label || '暂无可撤销事件'}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={openManualAdjustmentModal}
+                                className="btn btn-secondary flex items-center justify-center gap-2"
+                            >
+                                <Wrench className="h-4 w-4" />
+                                记录 cash adjustment
                             </button>
                         </div>
                     </div>
@@ -1090,6 +1146,100 @@ export default function PositionDetailPage() {
                             >
                                 {isSavingTruthNarrative && <Loader2 className="w-4 h-4 animate-spin" />}
                                 <span>保存到 truth event</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {editingManualAdjustment && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                    <div className="card w-full max-w-lg shadow-2xl animate-in zoom-in duration-200">
+                        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-start justify-between gap-4">
+                            <div>
+                                <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-600 dark:text-amber-300">
+                                    PositionEvent adjustment
+                                </p>
+                                <h3 className="mt-1 text-lg font-bold">记录 cash adjustment</h3>
+                                <p className="mt-1 text-xs text-slate-500">
+                                    只写入 MANUAL_ADJUSTMENT event 和 CASH_ADJUSTMENT ledger，不修改 FIFO 数量或 realized PnL。
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setEditingManualAdjustment(false)}
+                                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                            >
+                                <Plus className="w-5 h-5 rotate-45" />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div className="grid gap-4 md:grid-cols-[1fr_120px]">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">调整金额</label>
+                                    <input
+                                        type="number"
+                                        step="any"
+                                        value={manualAdjustmentForm.amount}
+                                        onChange={e => setManualAdjustmentForm({
+                                            ...manualAdjustmentForm,
+                                            amount: Number(e.target.value),
+                                        })}
+                                        className="input"
+                                        placeholder="-7.25"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">币种</label>
+                                    <input
+                                        value={manualAdjustmentForm.currency}
+                                        onChange={e => setManualAdjustmentForm({
+                                            ...manualAdjustmentForm,
+                                            currency: e.target.value.toUpperCase(),
+                                        })}
+                                        className="input"
+                                        placeholder="USD"
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">发生时间</label>
+                                <DateTimePicker
+                                    value={manualAdjustmentForm.occurred_at}
+                                    onChange={(val) => setManualAdjustmentForm({
+                                        ...manualAdjustmentForm,
+                                        occurred_at: val,
+                                    })}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">说明 / Note</label>
+                                <textarea
+                                    value={manualAdjustmentForm.note}
+                                    onChange={e => setManualAdjustmentForm({
+                                        ...manualAdjustmentForm,
+                                        note: e.target.value,
+                                    })}
+                                    className="input min-h-[90px]"
+                                    placeholder="例如：Broker cash correction / fee rebate / reconciliation adjustment"
+                                />
+                            </div>
+                            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                                正数会增加 ledger cash effect，负数会减少 cash effect；这不是交易成交修正，也不会改写任何历史事件。
+                            </div>
+                        </div>
+                        <div className="p-6 border-t border-slate-100 dark:border-slate-800 flex justify-end space-x-3">
+                            <button
+                                onClick={() => setEditingManualAdjustment(false)}
+                                className="btn btn-secondary"
+                            >
+                                取消
+                            </button>
+                            <button
+                                onClick={handleCreateManualAdjustment}
+                                disabled={isSavingManualAdjustment}
+                                className="btn btn-primary flex items-center space-x-2"
+                            >
+                                {isSavingManualAdjustment && <Loader2 className="w-4 h-4 animate-spin" />}
+                                <span>保存 adjustment</span>
                             </button>
                         </div>
                     </div>

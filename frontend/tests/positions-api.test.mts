@@ -80,3 +80,42 @@ test('reverseTradingPositionTradeEvent posts guarded reversals to the truth even
     globalThis.fetch = originalFetch
   }
 })
+
+test('createTradingPositionManualAdjustment posts cash corrections to the truth adjustment route', async () => {
+  const calls: Array<{ input: string | URL | Request; init?: RequestInit }> = []
+  const originalFetch = globalThis.fetch
+
+  globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+    calls.push({ input, init })
+    return new Response(JSON.stringify({
+      data: { ledger_summary: { total_adjustments: -7.25 } },
+      meta: { source: 'MANUAL' },
+    }), {
+      status: 201,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  try {
+    const result = await positionsAPI.createTradingPositionManualAdjustment('token-1', 'tp-1', {
+      amount: -7.25,
+      currency: 'USD',
+      occurred_at: '2026-04-04T12:00:00.000Z',
+      note: 'Broker cash correction',
+    })
+
+    assert.equal(result.meta.source, 'MANUAL')
+    assert.equal(calls.length, 1)
+    assert.equal(String(calls[0].input), 'http://localhost:8000/api/trading-positions/tp-1/adjustments')
+    assert.equal(calls[0].init?.method, 'POST')
+    assert.equal((calls[0].init?.headers as Record<string, string>).Authorization, 'Bearer token-1')
+    assert.deepEqual(JSON.parse(String(calls[0].init?.body)), {
+      amount: -7.25,
+      currency: 'USD',
+      occurred_at: '2026-04-04T12:00:00.000Z',
+      note: 'Broker cash correction',
+    })
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
