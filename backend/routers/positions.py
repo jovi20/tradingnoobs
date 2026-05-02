@@ -31,10 +31,18 @@ from services.market_data_service import MarketDataService
 from services.public_id_service import resolve_position, resolve_trade_batch, resolve_trading_account
 from services.legacy_truth_sync_service import sync_legacy_position_to_truth
 from services.trading_position_read_service import build_trading_position_lifecycle_payload
-from services.trading_accounting_service import AccountingEvent, calculate_fifo_position_accounting
+from services.trading_accounting_service import (
+    AccountingEvent,
+    calculate_fifo_position_accounting,
+    calculate_mark_to_market_position,
+)
 import asyncio
 
 router = APIRouter(prefix="/api/positions", tags=["positions"])
+
+
+def _enum_value(value):
+    return value.value if hasattr(value, "value") else str(value)
 
 
 def recalculate_position(position: Position, db: Session):
@@ -52,9 +60,6 @@ def recalculate_position(position: Position, db: Session):
             return t.replace(tzinfo=None)
         return t
 
-    def enum_value(value):
-        return value.value if hasattr(value, "value") else str(value)
-    
     batches = sorted(position.batches, key=get_sortable_time)
     batch_event_ids: dict[TradeBatch, str] = {}
     accounting_events: list[AccountingEvent] = []
@@ -65,7 +70,7 @@ def recalculate_position(position: Position, db: Session):
         accounting_events.append(
             AccountingEvent(
                 public_id=event_public_id,
-                event_type="ADD" if enum_value(batch.type) == BatchType.ENTRY.value else "REDUCE",
+                event_type="ADD" if _enum_value(batch.type) == BatchType.ENTRY.value else "REDUCE",
                 quantity=Decimal(str(batch.quantity)),
                 price=Decimal(str(batch.price)),
             )
@@ -73,7 +78,7 @@ def recalculate_position(position: Position, db: Session):
 
     summary = calculate_fifo_position_accounting(
         accounting_events,
-        side=enum_value(position.direction),
+        side=_enum_value(position.direction),
     )
 
     for batch in batches:
@@ -282,14 +287,14 @@ async def list_positions(
             if quote and quote.get('c') is not None:
                 current_price = float(quote['c'])
                 pos_dict['current_price'] = current_price
-                # Calculate unrealized P&L
                 if pos.average_entry_price:
-                    entry = float(pos.average_entry_price)
-                    qty = float(pos.total_quantity)
-                    if pos.direction == PositionDirection.LONG:
-                        pos_dict['unrealized_pnl'] = (current_price - entry) * qty
-                    else:
-                        pos_dict['unrealized_pnl'] = (entry - current_price) * qty
+                    mark = calculate_mark_to_market_position(
+                        open_quantity=pos.total_quantity,
+                        avg_open_price=pos.average_entry_price,
+                        current_price=current_price,
+                        side=_enum_value(pos.direction),
+                    )
+                    pos_dict['unrealized_pnl'] = float(mark.unrealized_pnl)
         else:
             # For closed positions, calculate weighted average exit price from EXIT batches
             if pos.batches:
@@ -349,12 +354,13 @@ async def get_position(
                 current_price = float(quote['c'])
                 position.current_price = current_price
                 if position.average_entry_price:
-                    entry = float(position.average_entry_price)
-                    qty = float(position.total_quantity)
-                    if position.direction == PositionDirection.LONG:
-                        position.unrealized_pnl = (current_price - entry) * qty
-                    else:
-                        position.unrealized_pnl = (entry - current_price) * qty
+                    mark = calculate_mark_to_market_position(
+                        open_quantity=position.total_quantity,
+                        avg_open_price=position.average_entry_price,
+                        current_price=current_price,
+                        side=_enum_value(position.direction),
+                    )
+                    position.unrealized_pnl = float(mark.unrealized_pnl)
         except Exception as e:
             print(f"Error fetching quote for {position.symbol}: {e}")
             # Continue without real-time price
@@ -612,18 +618,10 @@ async def add_batch(
     if position.status == PositionStatus.CLOSED:
         raise HTTPException(status_code=400, detail="Cannot add batch to closed position")
     
-    # For EXIT batches, validate quantity and calculate PnL
-    pnl = None
+    # PnL is assigned only by the centralized FIFO recalculation below.
     if batch_data.type == BatchTypeEnum.EXIT:
         if batch_data.quantity > position.total_quantity:
             raise HTTPException(status_code=400, detail="Exit quantity exceeds position quantity")
-        
-        # Calculate PnL for this exit batch
-        if position.average_entry_price:
-            if position.direction == PositionDirection.LONG:
-                pnl = (batch_data.price - position.average_entry_price) * batch_data.quantity
-            else:  # SHORT
-                pnl = (position.average_entry_price - batch_data.price) * batch_data.quantity
     
     batch = TradeBatch(
         position_id=position.id,
@@ -634,7 +632,7 @@ async def add_batch(
         reason=batch_data.reason,
         emotion=batch_data.emotion,
         confidence=batch_data.confidence,
-        pnl=pnl
+        pnl=None
     )
     db.add(batch)
     db.flush()
@@ -691,16 +689,6 @@ async def update_batch(
     update_data = batch_data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(batch, key, value)
-    
-    # If this is an EXIT batch, we might need to recalculate its PnL
-    # But recalculate_position handles the overall PnL, let's ensure individual batch pnl is correct
-    if batch.type == BatchType.EXIT:
-        position = batch.position
-        if position.average_entry_price:
-            if position.direction == PositionDirection.LONG:
-                batch.pnl = (batch.price - position.average_entry_price) * batch.quantity
-            else:
-                batch.pnl = (position.average_entry_price - batch.price) * batch.quantity
     
     db.flush()
     recalculate_position(batch.position, db)

@@ -16,8 +16,13 @@ from services.exchange_rate_service import get_exchange_rate, get_rates_batch
 import asyncio
 from models import DailySnapshot
 from services.metrics_service import MetricsService
+from services.trading_accounting_service import calculate_mark_to_market_position
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
+
+
+def _enum_value(value):
+    return value.value if hasattr(value, "value") else str(value)
 
 
 @router.get("/stats", response_model=DashboardStats)
@@ -197,22 +202,23 @@ async def get_dashboard_stats(
         if not isinstance(quote, Exception) and quote and quote.get('c'):
             current_price = float(quote['c'])
             if entry_price > 0:
-                change_pct = ((current_price - entry_price) / entry_price) * 100
-                if pos.direction == 'SHORT':
-                    change_pct = -change_pct
-        
-        # Calculate Position Metrics (原生币种)
-        qty = float(pos.total_quantity)
-        market_value_native = qty * current_price
-        cost_basis_native = qty * entry_price
-        unrealized_pnl_native = market_value_native - cost_basis_native
-        if pos.direction == 'SHORT':
-             unrealized_pnl_native = (entry_price - current_price) * qty
-             market_value_native = abs(market_value_native)
+                mark_for_change = calculate_mark_to_market_position(
+                    open_quantity=pos.total_quantity,
+                    avg_open_price=pos.average_entry_price or 0,
+                    current_price=current_price,
+                    side=_enum_value(pos.direction),
+                )
+                change_pct = float(mark_for_change.change_percent)
 
-        # 换算到显示币种用于图表汇总
-        market_value_display = market_value_native * pos_fx_rate
-        unrealized_pnl_display = unrealized_pnl_native * pos_fx_rate
+        mark = calculate_mark_to_market_position(
+            open_quantity=pos.total_quantity,
+            avg_open_price=pos.average_entry_price or 0,
+            current_price=current_price,
+            side=_enum_value(pos.direction),
+            fx_rate_to_display_ccy=pos_fx_rate,
+        )
+        market_value_display = float(mark.market_value)
+        unrealized_pnl_display = float(mark.unrealized_pnl)
 
         # Update Allocations (使用换算后的值)
         core_type_map[core_type] = core_type_map.get(core_type, 0.0) + market_value_display
@@ -344,7 +350,6 @@ async def get_dashboard_stats(
                 quote = quotes_results[i]
                 price = (float(quote['c']) if (quote and not isinstance(quote, Exception) and quote.get('c')) 
                          else float(pos.average_entry_price or 0))
-                mkt_val = float(pos.total_quantity) * price
                 
                 # 获取该标的币种的汇率用于 Sankey 换算
                 metadata = metadata_results[i]
@@ -353,9 +358,16 @@ async def get_dashboard_stats(
                 asset_cat_name = f"{asset_type}"
                 asset_cur = (metadata.currency.value if (metadata and metadata.currency) else stats['currency'])
                 pos_fx = fx_rates.get(asset_cur, 1.0)
-                mkt_val_display = mkt_val * pos_fx  # 换算到显示币种
+                mark = calculate_mark_to_market_position(
+                    open_quantity=pos.total_quantity,
+                    avg_open_price=pos.average_entry_price or 0,
+                    current_price=price,
+                    side=_enum_value(pos.direction),
+                    fx_rate_to_display_ccy=pos_fx,
+                )
+                mkt_val_display = float(mark.market_value)
                 
-                if pos.direction == 'LONG':
+                if _enum_value(pos.direction) == 'LONG':
                     val = mkt_val_display
                     acc_longs += val
                     if asset_cat_name not in cat_holdings: cat_holdings[asset_cat_name] = {}

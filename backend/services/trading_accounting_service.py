@@ -48,6 +48,13 @@ class PositionAccountingSummary:
     event_results: dict[str, AccountingEventResult]
 
 
+@dataclass(frozen=True)
+class MarkToMarketResult:
+    market_value: Decimal
+    unrealized_pnl: Decimal
+    change_percent: Decimal
+
+
 @dataclass
 class _FifoLot:
     quantity: Decimal
@@ -157,4 +164,34 @@ def calculate_fifo_position_accounting(
         realized_pnl_net=realized_gross_total - total_fees,
         total_fees=total_fees,
         event_results=event_results,
+    )
+
+
+def calculate_mark_to_market_position(
+    *,
+    open_quantity,
+    avg_open_price,
+    current_price,
+    side: str,
+    fx_rate_to_display_ccy=Decimal("1"),
+) -> MarkToMarketResult:
+    quantity = _to_decimal(open_quantity)
+    entry_price = _to_decimal(avg_open_price)
+    mark_price = _to_decimal(current_price)
+    fx_rate = _to_decimal(fx_rate_to_display_ccy)
+    side_value = _event_type(side).upper()
+
+    market_value_native = quantity * mark_price
+    if side_value == "SHORT":
+        unrealized_native = (entry_price - mark_price) * quantity
+        market_value_native = abs(market_value_native)
+        change_percent_native = ((entry_price - mark_price) / entry_price) * Decimal("100") if entry_price else Decimal("0")
+    else:
+        unrealized_native = (mark_price - entry_price) * quantity
+        change_percent_native = ((mark_price - entry_price) / entry_price) * Decimal("100") if entry_price else Decimal("0")
+
+    return MarkToMarketResult(
+        market_value=market_value_native * fx_rate,
+        unrealized_pnl=unrealized_native * fx_rate,
+        change_percent=change_percent_native,
     )

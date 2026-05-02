@@ -288,19 +288,7 @@ class ImportService:
                 print(f"Skipping orphan exit for {symbol}")
                 return
 
-        # 2. Add Batch
-        # Calculate PnL if Exit
-        pnl = None
-        if batch_type == BatchTypeEnum.EXIT:
-             if position.average_entry_price and position.total_quantity > 0:
-                 entry_price = float(position.average_entry_price)
-                 exit_price = float(data['price'])
-                 qty = float(data['quantity'])
-                 
-                 if direction == PositionDirectionEnum.LONG:
-                     pnl = (exit_price - entry_price) * qty
-                 else:
-                     pnl = (entry_price - exit_price) * qty
+        # 2. Add Batch. PnL is assigned by the centralized FIFO recalculation below.
 
         batch = TradeBatch(
             position_id=position.id,
@@ -311,7 +299,7 @@ class ImportService:
             reason=data.get('reason'),
             emotion=data.get('emotion'),
             confidence=data.get('confidence'),
-            pnl=pnl
+            pnl=None
         )
         self.db.add(batch)
         self.db.flush()

@@ -3,10 +3,15 @@ from decimal import Decimal
 
 
 try:
-    from services.trading_accounting_service import AccountingEvent, calculate_fifo_position_accounting
+    from services.trading_accounting_service import (
+        AccountingEvent,
+        calculate_fifo_position_accounting,
+        calculate_mark_to_market_position,
+    )
 except Exception as exc:  # pragma: no cover - exercised as a TDD red state before the service exists.
     AccountingEvent = None
     calculate_fifo_position_accounting = None
+    calculate_mark_to_market_position = None
     IMPORT_ERROR = exc
 else:
     IMPORT_ERROR = None
@@ -86,6 +91,37 @@ class TradingAccountingServiceTests(unittest.TestCase):
 
         self.assertEqual(summary.realized_pnl_gross, Decimal("200"))
         self.assertEqual(summary.realized_pnl_net, Decimal("200"))
+
+    def test_mark_to_market_position_calculates_long_unrealized_value_with_fx(self):
+        if IMPORT_ERROR:
+            self.fail(f"trading accounting service is unavailable: {IMPORT_ERROR}")
+
+        result = calculate_mark_to_market_position(
+            open_quantity=Decimal("10"),
+            avg_open_price=Decimal("100"),
+            current_price=Decimal("120"),
+            side="LONG",
+            fx_rate_to_display_ccy=Decimal("1.5"),
+        )
+
+        self.assertEqual(result.market_value, Decimal("1800.0"))
+        self.assertEqual(result.unrealized_pnl, Decimal("300.0"))
+        self.assertEqual(result.change_percent, Decimal("20.0"))
+
+    def test_mark_to_market_position_reverses_short_unrealized_direction(self):
+        if IMPORT_ERROR:
+            self.fail(f"trading accounting service is unavailable: {IMPORT_ERROR}")
+
+        result = calculate_mark_to_market_position(
+            open_quantity=Decimal("10"),
+            avg_open_price=Decimal("100"),
+            current_price=Decimal("80"),
+            side="SHORT",
+        )
+
+        self.assertEqual(result.market_value, Decimal("800"))
+        self.assertEqual(result.unrealized_pnl, Decimal("200"))
+        self.assertEqual(result.change_percent, Decimal("20.0"))
 
 
 if __name__ == "__main__":
