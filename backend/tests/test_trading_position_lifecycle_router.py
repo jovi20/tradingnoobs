@@ -384,6 +384,63 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         self.assertEqual(ledger_entry.amount, Decimal("59.00000000"))
         self.assertEqual(ledger_entry.currency, "USD")
 
+    def test_trade_event_write_close_marks_position_closed_and_writes_ledger_entry(self):
+        truth_position = self._seed_open_synced_position()
+
+        response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events",
+            json={
+                "event_type": "CLOSE",
+                "quantity": "5",
+                "price": "210",
+                "currency": "USD",
+                "occurred_at": "2026-04-03T15:30:00+00:00",
+                "fee_amount": "1.00",
+                "reason": "Exit full position",
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        payload = response.json()
+        self.assertEqual(payload["data"]["position_summary"]["status"], "CLOSED")
+        self.assertEqual(payload["data"]["review_status"], "CLOSED_PENDING_REVIEW")
+        self.assertEqual(Decimal(str(payload["data"]["position_summary"]["realized_pnl_gross"])), Decimal("150"))
+        self.assertEqual(Decimal(str(payload["data"]["position_summary"]["realized_pnl_net"])), Decimal("149"))
+        node_types = [node["node_type"] for node in payload["data"]["lifecycle_thread"]["nodes"]]
+        self.assertEqual(node_types, ["OPEN", "CLOSE"])
+
+        self.db.expire_all()
+        close_event = self.db.query(PositionEvent).filter(
+            PositionEvent.position_id == truth_position.id,
+            PositionEvent.event_type == PositionEventType.CLOSE,
+        ).one()
+        ledger_entry = self.db.query(AccountLedgerEntry).filter(
+            AccountLedgerEntry.position_event_id == close_event.id,
+        ).one()
+        self.assertEqual(ledger_entry.entry_type, AccountLedgerEntryType.REALIZED_PNL)
+        self.assertEqual(ledger_entry.amount, Decimal("149.00000000"))
+
+    def test_trade_event_write_rejects_partial_close_without_mutating_events(self):
+        truth_position = self._seed_open_synced_position()
+
+        response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events",
+            json={
+                "event_type": "CLOSE",
+                "quantity": "2",
+                "price": "210",
+                "currency": "USD",
+                "occurred_at": "2026-04-03T15:30:00+00:00",
+            },
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("CLOSE event quantity must equal remaining open quantity", response.json()["detail"])
+
+        self.db.expire_all()
+        events = self.db.query(PositionEvent).filter(PositionEvent.position_id == truth_position.id).all()
+        self.assertEqual([event.event_type for event in events], [PositionEventType.OPEN])
+
 
 if __name__ == "__main__":
     unittest.main()

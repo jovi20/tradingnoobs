@@ -29,6 +29,10 @@ def _coerce_decimal(value) -> Decimal:
     return Decimal(str(value))
 
 
+def _remaining_open_quantity(position: TradingPosition) -> Decimal:
+    return _coerce_decimal(position.quantity_opened) - _coerce_decimal(position.quantity_closed)
+
+
 def replay_truth_position_accounting(db: Session, *, position: TradingPosition) -> None:
     events = (
         db.query(PositionEvent)
@@ -120,6 +124,13 @@ def append_truth_trade_event(
     confidence: int | None = None,
     note: str | None = None,
 ) -> PositionEvent:
+    if event_type == PositionEventType.CLOSE:
+        remaining_open_quantity = _remaining_open_quantity(position)
+        if quantity != remaining_open_quantity:
+            raise ValueError(
+                f"CLOSE event quantity must equal remaining open quantity ({remaining_open_quantity})"
+            )
+
     event = PositionEvent(
         user_id=position.user_id,
         position_id=position.id,

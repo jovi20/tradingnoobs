@@ -94,22 +94,26 @@ def create_trading_position_trade_event(
     if not truth_position:
         raise HTTPException(status_code=404, detail="Trading position not found")
 
-    append_truth_trade_event(
-        db,
-        position=truth_position,
-        event_type=PositionEventType(payload.event_type.value),
-        quantity=payload.quantity,
-        price=payload.price,
-        currency=payload.currency,
-        occurred_at=payload.occurred_at,
-        fee_amount=payload.fee_amount,
-        fee_currency=payload.fee_currency,
-        fx_rate_to_account_ccy=payload.fx_rate_to_account_ccy,
-        reason=payload.reason,
-        emotion=payload.emotion,
-        confidence=payload.confidence,
-        note=payload.note,
-    )
+    try:
+        append_truth_trade_event(
+            db,
+            position=truth_position,
+            event_type=PositionEventType(payload.event_type.value),
+            quantity=payload.quantity,
+            price=payload.price,
+            currency=payload.currency,
+            occurred_at=payload.occurred_at,
+            fee_amount=payload.fee_amount,
+            fee_currency=payload.fee_currency,
+            fx_rate_to_account_ccy=payload.fx_rate_to_account_ccy,
+            reason=payload.reason,
+            emotion=payload.emotion,
+            confidence=payload.confidence,
+            note=payload.note,
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     db.commit()
 
     updated_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
