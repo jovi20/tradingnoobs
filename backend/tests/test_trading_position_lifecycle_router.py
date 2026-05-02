@@ -384,6 +384,43 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         self.assertEqual(ledger_entry.amount, Decimal("59.00000000"))
         self.assertEqual(ledger_entry.currency, "USD")
 
+    def test_trade_event_write_add_replays_fifo_without_cash_ledger_entry(self):
+        truth_position = self._seed_open_synced_position()
+
+        response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events",
+            json={
+                "event_type": "ADD",
+                "quantity": "3",
+                "price": "190",
+                "currency": "USD",
+                "occurred_at": "2026-04-03T15:30:00+00:00",
+                "reason": "Add on continuation",
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        payload = response.json()
+        self.assertEqual(payload["meta"]["source"], "MANUAL")
+        self.assertEqual(Decimal(str(payload["data"]["position_summary"]["realized_pnl_gross"])), Decimal("0"))
+        self.assertEqual(Decimal(str(payload["data"]["position_summary"]["realized_pnl_net"])), Decimal("0"))
+        node_types = [node["node_type"] for node in payload["data"]["lifecycle_thread"]["nodes"]]
+        self.assertEqual(node_types, ["OPEN", "ADD"])
+
+        self.db.expire_all()
+        add_event = self.db.query(PositionEvent).filter(
+            PositionEvent.position_id == truth_position.id,
+            PositionEvent.event_type == PositionEventType.ADD,
+        ).one()
+        self.assertEqual(add_event.quantity, Decimal("3.00000000"))
+        self.assertEqual(add_event.price, Decimal("190.00000000"))
+        self.assertEqual(add_event.realized_pnl_gross, Decimal("0E-8"))
+        self.assertEqual(add_event.realized_pnl_net, Decimal("0E-8"))
+        self.assertEqual(
+            self.db.query(AccountLedgerEntry).filter(AccountLedgerEntry.position_event_id == add_event.id).count(),
+            0,
+        )
+
     def test_trade_event_write_close_marks_position_closed_and_writes_ledger_entry(self):
         truth_position = self._seed_open_synced_position()
 

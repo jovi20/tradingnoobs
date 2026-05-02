@@ -50,7 +50,7 @@
 - 单笔详情页已支持优先用 `TradingPosition.public_id` 直接读取 truth lifecycle 主叙事；已展示 lifecycle `evidence_list` 与 `ai_sidecar`，legacy `Position / TradeBatch` 数据存在时明确标成迁移、校准和回填辅助区块。
 - 已新增 truth event 叙事字段写入口 `PATCH /api/trading-positions/{position_public_id}/events/{event_public_id}`，可用 `PositionEvent.public_id` 更新 reason / emotion / confidence / thesis / invalidation / planned exit / sizing / checklist / note 等 C5 字段；前端详情页已有独立 truth narrative 编辑入口，会写入 `PositionEvent` 并刷新 lifecycle read model。
 - 已新增 `trading_accounting_service` 的 FIFO 口径核心，覆盖 long/short realized PnL、FIFO lot matching、fee netting、remaining open-lot cost basis、open-position mark-to-market 与 account signed market value；legacy truth sync 已改为从 `PositionEvent` 重放结果推导 truth aggregate、event realized PnL 与 ledger amount，不再盲信 legacy realized_pnl；legacy batch router/import recalculation、positions open-position display、dashboard open-position aggregation 与 account NAV market value 已改用同一服务重算；账户/仪表盘现金读模型已优先从 `AccountLedgerEntry` 推导，账户创建会为非零 `initial_balance` 写入 `OPENING_BALANCE` ledger entry，账户现金 PATCH 会写入 `MANUAL_CASH_ADJUSTMENT` ledger delta，truth position dividend 写入口会创建 `PositionEvent(DIVIDEND)` 并同步 `AccountLedgerEntry(DIVIDEND)`。
-- 已新增首个 truth trade event 写入口 `POST /api/trading-positions/{position_public_id}/events`，支持在既有 `TradingPosition` 上追加 `ADD / REDUCE / CLOSE` 价格数量事件；当前回归覆盖 `REDUCE` 写入、`CLOSE` 全量闭仓、partial `CLOSE` 422、closed position 禁止 `ADD`、FIFO replay、truth aggregate 更新与 `AccountLedgerEntry(REALIZED_PNL)` 同步。
+- 已新增首个 truth trade event 写入口 `POST /api/trading-positions/{position_public_id}/events`，支持在既有 `TradingPosition` 上追加 `ADD / REDUCE / CLOSE` 价格数量事件；当前回归覆盖 `ADD` 写入、`REDUCE` 写入、`CLOSE` 全量闭仓、partial `CLOSE` 422、closed position 禁止 `ADD`、FIFO replay、truth aggregate 更新与 `AccountLedgerEntry(REALIZED_PNL)` 同步。
 - `/api/timeline/home` 已补 bridge 级 `limit` / `cursor` 分页行为，按稳定排序后的 timeline event card 切页，并返回 opaque `next_cursor`。
 - 前端默认入口已切到 timeline-first，Dashboard 改为次级入口；后端 Timeline Home 当前仍是 legacy-derived bridge，不视为 truth-backed 首页完成。
 - 前端已建立 read-model / adapter 层，并接上 Timeline Home 与 Lifecycle Preview；Lifecycle Preview 当前是 truth bridge 预览，不是最终详情页替代。
@@ -62,7 +62,7 @@
 - Lifecycle Detail 用户侧 public_id-only contract 已补回归测试并落地；前端已能展示 evidence / ledger / AI sidecar，但后端 AI sidecar 生成、InsightArtifact 正式写入与最终 evidence 覆盖仍未完成。
 - `AccountLedgerEntry` 现金真相基础已建立，账户余额 read model 已对有 opening balance 的账户优先走 ledger-derived；正式 opening-balance、manual cash adjustment、dividend 与首个 realized PnL truth event 写入口已落地；前端价格/数量/批次写路径仍需迁到 truth event。
 - Lifecycle `ledger_summary.cash_effects` 与 `total_dividends` 已读取 ledger；`total_fees` 的最终 fee 归属、adjustment 汇总与 AI workflow 写入仍未完成，不能标为最终 evidence/AI sidecar 完成。
-- FIFO / fee / FX 口径已有 C4 服务起点并接入 legacy truth sync、legacy batch router/import recalculation、positions open-position display、dashboard mark-to-market、account signed market value、ledger-derived cash read model、opening-balance ledger write、manual cash-adjustment write、dividend ledger write 与首个 REDUCE/CLOSE truth write route；ADD 成功路径、前端价格/数量/批次迁移和部分 analytics/timeline legacy realized PnL 汇总仍未彻底收敛到 truth/ledger-derived。
+- FIFO / fee / FX 口径已有 C4 服务起点并接入 legacy truth sync、legacy batch router/import recalculation、positions open-position display、dashboard mark-to-market、account signed market value、ledger-derived cash read model、opening-balance ledger write、manual cash-adjustment write、dividend ledger write 与首个 ADD/REDUCE/CLOSE truth write route；前端价格/数量/批次迁移和部分 analytics/timeline legacy realized PnL 汇总仍未彻底收敛到 truth/ledger-derived。
 - outbox / job system / idempotency / job status 仍为空白，后续 derived refresh 没有稳定异步底座。
 - Timeline contract 中的 `cursor` / `limit` 已有 bridge 级实现；最终 truth-backed Timeline read model 尚未完成。
 - 市场数据分层、provider symbol mapping、derived/materialized analytics 还未开始。
@@ -73,7 +73,7 @@
 
 1. 先完成计划修正与 `dev` 检查点：记录 bridge 状态、可运行验证命令、阶段性 diff 边界，为后续 `main` vs `dev` 评估做准备。
 2. 在 `dev` 上形成阶段性提交边界，避免 C1-C3 与前端桥接继续扩大成不可读 diff。
-3. 继续推进 `C2 + C5` hard cutover：详情页 UI 的叙事字段编辑已接到 truth event 写入口，后端已有首个 trade event 写入口；下一步补 `ADD` 成功路径回归，并把前端价格/数量/批次操作从 legacy `Position / TradeBatch` 迁到 `TradingPosition / PositionEvent` 写路径。当前旧控件已明确标成迁移工具，但仍不是最终 truth 写路径。
+3. 继续推进 `C2 + C5` hard cutover：详情页 UI 的叙事字段编辑已接到 truth event 写入口，后端已有首个 trade event 写入口；下一步把前端价格/数量/批次操作从 legacy `Position / TradeBatch` 迁到 `TradingPosition / PositionEvent` 写路径。当前旧控件已明确标成迁移工具，但仍不是最终 truth 写路径。
 4. 继续完成 `C4` 剩余口径收敛：围绕价格/数量/batch truth 写入口补回放、聚合、ledger、legacy bridge 与错误边界回归，确保新写路径不再依赖 legacy realized_pnl。
 5. 再推进 `D1 -> D3`，先把 outbox、job model、idempotency 补齐，再做任何重 derived 刷新。
 6. 在异步底座具备后推进 `E1`, `E2`, `F1`, `F4`，把市场数据编排和 dashboard/detail 派生读路径迁出请求链路。
