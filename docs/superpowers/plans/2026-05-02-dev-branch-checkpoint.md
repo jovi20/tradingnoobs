@@ -35,8 +35,8 @@ node --experimental-strip-types --test frontend/tests/*.test.mts
 Result:
 
 ```text
-tests 15
-pass 15
+tests 16
+pass 16
 fail 0
 ```
 
@@ -72,7 +72,7 @@ cd backend && ../.venv313/bin/python -m unittest discover -s tests
 Result:
 
 ```text
-Ran 48 tests in 4.403s
+Ran 48 tests in 4.143s
 OK
 ```
 
@@ -144,8 +144,8 @@ node --experimental-strip-types --test frontend/tests/*.test.mts
 Result:
 
 ```text
-tests 15
-pass 15
+tests 16
+pass 16
 fail 0
 ```
 
@@ -153,8 +153,10 @@ Scope covered:
 
 - Single-trade detail can prefer `TradingPosition.public_id` lifecycle data.
 - Lifecycle adapter exposes auditable evidence and AI sidecar summaries.
+- Lifecycle adapter exposes a truth narrative draft that targets the `thesis_block.source_event_public_id` event for edits.
 - Truth detail UI renders `evidence_list` and `ai_sidecar` as first-class sections when present.
-- Legacy `Position / TradeBatch` detail controls are visibly marked as migration, calibration, and backfill tools.
+- Detail UI exposes a separate truth narrative editor that writes C5 narrative fields to `PositionEvent` and refreshes lifecycle.
+- Legacy `Position / TradeBatch` detail controls are visibly marked as migration, calibration, and backfill tools; price/quantity/PnL edits remain outside the truth writer until C4.
 
 Build limitation:
 
@@ -181,9 +183,9 @@ Reason:
 - `AccountLedgerEntry` foundation is landed with migration, legacy realized PnL bridge, transaction cash bridge, and lifecycle `cash_effects` consumption.
 - Account cash balance/read models are not yet fully ledger-derived; keep this as a C4/accounting-service follow-up.
 - Post-boundary `C2 + C5` slice continued: single-trade detail can load `TradingPosition.public_id` lifecycle directly, render truth lifecycle as the primary narrative, surface evidence refs, and show AI sidecar artifacts when the backend returns them.
-- Truth event narrative write slice added: `PATCH /api/trading-positions/{position_public_id}/events/{event_public_id}` updates reason / emotion / confidence / thesis / invalidation / planned exit / sizing / checklist / note on `PositionEvent`; frontend API client exposes `updateTradingPositionEventNarrative`.
+- Truth event narrative write slice added: `PATCH /api/trading-positions/{position_public_id}/events/{event_public_id}` updates reason / emotion / confidence / thesis / invalidation / planned exit / sizing / checklist / note on `PositionEvent`; frontend API client exposes `updateTradingPositionEventNarrative`, and detail UI now has a dedicated truth narrative editor using it.
 - Legacy edit/review/batch/MAE controls are still present only as migration tools; they still depend on legacy DTOs and should not be treated as final truth write paths.
-- The next implementation slice should wire the detail UI narrative editor to the truth event write route, then proceed to `C4` accounting service before moving price/quantity/batch operations onto `TradingPosition / PositionEvent` write paths.
+- The next implementation slice should proceed to `C4` accounting service before moving price/quantity/batch operations onto `TradingPosition / PositionEvent` write paths.
 
 ## Next Checkpoint Criteria
 

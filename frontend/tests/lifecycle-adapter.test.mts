@@ -116,6 +116,7 @@ test('adaptLifecycleDetail maps truth lifecycle payload into preview-friendly vi
   assert.equal(result.assetLabel, 'Apple Inc.')
   assert.equal(result.accountLabel, 'IBKR Main')
   assert.equal(result.nodeCount, 2)
+  assert.equal(result.thesisSourceEventPublicId, 'evt-1')
   assert.equal(result.thesis, 'Initial breakout entry')
   assert.equal(result.executionQuality, 'GOOD')
   assert.equal(result.checklistMissCount, 1)
@@ -127,6 +128,85 @@ test('adaptLifecycleDetail maps truth lifecycle payload into preview-friendly vi
   assert.equal(result.aiItems[0].evidence_refs?.length, 2)
   assert.equal(result.emotionPoints.length, 1)
   assert.equal(getLifecycleCashEffectSummary(result), '1 条现金流水 · USD 180.00')
+})
+
+test('lifecycle narrative draft targets the thesis source event for truth writes', () => {
+  const lifecycle = adaptLifecycleDetail({
+    data: {
+      review_status: 'OPEN',
+      position_summary: {
+        public_id: 'tp-1',
+        title: 'AAPL',
+        status: 'OPEN',
+        side: 'LONG',
+        account: { public_id: 'acct-1', label: 'IBKR Main' },
+        asset: { symbol: 'AAPL', asset_label: 'Apple Inc.', instrument_label: 'Apple Spot' },
+        opened_at: '2026-04-01T09:30:00Z',
+        pnl_basis: {
+          cost_basis_method: 'FIFO',
+          realized_definition: 'EVENT_REALIZED',
+          unrealized_definition: 'MARK_TO_MARKET',
+          fee_treatment: 'NET_INCLUDED',
+          fx_treatment: 'EVENT_TIME_ACCOUNT_CCY',
+        },
+      },
+      thesis_block: {
+        source_event_public_id: 'evt-open',
+        thesis: 'Opening thesis',
+        invalidation_rule: 'Lose prior low',
+        planned_exit_rule: 'Scale at 2R',
+        sizing_rationale: 'Half size until confirmation',
+        checklist_snapshot: [
+          { label: 'pre_market', checked: true },
+          { label: 'risk_check', checked: false },
+        ],
+      },
+      lifecycle_thread: {
+        nodes: [
+          {
+            node_public_id: 'evt-open',
+            node_type: 'OPEN',
+            occurred_at: '2026-04-01T09:30:00Z',
+            title: 'AAPL OPEN',
+            summary: 'Initial breakout entry',
+            emotion: 'Focused',
+            confidence: 4,
+            note: 'Followed the entry plan.',
+          },
+          { node_public_id: 'evt-add', node_type: 'ADD', occurred_at: '2026-04-02T09:30:00Z', title: 'AAPL ADD', summary: 'Added on continuation' },
+        ],
+      },
+      result_summary: { headline: 'AAPL lifecycle', summary: '包含 2 个事件节点。', key_numbers: [] },
+      execution_quality: {},
+      discipline_profile: null,
+      emotion_path: null,
+      ledger_summary: { account_currency: 'USD', cash_effects: [] },
+      evidence_list: { items: [] },
+      ai_sidecar: { items: [] },
+    },
+    meta: {
+      as_of: '2026-04-01T09:30:00Z',
+      freshness: 'FRESH',
+      source: 'DERIVED',
+    },
+  })
+
+  assert.equal(typeof lifecycleAdapter.getLifecycleNarrativeDraft, 'function')
+  assert.deepEqual(lifecycleAdapter.getLifecycleNarrativeDraft(lifecycle), {
+    eventPublicId: 'evt-open',
+    reason: 'Initial breakout entry',
+    emotion: 'Focused',
+    confidence: 4,
+    thesis: 'Opening thesis',
+    invalidationRule: 'Lose prior low',
+    plannedExitRule: 'Scale at 2R',
+    sizingRationale: 'Half size until confirmation',
+    note: 'Followed the entry plan.',
+    checklistSnapshot: {
+      pre_market: true,
+      risk_check: false,
+    },
+  })
 })
 
 test('lifecycle detail summaries make evidence and AI sidecar auditable', () => {

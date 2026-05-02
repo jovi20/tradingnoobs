@@ -6,6 +6,7 @@ export interface LifecycleDetailViewModel {
     positionStatus: LifecycleDetailResponse['data']['position_summary']['status']
     positionRouteId: string
     truthPositionPublicId: string
+    thesisSourceEventPublicId: string | null
     side: LifecycleDetailResponse['data']['position_summary']['side']
     accountLabel: string
     accountPublicId: string
@@ -37,6 +38,19 @@ export interface LifecycleDetailViewModel {
     trust: LifecycleDetailResponse['meta']
 }
 
+export interface LifecycleNarrativeDraft {
+    eventPublicId: string
+    reason: string
+    emotion: string
+    confidence: number
+    thesis: string
+    invalidationRule: string
+    plannedExitRule: string
+    sizingRationale: string
+    note: string
+    checklistSnapshot: Record<string, boolean>
+}
+
 export function adaptLifecycleDetail(response: LifecycleDetailResponse): LifecycleDetailViewModel {
     const summary = response.data.position_summary
     const thesis = response.data.thesis_block
@@ -47,6 +61,7 @@ export function adaptLifecycleDetail(response: LifecycleDetailResponse): Lifecyc
         positionStatus: summary.status,
         positionRouteId: summary.public_id,
         truthPositionPublicId: summary.public_id,
+        thesisSourceEventPublicId: thesis.source_event_public_id || null,
         side: summary.side,
         accountLabel: summary.account.label,
         accountPublicId: summary.account.public_id,
@@ -147,4 +162,24 @@ export function getLifecycleAiSidecarSummary(input: Pick<LifecycleDetailViewMode
 
     const evidenceCount = input.aiItems.reduce((sum, item) => sum + (item.evidence_refs?.length || 0), 0)
     return `${input.aiItems.length} 条 AI 结论 · ${evidenceCount} 条证据`
+}
+
+export function getLifecycleNarrativeDraft(lifecycle: LifecycleDetailViewModel): LifecycleNarrativeDraft {
+    const targetEventPublicId = lifecycle.thesisSourceEventPublicId || lifecycle.nodes[0]?.node_public_id || ''
+    const targetNode = lifecycle.nodes.find((node) => node.node_public_id === targetEventPublicId) || lifecycle.nodes[0]
+
+    return {
+        eventPublicId: targetEventPublicId,
+        reason: targetNode?.summary || '',
+        emotion: targetNode?.emotion || '',
+        confidence: targetNode?.confidence || 3,
+        thesis: lifecycle.thesis || '',
+        invalidationRule: lifecycle.invalidationRule || '',
+        plannedExitRule: lifecycle.plannedExitRule || '',
+        sizingRationale: lifecycle.sizingRationale || '',
+        note: targetNode?.note || '',
+        checklistSnapshot: Object.fromEntries(
+            (lifecycle.checklistSnapshot || []).map((item) => [item.label, Boolean(item.checked)])
+        ),
+    }
 }

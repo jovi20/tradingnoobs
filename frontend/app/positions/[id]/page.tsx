@@ -23,7 +23,12 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import { positionsAPI } from '@/lib/api'
 import { adaptPosition, PositionViewModel, TradeBatchViewModel } from '@/lib/adapters/trading'
-import { adaptLifecycleDetail, LifecycleDetailViewModel } from '@/lib/adapters/lifecycle'
+import {
+    adaptLifecycleDetail,
+    getLifecycleNarrativeDraft,
+    type LifecycleDetailViewModel,
+    type LifecycleNarrativeDraft,
+} from '@/lib/adapters/lifecycle'
 import { TruthLifecycleDetail } from '@/components/positions/domain/TruthLifecycleDetail'
 
 import {
@@ -40,6 +45,19 @@ import {
 } from '@/lib/symbolUtils'
 import CustomSelect from '@/components/CustomSelect'
 import DateTimePicker from '@/components/DateTimePicker'
+
+const emptyTruthNarrativeForm: LifecycleNarrativeDraft = {
+    eventPublicId: '',
+    reason: '',
+    emotion: '',
+    confidence: 3,
+    thesis: '',
+    invalidationRule: '',
+    plannedExitRule: '',
+    sizingRationale: '',
+    note: '',
+    checklistSnapshot: {},
+}
 
 export default function PositionDetailPage() {
     const { token } = useAuth()
@@ -84,6 +102,9 @@ export default function PositionDetailPage() {
         max_price: 0,
         min_price: 0
     })
+    const [editingTruthNarrative, setEditingTruthNarrative] = useState(false)
+    const [isSavingTruthNarrative, setIsSavingTruthNarrative] = useState(false)
+    const [truthNarrativeForm, setTruthNarrativeForm] = useState<LifecycleNarrativeDraft>(emptyTruthNarrativeForm)
 
     useEffect(() => {
         const fetchPosition = async () => {
@@ -249,6 +270,46 @@ export default function PositionDetailPage() {
         }
     }
 
+    const openTruthNarrativeModal = () => {
+        if (!truthLifecycle) return
+        const draft = getLifecycleNarrativeDraft(truthLifecycle)
+        if (!draft.eventPublicId) {
+            alert('当前 lifecycle 没有可编辑的 PositionEvent public_id。')
+            return
+        }
+        setTruthNarrativeForm(draft)
+        setEditingTruthNarrative(true)
+    }
+
+    const handleUpdateTruthNarrative = async () => {
+        if (!token || !truthLifecycle || !truthNarrativeForm.eventPublicId) return
+        setIsSavingTruthNarrative(true)
+        try {
+            const updatedLifecycle = await positionsAPI.updateTradingPositionEventNarrative(
+                token,
+                truthLifecycle.truthPositionPublicId,
+                truthNarrativeForm.eventPublicId,
+                {
+                    reason: truthNarrativeForm.reason,
+                    emotion: truthNarrativeForm.emotion,
+                    confidence: truthNarrativeForm.confidence,
+                    thesis: truthNarrativeForm.thesis,
+                    invalidation_rule: truthNarrativeForm.invalidationRule,
+                    planned_exit_rule: truthNarrativeForm.plannedExitRule,
+                    sizing_rationale: truthNarrativeForm.sizingRationale,
+                    checklist_snapshot: truthNarrativeForm.checklistSnapshot,
+                    note: truthNarrativeForm.note,
+                }
+            )
+            setTruthLifecycle(adaptLifecycleDetail(updatedLifecycle))
+            setEditingTruthNarrative(false)
+        } catch (err: any) {
+            alert(err.message || '保存 truth narrative 失败')
+        } finally {
+            setIsSavingTruthNarrative(false)
+        }
+    }
+
     if (isLoading) {
         return (
             <div className="flex items-center justify-center py-20">
@@ -336,6 +397,38 @@ export default function PositionDetailPage() {
 
             {truthLifecycle && (
                 <TruthLifecycleDetail lifecycle={truthLifecycle} />
+            )}
+
+            {truthLifecycle && (
+                <div className="card overflow-hidden border-cyan-200 bg-cyan-50/80 dark:border-cyan-900 dark:bg-cyan-950/20">
+                    <div className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
+                        <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span className="rounded-full bg-cyan-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-800 dark:bg-cyan-500/15 dark:text-cyan-200">
+                                    Truth write path
+                                </span>
+                                <span className="text-xs text-cyan-700/80 dark:text-cyan-200/80">
+                                    PositionEvent · {truthLifecycle.thesisSourceEventPublicId || truthLifecycle.nodes[0]?.node_public_id || 'no event'}
+                                </span>
+                            </div>
+                            <h2 className="mt-3 text-lg font-black text-slate-950 dark:text-white">
+                                叙事字段现在写入 TradingPosition / PositionEvent
+                            </h2>
+                            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300">
+                                这里只编辑 reason、emotion、confidence、thesis、invalidation、planned exit、sizing 和 note。
+                                价格、数量、PnL 仍留在 legacy migration tools，等 C4 accounting service 后再迁。
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={openTruthNarrativeModal}
+                            className="btn btn-primary flex shrink-0 items-center justify-center gap-2"
+                        >
+                            <Edit3 className="h-4 w-4" />
+                            编辑 truth narrative
+                        </button>
+                    </div>
+                </div>
             )}
 
             {!position && truthLifecycle && (
@@ -797,6 +890,129 @@ export default function PositionDetailPage() {
                             >
                                 {isSavingBatch && <Loader2 className="w-4 h-4 animate-spin" />}
                                 <span>保存修改</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {editingTruthNarrative && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                    <div className="card max-h-[90vh] w-full max-w-2xl overflow-y-auto shadow-2xl animate-in zoom-in duration-200">
+                        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-start justify-between gap-4">
+                            <div>
+                                <p className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-600 dark:text-cyan-300">
+                                    PositionEvent narrative
+                                </p>
+                                <h3 className="mt-1 text-lg font-bold">编辑 truth 叙事字段</h3>
+                                <p className="mt-1 text-xs text-slate-500">
+                                    Event public_id: {truthNarrativeForm.eventPublicId}
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setEditingTruthNarrative(false)}
+                                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                            >
+                                <Plus className="w-5 h-5 rotate-45" />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium mb-1">事件摘要 / Reason</label>
+                                <textarea
+                                    value={truthNarrativeForm.reason}
+                                    onChange={e => setTruthNarrativeForm({ ...truthNarrativeForm, reason: e.target.value })}
+                                    className="input min-h-[80px]"
+                                    placeholder="这一步为什么发生？"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Thesis</label>
+                                <textarea
+                                    value={truthNarrativeForm.thesis}
+                                    onChange={e => setTruthNarrativeForm({ ...truthNarrativeForm, thesis: e.target.value })}
+                                    className="input min-h-[90px]"
+                                    placeholder="这笔交易的核心假设是什么？"
+                                />
+                            </div>
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Invalidation Rule</label>
+                                    <textarea
+                                        value={truthNarrativeForm.invalidationRule}
+                                        onChange={e => setTruthNarrativeForm({ ...truthNarrativeForm, invalidationRule: e.target.value })}
+                                        className="input min-h-[80px]"
+                                        placeholder="什么情况说明交易假设失效？"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Planned Exit</label>
+                                    <textarea
+                                        value={truthNarrativeForm.plannedExitRule}
+                                        onChange={e => setTruthNarrativeForm({ ...truthNarrativeForm, plannedExitRule: e.target.value })}
+                                        className="input min-h-[80px]"
+                                        placeholder="计划如何退出？"
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Sizing Rationale</label>
+                                <textarea
+                                    value={truthNarrativeForm.sizingRationale}
+                                    onChange={e => setTruthNarrativeForm({ ...truthNarrativeForm, sizingRationale: e.target.value })}
+                                    className="input min-h-[80px]"
+                                    placeholder="为什么是这个仓位？"
+                                />
+                            </div>
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Emotion</label>
+                                    <input
+                                        value={truthNarrativeForm.emotion}
+                                        onChange={e => setTruthNarrativeForm({ ...truthNarrativeForm, emotion: e.target.value })}
+                                        className="input"
+                                        placeholder="Focused, Calm..."
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Confidence (1-5)</label>
+                                    <input
+                                        type="range"
+                                        min="1"
+                                        max="5"
+                                        value={truthNarrativeForm.confidence}
+                                        onChange={e => setTruthNarrativeForm({ ...truthNarrativeForm, confidence: parseInt(e.target.value) })}
+                                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                                    />
+                                    <p className="mt-1 text-xs text-slate-500">当前：{truthNarrativeForm.confidence}/5</p>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Note</label>
+                                <textarea
+                                    value={truthNarrativeForm.note}
+                                    onChange={e => setTruthNarrativeForm({ ...truthNarrativeForm, note: e.target.value })}
+                                    className="input min-h-[70px]"
+                                    placeholder="补充备注"
+                                />
+                            </div>
+                            <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-3 text-xs leading-5 text-cyan-900 dark:border-cyan-900 dark:bg-cyan-950/30 dark:text-cyan-200">
+                                保存会写入 `PositionEvent` 的叙事字段，并刷新上方 lifecycle read model。不会修改成交价、数量或 PnL。
+                            </div>
+                        </div>
+                        <div className="p-6 border-t border-slate-100 dark:border-slate-800 flex justify-end space-x-3">
+                            <button
+                                onClick={() => setEditingTruthNarrative(false)}
+                                className="btn btn-secondary"
+                            >
+                                取消
+                            </button>
+                            <button
+                                onClick={handleUpdateTruthNarrative}
+                                disabled={isSavingTruthNarrative}
+                                className="btn btn-primary flex items-center space-x-2"
+                            >
+                                {isSavingTruthNarrative && <Loader2 className="w-4 h-4 animate-spin" />}
+                                <span>保存到 truth event</span>
                             </button>
                         </div>
                     </div>
