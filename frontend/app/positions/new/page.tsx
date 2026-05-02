@@ -15,7 +15,13 @@ import {
     positionsAPI, accountsAPI, strategiesAPI, marketAPI,
     Strategy, PositionCreate, BatchCreate, SymbolValidation, ChecklistItem
 } from '@/lib/api'
-import { adaptPosition, adaptTradingAccounts, PositionViewModel, TradingAccountViewModel } from '@/lib/adapters/trading'
+import {
+    adaptPosition,
+    adaptTradingAccounts,
+    buildTruthTradeEventFromBatchForm,
+    PositionViewModel,
+    TradingAccountViewModel
+} from '@/lib/adapters/trading'
 import {
     detectSymbolType, getAssetTypeColor, getAssetTypeLabel, SymbolDetection,
     getCoreTypeLabel, getMarketLabel, getRiskLevelInfo,
@@ -275,8 +281,22 @@ export default function NewPositionPage() {
                 confidence: form.entry_confidence
             }
 
-            await positionsAPI.addBatch(token, existingPosition.routeId, batchData)
-            router.push(`/positions/${existingPosition.routeId}`)
+            const truthData = await positionsAPI.getTradingPositionLifecycle(token, existingPosition.routeId).catch(() =>
+                positionsAPI.getTruthLifecycle(token, existingPosition.routeId).catch(() => null)
+            )
+            const truthPositionPublicId = truthData?.data?.position_summary?.public_id
+
+            if (truthPositionPublicId) {
+                await positionsAPI.createTradingPositionTradeEvent(
+                    token,
+                    truthPositionPublicId,
+                    buildTruthTradeEventFromBatchForm(batchData, existingPosition)
+                )
+                router.push(`/positions/${truthPositionPublicId}`)
+            } else {
+                await positionsAPI.addBatch(token, existingPosition.routeId, batchData)
+                router.push(`/positions/${existingPosition.routeId}`)
+            }
         } catch (err: any) {
             setError(err.message || '加仓失败')
         } finally {

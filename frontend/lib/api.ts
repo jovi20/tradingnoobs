@@ -771,6 +771,21 @@ export interface TradingPositionEventNarrativeUpdate {
     note?: string
 }
 
+export interface TradingPositionTradeEventCreate {
+    event_type: 'ADD' | 'REDUCE' | 'CLOSE'
+    quantity: number
+    price: number
+    currency?: string
+    occurred_at: string
+    fee_amount?: number
+    fee_currency?: string
+    fx_rate_to_account_ccy?: number
+    reason?: string
+    emotion?: string
+    confidence?: number
+    note?: string
+}
+
 // ============== Positions API ==============
 
 export const positionsAPI = {
@@ -815,6 +830,17 @@ export const positionsAPI = {
     ): Promise<LifecycleDetailResponse> => {
         return fetchAPI(`/api/trading-positions/${positionPublicId}/events/${eventPublicId}`, {
             method: 'PATCH',
+            body: JSON.stringify(data),
+        }, token)
+    },
+
+    createTradingPositionTradeEvent: async (
+        token: string,
+        positionPublicId: string,
+        data: TradingPositionTradeEventCreate
+    ): Promise<LifecycleDetailResponse> => {
+        return fetchAPI(`/api/trading-positions/${positionPublicId}/events`, {
+            method: 'POST',
             body: JSON.stringify(data),
         }, token)
     },
@@ -923,7 +949,7 @@ export interface SymbolValidation {
 }
 
 
-import { getHolidays } from './holidays'
+import { getHolidays } from './holidays.ts'
 
 export interface MarketHoliday {
     date: string

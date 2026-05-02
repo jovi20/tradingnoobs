@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { positionsAPI, Position, BatchCreate, marketAPI } from '@/lib/api'
+import { buildTruthTradeEventFromBatchForm } from '@/lib/adapters/trading'
 import DateTimePicker from '@/components/DateTimePicker'
 import CustomSelect from '@/components/CustomSelect'
 
@@ -19,9 +20,10 @@ export default function AddBatchPage() {
     const router = useRouter()
     const params = useParams()
     const searchParams = useSearchParams()
-    const positionId = parseInt(params.id as string)
+    const positionId = params.id as string
 
     const [position, setPosition] = useState<Position | null>(null)
+    const [truthPositionPublicId, setTruthPositionPublicId] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState('')
@@ -47,6 +49,10 @@ export default function AddBatchPage() {
                 // 1. Get Position Details
                 const data = await positionsAPI.get(token, positionId)
                 setPosition(data)
+                const truthData = await positionsAPI.getTradingPositionLifecycle(token, positionId).catch(() =>
+                    positionsAPI.getTruthLifecycle(token, positionId).catch(() => null)
+                )
+                setTruthPositionPublicId(truthData?.data?.position_summary?.public_id || null)
 
                 // 2. Try to get current market price to pre-fill
                 if (data.status === 'OPEN') {
@@ -99,8 +105,17 @@ export default function AddBatchPage() {
                 confidence: form.confidence
             }
 
-            await positionsAPI.addBatch(token, positionId, batchData)
-            router.push(`/positions`)
+            if (truthPositionPublicId) {
+                await positionsAPI.createTradingPositionTradeEvent(
+                    token,
+                    truthPositionPublicId,
+                    buildTruthTradeEventFromBatchForm(batchData, position)
+                )
+                router.push(`/positions/${truthPositionPublicId}`)
+            } else {
+                await positionsAPI.addBatch(token, positionId, batchData)
+                router.push(`/positions`)
+            }
         } catch (err: any) {
             setError(err.message || '操作失败')
         } finally {
