@@ -822,6 +822,14 @@ class TradingPositionDividendCreate(BaseModel):
     note: Optional[str] = None
 
 
+class TradingPositionManualAdjustmentCreate(BaseModel):
+    amount: Decimal
+    currency: str = Field(default="USD", max_length=10)
+    occurred_at: datetime
+    fx_rate_to_account_ccy: Decimal = Field(default=Decimal("1"), gt=0)
+    note: Optional[str] = None
+
+
 class TradingPositionTradeEventTypeEnum(str, Enum):
     ADD = "ADD"
     REDUCE = "REDUCE"

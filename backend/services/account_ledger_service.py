@@ -191,6 +191,47 @@ def sync_dividend_event_to_account_ledger(
     return ledger_entry
 
 
+def sync_manual_adjustment_event_to_account_ledger(
+    db: Session,
+    *,
+    event: PositionEvent,
+) -> AccountLedgerEntry:
+    if event.id is None:
+        db.flush()
+
+    ledger_entry = (
+        db.query(AccountLedgerEntry)
+        .filter(
+            AccountLedgerEntry.position_event_id == event.id,
+            AccountLedgerEntry.entry_type == AccountLedgerEntryType.CASH_ADJUSTMENT,
+        )
+        .first()
+    )
+    if not ledger_entry:
+        ledger_entry = AccountLedgerEntry(
+            public_id=_deterministic_ledger_public_id(f"position_event:{event.public_id}:manual_adjustment")
+        )
+        db.add(ledger_entry)
+
+    adjustment_amount = Decimal(str(event.gross_amount or 0))
+    fx_rate = Decimal(str(event.fx_rate_to_account_ccy or 1))
+    ledger_entry.user_id = event.user_id
+    ledger_entry.account_id = event.account_id
+    ledger_entry.position_id = event.position_id
+    ledger_entry.position_event_id = event.id
+    ledger_entry.entry_type = AccountLedgerEntryType.CASH_ADJUSTMENT
+    ledger_entry.occurred_at = event.event_time
+    ledger_entry.currency = event.currency or "USD"
+    ledger_entry.amount = adjustment_amount
+    ledger_entry.amount_account_ccy = adjustment_amount * fx_rate
+    ledger_entry.fx_rate_to_account_ccy = fx_rate
+    ledger_entry.source = "POSITION_EVENT"
+    ledger_entry.source_run_id = event.public_id
+    ledger_entry.description = event.note or "Manual position adjustment"
+    db.flush()
+    return ledger_entry
+
+
 def sync_realized_pnl_event_to_account_ledger(
     db: Session,
     *,

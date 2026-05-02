@@ -13,10 +13,14 @@ from models import PositionEvent, PositionEventType, User
 from schemas import (
     TradingPositionDividendCreate,
     TradingPositionEventNarrativeUpdate,
+    TradingPositionManualAdjustmentCreate,
     TradingPositionTradeEventCreate,
     TradingPositionTradeEventReverseCreate,
 )
-from services.account_ledger_service import sync_dividend_event_to_account_ledger
+from services.account_ledger_service import (
+    sync_dividend_event_to_account_ledger,
+    sync_manual_adjustment_event_to_account_ledger,
+)
 from services.auth_service import get_current_user
 from services.trading_position_read_service import build_trading_position_lifecycle_payload, resolve_truth_position_by_public_id
 from services.trading_position_write_service import append_truth_trade_event, reverse_latest_truth_trade_event
@@ -189,6 +193,43 @@ def create_trading_position_dividend(
     db.add(event)
     db.flush()
     sync_dividend_event_to_account_ledger(db, event=event)
+    db.commit()
+
+    updated_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
+    return _lifecycle_response(updated_position, source="MANUAL", status_code=201)
+
+
+@router.post("/{position_public_id}/adjustments", status_code=201)
+def create_trading_position_manual_adjustment(
+    position_public_id: str,
+    payload: TradingPositionManualAdjustmentCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    truth_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
+    if not truth_position:
+        raise HTTPException(status_code=404, detail="Trading position not found")
+
+    if payload.amount == 0:
+        raise HTTPException(status_code=422, detail="Manual adjustment amount cannot be zero")
+
+    event = PositionEvent(
+        user_id=current_user.id,
+        position_id=truth_position.id,
+        account_id=truth_position.account_id,
+        instrument_id=truth_position.instrument_id,
+        event_type=PositionEventType.MANUAL_ADJUSTMENT,
+        event_time=payload.occurred_at,
+        currency=payload.currency,
+        gross_amount=payload.amount,
+        fx_rate_to_account_ccy=payload.fx_rate_to_account_ccy,
+        input_source="MANUAL",
+        note=payload.note,
+        is_adjustment=True,
+    )
+    db.add(event)
+    db.flush()
+    sync_manual_adjustment_event_to_account_ledger(db, event=event)
     db.commit()
 
     updated_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)

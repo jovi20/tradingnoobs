@@ -339,6 +339,42 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         self.assertEqual(ledger_entry.amount, Decimal("12.50000000"))
         self.assertEqual(ledger_entry.currency, "USD")
 
+    def test_manual_adjustment_event_write_creates_adjustment_event_and_ledger_entry(self):
+        truth_position = self._seed_open_synced_position()
+
+        response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/adjustments",
+            json={
+                "amount": "-7.25",
+                "currency": "USD",
+                "occurred_at": "2026-04-04T12:00:00+00:00",
+                "note": "Broker cash correction",
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        payload = response.json()
+        self.assertEqual(payload["meta"]["source"], "MANUAL")
+        self.assertEqual(Decimal(str(payload["data"]["ledger_summary"]["total_adjustments"])), Decimal("-7.25"))
+        self.assertEqual(Decimal(str(payload["data"]["position_summary"]["realized_pnl_net"])), Decimal("0"))
+        node_types = [node["node_type"] for node in payload["data"]["lifecycle_thread"]["nodes"]]
+        self.assertEqual(node_types, ["OPEN", "MANUAL_ADJUSTMENT"])
+
+        adjustment_event = self.db.query(PositionEvent).filter(
+            PositionEvent.position_id == truth_position.id,
+            PositionEvent.event_type == PositionEventType.MANUAL_ADJUSTMENT,
+        ).one()
+        self.assertTrue(adjustment_event.is_adjustment)
+        self.assertEqual(adjustment_event.gross_amount, Decimal("-7.25000000"))
+        self.assertEqual(adjustment_event.note, "Broker cash correction")
+
+        ledger_entry = self.db.query(AccountLedgerEntry).filter(
+            AccountLedgerEntry.position_event_id == adjustment_event.id,
+        ).one()
+        self.assertEqual(ledger_entry.entry_type, AccountLedgerEntryType.CASH_ADJUSTMENT)
+        self.assertEqual(ledger_entry.amount, Decimal("-7.25000000"))
+        self.assertEqual(ledger_entry.currency, "USD")
+
     def test_trade_event_write_replays_fifo_and_creates_realized_pnl_ledger_entry(self):
         truth_position = self._seed_open_synced_position()
 
