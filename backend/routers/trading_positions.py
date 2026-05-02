@@ -10,11 +10,16 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import PositionEvent, PositionEventType, User
-from schemas import TradingPositionDividendCreate, TradingPositionEventNarrativeUpdate, TradingPositionTradeEventCreate
+from schemas import (
+    TradingPositionDividendCreate,
+    TradingPositionEventNarrativeUpdate,
+    TradingPositionTradeEventCreate,
+    TradingPositionTradeEventReverseCreate,
+)
 from services.account_ledger_service import sync_dividend_event_to_account_ledger
 from services.auth_service import get_current_user
 from services.trading_position_read_service import build_trading_position_lifecycle_payload, resolve_truth_position_by_public_id
-from services.trading_position_write_service import append_truth_trade_event
+from services.trading_position_write_service import append_truth_trade_event, reverse_latest_truth_trade_event
 
 router = APIRouter(prefix="/api/trading-positions", tags=["Trading Positions"])
 
@@ -109,6 +114,43 @@ def create_trading_position_trade_event(
             reason=payload.reason,
             emotion=payload.emotion,
             confidence=payload.confidence,
+            note=payload.note,
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    db.commit()
+
+    updated_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
+    return _lifecycle_response(updated_position, source="MANUAL", status_code=201)
+
+
+@router.post("/{position_public_id}/events/{event_public_id}/reverse", status_code=201)
+def reverse_trading_position_trade_event(
+    position_public_id: str,
+    event_public_id: str,
+    payload: TradingPositionTradeEventReverseCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    truth_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
+    if not truth_position:
+        raise HTTPException(status_code=404, detail="Trading position not found")
+
+    event = db.query(PositionEvent).filter(
+        PositionEvent.public_id == event_public_id,
+        PositionEvent.position_id == truth_position.id,
+        PositionEvent.user_id == current_user.id,
+    ).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Position event not found")
+
+    try:
+        reverse_latest_truth_trade_event(
+            db,
+            position=truth_position,
+            event=event,
+            occurred_at=payload.occurred_at,
             note=payload.note,
         )
     except ValueError as exc:

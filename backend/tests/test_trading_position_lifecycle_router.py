@@ -421,6 +421,159 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
             0,
         )
 
+    def test_trade_event_reverse_latest_event_preserves_audit_trail_and_replays_fifo(self):
+        truth_position = self._seed_open_synced_position()
+        reduce_response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events",
+            json={
+                "event_type": "REDUCE",
+                "quantity": "2",
+                "price": "210",
+                "currency": "USD",
+                "occurred_at": "2026-04-03T15:30:00+00:00",
+                "fee_amount": "1.00",
+                "reason": "Scale out into strength",
+            },
+        )
+        self.assertEqual(reduce_response.status_code, 201)
+
+        self.db.expire_all()
+        reduce_event = self.db.query(PositionEvent).filter(
+            PositionEvent.position_id == truth_position.id,
+            PositionEvent.event_type == PositionEventType.REDUCE,
+        ).one()
+
+        reverse_response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events/{reduce_event.public_id}/reverse",
+            json={
+                "occurred_at": "2026-04-04T12:00:00+00:00",
+                "note": "Broker correction: reduction did not fill",
+            },
+        )
+
+        self.assertEqual(reverse_response.status_code, 201)
+        payload = reverse_response.json()
+        self.assertEqual(payload["meta"]["source"], "MANUAL")
+        self.assertEqual(Decimal(str(payload["data"]["position_summary"]["realized_pnl_gross"])), Decimal("0"))
+        self.assertEqual(Decimal(str(payload["data"]["position_summary"]["realized_pnl_net"])), Decimal("0"))
+        node_types = [node["node_type"] for node in payload["data"]["lifecycle_thread"]["nodes"]]
+        self.assertEqual(node_types, ["OPEN", "REDUCE", "REVERSAL"])
+        cash_effects = payload["data"]["ledger_summary"]["cash_effects"]
+        self.assertEqual([entry["entry_type"] for entry in cash_effects], ["REALIZED_PNL", "REALIZED_PNL"])
+        self.assertEqual(Decimal(str(cash_effects[0]["amount"])), Decimal("59.0"))
+        self.assertEqual(Decimal(str(cash_effects[1]["amount"])), Decimal("-59.0"))
+
+        self.db.expire_all()
+        reversal_event = self.db.query(PositionEvent).filter(
+            PositionEvent.position_id == truth_position.id,
+            PositionEvent.event_type == PositionEventType.REVERSAL,
+        ).one()
+        self.assertTrue(reversal_event.is_adjustment)
+        self.assertEqual(reversal_event.reverses_event_id, reduce_event.id)
+        self.assertEqual(reversal_event.realized_pnl_net, Decimal("-59.00000000"))
+        reversal_ledger = self.db.query(AccountLedgerEntry).filter(
+            AccountLedgerEntry.position_event_id == reversal_event.id,
+        ).one()
+        self.assertEqual(reversal_ledger.entry_type, AccountLedgerEntryType.REALIZED_PNL)
+        self.assertEqual(reversal_ledger.amount, Decimal("-59.00000000"))
+
+    def test_trade_event_reverse_rejects_open_event_until_void_semantics_exist(self):
+        truth_position = self._seed_open_synced_position()
+        open_event = self.db.query(PositionEvent).filter(
+            PositionEvent.position_id == truth_position.id,
+            PositionEvent.event_type == PositionEventType.OPEN,
+        ).one()
+
+        response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events/{open_event.public_id}/reverse",
+            json={
+                "occurred_at": "2026-04-04T12:00:00+00:00",
+                "note": "Attempt to void opening event",
+            },
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("OPEN events cannot be reversed", response.json()["detail"])
+        self.db.expire_all()
+        self.assertEqual(
+            self.db.query(PositionEvent).filter(
+                PositionEvent.position_id == truth_position.id,
+                PositionEvent.event_type == PositionEventType.REVERSAL,
+            ).count(),
+            0,
+        )
+
+    def test_trade_event_reverse_rejects_non_latest_active_trade_event(self):
+        truth_position = self._seed_open_synced_position()
+        reduce_response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events",
+            json={
+                "event_type": "REDUCE",
+                "quantity": "1",
+                "price": "210",
+                "currency": "USD",
+                "occurred_at": "2026-04-03T15:30:00+00:00",
+            },
+        )
+        self.assertEqual(reduce_response.status_code, 201)
+        add_response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events",
+            json={
+                "event_type": "ADD",
+                "quantity": "1",
+                "price": "200",
+                "currency": "USD",
+                "occurred_at": "2026-04-04T15:30:00+00:00",
+            },
+        )
+        self.assertEqual(add_response.status_code, 201)
+
+        self.db.expire_all()
+        reduce_event = self.db.query(PositionEvent).filter(
+            PositionEvent.position_id == truth_position.id,
+            PositionEvent.event_type == PositionEventType.REDUCE,
+        ).one()
+        response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events/{reduce_event.public_id}/reverse",
+            json={"occurred_at": "2026-04-05T12:00:00+00:00"},
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("Only the latest active trade event can be reversed", response.json()["detail"])
+
+    def test_trade_event_reverse_rejects_duplicate_reversal(self):
+        truth_position = self._seed_open_synced_position()
+        reduce_response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events",
+            json={
+                "event_type": "REDUCE",
+                "quantity": "2",
+                "price": "210",
+                "currency": "USD",
+                "occurred_at": "2026-04-03T15:30:00+00:00",
+                "fee_amount": "1.00",
+            },
+        )
+        self.assertEqual(reduce_response.status_code, 201)
+        self.db.expire_all()
+        reduce_event = self.db.query(PositionEvent).filter(
+            PositionEvent.position_id == truth_position.id,
+            PositionEvent.event_type == PositionEventType.REDUCE,
+        ).one()
+
+        first_response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events/{reduce_event.public_id}/reverse",
+            json={"occurred_at": "2026-04-04T12:00:00+00:00"},
+        )
+        self.assertEqual(first_response.status_code, 201)
+        second_response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events/{reduce_event.public_id}/reverse",
+            json={"occurred_at": "2026-04-05T12:00:00+00:00"},
+        )
+
+        self.assertEqual(second_response.status_code, 422)
+        self.assertIn("already been reversed", second_response.json()["detail"])
+
     def test_trade_event_write_close_marks_position_closed_and_writes_ledger_entry(self):
         truth_position = self._seed_open_synced_position()
 

@@ -34,6 +34,16 @@ def _remaining_open_quantity(position: TradingPosition) -> Decimal:
 
 
 def replay_truth_position_accounting(db: Session, *, position: TradingPosition) -> None:
+    reversed_event_ids = {
+        row[0]
+        for row in db.query(PositionEvent.reverses_event_id)
+        .filter(
+            PositionEvent.position_id == position.id,
+            PositionEvent.event_type == PositionEventType.REVERSAL,
+            PositionEvent.reverses_event_id.isnot(None),
+        )
+        .all()
+    }
     events = (
         db.query(PositionEvent)
         .filter(
@@ -43,6 +53,7 @@ def replay_truth_position_accounting(db: Session, *, position: TradingPosition) 
         .order_by(PositionEvent.event_time.asc(), PositionEvent.id.asc())
         .all()
     )
+    active_events = [event for event in events if event.id not in reversed_event_ids]
 
     summary = calculate_fifo_position_accounting(
         [
@@ -55,6 +66,7 @@ def replay_truth_position_accounting(db: Session, *, position: TradingPosition) 
                 fx_rate_to_account_ccy=_coerce_decimal(event.fx_rate_to_account_ccy or 1),
             )
             for event in events
+            if event.id not in reversed_event_ids
         ],
         side=position.side.value,
     )
@@ -67,12 +79,12 @@ def replay_truth_position_accounting(db: Session, *, position: TradingPosition) 
     position.realized_pnl_net = summary.realized_pnl_net
     position.total_fees = summary.total_fees
 
-    opening_event = next((event for event in events if event.event_type == PositionEventType.OPEN), None)
+    opening_event = next((event for event in active_events if event.event_type == PositionEventType.OPEN), None)
     position.opening_event_id = opening_event.id if opening_event else None
 
     if summary.open_quantity == 0 and summary.quantity_opened > 0:
         closing_event = next(
-            (event for event in reversed(events) if event.event_type in {PositionEventType.REDUCE, PositionEventType.CLOSE}),
+            (event for event in reversed(active_events) if event.event_type in {PositionEventType.REDUCE, PositionEventType.CLOSE}),
             None,
         )
         position.status = TradingPositionStatus.CLOSED
@@ -94,7 +106,7 @@ def replay_truth_position_accounting(db: Session, *, position: TradingPosition) 
     else:
         position.holding_period_seconds = None
 
-    for event in events:
+    for event in active_events:
         result = summary.event_results.get(event.public_id)
         if not result:
             continue
@@ -103,7 +115,7 @@ def replay_truth_position_accounting(db: Session, *, position: TradingPosition) 
 
     db.flush()
 
-    for event in events:
+    for event in active_events:
         sync_realized_pnl_event_to_account_ledger(db, event=event, position=position)
 
 
@@ -159,3 +171,81 @@ def append_truth_trade_event(
     db.flush()
     replay_truth_position_accounting(db, position=position)
     return event
+
+
+def reverse_latest_truth_trade_event(
+    db: Session,
+    *,
+    position: TradingPosition,
+    event: PositionEvent,
+    occurred_at: datetime,
+    note: str | None = None,
+) -> PositionEvent:
+    if event.event_type not in TRADE_EVENT_TYPES:
+        raise ValueError("Only trade events can be reversed")
+    if event.event_type == PositionEventType.OPEN:
+        raise ValueError("OPEN events cannot be reversed until position void semantics exist")
+
+    existing_reversal = (
+        db.query(PositionEvent)
+        .filter(
+            PositionEvent.position_id == position.id,
+            PositionEvent.event_type == PositionEventType.REVERSAL,
+            PositionEvent.reverses_event_id == event.id,
+        )
+        .first()
+    )
+    if existing_reversal:
+        raise ValueError("Position event has already been reversed")
+
+    reversed_event_ids = {
+        row[0]
+        for row in db.query(PositionEvent.reverses_event_id)
+        .filter(
+            PositionEvent.position_id == position.id,
+            PositionEvent.event_type == PositionEventType.REVERSAL,
+            PositionEvent.reverses_event_id.isnot(None),
+        )
+        .all()
+    }
+    active_trade_events = [
+        item
+        for item in (
+            db.query(PositionEvent)
+            .filter(
+                PositionEvent.position_id == position.id,
+                PositionEvent.event_type.in_(TRADE_EVENT_TYPES),
+            )
+            .order_by(PositionEvent.event_time.asc(), PositionEvent.id.asc())
+            .all()
+        )
+        if item.id not in reversed_event_ids
+    ]
+    if not active_trade_events or active_trade_events[-1].id != event.id:
+        raise ValueError("Only the latest active trade event can be reversed")
+
+    reversal_event = PositionEvent(
+        user_id=position.user_id,
+        position_id=position.id,
+        account_id=position.account_id,
+        instrument_id=position.instrument_id,
+        event_type=PositionEventType.REVERSAL,
+        event_time=occurred_at,
+        side_effect=position.side.value,
+        currency=event.currency or position.base_currency,
+        gross_amount=-_coerce_decimal(event.gross_amount),
+        fee_amount=Decimal("0"),
+        fee_currency=event.fee_currency or event.currency or position.base_currency,
+        fx_rate_to_account_ccy=_coerce_decimal(event.fx_rate_to_account_ccy or 1),
+        realized_pnl_gross=-_coerce_decimal(event.realized_pnl_gross),
+        realized_pnl_net=-_coerce_decimal(event.realized_pnl_net),
+        input_source="MANUAL",
+        note=note or f"Reversal of {event.public_id}",
+        is_adjustment=True,
+        reverses_event_id=event.id,
+    )
+    db.add(reversal_event)
+    db.flush()
+    replay_truth_position_accounting(db, position=position)
+    sync_realized_pnl_event_to_account_ledger(db, event=reversal_event, position=position)
+    return reversal_event

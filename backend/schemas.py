@@ -843,6 +843,11 @@ class TradingPositionTradeEventCreate(BaseModel):
     note: Optional[str] = None
 
 
+class TradingPositionTradeEventReverseCreate(BaseModel):
+    occurred_at: datetime
+    note: Optional[str] = None
+
+
 class TradeBatchResponse(BaseModel):
     id: int
     public_id: str
