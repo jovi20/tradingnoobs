@@ -17,7 +17,8 @@ import {
     DollarSign,
     Target,
     MessageSquare,
-    Award
+    Award,
+    Wrench
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { positionsAPI } from '@/lib/api'
@@ -345,6 +346,23 @@ export default function PositionDetailPage() {
 
             {position && (
                 <>
+
+            {truthLifecycle && (
+                <div className="card border-amber-200 bg-amber-50 p-5 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+                    <div className="flex items-start gap-3">
+                        <div className="rounded-2xl bg-amber-100 p-2 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200">
+                            <Wrench className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <h2 className="text-sm font-bold uppercase tracking-[0.18em]">Legacy migration tools</h2>
+                            <p className="mt-2 text-sm leading-6">
+                                下方持仓摘要、资产属性、MAE/MFE、交易批次、复盘与编辑弹窗仍来自 legacy `Position / TradeBatch` DTO。
+                                当前 truth 叙事以上方 TradingPosition lifecycle 为准；这些旧控件仅作为迁移、校准和回填辅助入口保留。
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Summary Card */}
             <div className="card overflow-hidden">

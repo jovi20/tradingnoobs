@@ -6,7 +6,7 @@
 - Current branch: `dev`
 - Baseline branch kept for comparison: `main`
 - Stage boundary commit: `e4c6544 feat: land platform foundation and frontend read models`
-- Current `main...dev` committed diff: available from `main` to `e4c6544`; use focused diffs by area for review.
+- Current `main...dev` committed diff: review from `main` to current `dev`; use focused diffs by area and the stage boundary below to avoid treating the full branch as one undifferentiated patch.
 
 ## Current Working Tree Shape
 
@@ -35,8 +35,8 @@ node --experimental-strip-types --test frontend/tests/*.test.mts
 Result:
 
 ```text
-tests 14
-pass 14
+tests 15
+pass 15
 fail 0
 ```
 
@@ -128,7 +128,7 @@ public-id route group: 7 OK
 alembic chain: 1 OK
 ```
 
-C2 + C5 truth-first detail entry regression:
+C2 + C5 truth-first detail entry and evidence/AI sidecar regression:
 
 ```bash
 node --experimental-strip-types --test frontend/tests/*.test.mts
@@ -137,10 +137,17 @@ node --experimental-strip-types --test frontend/tests/*.test.mts
 Result:
 
 ```text
-tests 14
-pass 14
+tests 15
+pass 15
 fail 0
 ```
+
+Scope covered:
+
+- Single-trade detail can prefer `TradingPosition.public_id` lifecycle data.
+- Lifecycle adapter exposes auditable evidence and AI sidecar summaries.
+- Truth detail UI renders `evidence_list` and `ai_sidecar` as first-class sections when present.
+- Legacy `Position / TradeBatch` detail controls are visibly marked as migration, calibration, and backfill tools.
 
 Build limitation:
 
@@ -166,8 +173,9 @@ Reason:
 - `/api/timeline/home` now has bridge-level `limit` / `cursor` support over stabilized timeline event cards.
 - `AccountLedgerEntry` foundation is landed with migration, legacy realized PnL bridge, transaction cash bridge, and lifecycle `cash_effects` consumption.
 - Account cash balance/read models are not yet fully ledger-derived; keep this as a C4/accounting-service follow-up.
-- Post-boundary `C2 + C5` slice started: single-trade detail can load `TradingPosition.public_id` lifecycle directly and render truth lifecycle as the primary narrative when available.
-- The next implementation slice should continue hard cutover of edit/review/batch operations to truth events, or proceed to `C4` accounting service.
+- Post-boundary `C2 + C5` slice continued: single-trade detail can load `TradingPosition.public_id` lifecycle directly, render truth lifecycle as the primary narrative, surface evidence refs, and show AI sidecar artifacts when the backend returns them.
+- Legacy edit/review/batch/MAE controls are still present only as migration tools; they still depend on legacy DTOs and should not be treated as final truth write paths.
+- The next implementation slice should move edit/review/batch operations onto `TradingPosition / PositionEvent` write paths, or proceed to `C4` accounting service if we want to centralize cost/FIFO/fee/FX before more UI write work.
 
 ## Next Checkpoint Criteria
 
@@ -175,6 +183,6 @@ Reason:
 - Public-id-only lifecycle behavior has a failing test first, then passing implementation.
 - Timeline `limit` / `cursor` behavior has a failing test first, then passing implementation.
 - C3 AccountLedgerEntry foundation has model, migration, sync, route, and lifecycle regressions.
-- C2 + C5 truth-first detail entry has frontend adapter regressions and a documented build limitation if frontend dependencies are absent.
+- C2 + C5 truth-first detail entry plus evidence/AI sidecar display has frontend adapter regressions and a documented build limitation if frontend dependencies are absent.
 - Frontend adapter tests remain green.
-- Stage boundary commit exists on `dev`; next checkpoint should record the next focused slice commit separately.
+- Stage boundary commit exists on `dev`; next checkpoint should record each focused slice commit separately for `main` vs `dev` review.

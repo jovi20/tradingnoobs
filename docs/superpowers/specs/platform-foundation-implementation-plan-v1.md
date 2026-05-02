@@ -47,7 +47,7 @@
 - `AssetMaster`, `TradeInstrument`, `TradingPosition`, `PositionEvent` 已有初版 truth schema 与同步服务。
 - `AccountLedgerEntry` 已有初版 schema / migration / service；legacy realized PnL 与账户 transaction 会写入 ledger，Lifecycle `cash_effects` 已从 ledger 读取。
 - 已有 `/api/trading-positions/{position_public_id}/lifecycle` truth read API，并已收紧为普通用户路径只接受 `TradingPosition.public_id`；legacy bridge `/api/positions/{id}/truth-lifecycle` 保留为迁移/过渡路径。
-- 单笔详情页已支持优先用 `TradingPosition.public_id` 直接读取 truth lifecycle 主叙事；legacy `Position` 数据存在时仅继续显示旧编辑/迁移辅助区块。
+- 单笔详情页已支持优先用 `TradingPosition.public_id` 直接读取 truth lifecycle 主叙事；已展示 lifecycle `evidence_list` 与 `ai_sidecar`，legacy `Position / TradeBatch` 数据存在时明确标成迁移、校准和回填辅助区块。
 - `/api/timeline/home` 已补 bridge 级 `limit` / `cursor` 分页行为，按稳定排序后的 timeline event card 切页，并返回 opaque `next_cursor`。
 - 前端默认入口已切到 timeline-first，Dashboard 改为次级入口；后端 Timeline Home 当前仍是 legacy-derived bridge，不视为 truth-backed 首页完成。
 - 前端已建立 read-model / adapter 层，并接上 Timeline Home 与 Lifecycle Preview；Lifecycle Preview 当前是 truth bridge 预览，不是最终详情页替代。
@@ -56,9 +56,9 @@
 
 - 仍未完成真正的 hard cutover：旧 `Position / TradeBatch` 仍是主写模型；详情页已有 truth-first 入口，但旧编辑流仍依赖 legacy 模型。
 - Timeline Home 当前仍从 legacy `Position`、`AISummary`、`AIAnalysisResult` 派生，不是基于 `TradingPosition / PositionEvent / InsightArtifact` 的最终 read model。
-- Lifecycle Detail 用户侧 public_id-only contract 已补回归测试并落地；最终 evidence / ledger / AI sidecar 仍未完成。
+- Lifecycle Detail 用户侧 public_id-only contract 已补回归测试并落地；前端已能展示 evidence / ledger / AI sidecar，但后端 AI sidecar 生成、InsightArtifact 正式写入与最终 evidence 覆盖仍未完成。
 - `AccountLedgerEntry` 现金真相基础已建立，但账户余额 read model 尚未完全改成 ledger-derived，dividend / cash adjustment 的正式入口仍需后续补齐。
-- Lifecycle `ledger_summary.cash_effects` 已读取 ledger；`total_fees` 的最终 fee 归属、dividend / adjustment 汇总与 `ai_sidecar` 仍未完成，不能标为最终 evidence/AI sidecar 完成。
+- Lifecycle `ledger_summary.cash_effects` 已读取 ledger；`total_fees` 的最终 fee 归属、dividend / adjustment 汇总与 AI workflow 写入仍未完成，不能标为最终 evidence/AI sidecar 完成。
 - FIFO / fee / FX 口径还没有从 legacy 路径彻底中心化，`C4` 依赖 `C3` 的 ledger 现金真相。
 - outbox / job system / idempotency / job status 仍为空白，后续 derived refresh 没有稳定异步底座。
 - Timeline contract 中的 `cursor` / `limit` 已有 bridge 级实现；最终 truth-backed Timeline read model 尚未完成。
@@ -70,7 +70,7 @@
 
 1. 先完成计划修正与 `dev` 检查点：记录 bridge 状态、可运行验证命令、阶段性 diff 边界，为后续 `main` vs `dev` 评估做准备。
 2. 在 `dev` 上形成阶段性提交边界，避免 C1-C3 与前端桥接继续扩大成不可读 diff。
-3. 继续推进 `C2 + C5` hard cutover：把详情页编辑/复盘/批次操作从 legacy `Position / TradeBatch` 迁到 `TradingPosition / PositionEvent`，或明确标成迁移工具。
+3. 继续推进 `C2 + C5` hard cutover：下一步应把详情页编辑/复盘/批次操作从 legacy `Position / TradeBatch` 迁到 `TradingPosition / PositionEvent` 写路径；当前旧控件已明确标成迁移工具，但仍不是最终 truth 写路径。
 4. 完成 `C4`：建立 FIFO / fee / FX 口径中心化服务，替代 legacy 平均成本和 router 内散落计算，并把账户余额 read model 进一步收敛到 ledger-derived。
 5. 再推进 `D1 -> D3`，先把 outbox、job model、idempotency 补齐，再做任何重 derived 刷新。
 6. 在异步底座具备后推进 `E1`, `E2`, `F1`, `F4`，把市场数据编排和 dashboard/detail 派生读路径迁出请求链路。

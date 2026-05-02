@@ -8,6 +8,7 @@ import {
   getLifecyclePreviewSummary,
   getLifecyclePreviewTrustSummary,
 } from '../lib/adapters/lifecycle.ts'
+import * as lifecycleAdapter from '../lib/adapters/lifecycle.ts'
 
 test('adaptLifecycleDetail maps truth lifecycle payload into preview-friendly view model', () => {
   const result = adaptLifecycleDetail({
@@ -81,7 +82,24 @@ test('adaptLifecycleDetail maps truth lifecycle payload into preview-friendly vi
           { ref_type: 'LEDGER_ENTRY', public_id: 'ledger-1', label: 'REALIZED_PNL', href: '/positions/tp-1' },
         ],
       },
-      ai_sidecar: { items: [] },
+      ai_sidecar: {
+        items: [
+          {
+            insight_run_public_id: 'run-1',
+            insight_artifact_public_id: 'artifact-1',
+            title: '减仓节奏偏慢',
+            conclusion: '第一段盈利兑现没有按计划执行，回吐扩大。',
+            coverage_summary: '覆盖 OPEN/CLOSE 事件与 realized PnL ledger。',
+            confidence_label: 'MEDIUM',
+            recommended_action: '复盘首次减仓规则',
+            evidence_refs: [
+              { ref_type: 'POSITION_EVENT', public_id: 'evt-2', label: 'CLOSE', href: '/positions/tp-1' },
+              { ref_type: 'LEDGER_ENTRY', public_id: 'ledger-1', label: 'REALIZED_PNL', href: '/positions/tp-1' },
+            ],
+            href: '/insights/artifact-1',
+          },
+        ],
+      },
     },
     meta: {
       as_of: '2026-04-05T16:00:00Z',
@@ -104,8 +122,42 @@ test('adaptLifecycleDetail maps truth lifecycle payload into preview-friendly vi
   assert.equal(result.cashEffects.length, 1)
   assert.equal(result.cashEffects[0].entry_type, 'REALIZED_PNL')
   assert.equal(result.evidenceItems.length, 2)
+  assert.equal(result.aiItems.length, 1)
+  assert.equal(result.aiItems[0].title, '减仓节奏偏慢')
+  assert.equal(result.aiItems[0].evidence_refs?.length, 2)
   assert.equal(result.emotionPoints.length, 1)
   assert.equal(getLifecycleCashEffectSummary(result), '1 条现金流水 · USD 180.00')
+})
+
+test('lifecycle detail summaries make evidence and AI sidecar auditable', () => {
+  assert.equal(typeof lifecycleAdapter.getLifecycleEvidenceSummary, 'function')
+  assert.equal(typeof lifecycleAdapter.getLifecycleAiSidecarSummary, 'function')
+
+  assert.equal(
+    lifecycleAdapter.getLifecycleEvidenceSummary({
+      evidenceItems: [
+        { ref_type: 'POSITION_EVENT', public_id: 'evt-1', label: 'OPEN', href: '/positions/tp-1' },
+        { ref_type: 'LEDGER_ENTRY', public_id: 'ledger-1', label: 'REALIZED_PNL', href: '/positions/tp-1' },
+      ],
+    }),
+    '2 条 evidence · POSITION_EVENT, LEDGER_ENTRY'
+  )
+
+  assert.equal(
+    lifecycleAdapter.getLifecycleAiSidecarSummary({
+      aiItems: [
+        {
+          title: '减仓节奏偏慢',
+          conclusion: '第一段盈利兑现没有按计划执行，回吐扩大。',
+          evidence_refs: [
+            { ref_type: 'POSITION_EVENT', public_id: 'evt-2', label: 'CLOSE', href: '/positions/tp-1' },
+            { ref_type: 'LEDGER_ENTRY', public_id: 'ledger-1', label: 'REALIZED_PNL', href: '/positions/tp-1' },
+          ],
+        },
+      ],
+    }),
+    '1 条 AI 结论 · 2 条证据'
+  )
 })
 
 test('getLifecyclePreviewSummary produces stable copy', () => {

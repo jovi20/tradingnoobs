@@ -130,3 +130,21 @@ export function getLifecycleCashEffectSummary(input: Pick<LifecycleDetailViewMod
     const total = input.cashEffects.reduce((sum, item) => sum + Number(item.amount || 0), 0)
     return `${input.cashEffects.length} 条现金流水 · ${firstCurrency} ${total.toFixed(2)}`
 }
+
+export function getLifecycleEvidenceSummary(input: Pick<LifecycleDetailViewModel, 'evidenceItems'>) {
+    if (input.evidenceItems.length === 0) {
+        return '暂无 evidence'
+    }
+
+    const refTypes = Array.from(new Set(input.evidenceItems.map((item) => item.ref_type)))
+    return `${input.evidenceItems.length} 条 evidence · ${refTypes.join(', ')}`
+}
+
+export function getLifecycleAiSidecarSummary(input: Pick<LifecycleDetailViewModel, 'aiItems'>) {
+    if (input.aiItems.length === 0) {
+        return '暂无 AI 结论'
+    }
+
+    const evidenceCount = input.aiItems.reduce((sum, item) => sum + (item.evidence_refs?.length || 0), 0)
+    return `${input.aiItems.length} 条 AI 结论 · ${evidenceCount} 条证据`
+}
