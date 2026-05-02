@@ -3,29 +3,78 @@ import type { LifecycleDetailResponse } from '../read-models.ts'
 export interface LifecycleDetailViewModel {
     positionTitle: string
     reviewStatus: LifecycleDetailResponse['data']['review_status']
+    positionStatus: LifecycleDetailResponse['data']['position_summary']['status']
     positionRouteId: string
     truthPositionPublicId: string
+    side: LifecycleDetailResponse['data']['position_summary']['side']
+    accountLabel: string
+    accountPublicId: string
+    assetSymbol: string
+    assetLabel: string
+    instrumentLabel: string
+    openedAt: string
+    closedAt?: string
+    realizedPnlNet?: number
+    realizedPnlGross?: number
+    totalFees?: number
+    holdingPeriodSeconds?: number
     nodeCount: number
     thesis: string | null
+    invalidationRule: string | null
+    plannedExitRule: string | null
+    sizingRationale: string | null
+    checklistSnapshot: LifecycleDetailResponse['data']['thesis_block']['checklist_snapshot']
     summaryHeadline: string
     summaryBody: string
     keyNumbers: Array<{ label: string; value: string }>
+    executionQuality?: string
+    checklistMissCount?: number
     nodes: LifecycleDetailResponse['data']['lifecycle_thread']['nodes']
+    cashEffects: LifecycleDetailResponse['data']['ledger_summary']['cash_effects']
+    evidenceItems: LifecycleDetailResponse['data']['evidence_list']['items']
+    emotionPoints: NonNullable<LifecycleDetailResponse['data']['emotion_path']>['points']
+    aiItems: LifecycleDetailResponse['data']['ai_sidecar']['items']
     trust: LifecycleDetailResponse['meta']
 }
 
 export function adaptLifecycleDetail(response: LifecycleDetailResponse): LifecycleDetailViewModel {
+    const summary = response.data.position_summary
+    const thesis = response.data.thesis_block
+
     return {
-        positionTitle: response.data.position_summary.title,
+        positionTitle: summary.title,
         reviewStatus: response.data.review_status,
-        positionRouteId: response.data.position_summary.public_id,
-        truthPositionPublicId: response.data.position_summary.public_id,
+        positionStatus: summary.status,
+        positionRouteId: summary.public_id,
+        truthPositionPublicId: summary.public_id,
+        side: summary.side,
+        accountLabel: summary.account.label,
+        accountPublicId: summary.account.public_id,
+        assetSymbol: summary.asset.symbol,
+        assetLabel: summary.asset.asset_label,
+        instrumentLabel: summary.asset.instrument_label,
+        openedAt: summary.opened_at,
+        closedAt: summary.closed_at,
+        realizedPnlNet: summary.realized_pnl_net,
+        realizedPnlGross: summary.realized_pnl_gross,
+        totalFees: summary.total_fees,
+        holdingPeriodSeconds: summary.holding_period_seconds,
         nodeCount: response.data.lifecycle_thread.nodes.length,
-        thesis: response.data.thesis_block.thesis || null,
+        thesis: thesis.thesis || null,
+        invalidationRule: thesis.invalidation_rule || null,
+        plannedExitRule: thesis.planned_exit_rule || null,
+        sizingRationale: thesis.sizing_rationale || null,
+        checklistSnapshot: thesis.checklist_snapshot || [],
         summaryHeadline: response.data.result_summary.headline,
         summaryBody: response.data.result_summary.summary,
         keyNumbers: response.data.result_summary.key_numbers,
+        executionQuality: response.data.execution_quality.execution_quality,
+        checklistMissCount: response.data.execution_quality.checklist_miss_count,
         nodes: response.data.lifecycle_thread.nodes,
+        cashEffects: response.data.ledger_summary.cash_effects,
+        evidenceItems: response.data.evidence_list.items,
+        emotionPoints: response.data.emotion_path?.points || [],
+        aiItems: response.data.ai_sidecar.items,
         trust: response.meta,
     }
 }
@@ -70,4 +119,14 @@ export function getLifecyclePreviewTrustSummary(trust: LifecycleDetailViewModel[
         pieces.push(trust.maturity.toLowerCase())
     }
     return pieces.join(' · ')
+}
+
+export function getLifecycleCashEffectSummary(input: Pick<LifecycleDetailViewModel, 'cashEffects'>) {
+    if (input.cashEffects.length === 0) {
+        return '暂无现金流水'
+    }
+
+    const firstCurrency = input.cashEffects[0].currency
+    const total = input.cashEffects.reduce((sum, item) => sum + Number(item.amount || 0), 0)
+    return `${input.cashEffects.length} 条现金流水 · ${firstCurrency} ${total.toFixed(2)}`
 }

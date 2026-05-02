@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import {
   adaptLifecycleDetail,
+  getLifecycleCashEffectSummary,
   getLifecyclePreviewBadge,
   getLifecyclePreviewSummary,
   getLifecyclePreviewTrustSummary,
@@ -51,11 +52,35 @@ test('adaptLifecycleDetail maps truth lifecycle payload into preview-friendly vi
       },
       execution_quality: {
         execution_quality: 'GOOD',
+        checklist_miss_count: 1,
       },
       discipline_profile: null,
-      emotion_path: { points: [] },
-      ledger_summary: { account_currency: 'USD', cash_effects: [] },
-      evidence_list: { items: [] },
+      emotion_path: {
+        points: [
+          { occurred_at: '2026-04-01T09:30:00Z', emotion: 'Confident', confidence: 4 },
+        ],
+      },
+      ledger_summary: {
+        account_currency: 'USD',
+        cash_effects: [
+          {
+            ledger_entry_public_id: 'ledger-1',
+            entry_type: 'REALIZED_PNL',
+            amount: 180,
+            amount_account_ccy: 180,
+            currency: 'USD',
+            occurred_at: '2026-04-05T16:00:00Z',
+            source_event_public_id: 'evt-2',
+            description: 'AAPL realized PnL',
+          },
+        ],
+      },
+      evidence_list: {
+        items: [
+          { ref_type: 'POSITION_EVENT', public_id: 'evt-1', label: 'OPEN', href: '/positions/tp-1' },
+          { ref_type: 'LEDGER_ENTRY', public_id: 'ledger-1', label: 'REALIZED_PNL', href: '/positions/tp-1' },
+        ],
+      },
       ai_sidecar: { items: [] },
     },
     meta: {
@@ -69,8 +94,18 @@ test('adaptLifecycleDetail maps truth lifecycle payload into preview-friendly vi
 
   assert.equal(result.positionTitle, 'AAPL')
   assert.equal(result.reviewStatus, 'CLOSED_PENDING_REVIEW')
+  assert.equal(result.positionStatus, 'CLOSED')
+  assert.equal(result.assetLabel, 'Apple Inc.')
+  assert.equal(result.accountLabel, 'IBKR Main')
   assert.equal(result.nodeCount, 2)
   assert.equal(result.thesis, 'Initial breakout entry')
+  assert.equal(result.executionQuality, 'GOOD')
+  assert.equal(result.checklistMissCount, 1)
+  assert.equal(result.cashEffects.length, 1)
+  assert.equal(result.cashEffects[0].entry_type, 'REALIZED_PNL')
+  assert.equal(result.evidenceItems.length, 2)
+  assert.equal(result.emotionPoints.length, 1)
+  assert.equal(getLifecycleCashEffectSummary(result), '1 条现金流水 · USD 180.00')
 })
 
 test('getLifecyclePreviewSummary produces stable copy', () => {

@@ -23,7 +23,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { positionsAPI } from '@/lib/api'
 import { adaptPosition, PositionViewModel, TradeBatchViewModel } from '@/lib/adapters/trading'
 import { adaptLifecycleDetail, LifecycleDetailViewModel } from '@/lib/adapters/lifecycle'
-import { TruthLifecyclePreview } from '@/components/positions/domain/TruthLifecyclePreview'
+import { TruthLifecycleDetail } from '@/components/positions/domain/TruthLifecycleDetail'
 
 import {
     getCoreTypeLabel,
@@ -88,12 +88,20 @@ export default function PositionDetailPage() {
         const fetchPosition = async () => {
             if (!token || !positionId) return
             try {
-                const [data, truthData] = await Promise.all([
-                    positionsAPI.get(token, positionId),
-                    positionsAPI.getTruthLifecycle(token, positionId).catch(() => null),
-                ])
+                const directTruthData = await positionsAPI.getTradingPositionLifecycle(token, positionId).catch(() => null)
+                if (directTruthData) {
+                    setTruthLifecycle(adaptLifecycleDetail(directTruthData))
+                    const legacyData = await positionsAPI.get(token, positionId).catch(() => null)
+                    setPosition(legacyData ? adaptPosition(legacyData) : null)
+                    setError('')
+                    return
+                }
+
+                const data = await positionsAPI.get(token, positionId)
+                const truthData = await positionsAPI.getTruthLifecycle(token, positionId).catch(() => null)
                 setPosition(adaptPosition(data))
                 setTruthLifecycle(truthData ? adaptLifecycleDetail(truthData) : null)
+                setError('')
             } catch (err: any) {
                 setError(err.message || '加载失败')
             } finally {
@@ -248,7 +256,7 @@ export default function PositionDetailPage() {
         )
     }
 
-    if (error || !position) {
+    if (error || (!position && !truthLifecycle)) {
         return (
             <div className="card p-8 text-center">
                 <p className="text-red-500 mb-4">{error || '持仓不存在'}</p>
@@ -259,11 +267,18 @@ export default function PositionDetailPage() {
         )
     }
 
-    const isPositive = Number(position.realized_pnl) >= 0
-    const isOpen = position.status === 'OPEN'
+    const displayTitle = truthLifecycle?.assetSymbol || position?.symbol || ''
+    const displayStatus = truthLifecycle?.positionStatus || position?.status || 'CLOSED'
+    const displaySide = truthLifecycle?.side || position?.direction || 'LONG'
+    const displaySubtitle = truthLifecycle
+        ? `${truthLifecycle.instrumentLabel} · ${truthLifecycle.accountLabel}`
+        : `${position?.exchange} · ${displaySide === 'LONG' ? '做多' : '做空'}`
+    const realizedPnl = truthLifecycle?.realizedPnlNet ?? position?.realized_pnl ?? 0
+    const isPositive = Number(realizedPnl) >= 0
+    const isOpen = displayStatus === 'OPEN'
 
     // Sort batches by time
-    const sortedBatches = [...(position.batches || [])].sort(
+    const sortedBatches = [...(position?.batches || [])].sort(
         (a, b) => new Date(a.time).getTime() - new Date(b.time).getTime()
     )
 
@@ -280,7 +295,7 @@ export default function PositionDetailPage() {
                     </Link>
                     <div className="min-w-0">
                         <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2">
-                            <span className="truncate">{position.symbol}</span>
+                            <span className="truncate">{displayTitle}</span>
                             <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${isOpen
                                 ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
                                 : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
@@ -289,12 +304,12 @@ export default function PositionDetailPage() {
                             </span>
                         </h1>
                         <p className="text-sm text-slate-500 truncate">
-                            {position.exchange} · {position.direction === 'LONG' ? '做多' : '做空'}
+                            {displaySubtitle}
                         </p>
                     </div>
                 </div>
                 <div className="flex gap-2 shrink-0">
-                    {isOpen && (
+                    {position && isOpen && (
                         <Link
                             href={`/positions/${position.routeId}/add-batch`}
                             className="btn btn-primary flex items-center gap-1 px-3 md:px-4"
@@ -305,7 +320,7 @@ export default function PositionDetailPage() {
                     )}
                     <button
                         onClick={handleDelete}
-                        disabled={isDeleting}
+                        disabled={isDeleting || !position}
                         className="btn btn-danger flex items-center gap-1 px-3 md:px-4"
                     >
                         {isDeleting ? (
@@ -319,8 +334,17 @@ export default function PositionDetailPage() {
             </div>
 
             {truthLifecycle && (
-                <TruthLifecyclePreview lifecycle={truthLifecycle} />
+                <TruthLifecycleDetail lifecycle={truthLifecycle} />
             )}
+
+            {!position && truthLifecycle && (
+                <div className="card border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">
+                    当前详情由 TradingPosition truth read model 直接驱动。旧 Position 编辑控件未显示，避免把新真相路径重新绑回 legacy DTO。
+                </div>
+            )}
+
+            {position && (
+                <>
 
             {/* Summary Card */}
             <div className="card overflow-hidden">
@@ -909,6 +933,8 @@ export default function PositionDetailPage() {
                         </div>
                     </div>
                 </div>
+            )}
+                </>
             )}
         </div>
     )

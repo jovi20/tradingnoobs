@@ -788,6 +788,10 @@ export const positionsAPI = {
         return fetchAPI(`/api/positions/${id}/truth-lifecycle`, {}, token)
     },
 
+    getTradingPositionLifecycle: async (token: string, positionPublicId: string): Promise<LifecycleDetailResponse> => {
+        return fetchAPI(`/api/trading-positions/${positionPublicId}/lifecycle`, {}, token)
+    },
+
     create: async (token: string, data: PositionCreate): Promise<Position> => {
         return fetchAPI('/api/positions', {
             method: 'POST',

@@ -301,12 +301,16 @@ export interface LifecycleEmotionPath {
 export interface LifecycleLedgerSummary {
     account_currency: string
     cash_effects: Array<{
-        entry_public_id: string
+        entry_public_id?: string
+        ledger_entry_public_id?: string
         entry_type: string
         amount: number
         currency: string
         amount_in_account_ccy?: number
+        amount_account_ccy?: number
         occurred_at: string
+        source_event_public_id?: string
+        description?: string
     }>
     total_fees?: number
     total_dividends?: number

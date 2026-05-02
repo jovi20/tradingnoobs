@@ -128,6 +128,36 @@ public-id route group: 7 OK
 alembic chain: 1 OK
 ```
 
+C2 + C5 truth-first detail entry regression:
+
+```bash
+node --experimental-strip-types --test frontend/tests/*.test.mts
+```
+
+Result:
+
+```text
+tests 14
+pass 14
+fail 0
+```
+
+Build limitation:
+
+```bash
+cd frontend && npm run build
+```
+
+Result:
+
+```text
+next: command not found
+```
+
+Reason:
+
+- This dev worktree does not currently have `frontend/node_modules` with the Next.js binary installed.
+
 ## Current Plan State
 
 - Timeline and lifecycle user-facing paths are explicitly marked as `Bridge landed / partial`.
@@ -136,7 +166,8 @@ alembic chain: 1 OK
 - `/api/timeline/home` now has bridge-level `limit` / `cursor` support over stabilized timeline event cards.
 - `AccountLedgerEntry` foundation is landed with migration, legacy realized PnL bridge, transaction cash bridge, and lifecycle `cash_effects` consumption.
 - Account cash balance/read models are not yet fully ledger-derived; keep this as a C4/accounting-service follow-up.
-- The next implementation slice should continue `C2 + C5` truth-first detail or `C4` accounting service from the `e4c6544` stage boundary.
+- Post-boundary `C2 + C5` slice started: single-trade detail can load `TradingPosition.public_id` lifecycle directly and render truth lifecycle as the primary narrative when available.
+- The next implementation slice should continue hard cutover of edit/review/batch operations to truth events, or proceed to `C4` accounting service.
 
 ## Next Checkpoint Criteria
 
@@ -144,5 +175,6 @@ alembic chain: 1 OK
 - Public-id-only lifecycle behavior has a failing test first, then passing implementation.
 - Timeline `limit` / `cursor` behavior has a failing test first, then passing implementation.
 - C3 AccountLedgerEntry foundation has model, migration, sync, route, and lifecycle regressions.
+- C2 + C5 truth-first detail entry has frontend adapter regressions and a documented build limitation if frontend dependencies are absent.
 - Frontend adapter tests remain green.
 - Stage boundary commit exists on `dev`; next checkpoint should record the next focused slice commit separately.

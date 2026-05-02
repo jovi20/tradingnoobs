@@ -160,7 +160,8 @@ git diff main...dev -- frontend
 
 - [x] Make the Timeline route the default landing surface using bridge data.
 - [ ] Ship the truth-backed homepage as the final default landing surface.
-- [ ] Make single-trade detail a lifecycle thread, not a tabbed field sheet.
+- [x] Let single-trade detail load `TradingPosition.public_id` lifecycle directly and render truth lifecycle as the primary narrative when available.
+- [ ] Finish single-trade hard cutover by moving edit/review/batch operations from legacy `Position / TradeBatch` to truth events or labeling them as migration tools.
 - [x] Keep Dashboard as macro view, not the default home.
 - [ ] Keep AI as evidence-linked sidecar across surfaces.
 
