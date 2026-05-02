@@ -11,7 +11,15 @@ from sqlalchemy.orm import sessionmaker
 
 from database import Base, get_db
 from main import app
-from models import Position, PositionDirection, PositionStatus, TradingAccount, User
+from models import (
+    AccountLedgerEntry,
+    AccountLedgerEntryType,
+    Position,
+    PositionDirection,
+    PositionStatus,
+    TradingAccount,
+    User,
+)
 from services.auth_service import get_current_user
 
 
@@ -141,6 +149,31 @@ class PublicIdRouteTests(unittest.TestCase):
             payload = get_response.json()
             self.assertEqual(Decimal(str(payload["market_value"])), Decimal("120"))
             self.assertEqual(Decimal(str(payload["total_equity"])), Decimal("1120"))
+
+    def test_account_cash_balance_prefers_ledger_derived_read_model(self):
+        self.account.initial_balance = Decimal("1000")
+        self.account.cash_balance = Decimal("9999")
+        self.db.add(
+            AccountLedgerEntry(
+                public_id="ledger-cash-out",
+                user_id=self.user.id,
+                account_id=self.account.id,
+                entry_type=AccountLedgerEntryType.WITHDRAWAL,
+                occurred_at=datetime.now(timezone.utc),
+                currency="USD",
+                amount=Decimal("-25"),
+                amount_account_ccy=Decimal("-25"),
+                source="TEST",
+            )
+        )
+        self.db.commit()
+
+        get_response = self.client.get("/api/accounts/acct-public-id")
+
+        self.assertEqual(get_response.status_code, 200)
+        payload = get_response.json()
+        self.assertEqual(Decimal(str(payload["cash_balance"])), Decimal("975"))
+        self.assertEqual(Decimal(str(payload["total_equity"])), Decimal("975"))
 
     def test_positions_list_and_get_include_and_accept_public_id(self):
         list_response = self.client.get("/api/positions")

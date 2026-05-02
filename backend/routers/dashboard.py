@@ -10,6 +10,7 @@ from datetime import date, timedelta
 from database import get_db
 from models import User, Position, PositionStatus, TradingAccount, TradeBatch, BatchType, UserSettings
 from schemas import DashboardStats, AssetAllocation, PositionMover, AccountAllocation, PortfolioFlow, SankeyNode, SankeyLink
+from services.account_ledger_service import calculate_account_cash_balance_read_model
 from services.auth_service import get_current_user
 from services.market_data_service import MarketDataService
 from services.exchange_rate_service import get_exchange_rate, get_rates_batch
@@ -159,8 +160,7 @@ async def get_dashboard_stats(
     # Account Stats: { acc_id: { initial, realized, unrealized, cost_basis, market_value, obj, fx_rate } }
     account_stats = {}
     for acc in accounts:
-        # Use cash_balance if available, else fallback logic
-        current_cash = float(acc.cash_balance or 0)
+        current_cash = float(calculate_account_cash_balance_read_model(db, account=acc))
         acc_currency = (acc.currency or 'USD').upper()
         acc_fx_rate = fx_rates.get(acc_currency, 1.0)
         account_stats[acc.id] = {

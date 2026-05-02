@@ -8,6 +8,7 @@ from typing import List
 from database import get_db
 from models import Position, PositionStatus, TradingAccount, User
 from schemas import TradingAccountCreate, TradingAccountUpdate, TradingAccountResponse
+from services.account_ledger_service import calculate_account_cash_balance_read_model
 from services.auth_service import get_current_user
 from services.market_data_service import MarketDataService
 from services.public_id_service import resolve_trading_account
@@ -72,9 +73,11 @@ async def list_accounts(
 
     for acc in accounts:
         mv = account_mv.get(acc.id, 0.0)
-        cash = float(acc.cash_balance or 0)
+        cash_balance = calculate_account_cash_balance_read_model(db, account=acc)
+        cash = float(cash_balance)
         nav = cash + mv
-        
+
+        setattr(acc, 'cash_balance', cash_balance)
         setattr(acc, 'market_value', Decimal(str(mv)))
         setattr(acc, 'total_equity', Decimal(str(nav)))
         results.append(acc)
@@ -147,9 +150,10 @@ async def get_account(
                 market_value += mark.signed_market_value
         
         # 4. Attach to response
-        cash = account.cash_balance or Decimal("0")
+        cash = calculate_account_cash_balance_read_model(db, account=account)
         nav = cash + market_value
-        
+
+        setattr(account, 'cash_balance', cash)
         setattr(account, 'market_value', market_value)
         setattr(account, 'total_equity', nav)
         

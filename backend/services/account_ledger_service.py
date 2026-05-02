@@ -78,3 +78,34 @@ def delete_transaction_ledger_entries(db: Session, *, transaction: Transaction) 
     db.query(AccountLedgerEntry).filter(
         AccountLedgerEntry.transaction_id == transaction.id
     ).delete(synchronize_session=False)
+
+
+def calculate_account_cash_balance_read_model(db: Session, *, account: TradingAccount) -> Decimal:
+    """
+    Return account cash from the ledger when an opening balance is available.
+
+    Transitional rule: legacy accounts without `initial_balance` keep using the
+    stored `cash_balance`, because old data may not have a complete opening
+    ledger. Newer accounts can derive cash as opening balance + ledger effects.
+    """
+    ledger_entries = (
+        db.query(AccountLedgerEntry)
+        .filter(AccountLedgerEntry.account_id == account.id)
+        .all()
+    )
+    ledger_total = sum(
+        (
+            Decimal(str(entry.amount_account_ccy))
+            if entry.amount_account_ccy is not None
+            else Decimal(str(entry.amount))
+        )
+        for entry in ledger_entries
+    )
+
+    if account.initial_balance is not None:
+        return Decimal(str(account.initial_balance)) + ledger_total
+
+    if ledger_entries and account.cash_balance is None:
+        return ledger_total
+
+    return Decimal(str(account.cash_balance or 0))
