@@ -124,6 +124,9 @@ def append_truth_trade_event(
     confidence: int | None = None,
     note: str | None = None,
 ) -> PositionEvent:
+    if position.status == TradingPositionStatus.CLOSED:
+        raise ValueError("Cannot append trade events to a closed trading position")
+
     if event_type == PositionEventType.CLOSE:
         remaining_open_quantity = _remaining_open_quantity(position)
         if quantity != remaining_open_quantity:

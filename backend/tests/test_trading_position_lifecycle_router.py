@@ -441,6 +441,33 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         events = self.db.query(PositionEvent).filter(PositionEvent.position_id == truth_position.id).all()
         self.assertEqual([event.event_type for event in events], [PositionEventType.OPEN])
 
+    def test_trade_event_write_rejects_add_on_closed_position_without_mutating_events(self):
+        truth_position = self._seed_synced_position()
+        original_events = self.db.query(PositionEvent).filter(PositionEvent.position_id == truth_position.id).count()
+
+        response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events",
+            json={
+                "event_type": "ADD",
+                "quantity": "1",
+                "price": "205",
+                "currency": "USD",
+                "occurred_at": "2026-04-06T15:30:00+00:00",
+            },
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("Cannot append trade events to a closed trading position", response.json()["detail"])
+
+        self.db.expire_all()
+        events = self.db.query(PositionEvent).filter(PositionEvent.position_id == truth_position.id).all()
+        self.assertEqual(len(events), original_events)
+        self.assertEqual([event.event_type for event in events], [
+            PositionEventType.OPEN,
+            PositionEventType.ADD,
+            PositionEventType.CLOSE,
+        ])
+
 
 if __name__ == "__main__":
     unittest.main()
