@@ -10,6 +10,7 @@ from models import Position, PositionStatus, TradingAccount, User
 from schemas import TradingAccountCreate, TradingAccountUpdate, TradingAccountResponse
 from services.account_ledger_service import (
     calculate_account_cash_balance_read_model,
+    sync_cash_balance_adjustment_to_account_ledger,
     sync_opening_balance_to_account_ledger,
 )
 from services.auth_service import get_current_user
@@ -188,11 +189,24 @@ async def update_account(
         raise HTTPException(status_code=404, detail="Account not found")
     
     update_data = account_data.model_dump(exclude_unset=True)
+    target_cash_balance = update_data.pop("cash_balance", None)
     for key, value in update_data.items():
         setattr(account, key, value)
-    
+
+    if target_cash_balance is not None:
+        sync_cash_balance_adjustment_to_account_ledger(
+            db,
+            account=account,
+            target_cash_balance=target_cash_balance,
+        )
+        account.cash_balance = target_cash_balance
+
     db.commit()
     db.refresh(account)
+    cash_balance = calculate_account_cash_balance_read_model(db, account=account)
+    setattr(account, 'cash_balance', cash_balance)
+    setattr(account, 'market_value', Decimal("0"))
+    setattr(account, 'total_equity', cash_balance)
     return account
 
 

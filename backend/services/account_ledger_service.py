@@ -117,6 +117,41 @@ def sync_opening_balance_to_account_ledger(
     return ledger_entry
 
 
+def sync_cash_balance_adjustment_to_account_ledger(
+    db: Session,
+    *,
+    account: TradingAccount,
+    target_cash_balance,
+    description: str | None = None,
+) -> AccountLedgerEntry | None:
+    target_balance = Decimal(str(target_cash_balance))
+    current_balance = calculate_account_cash_balance_read_model(db, account=account)
+    adjustment_amount = target_balance - current_balance
+    if adjustment_amount == 0:
+        return None
+
+    if account.id is None:
+        db.flush()
+
+    ledger_entry = AccountLedgerEntry(
+        public_id=str(uuid.uuid4()),
+        user_id=account.user_id,
+        account_id=account.id,
+        entry_type=AccountLedgerEntryType.CASH_ADJUSTMENT,
+        occurred_at=datetime.now(timezone.utc),
+        currency=account.currency or "USD",
+        amount=adjustment_amount,
+        amount_account_ccy=adjustment_amount,
+        fx_rate_to_account_ccy=Decimal("1"),
+        source="MANUAL_CASH_ADJUSTMENT",
+        source_run_id=account.public_id or str(account.id),
+        description=description or "Manual cash balance adjustment",
+    )
+    db.add(ledger_entry)
+    db.flush()
+    return ledger_entry
+
+
 def delete_transaction_ledger_entries(db: Session, *, transaction: Transaction) -> None:
     db.query(AccountLedgerEntry).filter(
         AccountLedgerEntry.transaction_id == transaction.id
