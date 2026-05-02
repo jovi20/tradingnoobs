@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import {
   buildTruthTradeEventFromBatchForm,
+  getLegacyBatchMutationState,
 } from '../lib/adapters/trading.ts'
 
 test('buildTruthTradeEventFromBatchForm maps entry batches to ADD truth events', () => {
@@ -50,4 +51,18 @@ test('buildTruthTradeEventFromBatchForm maps partial and full exits to REDUCE or
     ).event_type,
     'CLOSE',
   )
+})
+
+test('getLegacyBatchMutationState disables legacy batch edits once truth lifecycle is available', () => {
+  assert.deepEqual(getLegacyBatchMutationState(true), {
+    canMutate: false,
+    label: '迁移只读',
+    reason: '价格、数量和 PnL 已由 TradingPosition / PositionEvent truth path 接管。',
+  })
+
+  assert.deepEqual(getLegacyBatchMutationState(false), {
+    canMutate: true,
+    label: '编辑',
+    reason: '尚未解析到 truth lifecycle，保留 legacy batch 迁移编辑入口。',
+  })
 })

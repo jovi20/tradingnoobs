@@ -92,6 +92,26 @@ export function buildTruthTradeEventFromBatchForm(
     return event
 }
 
+export function getLegacyBatchMutationState(hasTruthLifecycle: boolean): {
+    canMutate: boolean
+    label: string
+    reason: string
+} {
+    if (hasTruthLifecycle) {
+        return {
+            canMutate: false,
+            label: '迁移只读',
+            reason: '价格、数量和 PnL 已由 TradingPosition / PositionEvent truth path 接管。',
+        }
+    }
+
+    return {
+        canMutate: true,
+        label: '编辑',
+        reason: '尚未解析到 truth lifecycle，保留 legacy batch 迁移编辑入口。',
+    }
+}
+
 export function adaptTransactions(transactions: Transaction[]): TransactionViewModel[] {
     return transactions.map(adaptTransaction)
 }

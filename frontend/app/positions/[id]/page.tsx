@@ -22,7 +22,12 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { positionsAPI } from '@/lib/api'
-import { adaptPosition, PositionViewModel, TradeBatchViewModel } from '@/lib/adapters/trading'
+import {
+    adaptPosition,
+    getLegacyBatchMutationState,
+    PositionViewModel,
+    TradeBatchViewModel
+} from '@/lib/adapters/trading'
 import {
     adaptLifecycleDetail,
     getLifecycleNarrativeDraft,
@@ -343,6 +348,7 @@ export default function PositionDetailPage() {
     const sortedBatches = [...(position?.batches || [])].sort(
         (a, b) => new Date(a.time).getTime() - new Date(b.time).getTime()
     )
+    const legacyBatchMutationState = getLegacyBatchMutationState(Boolean(truthLifecycle))
 
     return (
         <div className="space-y-6 pb-20 md:pb-6">
@@ -449,8 +455,8 @@ export default function PositionDetailPage() {
                         <div>
                             <h2 className="text-sm font-bold uppercase tracking-[0.18em]">Legacy migration tools</h2>
                             <p className="mt-2 text-sm leading-6">
-                                下方持仓摘要、资产属性、MAE/MFE、交易批次、复盘与编辑弹窗仍来自 legacy `Position / TradeBatch` DTO。
-                                当前 truth 叙事以上方 TradingPosition lifecycle 为准；这些旧控件仅作为迁移、校准和回填辅助入口保留。
+                                下方持仓摘要、资产属性、MAE/MFE、交易批次和复盘仍来自 legacy `Position / TradeBatch` DTO。
+                                当前新增/加仓/平仓已走 TradingPosition truth write path；旧批次编辑在 truth lifecycle 存在时降级为只读迁移视图。
                             </p>
                         </div>
                     </div>
@@ -757,12 +763,22 @@ export default function PositionDetailPage() {
                                             </div>
                                         )}
                                     </div>
-                                    <button
-                                        onClick={() => openEditModal(batch)}
-                                        className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500 transition-colors"
-                                    >
-                                        <Edit3 className="w-4 h-4" />
-                                    </button>
+                                    {legacyBatchMutationState.canMutate ? (
+                                        <button
+                                            onClick={() => openEditModal(batch)}
+                                            title={legacyBatchMutationState.reason}
+                                            className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500 transition-colors"
+                                        >
+                                            <Edit3 className="w-4 h-4" />
+                                        </button>
+                                    ) : (
+                                        <span
+                                            title={legacyBatchMutationState.reason}
+                                            className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+                                        >
+                                            {legacyBatchMutationState.label}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
                             {batch.reason && (
