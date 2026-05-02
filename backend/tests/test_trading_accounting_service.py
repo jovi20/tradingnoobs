@@ -105,6 +105,7 @@ class TradingAccountingServiceTests(unittest.TestCase):
         )
 
         self.assertEqual(result.market_value, Decimal("1800.0"))
+        self.assertEqual(result.signed_market_value, Decimal("1800.0"))
         self.assertEqual(result.unrealized_pnl, Decimal("300.0"))
         self.assertEqual(result.change_percent, Decimal("20.0"))
 
@@ -120,6 +121,7 @@ class TradingAccountingServiceTests(unittest.TestCase):
         )
 
         self.assertEqual(result.market_value, Decimal("800"))
+        self.assertEqual(result.signed_market_value, Decimal("-800"))
         self.assertEqual(result.unrealized_pnl, Decimal("200"))
         self.assertEqual(result.change_percent, Decimal("20.0"))
 

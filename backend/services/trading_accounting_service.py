@@ -51,6 +51,7 @@ class PositionAccountingSummary:
 @dataclass(frozen=True)
 class MarkToMarketResult:
     market_value: Decimal
+    signed_market_value: Decimal
     unrealized_pnl: Decimal
     change_percent: Decimal
 
@@ -181,10 +182,12 @@ def calculate_mark_to_market_position(
     fx_rate = _to_decimal(fx_rate_to_display_ccy)
     side_value = _event_type(side).upper()
 
-    market_value_native = quantity * mark_price
+    signed_market_value_native = quantity * mark_price
+    market_value_native = signed_market_value_native
     if side_value == "SHORT":
         unrealized_native = (entry_price - mark_price) * quantity
-        market_value_native = abs(market_value_native)
+        signed_market_value_native = -abs(signed_market_value_native)
+        market_value_native = abs(signed_market_value_native)
         change_percent_native = ((entry_price - mark_price) / entry_price) * Decimal("100") if entry_price else Decimal("0")
     else:
         unrealized_native = (mark_price - entry_price) * quantity
@@ -192,6 +195,7 @@ def calculate_mark_to_market_position(
 
     return MarkToMarketResult(
         market_value=market_value_native * fx_rate,
+        signed_market_value=signed_market_value_native * fx_rate,
         unrealized_pnl=unrealized_native * fx_rate,
         change_percent=change_percent_native,
     )

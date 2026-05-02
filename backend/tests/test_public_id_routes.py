@@ -2,6 +2,8 @@ import os
 import tempfile
 import unittest
 from datetime import datetime, timezone
+from decimal import Decimal
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -97,6 +99,48 @@ class PublicIdRouteTests(unittest.TestCase):
         self.assertEqual(get_response.status_code, 200)
         self.assertEqual(get_response.json()["id"], self.account.id)
         self.assertEqual(get_response.json()["public_id"], "acct-public-id")
+
+    def test_account_market_value_uses_signed_mark_to_market_for_short_positions(self):
+        self.account.cash_balance = Decimal("1000")
+        self.db.add_all(
+            [
+                Position(
+                    user_id=self.user.id,
+                    account_id=self.account.id,
+                    public_id="pos-account-long",
+                    symbol="LONGX",
+                    exchange="NASDAQ",
+                    direction=PositionDirection.LONG,
+                    status=PositionStatus.OPEN,
+                    total_quantity=Decimal("2"),
+                    average_entry_price=Decimal("100"),
+                    opened_at=datetime.now(timezone.utc),
+                ),
+                Position(
+                    user_id=self.user.id,
+                    account_id=self.account.id,
+                    public_id="pos-account-short",
+                    symbol="SHORTX",
+                    exchange="NASDAQ",
+                    direction=PositionDirection.SHORT,
+                    status=PositionStatus.OPEN,
+                    total_quantity=Decimal("3"),
+                    average_entry_price=Decimal("50"),
+                    opened_at=datetime.now(timezone.utc),
+                ),
+            ]
+        )
+        self.db.commit()
+
+        async def fake_get_quote(self, symbol, exchange):
+            return {"c": 120 if symbol == "LONGX" else 40}
+
+        with patch("routers.accounts.MarketDataService.get_quote", new=fake_get_quote):
+            get_response = self.client.get("/api/accounts/acct-public-id")
+            self.assertEqual(get_response.status_code, 200)
+            payload = get_response.json()
+            self.assertEqual(Decimal(str(payload["market_value"])), Decimal("120"))
+            self.assertEqual(Decimal(str(payload["total_equity"])), Decimal("1120"))
 
     def test_positions_list_and_get_include_and_accept_public_id(self):
         list_response = self.client.get("/api/positions")

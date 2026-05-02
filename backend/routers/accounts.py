@@ -6,16 +6,20 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from database import get_db
-from models import TradingAccount, User
+from models import Position, PositionStatus, TradingAccount, User
 from schemas import TradingAccountCreate, TradingAccountUpdate, TradingAccountResponse
 from services.auth_service import get_current_user
 from services.market_data_service import MarketDataService
 from services.public_id_service import resolve_trading_account
-from models import TradingAccount, User, Position, PositionStatus
+from services.trading_accounting_service import calculate_mark_to_market_position
 import asyncio
 from decimal import Decimal
 
 router = APIRouter(prefix="/api/accounts", tags=["Trading Accounts"])
+
+
+def _enum_value(value):
+    return value.value if hasattr(value, "value") else str(value)
 
 
 @router.get("", response_model=List[TradingAccountResponse])
@@ -58,30 +62,13 @@ async def list_accounts(
     for p in positions:
         if p.account_id:
             current_price = quote_map.get(f"{p.symbol}_{p.exchange}", float(p.average_entry_price or 0))
-            # Standard accounting: Long MV = positive asset, Short MV = negative liability (reduces equity)
-            # However, for "Market Value" display, usually we show the absolute exposure or net?
-            # User wants: NAV = Cash + MarketValue.
-            # If I have Short $100 stock (Liability), and Cash $200. NAV is $100.
-            # So MarketValue should simply be the sum of (Qty * Price).
-            # If Qty is negative (Short? No, usually stored as positive with Direction=SHORT).
-            # Database model: Position has `direction` (LONG/SHORT) and `total_quantity` (seems positive).
-            # So if SHORT: val = -1 * qty * price.
-            # If LONG: val = qty * price.
-            
-            val = float(p.total_quantity) * current_price
-            if p.direction == PositionStatus.OPEN: # Wait, direction is enum
-                 # Check schema/model for direction logic. PositionDirection.SHORT
-                 pass 
-            
-            # Re-checking model: `direction = Column(SQLEnum(PositionDirection), ...)`
-            # So I need to import PositionDirection or compare string 'SHORT'.
-            # Based on Models.py:
-            # class PositionDirection(str, enum.Enum): LONG = "LONG", SHORT = "SHORT"
-            
-            if p.direction == "SHORT":
-                 account_mv[p.account_id] = account_mv.get(p.account_id, 0.0) - val
-            else:
-                 account_mv[p.account_id] = account_mv.get(p.account_id, 0.0) + val
+            mark = calculate_mark_to_market_position(
+                open_quantity=p.total_quantity,
+                avg_open_price=p.average_entry_price or 0,
+                current_price=current_price,
+                side=_enum_value(p.direction),
+            )
+            account_mv[p.account_id] = account_mv.get(p.account_id, 0.0) + float(mark.signed_market_value)
 
     for acc in accounts:
         mv = account_mv.get(acc.id, 0.0)
@@ -151,11 +138,13 @@ async def get_account(
                 if not isinstance(quote, Exception) and quote and quote.get('c'):
                     current_price = float(quote['c'])
                 
-                val = float(p.total_quantity) * current_price
-                if p.direction == "SHORT":
-                    market_value -= Decimal(str(val))
-                else:
-                    market_value += Decimal(str(val))
+                mark = calculate_mark_to_market_position(
+                    open_quantity=p.total_quantity,
+                    avg_open_price=p.average_entry_price or 0,
+                    current_price=current_price,
+                    side=_enum_value(p.direction),
+                )
+                market_value += mark.signed_market_value
         
         # 4. Attach to response
         cash = account.cash_balance or Decimal("0")
