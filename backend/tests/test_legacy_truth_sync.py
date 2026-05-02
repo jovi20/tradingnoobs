@@ -208,6 +208,19 @@ class LegacyTruthSyncTests(unittest.TestCase):
         self.assertEqual(self.db.query(PositionEvent).count(), 3)
         self.assertEqual(self.db.query(AccountLedgerEntry).count(), 1)
 
+    def test_sync_legacy_position_derives_truth_pnl_from_fifo_events(self):
+        legacy_position = self._seed_legacy_position(realized_pnl=Decimal("999"))
+
+        truth_position = sync_legacy_position_to_truth(self.db, legacy_position.id)
+
+        events = self.db.query(PositionEvent).order_by(PositionEvent.event_time.asc()).all()
+        ledger_entries = self.db.query(AccountLedgerEntry).order_by(AccountLedgerEntry.occurred_at.asc()).all()
+        self.assertEqual(float(truth_position.realized_pnl_gross), 180.0)
+        self.assertEqual(float(truth_position.realized_pnl_net), 180.0)
+        self.assertEqual(events[2].realized_pnl_gross, Decimal("180"))
+        self.assertEqual(events[2].realized_pnl_net, Decimal("180"))
+        self.assertEqual(ledger_entries[0].amount, Decimal("180"))
+
     def test_sync_all_legacy_positions_reports_created_summary(self):
         self._seed_legacy_position(
             email="batch@example.com",

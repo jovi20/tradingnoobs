@@ -4,7 +4,6 @@ Trading Noobs Backend - Legacy to Truth Sync Service
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Iterable
 import uuid
 
 from sqlalchemy.orm import Session
@@ -25,6 +24,7 @@ from models import (
     TradingPositionSide,
     TradingPositionStatus,
 )
+from services.trading_accounting_service import AccountingEvent, calculate_fifo_position_accounting
 
 
 LEGACY_TRUTH_NAMESPACE = uuid.UUID("7db5f25d-3f43-4e32-a8e3-bd245f7d7001")
@@ -233,6 +233,42 @@ def _sync_account_ledger_entries(
     return ledger_entries
 
 
+def _apply_fifo_accounting(
+    *,
+    truth_position: TradingPosition,
+    events: list[PositionEvent],
+) -> None:
+    summary = calculate_fifo_position_accounting(
+        [
+            AccountingEvent(
+                public_id=event.public_id,
+                event_type=event.event_type.value,
+                quantity=_coerce_decimal(event.quantity),
+                price=_coerce_decimal(event.price),
+                fee_amount=_coerce_decimal(event.fee_amount),
+                fx_rate_to_account_ccy=_coerce_decimal(event.fx_rate_to_account_ccy or 1),
+            )
+            for event in sorted(events, key=lambda item: (item.event_time, item.id))
+        ],
+        side=truth_position.side.value,
+    )
+
+    truth_position.quantity_opened = summary.quantity_opened
+    truth_position.quantity_closed = summary.quantity_closed
+    truth_position.avg_open_price = summary.avg_open_price
+    truth_position.avg_close_price = summary.avg_close_price
+    truth_position.realized_pnl_gross = summary.realized_pnl_gross
+    truth_position.realized_pnl_net = summary.realized_pnl_net
+    truth_position.total_fees = summary.total_fees
+
+    for event in events:
+        result = summary.event_results.get(event.public_id)
+        if not result:
+            continue
+        event.realized_pnl_gross = result.realized_pnl_gross
+        event.realized_pnl_net = result.realized_pnl_net
+
+
 def sync_legacy_position_to_truth(db: Session, legacy_position_id: int) -> TradingPosition:
     legacy_position = (
         db.query(Position)
@@ -251,20 +287,6 @@ def sync_legacy_position_to_truth(db: Session, legacy_position_id: int) -> Tradi
         truth_position = TradingPosition(public_id=truth_public_id)
         db.add(truth_position)
 
-    batches = list(sorted(legacy_position.batches or [], key=lambda batch: batch.time))
-    entry_batches = [batch for batch in batches if batch.type == batch.type.ENTRY]
-    exit_batches = [batch for batch in batches if batch.type == batch.type.EXIT]
-    quantity_opened = sum((_coerce_decimal(batch.quantity) for batch in entry_batches), Decimal("0"))
-    quantity_closed = sum((_coerce_decimal(batch.quantity) for batch in exit_batches), Decimal("0"))
-
-    def _weighted_average(items: Iterable[TradeBatch]) -> Decimal | None:
-        items = list(items)
-        total_qty = sum((_coerce_decimal(item.quantity) for item in items), Decimal("0"))
-        if total_qty == 0:
-            return None
-        weighted = sum((_coerce_decimal(item.price) * _coerce_decimal(item.quantity) for item in items), Decimal("0"))
-        return weighted / total_qty
-
     truth_position.user_id = legacy_position.user_id
     truth_position.account_id = legacy_position.account_id
     truth_position.instrument_id = instrument.id
@@ -279,13 +301,6 @@ def sync_legacy_position_to_truth(db: Session, legacy_position_id: int) -> Tradi
         else (legacy_position.trading_account.currency if legacy_position.trading_account else "USD")
     )
     truth_position.cost_basis_method = "FIFO"
-    truth_position.quantity_opened = quantity_opened
-    truth_position.quantity_closed = quantity_closed
-    truth_position.avg_open_price = _weighted_average(entry_batches)
-    truth_position.avg_close_price = _weighted_average(exit_batches)
-    truth_position.realized_pnl_gross = _coerce_decimal(legacy_position.realized_pnl)
-    truth_position.realized_pnl_net = _coerce_decimal(legacy_position.realized_pnl)
-    truth_position.total_fees = Decimal("0")
     if legacy_position.closed_at and legacy_position.opened_at:
         truth_position.holding_period_seconds = int((legacy_position.closed_at - legacy_position.opened_at).total_seconds())
     else:
@@ -300,6 +315,8 @@ def sync_legacy_position_to_truth(db: Session, legacy_position_id: int) -> Tradi
     )
     truth_position.opening_event_id = opening_event.id if opening_event else None
     truth_position.closing_event_id = closing_event.id if closing_event else None
+    _apply_fifo_accounting(truth_position=truth_position, events=events)
+    db.flush()
     _sync_account_ledger_entries(db, truth_position=truth_position, events=events)
 
     db.commit()
