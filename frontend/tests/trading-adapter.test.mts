@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import {
   buildTruthTradeEventFromBatchForm,
   getLegacyBatchMutationState,
+  getLegacyPositionDeleteState,
 } from '../lib/adapters/trading.ts'
 
 test('buildTruthTradeEventFromBatchForm maps entry batches to ADD truth events', () => {
@@ -64,5 +65,19 @@ test('getLegacyBatchMutationState disables legacy batch edits once truth lifecyc
     canMutate: true,
     label: '编辑',
     reason: '尚未解析到 truth lifecycle，保留 legacy batch 迁移编辑入口。',
+  })
+})
+
+test('getLegacyPositionDeleteState disables destructive legacy deletes once truth lifecycle is available', () => {
+  assert.deepEqual(getLegacyPositionDeleteState(true), {
+    canDelete: false,
+    label: 'Truth 受保护',
+    reason: 'TradingPosition 已成为审计真相，删除需要走后续 reversal / adjustment 流程。',
+  })
+
+  assert.deepEqual(getLegacyPositionDeleteState(false), {
+    canDelete: true,
+    label: '删除',
+    reason: '尚未解析到 truth lifecycle，保留 legacy position 迁移删除入口。',
   })
 })

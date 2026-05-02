@@ -112,6 +112,26 @@ export function getLegacyBatchMutationState(hasTruthLifecycle: boolean): {
     }
 }
 
+export function getLegacyPositionDeleteState(hasTruthLifecycle: boolean): {
+    canDelete: boolean
+    label: string
+    reason: string
+} {
+    if (hasTruthLifecycle) {
+        return {
+            canDelete: false,
+            label: 'Truth 受保护',
+            reason: 'TradingPosition 已成为审计真相，删除需要走后续 reversal / adjustment 流程。',
+        }
+    }
+
+    return {
+        canDelete: true,
+        label: '删除',
+        reason: '尚未解析到 truth lifecycle，保留 legacy position 迁移删除入口。',
+    }
+}
+
 export function adaptTransactions(transactions: Transaction[]): TransactionViewModel[] {
     return transactions.map(adaptTransaction)
 }

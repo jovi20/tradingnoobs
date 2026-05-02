@@ -25,6 +25,7 @@ import { positionsAPI } from '@/lib/api'
 import {
     adaptPosition,
     getLegacyBatchMutationState,
+    getLegacyPositionDeleteState,
     PositionViewModel,
     TradeBatchViewModel
 } from '@/lib/adapters/trading'
@@ -140,6 +141,10 @@ export default function PositionDetailPage() {
 
     const handleDelete = async () => {
         if (!token || !position) return
+        if (truthLifecycle) {
+            setError(legacyDeleteState.reason)
+            return
+        }
         if (!window.confirm('确定要删除这个交易记录吗？所有相关的交易批次也会被删除。')) return
 
         setIsDeleting(true)
@@ -349,6 +354,7 @@ export default function PositionDetailPage() {
         (a, b) => new Date(a.time).getTime() - new Date(b.time).getTime()
     )
     const legacyBatchMutationState = getLegacyBatchMutationState(Boolean(truthLifecycle))
+    const legacyDeleteState = getLegacyPositionDeleteState(Boolean(truthLifecycle))
 
     return (
         <div className="space-y-6 pb-20 md:pb-6">
@@ -388,15 +394,16 @@ export default function PositionDetailPage() {
                     )}
                     <button
                         onClick={handleDelete}
-                        disabled={isDeleting || !position}
-                        className="btn btn-danger flex items-center gap-1 px-3 md:px-4"
+                        disabled={isDeleting || !position || !legacyDeleteState.canDelete}
+                        title={legacyDeleteState.reason}
+                        className="btn btn-danger flex items-center gap-1 px-3 md:px-4 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                         {isDeleting ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
                         ) : (
                             <Trash2 className="w-4 h-4" />
                         )}
-                        <span className="hidden sm:inline">删除</span>
+                        <span className="hidden sm:inline">{legacyDeleteState.label}</span>
                     </button>
                 </div>
             </div>
