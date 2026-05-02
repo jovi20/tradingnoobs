@@ -5,23 +5,23 @@
 - Worktree: `/Users/a1/vibecoding/tradingnoobs/.worktrees/docs-platform-frontend-contracts`
 - Current branch: `dev`
 - Baseline branch kept for comparison: `main`
-- Current `main...dev` committed diff: empty because the platform/frontend work is still uncommitted in the `dev` worktree.
+- Stage boundary commit: `e4c6544 feat: land platform foundation and frontend read models`
+- Current `main...dev` committed diff: available from `main` to `e4c6544`; use focused diffs by area for review.
 
 ## Current Working Tree Shape
 
-- Tracked modified files: 30
-- Untracked files/directories include:
+- Stage boundary committed files include:
   - Alembic setup and revisions
-  - Backend bootstrap, timeline, trading position, platform config, public id, and truth sync services
+  - Backend bootstrap, timeline, trading position, platform config, public id, ledger, and truth sync services
   - Backend tests
   - Platform/frontend contract docs
   - Timeline/dashboard/settings/position frontend domain components
   - Frontend read models, adapters, and adapter tests
 
-Tracked diff summary at checkpoint:
+Committed diff summary at checkpoint:
 
 ```text
-30 files changed, 1444 insertions(+), 1005 deletions(-)
+103 files changed, 13132 insertions(+), 1005 deletions(-)
 ```
 
 ## Verification
@@ -136,7 +136,7 @@ alembic chain: 1 OK
 - `/api/timeline/home` now has bridge-level `limit` / `cursor` support over stabilized timeline event cards.
 - `AccountLedgerEntry` foundation is landed with migration, legacy realized PnL bridge, transaction cash bridge, and lifecycle `cash_effects` consumption.
 - Account cash balance/read models are not yet fully ledger-derived; keep this as a C4/accounting-service follow-up.
-- The next implementation slice should create a stage boundary commit on `dev`, then continue `C2 + C5` truth-first detail or `C4` accounting service.
+- The next implementation slice should continue `C2 + C5` truth-first detail or `C4` accounting service from the `e4c6544` stage boundary.
 
 ## Next Checkpoint Criteria
 
@@ -145,4 +145,4 @@ alembic chain: 1 OK
 - Timeline `limit` / `cursor` behavior has a failing test first, then passing implementation.
 - C3 AccountLedgerEntry foundation has model, migration, sync, route, and lifecycle regressions.
 - Frontend adapter tests remain green.
-- Stage boundary commit created on `dev` before starting larger `C2/C4` follow-up work.
+- Stage boundary commit exists on `dev`; next checkpoint should record the next focused slice commit separately.
