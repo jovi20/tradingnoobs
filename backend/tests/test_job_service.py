@@ -1,0 +1,228 @@
+import os
+import tempfile
+import unittest
+from datetime import datetime, timezone
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from database import Base
+from models import JobDefinition, JobRun, JobRunEvent, JobRunEventType, JobRunStatus
+from services.job_service import claim_next_due_job, complete_job_run, fail_job_run
+
+
+class JobServiceTests(unittest.TestCase):
+    def setUp(self):
+        fd, self.db_path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        self.engine = create_engine(
+            f"sqlite:///{self.db_path}",
+            connect_args={"check_same_thread": False},
+        )
+        self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
+        Base.metadata.create_all(bind=self.engine)
+        self.db = self.SessionLocal()
+
+    def tearDown(self):
+        self.db.close()
+        self.engine.dispose()
+        if os.path.exists(self.db_path):
+            os.remove(self.db_path)
+
+    def _definition(self) -> JobDefinition:
+        definition = JobDefinition(
+            key="derived.timeline.refresh",
+            display_name="Refresh Timeline Read Model",
+            queue_name="derived",
+            retry_policy={"max_attempts": 3},
+            timeout_seconds=300,
+            is_active=True,
+        )
+        self.db.add(definition)
+        self.db.flush()
+        return definition
+
+    def test_claim_next_due_job_locks_highest_priority_queued_run(self):
+        definition = self._definition()
+        due_at = datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc)
+        low_priority = JobRun(
+            job_definition_id=definition.id,
+            status=JobRunStatus.QUEUED,
+            priority=1,
+            payload={"position_event_public_id": "evt-low"},
+            max_attempts=3,
+            queue_name="derived",
+            next_run_at=due_at,
+        )
+        high_priority = JobRun(
+            job_definition_id=definition.id,
+            status=JobRunStatus.QUEUED,
+            priority=10,
+            payload={"position_event_public_id": "evt-high"},
+            max_attempts=3,
+            queue_name="derived",
+            next_run_at=due_at,
+        )
+        future = JobRun(
+            job_definition_id=definition.id,
+            status=JobRunStatus.QUEUED,
+            priority=100,
+            payload={"position_event_public_id": "evt-future"},
+            max_attempts=3,
+            queue_name="derived",
+            next_run_at=datetime(2026, 5, 3, 11, 0, tzinfo=timezone.utc),
+        )
+        self.db.add_all([low_priority, high_priority, future])
+        self.db.commit()
+
+        claimed = claim_next_due_job(
+            self.db,
+            queue_name="derived",
+            worker_id="worker-a",
+            now=datetime(2026, 5, 3, 10, 5, tzinfo=timezone.utc),
+        )
+        self.db.commit()
+
+        self.assertEqual(claimed.id, high_priority.id)
+        self.assertEqual(claimed.status, JobRunStatus.RUNNING)
+        self.assertEqual(claimed.locked_by, "worker-a")
+        self.assertEqual(claimed.attempt_count, 1)
+        self.assertIsNotNone(claimed.locked_at)
+        self.assertIsNotNone(claimed.started_at)
+
+        self.db.refresh(low_priority)
+        self.db.refresh(future)
+        self.assertEqual(low_priority.status, JobRunStatus.QUEUED)
+        self.assertEqual(future.status, JobRunStatus.QUEUED)
+
+        events = self.db.query(JobRunEvent).filter(JobRunEvent.job_run_id == claimed.id).all()
+        self.assertEqual([event.event_type for event in events], [
+            JobRunEventType.STATUS_CHANGED,
+            JobRunEventType.ATTEMPT_STARTED,
+        ])
+        self.assertEqual(events[0].from_status, JobRunStatus.QUEUED)
+        self.assertEqual(events[0].to_status, JobRunStatus.RUNNING)
+        self.assertEqual(events[1].metadata_json["worker_id"], "worker-a")
+
+    def test_complete_job_run_marks_running_job_succeeded_and_clears_lock(self):
+        definition = self._definition()
+        run = JobRun(
+            job_definition_id=definition.id,
+            status=JobRunStatus.RUNNING,
+            priority=1,
+            payload={"position_event_public_id": "evt-done"},
+            max_attempts=3,
+            attempt_count=1,
+            queue_name="derived",
+            locked_by="worker-a",
+            locked_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+            started_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+        )
+        self.db.add(run)
+        self.db.commit()
+
+        completed = complete_job_run(
+            self.db,
+            job_run=run,
+            result={"refreshed": True},
+            now=datetime(2026, 5, 3, 10, 2, tzinfo=timezone.utc),
+        )
+        self.db.commit()
+
+        self.assertEqual(completed.status, JobRunStatus.SUCCEEDED)
+        self.assertEqual(completed.result, {"refreshed": True})
+        self.assertIsNone(completed.locked_by)
+        self.assertIsNone(completed.locked_at)
+        self.assertIsNotNone(completed.finished_at)
+
+        event = self.db.query(JobRunEvent).filter(JobRunEvent.job_run_id == run.id).one()
+        self.assertEqual(event.event_type, JobRunEventType.STATUS_CHANGED)
+        self.assertEqual(event.from_status, JobRunStatus.RUNNING)
+        self.assertEqual(event.to_status, JobRunStatus.SUCCEEDED)
+
+    def test_fail_job_run_schedules_retry_when_attempts_remain(self):
+        definition = self._definition()
+        run = JobRun(
+            job_definition_id=definition.id,
+            status=JobRunStatus.RUNNING,
+            priority=1,
+            payload={"position_event_public_id": "evt-retry"},
+            max_attempts=3,
+            attempt_count=1,
+            queue_name="derived",
+            locked_by="worker-a",
+            locked_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+            started_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+        )
+        self.db.add(run)
+        self.db.commit()
+
+        failed = fail_job_run(
+            self.db,
+            job_run=run,
+            error_message="temporary timeout",
+            retry_delay_seconds=120,
+            now=datetime(2026, 5, 3, 10, 2, tzinfo=timezone.utc),
+        )
+        self.db.commit()
+
+        self.assertEqual(failed.status, JobRunStatus.RETRYING)
+        self.assertEqual(failed.error_message, "temporary timeout")
+        self.assertEqual(
+            failed.next_run_at.replace(tzinfo=timezone.utc),
+            datetime(2026, 5, 3, 10, 4, tzinfo=timezone.utc),
+        )
+        self.assertIsNone(failed.locked_by)
+        self.assertIsNone(failed.locked_at)
+        self.assertIsNone(failed.finished_at)
+
+        events = self.db.query(JobRunEvent).filter(JobRunEvent.job_run_id == run.id).all()
+        self.assertEqual([event.event_type for event in events], [
+            JobRunEventType.ATTEMPT_FAILED,
+            JobRunEventType.RETRY_SCHEDULED,
+        ])
+        self.assertEqual(events[0].from_status, JobRunStatus.RUNNING)
+        self.assertEqual(events[0].to_status, JobRunStatus.RETRYING)
+        self.assertEqual(events[1].metadata_json["retry_delay_seconds"], 120)
+
+    def test_fail_job_run_marks_failed_when_attempts_are_exhausted(self):
+        definition = self._definition()
+        run = JobRun(
+            job_definition_id=definition.id,
+            status=JobRunStatus.RUNNING,
+            priority=1,
+            payload={"position_event_public_id": "evt-failed"},
+            max_attempts=2,
+            attempt_count=2,
+            queue_name="derived",
+            locked_by="worker-a",
+            locked_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+            started_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+        )
+        self.db.add(run)
+        self.db.commit()
+
+        failed = fail_job_run(
+            self.db,
+            job_run=run,
+            error_message="permanent failure",
+            retry_delay_seconds=120,
+            now=datetime(2026, 5, 3, 10, 2, tzinfo=timezone.utc),
+        )
+        self.db.commit()
+
+        self.assertEqual(failed.status, JobRunStatus.FAILED)
+        self.assertEqual(failed.error_message, "permanent failure")
+        self.assertIsNone(failed.next_run_at)
+        self.assertIsNone(failed.locked_by)
+        self.assertIsNone(failed.locked_at)
+        self.assertIsNotNone(failed.finished_at)
+
+        event = self.db.query(JobRunEvent).filter(JobRunEvent.job_run_id == run.id).one()
+        self.assertEqual(event.event_type, JobRunEventType.ATTEMPT_FAILED)
+        self.assertEqual(event.from_status, JobRunStatus.RUNNING)
+        self.assertEqual(event.to_status, JobRunStatus.FAILED)
+
+
+if __name__ == "__main__":
+    unittest.main()
