@@ -116,6 +116,24 @@ class AccountLedgerEntryType(str, enum.Enum):
     REALIZED_PNL = "REALIZED_PNL"
 
 
+class JobRunStatus(str, enum.Enum):
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    RETRYING = "RETRYING"
+    CANCELLED = "CANCELLED"
+
+
+class JobRunEventType(str, enum.Enum):
+    STATUS_CHANGED = "STATUS_CHANGED"
+    ATTEMPT_STARTED = "ATTEMPT_STARTED"
+    ATTEMPT_FAILED = "ATTEMPT_FAILED"
+    RETRY_SCHEDULED = "RETRY_SCHEDULED"
+    LOG = "LOG"
+    CANCELLED = "CANCELLED"
+
+
 class AssetMetadata(Base):
     """标的元数据表 - 存储资产的多维属性"""
     __tablename__ = "asset_metadata"
@@ -605,6 +623,97 @@ class AccountLedgerEntry(Base):
     position = relationship("TradingPosition", back_populates="ledger_entries")
     position_event = relationship("PositionEvent", back_populates="ledger_entries")
     transaction = relationship("Transaction", back_populates="ledger_entries")
+
+
+class JobDefinition(Base):
+    __tablename__ = "job_definitions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    key = Column(String(120), unique=True, index=True, nullable=False)
+    display_name = Column(String(150), nullable=False)
+    description = Column(Text, nullable=True)
+    queue_name = Column(String(80), nullable=False, default="default")
+    retry_policy = Column(JSON, nullable=True, default=dict)
+    timeout_seconds = Column(Integer, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    runs = relationship("JobRun", back_populates="definition", order_by="JobRun.created_at")
+
+
+class JobRun(Base):
+    __tablename__ = "job_runs"
+    __table_args__ = (
+        Index("ix_job_runs_status_next_run", "status", "next_run_at"),
+        Index("ix_job_runs_user_created", "user_id", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    job_definition_id = Column(Integer, ForeignKey("job_definitions.id"), nullable=False)
+    idempotency_key = Column(String(255), nullable=True, index=True)
+    status = Column(SQLEnum(JobRunStatus), nullable=False, default=JobRunStatus.QUEUED, index=True)
+    priority = Column(Integer, nullable=False, default=0)
+    payload = Column(JSON, nullable=True, default=dict)
+    result = Column(JSON, nullable=True)
+    error_message = Column(Text, nullable=True)
+    attempt_count = Column(Integer, nullable=False, default=0)
+    max_attempts = Column(Integer, nullable=False, default=1)
+    queue_name = Column(String(80), nullable=False, default="default")
+    locked_by = Column(String(120), nullable=True)
+    locked_at = Column(DateTime(timezone=True), nullable=True)
+    next_run_at = Column(DateTime(timezone=True), nullable=True)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User")
+    definition = relationship("JobDefinition", back_populates="runs")
+    events = relationship("JobRunEvent", back_populates="job_run", order_by="JobRunEvent.created_at")
+    idempotency_records = relationship("IdempotencyKey", back_populates="job_run")
+
+
+class JobRunEvent(Base):
+    __tablename__ = "job_run_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    job_run_id = Column(Integer, ForeignKey("job_runs.id"), nullable=False)
+    event_type = Column(SQLEnum(JobRunEventType), nullable=False)
+    from_status = Column(SQLEnum(JobRunStatus), nullable=True)
+    to_status = Column(SQLEnum(JobRunStatus), nullable=True)
+    message = Column(Text, nullable=True)
+    metadata_json = Column("metadata", JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    job_run = relationship("JobRun", back_populates="events")
+
+
+class IdempotencyKey(Base):
+    __tablename__ = "idempotency_keys"
+    __table_args__ = (
+        UniqueConstraint("scope", "key", name="uq_idempotency_keys_scope_key"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    scope = Column(String(120), nullable=False)
+    key = Column(String(255), nullable=False)
+    request_hash = Column(String(255), nullable=False)
+    status = Column(String(40), nullable=False, default="IN_PROGRESS")
+    response_json = Column(JSON, nullable=True)
+    job_run_id = Column(Integer, ForeignKey("job_runs.id"), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User")
+    job_run = relationship("JobRun", back_populates="idempotency_records")
 
 
 class Position(Base):

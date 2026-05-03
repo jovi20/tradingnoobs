@@ -32,7 +32,7 @@
 | Stage 0：冻结与护栏 | 大部分完成 | 命名、用户侧 trust contract、timeline/lifecycle contract、hard cutover 方向已冻结；错误码/日志基础仍未冻结 |
 | Stage 1：数据库地基与认证底座 | 大部分完成 | `A2`, `B1`, `B2`, `B3` 已落地；`A1`, `A3`, `B4` 仍未完成 |
 | Stage 2：交易真相模型切换 | Bridge landed / C4 部分完成 | `C1` 与 `C2` 已有初版 truth layer 和 legacy sync bridge；`C3` 已有 AccountLedgerEntry 基础 bridge；`C4` 已有 FIFO accounting service 并接入 legacy truth sync、legacy batch router recalculation、positions/dashboard mark-to-market、account signed market value、ledger-derived cash read model、opening-balance ledger write、manual cash-adjustment write、dividend ledger write、首个 truth trade-event write route、最新 active trade-event reversal 与 position-level manual adjustment；前端新增/加仓/平仓入口已 truth-first，详情页已守护式暴露最新事件撤销和现金调整录入，truth lifecycle 存在时旧批次编辑和整仓删除已降级/保护 |
-| Stage 3：异步一致性与用户读模型基础 | 部分完成 / Bridge landed | Timeline/Lifecycle contract 与首版 API 已落地，但 Timeline 仍由 legacy `Position`/旧 AI 表派生；outbox/job/idempotency 仍未开始 |
+| Stage 3：异步一致性与用户读模型基础 | 部分完成 / Bridge landed | Timeline/Lifecycle contract 与首版 API 已落地；D1 统一 job model 的表和模型已开始落地；Timeline 仍由 legacy `Position`/旧 AI 表派生，outbox relay / worker / idempotent execution 尚未开始 |
 | Stage 4：市场数据和 analytics 分层 | 未开始 | 仍主要依赖旧 `MarketDataService` 与请求链路内统计 |
 | Stage 5：AI / 内容 / 后台运维强化 | 未开始 | 现有 AI 能力仍未迁到独立 schema/workflow |
 | Stage 6：测试、发布、硬化 | 进行中 | 已有 migration / router / adapter 级测试，但 release/rollback、恢复演练、阶段 commit/对比边界未建立 |
@@ -68,7 +68,7 @@
 - `AccountLedgerEntry` 现金真相基础已建立，账户余额 read model 已对有 opening balance 的账户优先走 ledger-derived；正式 opening-balance、manual cash adjustment、dividend、首个 realized PnL truth event 写入口、最新 active trade-event reversal 与 position-level manual adjustment 已落地；前端新增/加仓/平仓已接 truth event，详情页已能撤销最新未撤销的 `ADD / REDUCE / CLOSE` 并记录 cash adjustment，旧批次编辑在 truth lifecycle 存在时只读，整仓 legacy 删除受保护，非最新历史撤销仍需后续补齐。
 - Lifecycle `ledger_summary.cash_effects` 与 `total_dividends` 已读取 ledger；`total_fees` 的最终 fee 归属、adjustment 汇总与 AI workflow 写入仍未完成，不能标为最终 evidence/AI sidecar 完成。
 - FIFO / fee / FX 口径已有 C4 服务起点并接入 legacy truth sync、legacy batch router/import recalculation、positions open-position display、dashboard mark-to-market、account signed market value、ledger-derived cash read model、opening-balance ledger write、manual cash-adjustment write、dividend ledger write、首个 ADD/REDUCE/CLOSE truth write route 与最新 active trade-event reversal 后端路由；前端新增/加仓/平仓已 truth-first，编辑/删除旧批次、部分 analytics/timeline legacy realized PnL 汇总仍未彻底收敛到 truth/ledger-derived。
-- outbox / job system / idempotency / job status 仍为空白，后续 derived refresh 没有稳定异步底座。
+- D1 统一 job model 已有 schema 起点：`job_definitions`, `job_runs`, `job_run_events`, `idempotency_keys` 表与 SQLAlchemy 模型已落地；outbox relay / worker / job admin UI / idempotent execution 仍未完成，后续 derived refresh 还没有稳定异步执行链。
 - Timeline contract 中的 `cursor` / `limit` 已有 bridge 级实现；最终 truth-backed Timeline read model 尚未完成。
 - 市场数据分层、provider symbol mapping、derived/materialized analytics 还未开始。
 - AI schema / prompt registry / insight workflow / usage metering 仍未进入正式平台化阶段。
@@ -409,6 +409,12 @@
 - 新建 `job_definitions`, `job_runs`, `job_run_events`, `idempotency_keys`
 - 统一状态机与 retry policy
 - 替代零散后台任务记录
+
+当前进展：
+
+- 已新增 `JobDefinition`, `JobRun`, `JobRunEvent`, `IdempotencyKey` 模型与 Alembic 迁移。
+- 当前只覆盖 schema foundation：可记录 job 定义、run 状态、retry/payload、run event trail 与 idempotency-key 关联。
+- 尚未接入 outbox、Redis relay、worker、后台 job 管理页或业务写路径。
 
 完成定义：
 

@@ -68,6 +68,18 @@ class AlembicChainTests(unittest.TestCase):
                 account_ledger_entry_columns = conn.execute(
                     "PRAGMA table_info(account_ledger_entries)"
                 ).fetchall()
+                job_definition_columns = conn.execute(
+                    "PRAGMA table_info(job_definitions)"
+                ).fetchall()
+                job_run_columns = conn.execute(
+                    "PRAGMA table_info(job_runs)"
+                ).fetchall()
+                job_run_event_columns = conn.execute(
+                    "PRAGMA table_info(job_run_events)"
+                ).fetchall()
+                idempotency_key_columns = conn.execute(
+                    "PRAGMA table_info(idempotency_keys)"
+                ).fetchall()
             finally:
                 conn.close()
 
@@ -82,6 +94,10 @@ class AlembicChainTests(unittest.TestCase):
             trading_position_column_names = {row[1] for row in trading_position_columns}
             position_event_column_names = {row[1] for row in position_event_columns}
             account_ledger_entry_column_names = {row[1] for row in account_ledger_entry_columns}
+            job_definition_column_names = {row[1] for row in job_definition_columns}
+            job_run_column_names = {row[1] for row in job_run_columns}
+            job_run_event_column_names = {row[1] for row in job_run_event_columns}
+            idempotency_key_column_names = {row[1] for row in idempotency_key_columns}
             expected_tables = {
                 "alembic_version",
                 "users",
@@ -110,6 +126,10 @@ class AlembicChainTests(unittest.TestCase):
                 "trading_positions",
                 "position_events",
                 "account_ledger_entries",
+                "job_definitions",
+                "job_runs",
+                "job_run_events",
+                "idempotency_keys",
                 "system_settings",
             }
 
@@ -150,6 +170,10 @@ class AlembicChainTests(unittest.TestCase):
                     "amount",
                 }.issubset(account_ledger_entry_column_names)
             )
+            self.assertTrue({"public_id", "key", "queue_name", "retry_policy"}.issubset(job_definition_column_names))
+            self.assertTrue({"public_id", "job_definition_id", "status", "payload", "idempotency_key"}.issubset(job_run_column_names))
+            self.assertTrue({"public_id", "job_run_id", "event_type", "to_status", "metadata"}.issubset(job_run_event_column_names))
+            self.assertTrue({"public_id", "scope", "key", "request_hash", "job_run_id"}.issubset(idempotency_key_column_names))
         finally:
             if os.path.exists(db_path):
                 os.remove(db_path)
