@@ -1,8 +1,8 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from database import get_db
-from models import FeatureFlag, IntegrationCredential, PlatformSetting, SystemSetting, User
+from models import FeatureFlag, IntegrationCredential, JobRun, JobRunStatus, PlatformSetting, SystemSetting, User
 from schemas import (
     FeatureFlagResponse,
     FeatureFlagUpdate,
@@ -24,6 +24,72 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
+
+def _enum_value(value):
+    return value.value if hasattr(value, "value") else value
+
+
+def _job_run_detail(job_run: JobRun) -> dict:
+    return {
+        "public_id": job_run.public_id,
+        "definition": {
+            "public_id": job_run.definition.public_id,
+            "key": job_run.definition.key,
+            "display_name": job_run.definition.display_name,
+            "queue_name": job_run.definition.queue_name,
+        },
+        "user_public_id": job_run.user.public_id if job_run.user else None,
+        "idempotency_key": job_run.idempotency_key,
+        "status": _enum_value(job_run.status),
+        "priority": job_run.priority,
+        "payload": job_run.payload or {},
+        "result": job_run.result or {},
+        "error_message": job_run.error_message,
+        "attempt_count": job_run.attempt_count,
+        "max_attempts": job_run.max_attempts,
+        "queue_name": job_run.queue_name,
+        "locked_by": job_run.locked_by,
+        "locked_at": job_run.locked_at,
+        "next_run_at": job_run.next_run_at,
+        "started_at": job_run.started_at,
+        "finished_at": job_run.finished_at,
+        "created_at": job_run.created_at,
+        "updated_at": job_run.updated_at,
+        "events": [
+            {
+                "public_id": event.public_id,
+                "event_type": _enum_value(event.event_type),
+                "from_status": _enum_value(event.from_status),
+                "to_status": _enum_value(event.to_status),
+                "message": event.message,
+                "metadata": event.metadata_json or {},
+                "created_at": event.created_at,
+            }
+            for event in job_run.events
+        ],
+    }
+
+
+def _job_run_summary(job_run: JobRun) -> dict:
+    return {
+        "public_id": job_run.public_id,
+        "definition": {
+            "public_id": job_run.definition.public_id,
+            "key": job_run.definition.key,
+            "display_name": job_run.definition.display_name,
+        },
+        "status": _enum_value(job_run.status),
+        "queue_name": job_run.queue_name,
+        "priority": job_run.priority,
+        "attempt_count": job_run.attempt_count,
+        "max_attempts": job_run.max_attempts,
+        "next_run_at": job_run.next_run_at,
+        "started_at": job_run.started_at,
+        "finished_at": job_run.finished_at,
+        "created_at": job_run.created_at,
+        "error_message": job_run.error_message,
+    }
+
 def get_current_admin(current_user: User = Depends(get_current_user)):
     if current_user.role != "admin":
         raise HTTPException(
@@ -31,6 +97,46 @@ def get_current_admin(current_user: User = Depends(get_current_user)):
             detail="The user doesn't have enough privileges"
         )
     return current_user
+
+
+@router.get("/jobs/{job_public_id}")
+async def get_job_run_detail(
+    job_public_id: str,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    job_run = db.query(JobRun).filter(JobRun.public_id == job_public_id).first()
+    if not job_run:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job run not found")
+    return _job_run_detail(job_run)
+
+
+@router.get("/jobs")
+async def list_job_runs(
+    status_filter: JobRunStatus | None = Query(default=None, alias="status"),
+    queue_name: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    query = db.query(JobRun)
+    if status_filter is not None:
+        query = query.filter(JobRun.status == status_filter)
+    if queue_name:
+        query = query.filter(JobRun.queue_name == queue_name)
+
+    total = query.count()
+    jobs = (
+        query
+        .order_by(JobRun.created_at.desc(), JobRun.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return {
+        "items": [_job_run_summary(job_run) for job_run in jobs],
+        "total": total,
+        "limit": limit,
+    }
 
 @router.get("/settings", response_model=List[SystemSettingResponse])
 async def list_system_settings(
