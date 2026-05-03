@@ -134,6 +134,13 @@ class JobRunEventType(str, enum.Enum):
     CANCELLED = "CANCELLED"
 
 
+class OutboxEventStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    PUBLISHED = "PUBLISHED"
+    FAILED = "FAILED"
+    DISCARDED = "DISCARDED"
+
+
 class AssetMetadata(Base):
     """标的元数据表 - 存储资产的多维属性"""
     __tablename__ = "asset_metadata"
@@ -714,6 +721,33 @@ class IdempotencyKey(Base):
 
     user = relationship("User")
     job_run = relationship("JobRun", back_populates="idempotency_records")
+
+
+class OutboxEvent(Base):
+    __tablename__ = "outbox_events"
+    __table_args__ = (
+        Index("ix_outbox_events_status_available", "status", "available_at"),
+        Index("ix_outbox_events_aggregate", "aggregate_type", "aggregate_public_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    aggregate_type = Column(String(100), nullable=False)
+    aggregate_public_id = Column(String(100), nullable=True)
+    event_type = Column(String(150), nullable=False)
+    queue_name = Column(String(80), nullable=False, default="default")
+    dedupe_key = Column(String(255), unique=True, nullable=True)
+    payload = Column(JSON, nullable=False, default=dict)
+    status = Column(SQLEnum(OutboxEventStatus), nullable=False, default=OutboxEventStatus.PENDING, index=True)
+    attempt_count = Column(Integer, nullable=False, default=0)
+    last_error = Column(Text, nullable=True)
+    available_at = Column(DateTime(timezone=True), nullable=True)
+    published_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User")
 
 
 class Position(Base):
