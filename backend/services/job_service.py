@@ -4,11 +4,14 @@ Trading Noobs Backend - Job Execution Service
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from typing import Callable
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from models import JobRun, JobRunEvent, JobRunEventType, JobRunStatus
+
+JobHandler = Callable[[JobRun], dict | None]
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -142,3 +145,41 @@ def fail_job_run(
         )
     db.flush()
     return job_run
+
+
+def run_next_due_job(
+    db: Session,
+    *,
+    queue_name: str,
+    worker_id: str,
+    handlers: dict[str, JobHandler],
+    now: datetime | None = None,
+    retry_delay_seconds: int = 60,
+) -> JobRun | None:
+    now = _as_utc(now or datetime.now(timezone.utc))
+    job_run = claim_next_due_job(db, queue_name=queue_name, worker_id=worker_id, now=now)
+    if not job_run:
+        return None
+
+    handler = handlers.get(job_run.definition.key)
+    if handler is None:
+        return fail_job_run(
+            db,
+            job_run=job_run,
+            error_message=f"No handler registered for job definition {job_run.definition.key}",
+            retry_delay_seconds=retry_delay_seconds,
+            now=now,
+        )
+
+    try:
+        result = handler(job_run)
+    except Exception as exc:
+        return fail_job_run(
+            db,
+            job_run=job_run,
+            error_message=str(exc),
+            retry_delay_seconds=retry_delay_seconds,
+            now=now,
+        )
+
+    return complete_job_run(db, job_run=job_run, result=result or {}, now=now)

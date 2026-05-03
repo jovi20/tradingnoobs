@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 
 from database import Base
 from models import JobDefinition, JobRun, JobRunEvent, JobRunEventType, JobRunStatus
-from services.job_service import claim_next_due_job, complete_job_run, fail_job_run
+from services.job_service import claim_next_due_job, complete_job_run, fail_job_run, run_next_due_job
 
 
 class JobServiceTests(unittest.TestCase):
@@ -222,6 +222,68 @@ class JobServiceTests(unittest.TestCase):
         self.assertEqual(event.event_type, JobRunEventType.ATTEMPT_FAILED)
         self.assertEqual(event.from_status, JobRunStatus.RUNNING)
         self.assertEqual(event.to_status, JobRunStatus.FAILED)
+
+    def test_run_next_due_job_dispatches_registered_handler_and_completes(self):
+        definition = self._definition()
+        run = JobRun(
+            job_definition_id=definition.id,
+            status=JobRunStatus.QUEUED,
+            priority=1,
+            payload={"position_event_public_id": "evt-handler"},
+            max_attempts=3,
+            queue_name="derived",
+            next_run_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+        )
+        self.db.add(run)
+        self.db.commit()
+        calls = []
+
+        def refresh_timeline(job_run):
+            calls.append(job_run.payload)
+            return {"timeline_refreshed": True}
+
+        processed = run_next_due_job(
+            self.db,
+            queue_name="derived",
+            worker_id="worker-a",
+            handlers={"derived.timeline.refresh": refresh_timeline},
+            now=datetime(2026, 5, 3, 10, 1, tzinfo=timezone.utc),
+        )
+        self.db.commit()
+
+        self.assertEqual(processed.id, run.id)
+        self.assertEqual(calls, [{"position_event_public_id": "evt-handler"}])
+        self.assertEqual(processed.status, JobRunStatus.SUCCEEDED)
+        self.assertEqual(processed.result, {"timeline_refreshed": True})
+        self.assertEqual(processed.attempt_count, 1)
+
+    def test_run_next_due_job_fails_unknown_handler_without_retry_when_exhausted(self):
+        definition = self._definition()
+        run = JobRun(
+            job_definition_id=definition.id,
+            status=JobRunStatus.QUEUED,
+            priority=1,
+            payload={"position_event_public_id": "evt-missing-handler"},
+            max_attempts=1,
+            queue_name="derived",
+            next_run_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+        )
+        self.db.add(run)
+        self.db.commit()
+
+        processed = run_next_due_job(
+            self.db,
+            queue_name="derived",
+            worker_id="worker-a",
+            handlers={},
+            now=datetime(2026, 5, 3, 10, 1, tzinfo=timezone.utc),
+        )
+        self.db.commit()
+
+        self.assertEqual(processed.id, run.id)
+        self.assertEqual(processed.status, JobRunStatus.FAILED)
+        self.assertIn("No handler registered", processed.error_message)
+        self.assertEqual(processed.attempt_count, 1)
 
 
 if __name__ == "__main__":
