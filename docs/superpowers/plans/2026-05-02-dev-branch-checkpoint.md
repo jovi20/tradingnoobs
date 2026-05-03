@@ -72,7 +72,7 @@ cd backend && ../.venv313/bin/python -m unittest discover -s tests
 Result:
 
 ```text
-Ran 69 tests in 5.424s
+Ran 70 tests in 5.577s
 OK
 LLM Test Success: {'ok': True}
 ```
@@ -92,7 +92,7 @@ cd backend && ../.venv313/bin/python -m unittest discover -s tests -p test_tradi
 Result:
 
 ```text
-Ran 15 tests in 1.132s
+Ran 16 tests in 1.253s
 OK
 ```
 
@@ -102,7 +102,7 @@ Scope covered:
 - Truth event narrative PATCH uses `TradingPosition.public_id` + `PositionEvent.public_id`.
 - Narrative / C5 fields update on `position_events` and return an updated lifecycle envelope with `meta.source = MANUAL`.
 - Truth dividend write creates `PositionEvent(DIVIDEND)`, links `AccountLedgerEntry(DIVIDEND)`, and returns `ledger_summary.total_dividends`.
-- Truth manual adjustment write creates `PositionEvent(MANUAL_ADJUSTMENT)`, links `AccountLedgerEntry(CASH_ADJUSTMENT)`, returns `ledger_summary.total_adjustments`, and leaves FIFO quantity / realized PnL unchanged.
+- Truth manual adjustment write creates `PositionEvent(MANUAL_ADJUSTMENT)`, links `AccountLedgerEntry(CASH_ADJUSTMENT)`, returns `ledger_summary.total_adjustments`, leaves FIFO quantity / realized PnL unchanged, and rejects zero-amount no-op adjustments without mutating events or ledger entries.
 - Truth trade event write covers `REDUCE` and full `CLOSE`: it appends trade `PositionEvent`s, replays FIFO, updates truth aggregate realized PnL/fees/status, links `AccountLedgerEntry(REALIZED_PNL)`, returns the updated lifecycle, and rejects partial `CLOSE` with 422 before mutating events.
 - Truth trade event write covers `ADD`: it appends `PositionEvent(ADD)`, replays FIFO into the position aggregate, and does not create a cash ledger entry when there is no realized PnL.
 - Truth trade event reversal covers latest active `ADD / REDUCE / CLOSE` events: it appends `PositionEvent(REVERSAL)`, keeps the original event for audit, excludes the reversed event from FIFO replay, writes an offsetting realized PnL ledger entry when needed, rejects duplicate reversals, rejects non-latest active trade events, and blocks `OPEN` reversal until position void/archive semantics exist.
@@ -160,7 +160,7 @@ accounting service: 4 OK
 legacy truth sync: 5 OK
 legacy batch router recalculation: 1 OK
 public-id leaf routes: 2 OK
-lifecycle router: 15 OK
+lifecycle router: 16 OK
 public-id route group: 6 OK
 ```
 

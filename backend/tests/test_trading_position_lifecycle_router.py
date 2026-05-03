@@ -375,6 +375,37 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         self.assertEqual(ledger_entry.amount, Decimal("-7.25000000"))
         self.assertEqual(ledger_entry.currency, "USD")
 
+    def test_manual_adjustment_event_write_rejects_zero_without_mutating_events(self):
+        truth_position = self._seed_open_synced_position()
+
+        response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/adjustments",
+            json={
+                "amount": "0",
+                "currency": "USD",
+                "occurred_at": "2026-04-04T12:00:00+00:00",
+                "note": "No-op adjustment should not be recorded",
+            },
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("Manual adjustment amount cannot be zero", response.json()["detail"])
+        self.db.expire_all()
+        self.assertEqual(
+            self.db.query(PositionEvent).filter(
+                PositionEvent.position_id == truth_position.id,
+                PositionEvent.event_type == PositionEventType.MANUAL_ADJUSTMENT,
+            ).count(),
+            0,
+        )
+        self.assertEqual(
+            self.db.query(AccountLedgerEntry).filter(
+                AccountLedgerEntry.position_id == truth_position.id,
+                AccountLedgerEntry.entry_type == AccountLedgerEntryType.CASH_ADJUSTMENT,
+            ).count(),
+            0,
+        )
+
     def test_trade_event_write_replays_fifo_and_creates_realized_pnl_ledger_entry(self):
         truth_position = self._seed_open_synced_position()
 
