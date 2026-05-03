@@ -7,7 +7,16 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from database import Base
-from models import IdempotencyKey, JobRun, JobRunEvent, JobRunStatus, OutboxEvent, OutboxEventStatus, User
+from models import (
+    IdempotencyKey,
+    JobDefinition,
+    JobRun,
+    JobRunEvent,
+    JobRunStatus,
+    OutboxEvent,
+    OutboxEventStatus,
+    User,
+)
 from services.outbox_service import relay_pending_outbox_events
 
 
@@ -121,6 +130,78 @@ class OutboxModelTests(unittest.TestCase):
         self.assertEqual(idempotency_key.scope, "outbox_event")
         self.assertEqual(idempotency_key.key, event.dedupe_key)
         self.assertEqual(idempotency_key.job_run_id, job_run.id)
+
+    def test_relay_pending_outbox_events_resumes_after_idempotency_key_exists(self):
+        user = User(
+            email="relay-dedupe@example.com",
+            email_normalized="relay-dedupe@example.com",
+            hashed_password="hashed",
+            public_id="user-relay-dedupe-public-id",
+            status="ACTIVE",
+            is_active=True,
+            role="user",
+        )
+        self.db.add(user)
+        self.db.commit()
+        self.db.refresh(user)
+
+        definition = JobDefinition(
+            key="derived.timeline.refresh",
+            display_name="Refresh Timeline Read Model",
+            description="Refresh derived timeline/lifecycle read models after truth position events change.",
+            queue_name="derived",
+            retry_policy={"max_attempts": 3},
+            timeout_seconds=300,
+            is_active=True,
+        )
+        self.db.add(definition)
+        self.db.flush()
+        existing_job_run = JobRun(
+            user_id=user.id,
+            job_definition_id=definition.id,
+            idempotency_key="truth.position_event.created:evt-crash-resume",
+            status=JobRunStatus.QUEUED,
+            payload={"position_event_public_id": "evt-crash-resume"},
+            max_attempts=3,
+            queue_name="derived",
+        )
+        self.db.add(existing_job_run)
+        self.db.flush()
+        self.db.add(
+            IdempotencyKey(
+                user_id=user.id,
+                scope="outbox_event",
+                key="truth.position_event.created:evt-crash-resume",
+                request_hash="existing-relay-attempt",
+                status="COMPLETED",
+                job_run_id=existing_job_run.id,
+            )
+        )
+        event = OutboxEvent(
+            user_id=user.id,
+            aggregate_type="TradingPosition",
+            aggregate_public_id="tp-1",
+            event_type="truth.position_event.created",
+            queue_name="derived",
+            dedupe_key="truth.position_event.created:evt-crash-resume",
+            payload={"position_event_public_id": "evt-crash-resume"},
+            available_at=datetime(2026, 5, 3, 9, 0, tzinfo=timezone.utc),
+        )
+        self.db.add(event)
+        self.db.commit()
+
+        relayed = relay_pending_outbox_events(
+            self.db,
+            now=datetime(2026, 5, 3, 9, 2, tzinfo=timezone.utc),
+        )
+        self.db.commit()
+
+        self.assertEqual(relayed, 1)
+        self.assertEqual(self.db.query(JobRun).count(), 1)
+        self.assertEqual(self.db.query(IdempotencyKey).count(), 1)
+        self.db.refresh(event)
+        self.assertEqual(event.status, OutboxEventStatus.PUBLISHED)
+        self.assertEqual(event.attempt_count, 1)
 
 
 if __name__ == "__main__":

@@ -68,7 +68,7 @@
 - `AccountLedgerEntry` 现金真相基础已建立，账户余额 read model 已对有 opening balance 的账户优先走 ledger-derived；正式 opening-balance、manual cash adjustment、dividend、首个 realized PnL truth event 写入口、最新 active trade-event reversal 与 position-level manual adjustment 已落地；前端新增/加仓/平仓已接 truth event，详情页已能撤销最新未撤销的 `ADD / REDUCE / CLOSE` 并记录 cash adjustment，旧批次编辑在 truth lifecycle 存在时只读，整仓 legacy 删除受保护，非最新历史撤销仍需后续补齐。
 - Lifecycle `ledger_summary.cash_effects` 与 `total_dividends` 已读取 ledger；`total_fees` 的最终 fee 归属、adjustment 汇总与 AI workflow 写入仍未完成，不能标为最终 evidence/AI sidecar 完成。
 - FIFO / fee / FX 口径已有 C4 服务起点并接入 legacy truth sync、legacy batch router/import recalculation、positions open-position display、dashboard mark-to-market、account signed market value、ledger-derived cash read model、opening-balance ledger write、manual cash-adjustment write、dividend ledger write、首个 ADD/REDUCE/CLOSE truth write route 与最新 active trade-event reversal 后端路由；前端新增/加仓/平仓已 truth-first，编辑/删除旧批次、部分 analytics/timeline legacy realized PnL 汇总仍未彻底收敛到 truth/ledger-derived。
-- D1/D2 异步地基已有 schema 起点：`job_definitions`, `job_runs`, `job_run_events`, `idempotency_keys`, `outbox_events` 表与 SQLAlchemy 模型已落地；truth position event 创建路径已开始在同一事务写入 durable outbox rows；DB relay 已能把 pending outbox 转成 queued job run；Redis worker / job admin UI / idempotent execution 仍未完成，后续 derived refresh 还没有完整异步执行链。
+- D1/D2 异步地基已有 schema 起点：`job_definitions`, `job_runs`, `job_run_events`, `idempotency_keys`, `outbox_events` 表与 SQLAlchemy 模型已落地；truth position event 创建路径已开始在同一事务写入 durable outbox rows；DB relay 已能把 pending outbox 转成 queued job run，并可在已有 idempotency key 指向 job run 的 crash-resume 场景下补标 outbox 为 published；Redis worker / job admin UI / broader idempotent execution 仍未完成，后续 derived refresh 还没有完整异步执行链。
 - Timeline contract 中的 `cursor` / `limit` 已有 bridge 级实现；最终 truth-backed Timeline read model 尚未完成。
 - 市场数据分层、provider symbol mapping、derived/materialized analytics 还未开始。
 - AI schema / prompt registry / insight workflow / usage metering 仍未进入正式平台化阶段。
@@ -436,6 +436,7 @@
 - 当前只覆盖 schema foundation：可记录 aggregate reference、event type、queue、dedupe key、payload、status、attempt count 与 dispatch timestamps。
 - Truth position event 创建路径已经开始把 derived refresh signal 写入 outbox。
 - 已新增 DB relay service，可将 pending outbox row 转为 queued `JobRun`、`JobRunEvent` 与 `IdempotencyKey`，并把 outbox 标记为 `PUBLISHED`。
+- 已补 crash-resume 幂等边界：当同一 outbox dedupe key 已有 `IdempotencyKey` 指向 `JobRun` 时，不重复创建 job，只补标 pending outbox 为 `PUBLISHED` 并记录 relay attempt。
 - 尚未实现 Redis / worker，也尚未覆盖所有业务事务。
 
 完成定义：

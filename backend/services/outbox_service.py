@@ -124,6 +124,7 @@ def relay_pending_outbox_events(
         if existing_idempotency and existing_idempotency.job_run_id:
             outbox_event.status = OutboxEventStatus.PUBLISHED
             outbox_event.published_at = now
+            outbox_event.attempt_count = (outbox_event.attempt_count or 0) + 1
             db.flush()
             relayed_count += 1
             continue
