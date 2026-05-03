@@ -68,7 +68,7 @@
 - `AccountLedgerEntry` 现金真相基础已建立，账户余额 read model 已对有 opening balance 的账户优先走 ledger-derived；正式 opening-balance、manual cash adjustment、dividend、首个 realized PnL truth event 写入口、最新 active trade-event reversal 与 position-level manual adjustment 已落地；前端新增/加仓/平仓已接 truth event，详情页已能撤销最新未撤销的 `ADD / REDUCE / CLOSE` 并记录 cash adjustment，旧批次编辑在 truth lifecycle 存在时只读，整仓 legacy 删除受保护，非最新历史撤销仍需后续补齐。
 - Lifecycle `ledger_summary.cash_effects` 与 `total_dividends` 已读取 ledger；`total_fees` 的最终 fee 归属、adjustment 汇总与 AI workflow 写入仍未完成，不能标为最终 evidence/AI sidecar 完成。
 - FIFO / fee / FX 口径已有 C4 服务起点并接入 legacy truth sync、legacy batch router/import recalculation、positions open-position display、dashboard mark-to-market、account signed market value、ledger-derived cash read model、opening-balance ledger write、manual cash-adjustment write、dividend ledger write、首个 ADD/REDUCE/CLOSE truth write route 与最新 active trade-event reversal 后端路由；前端新增/加仓/平仓已 truth-first，编辑/删除旧批次、部分 analytics/timeline legacy realized PnL 汇总仍未彻底收敛到 truth/ledger-derived。
-- D1/D2/D3 异步地基已有 schema 起点：`job_definitions`, `job_runs`, `job_run_events`, `idempotency_keys`, `outbox_events` 表与 SQLAlchemy 模型已落地；truth position event 创建路径已开始在同一事务写入 durable outbox rows；DB relay 已能把 pending outbox 转成 queued job run，并可在已有 idempotency key 指向 job run 的 crash-resume 场景下补标 outbox 为 published；本地 relay CLI 已可手动/cron 触发 DB relay；最小 job execution service 已支持 claim due job、running lock、attempt event、handler dispatch、success completion、retry scheduling 与 final failure；Redis worker / job admin UI / broader idempotent execution 仍未完成，后续 derived refresh 还没有完整异步执行链。
+- D1/D2/D3 异步地基已有 schema 起点：`job_definitions`, `job_runs`, `job_run_events`, `idempotency_keys`, `outbox_events` 表与 SQLAlchemy 模型已落地；truth position event 创建路径已开始在同一事务写入 durable outbox rows；DB relay 已能把 pending outbox 转成 queued job run，并可在已有 idempotency key 指向 job run 的 crash-resume 场景下补标 outbox 为 published；本地 relay CLI 已可手动/cron 触发 DB relay；最小 job execution service 已支持 claim due job、running lock、attempt event、handler dispatch、success completion、retry scheduling 与 final failure；本地 DB worker CLI 已可批量消费 due jobs 并提交每个 job；Redis worker / job admin UI / broader idempotent execution 仍未完成，后续 derived refresh 还没有完整异步执行链。
 - Timeline contract 中的 `cursor` / `limit` 已有 bridge 级实现；最终 truth-backed Timeline read model 尚未完成。
 - 市场数据分层、provider symbol mapping、derived/materialized analytics 还未开始。
 - AI schema / prompt registry / insight workflow / usage metering 仍未进入正式平台化阶段。
@@ -457,6 +457,7 @@
 - 已新增最小 job execution service，可 claim `QUEUED/RETRYING` 且到期的 job，将其标记为 `RUNNING`、写入 worker lock、递增 attempt count，并记录 `STATUS_CHANGED` 与 `ATTEMPT_STARTED`。
 - 已新增 success/failure 状态转移：成功会写 result、清锁、标记 `SUCCEEDED`；失败在 attempts 未耗尽时标记 `RETRYING` 并设置 `next_run_at`，耗尽后标记 `FAILED` 与 `finished_at`。
 - 已新增本地 worker wrapper，可 claim 一个 due job，并按 `JobDefinition.key` 分派到 handler registry；handler 成功会 complete，异常或缺 handler 会进入 failure/retry 状态机。
+- 已新增本地 DB worker CLI：`python job_worker_cli.py --queue derived --limit N` 可按批次消费 due jobs，每个 job 成功/失败状态转移后提交；当前回归覆盖 outbox relay 生成 queued job 后由 worker CLI 分派 handler 并标记 `SUCCEEDED` 的闭环。
 - 尚未实现 asset/timeframe、broker connection、content source、AI scope 级业务锁，也尚未接入 Redis worker 与实际 derived refresh handler。
 
 完成定义：
