@@ -8,10 +8,8 @@ import socket
 from datetime import datetime
 
 from database import SessionLocal
+from services.derived_refresh_handlers import build_default_job_handlers
 from services.job_service import JobHandler, run_next_due_job
-
-
-DEFAULT_HANDLERS: dict[str, JobHandler] = {}
 
 
 def run_worker_batch(
@@ -26,7 +24,7 @@ def run_worker_batch(
     db = session_factory()
     processed = 0
     worker_id = worker_id or f"{socket.gethostname()}:job-worker"
-    handlers = handlers if handlers is not None else DEFAULT_HANDLERS
+    handlers = handlers if handlers is not None else build_default_job_handlers(db)
     try:
         for _ in range(limit):
             job_run = run_next_due_job(
