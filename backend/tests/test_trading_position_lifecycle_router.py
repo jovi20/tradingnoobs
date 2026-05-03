@@ -15,6 +15,8 @@ from models import (
     AccountLedgerEntryType,
     AssetMetadata,
     BatchType,
+    OutboxEvent,
+    OutboxEventStatus,
     Position,
     PositionEvent,
     PositionEventType,
@@ -450,6 +452,16 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         self.assertEqual(ledger_entry.entry_type, AccountLedgerEntryType.REALIZED_PNL)
         self.assertEqual(ledger_entry.amount, Decimal("59.00000000"))
         self.assertEqual(ledger_entry.currency, "USD")
+        outbox_event = self.db.query(OutboxEvent).filter(
+            OutboxEvent.aggregate_type == "TradingPosition",
+            OutboxEvent.aggregate_public_id == truth_position.public_id,
+            OutboxEvent.event_type == "truth.position_event.created",
+        ).one()
+        self.assertEqual(outbox_event.status, OutboxEventStatus.PENDING)
+        self.assertEqual(outbox_event.queue_name, "derived")
+        self.assertEqual(outbox_event.dedupe_key, f"truth.position_event.created:{trade_event.public_id}")
+        self.assertEqual(outbox_event.payload["position_event_public_id"], trade_event.public_id)
+        self.assertEqual(outbox_event.payload["position_event_type"], "REDUCE")
 
     def test_trade_event_write_add_replays_fifo_without_cash_ledger_entry(self):
         truth_position = self._seed_open_synced_position()

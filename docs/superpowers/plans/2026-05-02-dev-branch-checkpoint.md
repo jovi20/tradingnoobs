@@ -72,7 +72,7 @@ cd backend && ../.venv313/bin/python -m unittest discover -s tests
 Result:
 
 ```text
-Ran 72 tests in 5.881s
+Ran 72 tests in 5.962s
 OK
 LLM Test Success: {'ok': True}
 ```
@@ -104,6 +104,7 @@ Scope covered:
 - Truth dividend write creates `PositionEvent(DIVIDEND)`, links `AccountLedgerEntry(DIVIDEND)`, and returns `ledger_summary.total_dividends`.
 - Truth manual adjustment write creates `PositionEvent(MANUAL_ADJUSTMENT)`, links `AccountLedgerEntry(CASH_ADJUSTMENT)`, returns `ledger_summary.total_adjustments`, leaves FIFO quantity / realized PnL unchanged, and rejects zero-amount no-op adjustments without mutating events or ledger entries.
 - Truth trade event write covers `REDUCE` and full `CLOSE`: it appends trade `PositionEvent`s, replays FIFO, updates truth aggregate realized PnL/fees/status, links `AccountLedgerEntry(REALIZED_PNL)`, returns the updated lifecycle, and rejects partial `CLOSE` with 422 before mutating events.
+- Truth trade event writes now append a transactional `OutboxEvent` in the same DB transaction so derived refresh work has a durable enqueue signal.
 - Truth trade event write covers `ADD`: it appends `PositionEvent(ADD)`, replays FIFO into the position aggregate, and does not create a cash ledger entry when there is no realized PnL.
 - Truth trade event reversal covers latest active `ADD / REDUCE / CLOSE` events: it appends `PositionEvent(REVERSAL)`, keeps the original event for audit, excludes the reversed event from FIFO replay, writes an offsetting realized PnL ledger entry when needed, rejects duplicate reversals, rejects non-latest active trade events, and blocks `OPEN` reversal until position void/archive semantics exist.
 - Closed truth positions reject additional trade events such as `ADD` with 422 before mutating events.
@@ -276,7 +277,7 @@ OK
 - Legacy review/batch/MAE controls are still present only as migration tools; batch edit is read-only and whole-position delete is protected when truth lifecycle is available, while guarded frontend latest-event reversal exposure and position-level manual adjustment entry are wired.
 - Truth trade event write slice started: `POST /api/trading-positions/{position_public_id}/events` can append manual `ADD / REDUCE / CLOSE` events to an existing `TradingPosition`; current regression covers `ADD` FIFO replay without cash ledger, `REDUCE` FIFO replay, full `CLOSE` status transition, partial `CLOSE` 422, closed-position `ADD` rejection, realized PnL ledger sync, and latest active event reversal through `POST /api/trading-positions/{position_public_id}/events/{event_public_id}/reverse`.
 - Truth manual adjustment slice started: `POST /api/trading-positions/{position_public_id}/adjustments` can append position-level cash adjustments without touching FIFO quantities or realized PnL.
-- D1/D2 async foundation started: unified job definition/run/event/idempotency-key tables and outbox event table/model are landed, but no business write path, outbox relay, Redis queue, worker, or job admin UI is connected yet.
+- D1/D2 async foundation started: unified job definition/run/event/idempotency-key tables and outbox event table/model are landed; truth position event creation writes durable outbox rows in the same transaction, but outbox relay, Redis queue, worker, or job admin UI is not connected yet.
 - The next implementation slice should either harden manual adjustment edge cases or move into broader historical/non-latest reversal design; non-latest reversal remains intentionally blocked until its UX and accounting rules are explicit.
 
 ## Next Checkpoint Criteria

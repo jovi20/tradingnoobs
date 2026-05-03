@@ -22,6 +22,7 @@ from services.account_ledger_service import (
     sync_manual_adjustment_event_to_account_ledger,
 )
 from services.auth_service import get_current_user
+from services.outbox_service import enqueue_position_event_created_outbox
 from services.trading_position_read_service import build_trading_position_lifecycle_payload, resolve_truth_position_by_public_id
 from services.trading_position_write_service import append_truth_trade_event, reverse_latest_truth_trade_event
 
@@ -104,7 +105,7 @@ def create_trading_position_trade_event(
         raise HTTPException(status_code=404, detail="Trading position not found")
 
     try:
-        append_truth_trade_event(
+        event = append_truth_trade_event(
             db,
             position=truth_position,
             event_type=PositionEventType(payload.event_type.value),
@@ -120,6 +121,7 @@ def create_trading_position_trade_event(
             confidence=payload.confidence,
             note=payload.note,
         )
+        enqueue_position_event_created_outbox(db, position=truth_position, event=event)
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -150,13 +152,14 @@ def reverse_trading_position_trade_event(
         raise HTTPException(status_code=404, detail="Position event not found")
 
     try:
-        reverse_latest_truth_trade_event(
+        reversal_event = reverse_latest_truth_trade_event(
             db,
             position=truth_position,
             event=event,
             occurred_at=payload.occurred_at,
             note=payload.note,
         )
+        enqueue_position_event_created_outbox(db, position=truth_position, event=reversal_event)
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -193,6 +196,7 @@ def create_trading_position_dividend(
     db.add(event)
     db.flush()
     sync_dividend_event_to_account_ledger(db, event=event)
+    enqueue_position_event_created_outbox(db, position=truth_position, event=event)
     db.commit()
 
     updated_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
@@ -230,6 +234,7 @@ def create_trading_position_manual_adjustment(
     db.add(event)
     db.flush()
     sync_manual_adjustment_event_to_account_ledger(db, event=event)
+    enqueue_position_event_created_outbox(db, position=truth_position, event=event)
     db.commit()
 
     updated_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
