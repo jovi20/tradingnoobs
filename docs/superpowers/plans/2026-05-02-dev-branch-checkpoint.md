@@ -72,7 +72,7 @@ cd backend && ../.venv313/bin/python -m unittest discover -s tests
 Result:
 
 ```text
-Ran 72 tests in 5.962s
+Ran 73 tests in 5.995s
 OK
 LLM Test Success: {'ok': True}
 ```
@@ -155,7 +155,7 @@ Result:
 
 ```text
 job models: 1 OK
-outbox models: 1 OK
+outbox models: 2 OK
 alembic chain: 1 OK
 ```
 
@@ -166,6 +166,7 @@ Scope covered:
 - Job runs can persist status, retry policy, payload, queued event trail, and idempotency-key linkage.
 - D2 outbox foundation has `OutboxEvent` SQLAlchemy model and `outbox_events` migration.
 - Outbox events can persist aggregate reference, event type, queue, dedupe key, dispatch payload, pending status, and attempt metadata.
+- Outbox relay service can turn pending outbox rows into queued `JobRun`s with a status event and idempotency-key record, then mark the outbox row `PUBLISHED`.
 
 C4 FIFO accounting service regressions:
 
@@ -277,7 +278,7 @@ OK
 - Legacy review/batch/MAE controls are still present only as migration tools; batch edit is read-only and whole-position delete is protected when truth lifecycle is available, while guarded frontend latest-event reversal exposure and position-level manual adjustment entry are wired.
 - Truth trade event write slice started: `POST /api/trading-positions/{position_public_id}/events` can append manual `ADD / REDUCE / CLOSE` events to an existing `TradingPosition`; current regression covers `ADD` FIFO replay without cash ledger, `REDUCE` FIFO replay, full `CLOSE` status transition, partial `CLOSE` 422, closed-position `ADD` rejection, realized PnL ledger sync, and latest active event reversal through `POST /api/trading-positions/{position_public_id}/events/{event_public_id}/reverse`.
 - Truth manual adjustment slice started: `POST /api/trading-positions/{position_public_id}/adjustments` can append position-level cash adjustments without touching FIFO quantities or realized PnL.
-- D1/D2 async foundation started: unified job definition/run/event/idempotency-key tables and outbox event table/model are landed; truth position event creation writes durable outbox rows in the same transaction, but outbox relay, Redis queue, worker, or job admin UI is not connected yet.
+- D1/D2 async foundation started: unified job definition/run/event/idempotency-key tables and outbox event table/model are landed; truth position event creation writes durable outbox rows in the same transaction; DB relay can create queued job runs from pending outbox rows. Redis queue, worker, and job admin UI are not connected yet.
 - The next implementation slice should either harden manual adjustment edge cases or move into broader historical/non-latest reversal design; non-latest reversal remains intentionally blocked until its UX and accounting rules are explicit.
 
 ## Next Checkpoint Criteria
@@ -289,6 +290,6 @@ OK
 - C4 FIFO accounting service has pure service, legacy truth sync, legacy batch router/import recalculation, positions open-position, dashboard mark-to-market, account signed market value, ledger-derived cash read-model, opening-balance ledger write, manual cash-adjustment write, dividend ledger write, ADD/REDUCE/CLOSE truth trade-event write regressions, latest active trade-event reversal regressions, guarded frontend reversal exposure, and position-level manual adjustment regressions plus frontend entry; frontend add/reduce/close creation is truth-first with legacy fallback, legacy batch edit is read-only and whole-position delete is protected when truth lifecycle exists.
 - C2 + C5 truth-first detail entry plus evidence/AI sidecar display has frontend adapter regressions and a documented build limitation if frontend dependencies are absent.
 - C2 + C5 truth event narrative write route has backend router regressions and an explicit boundary: narrative fields stay on the narrative PATCH route; price/quantity/PnL recalculation belongs to the trade-event POST route.
-- D1 unified job model and D2 outbox event schema have migration/model regressions; transactional outbox writes, relay, Redis worker, and D3 idempotent execution rules remain pending.
+- D1 unified job model and D2 outbox event schema/relay have migration/model/service regressions; Redis worker and D3 idempotent execution rules remain pending.
 - Frontend adapter tests remain green.
 - Stage boundary commit exists on `dev`; next checkpoint should record each focused slice commit separately for `main` vs `dev` review.
