@@ -751,6 +751,27 @@ class BusinessLock(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
+class DerivedTimelineSnapshot(Base):
+    __tablename__ = "derived_timeline_snapshots"
+    __table_args__ = (
+        UniqueConstraint("user_id", "trading_position_public_id", name="uq_derived_timeline_snapshots_user_position"),
+        Index("ix_derived_timeline_snapshots_user_refreshed", "user_id", "refreshed_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    trading_position_public_id = Column(String(100), nullable=False, index=True)
+    source = Column(String(120), nullable=False)
+    snapshot_json = Column(JSON, nullable=False, default=dict)
+    refreshed_by_job_run_public_id = Column(String(36), nullable=True, index=True)
+    refreshed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User")
+
+
 class OutboxEvent(Base):
     __tablename__ = "outbox_events"
     __table_args__ = (

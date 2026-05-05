@@ -86,6 +86,9 @@ class AlembicChainTests(unittest.TestCase):
                 business_lock_columns = conn.execute(
                     "PRAGMA table_info(business_locks)"
                 ).fetchall()
+                derived_timeline_snapshot_columns = conn.execute(
+                    "PRAGMA table_info(derived_timeline_snapshots)"
+                ).fetchall()
             finally:
                 conn.close()
 
@@ -106,6 +109,7 @@ class AlembicChainTests(unittest.TestCase):
             idempotency_key_column_names = {row[1] for row in idempotency_key_columns}
             outbox_event_column_names = {row[1] for row in outbox_event_columns}
             business_lock_column_names = {row[1] for row in business_lock_columns}
+            derived_timeline_snapshot_column_names = {row[1] for row in derived_timeline_snapshot_columns}
             expected_tables = {
                 "alembic_version",
                 "users",
@@ -140,6 +144,7 @@ class AlembicChainTests(unittest.TestCase):
                 "idempotency_keys",
                 "outbox_events",
                 "business_locks",
+                "derived_timeline_snapshots",
                 "system_settings",
             }
 
@@ -186,6 +191,17 @@ class AlembicChainTests(unittest.TestCase):
             self.assertTrue({"public_id", "scope", "key", "request_hash", "job_run_id"}.issubset(idempotency_key_column_names))
             self.assertTrue({"public_id", "aggregate_type", "event_type", "payload", "status", "dedupe_key"}.issubset(outbox_event_column_names))
             self.assertTrue({"public_id", "scope", "resource_key", "owner_id", "status", "expires_at"}.issubset(business_lock_column_names))
+            self.assertTrue(
+                {
+                    "public_id",
+                    "user_id",
+                    "trading_position_public_id",
+                    "source",
+                    "snapshot_json",
+                    "refreshed_by_job_run_public_id",
+                    "refreshed_at",
+                }.issubset(derived_timeline_snapshot_column_names)
+            )
         finally:
             if os.path.exists(db_path):
                 os.remove(db_path)

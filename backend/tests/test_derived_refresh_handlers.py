@@ -9,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from database import Base
 from models import (
     AssetMaster,
+    DerivedTimelineSnapshot,
     JobDefinition,
     JobRun,
     JobRunStatus,
@@ -145,6 +146,13 @@ class DerivedRefreshHandlerTests(unittest.TestCase):
         self.assertEqual(result["lifecycle_node_count"], 1)
         self.assertEqual(result["position_title"], "AAPL")
         self.assertEqual(result["source"], "truth.lifecycle.bridge")
+        snapshot = self.db.query(DerivedTimelineSnapshot).one()
+        self.assertEqual(snapshot.user_id, user.id)
+        self.assertEqual(snapshot.trading_position_public_id, position.public_id)
+        self.assertEqual(snapshot.source, "truth.lifecycle.bridge")
+        self.assertEqual(snapshot.refreshed_by_job_run_public_id, job_run.public_id)
+        self.assertEqual(snapshot.snapshot_json["position_title"], "AAPL")
+        self.assertEqual(snapshot.snapshot_json["lifecycle_node_count"], 1)
 
 
 if __name__ == "__main__":
