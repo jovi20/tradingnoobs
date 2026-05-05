@@ -72,7 +72,7 @@ cd backend && ../.venv313/bin/python -m unittest discover -s tests
 Result:
 
 ```text
-Ran 111 tests in 8.488s
+Ran 113 tests in 7.680s
 OK
 LLM Test Success: {'ok': True}
 ```
@@ -92,7 +92,7 @@ cd backend && ../.venv313/bin/python -m unittest discover -s tests -p test_tradi
 Result:
 
 ```text
-Ran 16 tests in 1.253s
+Ran 18 tests in 1.609s
 OK
 ```
 
@@ -205,7 +205,7 @@ accounting service: 4 OK
 legacy truth sync: 5 OK
 legacy batch router recalculation: 1 OK
 public-id leaf routes: 2 OK
-lifecycle router: 16 OK
+lifecycle router: 18 OK
 public-id route group: 6 OK
 ```
 
