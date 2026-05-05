@@ -83,6 +83,9 @@ class AlembicChainTests(unittest.TestCase):
                 outbox_event_columns = conn.execute(
                     "PRAGMA table_info(outbox_events)"
                 ).fetchall()
+                business_lock_columns = conn.execute(
+                    "PRAGMA table_info(business_locks)"
+                ).fetchall()
             finally:
                 conn.close()
 
@@ -102,6 +105,7 @@ class AlembicChainTests(unittest.TestCase):
             job_run_event_column_names = {row[1] for row in job_run_event_columns}
             idempotency_key_column_names = {row[1] for row in idempotency_key_columns}
             outbox_event_column_names = {row[1] for row in outbox_event_columns}
+            business_lock_column_names = {row[1] for row in business_lock_columns}
             expected_tables = {
                 "alembic_version",
                 "users",
@@ -135,6 +139,7 @@ class AlembicChainTests(unittest.TestCase):
                 "job_run_events",
                 "idempotency_keys",
                 "outbox_events",
+                "business_locks",
                 "system_settings",
             }
 
@@ -180,6 +185,7 @@ class AlembicChainTests(unittest.TestCase):
             self.assertTrue({"public_id", "job_run_id", "event_type", "to_status", "metadata"}.issubset(job_run_event_column_names))
             self.assertTrue({"public_id", "scope", "key", "request_hash", "job_run_id"}.issubset(idempotency_key_column_names))
             self.assertTrue({"public_id", "aggregate_type", "event_type", "payload", "status", "dedupe_key"}.issubset(outbox_event_column_names))
+            self.assertTrue({"public_id", "scope", "resource_key", "owner_id", "status", "expires_at"}.issubset(business_lock_column_names))
         finally:
             if os.path.exists(db_path):
                 os.remove(db_path)

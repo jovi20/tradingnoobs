@@ -8,6 +8,8 @@ from sqlalchemy.orm import sessionmaker
 
 from database import Base
 from models import (
+    BusinessLock,
+    BusinessLockStatus,
     IdempotencyKey,
     JobDefinition,
     JobRun,
@@ -103,6 +105,27 @@ class JobModelTests(unittest.TestCase):
         self.assertEqual(run.max_attempts, 3)
         self.assertEqual(run.events[0].event_type, JobRunEventType.STATUS_CHANGED)
         self.assertEqual(run.idempotency_records[0].request_hash, "sha256:payload")
+
+    def test_business_lock_persists_scope_resource_owner_and_expiry(self):
+        lock = BusinessLock(
+            scope="asset_timeframe",
+            resource_key="AAPL:1d",
+            owner_id="job-run-public-id",
+            owner_type="job_run",
+            status=BusinessLockStatus.ACTIVE,
+            metadata_json={"asset": "AAPL", "timeframe": "1d"},
+            acquired_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+            expires_at=datetime(2026, 5, 3, 10, 5, tzinfo=timezone.utc),
+        )
+        self.db.add(lock)
+        self.db.commit()
+        self.db.refresh(lock)
+
+        self.assertEqual(lock.status, BusinessLockStatus.ACTIVE)
+        self.assertEqual(lock.scope, "asset_timeframe")
+        self.assertEqual(lock.resource_key, "AAPL:1d")
+        self.assertEqual(lock.owner_id, "job-run-public-id")
+        self.assertEqual(lock.metadata_json["timeframe"], "1d")
 
 
 if __name__ == "__main__":

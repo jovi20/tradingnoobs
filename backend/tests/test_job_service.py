@@ -7,7 +7,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from database import Base
-from models import JobDefinition, JobRun, JobRunEvent, JobRunEventType, JobRunStatus
+from models import BusinessLock, BusinessLockStatus, JobDefinition, JobRun, JobRunEvent, JobRunEventType, JobRunStatus
 from services.job_service import (
     cancel_job_run,
     claim_next_due_job,
@@ -293,6 +293,96 @@ class JobServiceTests(unittest.TestCase):
         self.assertEqual(processed.status, JobRunStatus.FAILED)
         self.assertIn("No handler registered", processed.error_message)
         self.assertEqual(processed.attempt_count, 1)
+
+    def test_run_next_due_job_retries_when_business_lock_is_held(self):
+        definition = self._definition()
+        held = JobRun(
+            job_definition_id=definition.id,
+            status=JobRunStatus.RUNNING,
+            priority=10,
+            payload={"position_event_public_id": "evt-held"},
+            max_attempts=3,
+            attempt_count=1,
+            queue_name="derived",
+            locked_by="worker-a",
+            locked_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+        )
+        blocked = JobRun(
+            job_definition_id=definition.id,
+            status=JobRunStatus.QUEUED,
+            priority=1,
+            payload={
+                "position_event_public_id": "evt-blocked",
+                "business_locks": [
+                    {"scope": "asset_timeframe", "resource_key": "AAPL:1d", "ttl_seconds": 300}
+                ],
+            },
+            max_attempts=3,
+            queue_name="derived",
+            next_run_at=datetime(2026, 5, 3, 10, 1, tzinfo=timezone.utc),
+        )
+        self.db.add_all([held, blocked])
+        self.db.commit()
+        from services.business_lock_service import acquire_business_lock
+
+        acquire_business_lock(
+            self.db,
+            scope="asset_timeframe",
+            resource_key="AAPL:1d",
+            owner_id=held.public_id,
+            ttl_seconds=300,
+            now=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+        )
+        self.db.commit()
+
+        calls = []
+        processed = run_next_due_job(
+            self.db,
+            queue_name="derived",
+            worker_id="worker-b",
+            handlers={"derived.timeline.refresh": lambda job_run: calls.append(job_run.public_id)},
+            now=datetime(2026, 5, 3, 10, 1, tzinfo=timezone.utc),
+            retry_delay_seconds=120,
+        )
+        self.db.commit()
+
+        self.assertEqual(processed.id, blocked.id)
+        self.assertEqual(processed.status, JobRunStatus.RETRYING)
+        self.assertIn("Business lock unavailable", processed.error_message)
+        self.assertEqual(calls, [])
+
+    def test_run_next_due_job_releases_business_lock_after_success(self):
+        definition = self._definition()
+        run = JobRun(
+            job_definition_id=definition.id,
+            status=JobRunStatus.QUEUED,
+            priority=1,
+            payload={
+                "position_event_public_id": "evt-lock-success",
+                "business_locks": [
+                    {"scope": "asset_timeframe", "resource_key": "MSFT:1d", "ttl_seconds": 300}
+                ],
+            },
+            max_attempts=3,
+            queue_name="derived",
+            next_run_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+        )
+        self.db.add(run)
+        self.db.commit()
+
+        processed = run_next_due_job(
+            self.db,
+            queue_name="derived",
+            worker_id="worker-a",
+            handlers={"derived.timeline.refresh": lambda job_run: {"ok": True}},
+            now=datetime(2026, 5, 3, 10, 1, tzinfo=timezone.utc),
+        )
+        self.db.commit()
+
+        self.assertEqual(processed.status, JobRunStatus.SUCCEEDED)
+        lock = self.db.query(BusinessLock).one()
+        self.assertEqual(lock.owner_id, run.public_id)
+        self.assertEqual(lock.status, BusinessLockStatus.RELEASED)
 
     def test_requeue_job_run_resets_retrying_job_for_immediate_claim(self):
         definition = self._definition()

@@ -134,6 +134,12 @@ class JobRunEventType(str, enum.Enum):
     CANCELLED = "CANCELLED"
 
 
+class BusinessLockStatus(str, enum.Enum):
+    ACTIVE = "ACTIVE"
+    RELEASED = "RELEASED"
+    EXPIRED = "EXPIRED"
+
+
 class OutboxEventStatus(str, enum.Enum):
     PENDING = "PENDING"
     PUBLISHED = "PUBLISHED"
@@ -721,6 +727,28 @@ class IdempotencyKey(Base):
 
     user = relationship("User")
     job_run = relationship("JobRun", back_populates="idempotency_records")
+
+
+class BusinessLock(Base):
+    __tablename__ = "business_locks"
+    __table_args__ = (
+        UniqueConstraint("scope", "resource_key", name="uq_business_locks_scope_resource"),
+        Index("ix_business_locks_status_expires", "status", "expires_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    scope = Column(String(120), nullable=False, index=True)
+    resource_key = Column(String(255), nullable=False, index=True)
+    owner_id = Column(String(120), nullable=False)
+    owner_type = Column(String(80), nullable=False, default="job_run")
+    status = Column(SQLEnum(BusinessLockStatus), nullable=False, default=BusinessLockStatus.ACTIVE, index=True)
+    metadata_json = Column("metadata", JSON, nullable=True, default=dict)
+    acquired_at = Column(DateTime(timezone=True), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    released_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
 class OutboxEvent(Base):

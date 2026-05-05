@@ -10,6 +10,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from models import JobRun, JobRunEvent, JobRunEventType, JobRunStatus
+from services.business_lock_service import acquire_business_lock, release_business_lock
 
 JobHandler = Callable[[JobRun], dict | None]
 
@@ -208,6 +209,55 @@ def recover_stale_running_jobs(
     return len(stale_runs)
 
 
+def _business_lock_specs(job_run: JobRun) -> list[dict]:
+    payload = job_run.payload or {}
+    specs = payload.get("business_locks") or []
+    if not isinstance(specs, list):
+        return []
+    return [spec for spec in specs if isinstance(spec, dict)]
+
+
+def _acquire_job_business_locks(
+    db: Session,
+    *,
+    job_run: JobRun,
+    now: datetime,
+) -> list:
+    acquired_locks = []
+    for spec in _business_lock_specs(job_run):
+        scope = spec.get("scope")
+        resource_key = spec.get("resource_key")
+        if not scope or not resource_key:
+            continue
+        lock = acquire_business_lock(
+            db,
+            scope=scope,
+            resource_key=resource_key,
+            owner_id=job_run.public_id,
+            ttl_seconds=int(spec.get("ttl_seconds") or job_run.definition.timeout_seconds or 300),
+            now=now,
+            owner_type="job_run",
+            metadata={"job_run_public_id": job_run.public_id, **(spec.get("metadata") or {})},
+        )
+        if lock is None:
+            for acquired_lock in acquired_locks:
+                release_business_lock(db, business_lock=acquired_lock, owner_id=job_run.public_id, now=now)
+            raise RuntimeError(f"Business lock unavailable: {scope}:{resource_key}")
+        acquired_locks.append(lock)
+    return acquired_locks
+
+
+def _release_job_business_locks(
+    db: Session,
+    *,
+    job_run: JobRun,
+    business_locks: list,
+    now: datetime,
+) -> None:
+    for business_lock in business_locks:
+        release_business_lock(db, business_lock=business_lock, owner_id=job_run.public_id, now=now)
+
+
 def run_next_due_job(
     db: Session,
     *,
@@ -222,19 +272,10 @@ def run_next_due_job(
     if not job_run:
         return None
 
-    handler = handlers.get(job_run.definition.key)
-    if handler is None:
-        return fail_job_run(
-            db,
-            job_run=job_run,
-            error_message=f"No handler registered for job definition {job_run.definition.key}",
-            retry_delay_seconds=retry_delay_seconds,
-            now=now,
-        )
-
+    business_locks = []
     try:
-        result = handler(job_run)
-    except Exception as exc:
+        business_locks = _acquire_job_business_locks(db, job_run=job_run, now=now)
+    except RuntimeError as exc:
         return fail_job_run(
             db,
             job_run=job_run,
@@ -243,7 +284,34 @@ def run_next_due_job(
             now=now,
         )
 
-    return complete_job_run(db, job_run=job_run, result=result or {}, now=now)
+    handler = handlers.get(job_run.definition.key)
+    if handler is None:
+        failed = fail_job_run(
+            db,
+            job_run=job_run,
+            error_message=f"No handler registered for job definition {job_run.definition.key}",
+            retry_delay_seconds=retry_delay_seconds,
+            now=now,
+        )
+        _release_job_business_locks(db, job_run=job_run, business_locks=business_locks, now=now)
+        return failed
+
+    try:
+        result = handler(job_run)
+    except Exception as exc:
+        failed = fail_job_run(
+            db,
+            job_run=job_run,
+            error_message=str(exc),
+            retry_delay_seconds=retry_delay_seconds,
+            now=now,
+        )
+        _release_job_business_locks(db, job_run=job_run, business_locks=business_locks, now=now)
+        return failed
+
+    completed = complete_job_run(db, job_run=job_run, result=result or {}, now=now)
+    _release_job_business_locks(db, job_run=job_run, business_locks=business_locks, now=now)
+    return completed
 
 
 def requeue_job_run(
