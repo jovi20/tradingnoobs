@@ -12,7 +12,8 @@ import {
     LogOut,
     User,
     Briefcase,
-    Clock3
+    Clock3,
+    ShieldCheck
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useTheme } from 'next-themes'
@@ -29,6 +30,10 @@ const navItems = [
     { href: '/settings', label: '设置', icon: Settings },
 ]
 
+const adminNavItems = [
+    { href: '/admin/jobs', label: '任务', icon: ShieldCheck },
+]
+
 export function Navbar() {
     const pathname = usePathname()
     const { user, isAuthenticated, logout } = useAuth()
@@ -38,6 +43,10 @@ export function Navbar() {
     useEffect(() => {
         setMounted(true)
     }, [])
+
+    const visibleNavItems = user?.role === 'admin'
+        ? [...navItems.slice(0, -1), ...adminNavItems, navItems[navItems.length - 1]]
+        : navItems
 
     // 不在登录/注册页显示导航
     if (pathname === '/login' || pathname === '/register') {
@@ -66,7 +75,7 @@ export function Navbar() {
                         {/* Desktop Nav */}
                         {isAuthenticated && (
                             <div className="hidden md:flex items-center space-x-1">
-                                {navItems.map((item) => {
+                                {visibleNavItems.map((item) => {
                                     const isActive = pathname === item.href
                                     const Icon = item.icon
                                     return (
@@ -116,7 +125,7 @@ export function Navbar() {
             {isAuthenticated && (
                 <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-t border-slate-200 dark:border-slate-700 pb-safe">
                     <div className="flex justify-around py-2">
-                        {navItems.map((item) => {
+                        {visibleNavItems.map((item) => {
                             const isActive = pathname === item.href
                             const Icon = item.icon
                             return (

@@ -582,6 +582,57 @@ export interface FeatureFlag {
     updated_at: string | null
 }
 
+export type AdminJobStatus = 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'RETRYING' | 'CANCELLED'
+
+export interface AdminJobDefinitionRef {
+    public_id: string
+    key: string
+    display_name: string
+    queue_name?: string
+}
+
+export interface AdminJobRunSummary {
+    public_id: string
+    definition: AdminJobDefinitionRef
+    status: AdminJobStatus
+    queue_name: string
+    priority: number
+    attempt_count: number
+    max_attempts: number
+    next_run_at: string | null
+    started_at: string | null
+    finished_at: string | null
+    created_at: string
+    error_message: string | null
+}
+
+export interface AdminJobRunEvent {
+    public_id: string
+    event_type: string
+    from_status: AdminJobStatus | null
+    to_status: AdminJobStatus | null
+    message: string | null
+    metadata: Record<string, unknown>
+    created_at: string
+}
+
+export interface AdminJobRunDetail extends AdminJobRunSummary {
+    user_public_id: string | null
+    idempotency_key: string | null
+    payload: Record<string, unknown>
+    result: Record<string, unknown>
+    locked_by: string | null
+    locked_at: string | null
+    updated_at: string | null
+    events: AdminJobRunEvent[]
+}
+
+export interface AdminJobListResponse {
+    items: AdminJobRunSummary[]
+    total: number
+    limit: number
+}
+
 export const adminAPI = {
     listSettings: async (token: string): Promise<SystemSetting[]> => {
         return fetchAPI('/api/admin/settings', {}, token)
@@ -650,7 +701,35 @@ export const adminAPI = {
             method: 'PUT',
             body: JSON.stringify(data),
         }, token)
-    }
+    },
+
+    listJobs: async (
+        token: string,
+        params: { status?: AdminJobStatus; queue_name?: string; limit?: number } = {}
+    ): Promise<AdminJobListResponse> => {
+        const search = new URLSearchParams()
+        if (params.status) search.set('status', params.status)
+        if (params.queue_name) search.set('queue_name', params.queue_name)
+        if (params.limit) search.set('limit', String(params.limit))
+        const suffix = search.toString() ? `?${search.toString()}` : ''
+        return fetchAPI(`/api/admin/jobs${suffix}`, {}, token)
+    },
+
+    getJob: async (token: string, jobPublicId: string): Promise<AdminJobRunDetail> => {
+        return fetchAPI(`/api/admin/jobs/${jobPublicId}`, {}, token)
+    },
+
+    requeueJob: async (token: string, jobPublicId: string): Promise<AdminJobRunDetail> => {
+        return fetchAPI(`/api/admin/jobs/${jobPublicId}/requeue`, {
+            method: 'POST',
+        }, token)
+    },
+
+    cancelJob: async (token: string, jobPublicId: string): Promise<AdminJobRunDetail> => {
+        return fetchAPI(`/api/admin/jobs/${jobPublicId}/cancel`, {
+            method: 'POST',
+        }, token)
+    },
 }
 
 // ============== Position & Batch Types ==============

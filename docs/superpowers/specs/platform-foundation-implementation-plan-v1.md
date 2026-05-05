@@ -68,7 +68,7 @@
 - `AccountLedgerEntry` 现金真相基础已建立，账户余额 read model 已对有 opening balance 的账户优先走 ledger-derived；正式 opening-balance、manual cash adjustment、dividend、首个 realized PnL truth event 写入口、最新 active trade-event reversal 与 position-level manual adjustment 已落地；前端新增/加仓/平仓已接 truth event，详情页已能撤销最新未撤销的 `ADD / REDUCE / CLOSE` 并记录 cash adjustment，旧批次编辑在 truth lifecycle 存在时只读，整仓 legacy 删除受保护，非最新历史撤销仍需后续补齐。
 - Lifecycle `ledger_summary.cash_effects` 与 `total_dividends` 已读取 ledger；`total_fees` 的最终 fee 归属、adjustment 汇总与 AI workflow 写入仍未完成，不能标为最终 evidence/AI sidecar 完成。
 - FIFO / fee / FX 口径已有 C4 服务起点并接入 legacy truth sync、legacy batch router/import recalculation、positions open-position display、dashboard mark-to-market、account signed market value、ledger-derived cash read model、opening-balance ledger write、manual cash-adjustment write、dividend ledger write、首个 ADD/REDUCE/CLOSE truth write route 与最新 active trade-event reversal 后端路由；前端新增/加仓/平仓已 truth-first，编辑/删除旧批次、部分 analytics/timeline legacy realized PnL 汇总仍未彻底收敛到 truth/ledger-derived。
-- D1/D2/D3/D4 异步地基已有 schema 起点：`job_definitions`, `job_runs`, `job_run_events`, `idempotency_keys`, `outbox_events` 表与 SQLAlchemy 模型已落地；truth position event 创建路径已开始在同一事务写入 durable outbox rows；DB relay 已能把 pending outbox 转成 queued job run，并可在已有 idempotency key 指向 job run 的 crash-resume 场景下补标 outbox 为 published；本地 relay CLI 已可手动/cron 触发 DB relay；最小 job execution service 已支持 claim due job、running lock、attempt event、handler dispatch、success completion、retry scheduling 与 final failure；本地 DB worker CLI 已可批量消费 due jobs 并提交每个 job；`derived.timeline.refresh` bridge handler 已能读取 truth lifecycle 并返回可审计 refresh 摘要；admin job read API 已可查询 job 列表与详情事件；Redis worker / job admin UI / broader idempotent execution 仍未完成，最终 materialized timeline refresh 还没有完整异步执行链。
+- D1/D2/D3/D4 异步地基已有 schema 起点：`job_definitions`, `job_runs`, `job_run_events`, `idempotency_keys`, `outbox_events` 表与 SQLAlchemy 模型已落地；truth position event 创建路径已开始在同一事务写入 durable outbox rows；DB relay 已能把 pending outbox 转成 queued job run，并可在已有 idempotency key 指向 job run 的 crash-resume 场景下补标 outbox 为 published；本地 relay CLI 已可手动/cron 触发 DB relay；最小 job execution service 已支持 claim due job、running lock、attempt event、handler dispatch、success completion、retry scheduling 与 final failure；本地 DB worker CLI 已可批量消费 due jobs 并提交每个 job；`derived.timeline.refresh` bridge handler 已能读取 truth lifecycle 并返回可审计 refresh 摘要；admin job read/action API 与前端 `/admin/jobs` 控制台已可查询 job 列表、详情事件并执行 requeue/cancel；Redis worker / broader idempotent execution 仍未完成，最终 materialized timeline refresh 还没有完整异步执行链。
 - Timeline contract 中的 `cursor` / `limit` 已有 bridge 级实现；最终 truth-backed Timeline read model 尚未完成。
 - 市场数据分层、provider symbol mapping、derived/materialized analytics 还未开始。
 - AI schema / prompt registry / insight workflow / usage metering 仍未进入正式平台化阶段。
@@ -481,7 +481,8 @@
 - 已新增 admin job detail API：`GET /api/admin/jobs/{job_public_id}` 返回 job definition、payload、result、error、attempt/lock/timing 字段以及 job events。
 - 已新增 admin requeue API：`POST /api/admin/jobs/{job_public_id}/requeue` 可将 `FAILED` / `RETRYING` job 重置为可立即执行的 `QUEUED`，并写入状态事件；`RUNNING` / `SUCCEEDED` 等状态会拒绝。
 - 已新增 admin cancel API：`POST /api/admin/jobs/{job_public_id}/cancel` 可取消 `QUEUED` / `RETRYING` job 并写入 `CANCELLED` 事件；`RUNNING` job 暂不强杀。
-- 尚未实现前端 `/admin/jobs` 页面。
+- 已新增前端 `/admin/jobs` 控制台，可查看状态统计、筛选 job、查看详情事件与 payload/result，并触发安全的 requeue/cancel 操作。
+- 尚未接入 Redis worker、heartbeat/interrupt 与最终 materialized timeline refresh。
 
 完成定义：
 

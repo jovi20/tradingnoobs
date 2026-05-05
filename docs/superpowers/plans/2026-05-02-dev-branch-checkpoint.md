@@ -35,8 +35,8 @@ node --experimental-strip-types --test frontend/tests/*.test.mts
 Result:
 
 ```text
-tests 24
-pass 24
+tests 29
+pass 29
 fail 0
 ```
 
@@ -72,7 +72,7 @@ cd backend && ../.venv313/bin/python -m unittest discover -s tests
 Result:
 
 ```text
-Ran 95 tests in 6.924s
+Ran 95 tests in 7.008s
 OK
 LLM Test Success: {'ok': True}
 ```
@@ -227,8 +227,8 @@ node --experimental-strip-types --test frontend/tests/*.test.mts
 Result:
 
 ```text
-tests 24
-pass 24
+tests 29
+pass 29
 fail 0
 ```
 
@@ -245,6 +245,7 @@ Scope covered:
 - Legacy whole-position delete is disabled once truth lifecycle is available, so destructive mutation waits for a formal truth reversal/adjustment operation.
 - Frontend API client exposes `reverseTradingPositionTradeEvent`, lifecycle adapter exposes `getLifecycleReversalAction`, and the detail page only enables reversal for the latest unreversed `ADD / REDUCE / CLOSE` event surfaced by the truth lifecycle.
 - Frontend API client exposes `createTradingPositionManualAdjustment`, and the detail page can record position-level cash adjustments into the truth adjustment route without touching FIFO or realized PnL.
+- D4 frontend admin jobs slice exposes `adminAPI.listJobs/getJob/requeueJob/cancelJob`, admin job adapter regressions for status counts/actions, and `/admin/jobs` control-room UI for list/detail/requeue/cancel.
 
 Build limitation:
 
@@ -289,7 +290,7 @@ OK
 - Legacy review/batch/MAE controls are still present only as migration tools; batch edit is read-only and whole-position delete is protected when truth lifecycle is available, while guarded frontend latest-event reversal exposure and position-level manual adjustment entry are wired.
 - Truth trade event write slice started: `POST /api/trading-positions/{position_public_id}/events` can append manual `ADD / REDUCE / CLOSE` events to an existing `TradingPosition`; current regression covers `ADD` FIFO replay without cash ledger, `REDUCE` FIFO replay, full `CLOSE` status transition, partial `CLOSE` 422, closed-position `ADD` rejection, realized PnL ledger sync, and latest active event reversal through `POST /api/trading-positions/{position_public_id}/events/{event_public_id}/reverse`.
 - Truth manual adjustment slice started: `POST /api/trading-positions/{position_public_id}/adjustments` can append position-level cash adjustments without touching FIFO quantities or realized PnL.
-- D1/D2/D3/D4 async foundation started: unified job definition/run/event/idempotency-key tables and outbox event table/model are landed; truth position event creation writes durable outbox rows in the same transaction; DB relay can create queued job runs from pending outbox rows and resume safely when an idempotency key already points at an existing job run; local relay CLI can run one bounded relay batch; job execution service can claim, dispatch handlers, complete, retry, fail, requeue, and cancel job runs; local DB worker CLI can process bounded due-job batches; `derived.timeline.refresh` bridge handler can produce truth lifecycle refresh summaries; admin job API exposes list/detail/requeue/cancel status. Redis queue, final derived materialization, broader business locks, and job admin UI are not connected yet.
+- D1/D2/D3/D4 async foundation started: unified job definition/run/event/idempotency-key tables and outbox event table/model are landed; truth position event creation writes durable outbox rows in the same transaction; DB relay can create queued job runs from pending outbox rows and resume safely when an idempotency key already points at an existing job run; local relay CLI can run one bounded relay batch; job execution service can claim, dispatch handlers, complete, retry, fail, requeue, and cancel job runs; local DB worker CLI can process bounded due-job batches; `derived.timeline.refresh` bridge handler can produce truth lifecycle refresh summaries; admin job API and `/admin/jobs` frontend expose list/detail/requeue/cancel status. Redis queue, final derived materialization, broader business locks, and heartbeat/interrupt semantics are not connected yet.
 - The next implementation slice should either harden manual adjustment edge cases or move into broader historical/non-latest reversal design; non-latest reversal remains intentionally blocked until its UX and accounting rules are explicit.
 
 ## Next Checkpoint Criteria
