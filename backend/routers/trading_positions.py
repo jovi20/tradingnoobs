@@ -189,7 +189,7 @@ def create_trading_position_dividend(
         event_time=payload.occurred_at,
         currency=payload.currency,
         gross_amount=payload.amount,
-        fx_rate_to_account_ccy=1,
+        fx_rate_to_account_ccy=payload.fx_rate_to_account_ccy,
         input_source="MANUAL",
         note=payload.note,
     )

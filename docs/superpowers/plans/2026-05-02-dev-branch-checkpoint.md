@@ -221,7 +221,7 @@ Scope covered:
 - Account and dashboard cash read paths now prefer `initial_balance + AccountLedgerEntry` when an opening balance exists, with legacy `cash_balance` fallback for accounts that do not yet have complete ledger history.
 - Account create now writes an `OPENING_BALANCE` `AccountLedgerEntry` for non-zero `initial_balance`, and the cash read model uses that ledger entry without double-counting `initial_balance`.
 - Account cash balance PATCH now writes a `MANUAL_CASH_ADJUSTMENT` `AccountLedgerEntry` delta and returns the ledger-derived target balance.
-- Truth position dividend write path creates a `PositionEvent(DIVIDEND)` and linked `AccountLedgerEntry(DIVIDEND)`, then returns an updated lifecycle with `ledger_summary.total_dividends`.
+- Truth position dividend write path creates a `PositionEvent(DIVIDEND)` and linked `AccountLedgerEntry(DIVIDEND)`, supports `fx_rate_to_account_ccy`, then returns an updated lifecycle with account-currency `ledger_summary.total_dividends`.
 - Truth position manual adjustment write path creates a `PositionEvent(MANUAL_ADJUSTMENT)` and linked `AccountLedgerEntry(CASH_ADJUSTMENT)`, then returns an updated lifecycle with `ledger_summary.total_adjustments`.
 - Truth position trade event write path covers manual `REDUCE` and full `CLOSE`, replaying FIFO into `TradingPosition` aggregates/status and syncing realized PnL into `AccountLedgerEntry(REALIZED_PNL)`.
 - Truth position latest-event reversal path preserves audit trail and replays FIFO without the reversed event, while realized PnL ledger effects are offset through a separate `REVERSAL` event ledger entry.
