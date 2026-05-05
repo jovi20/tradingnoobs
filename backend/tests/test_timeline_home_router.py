@@ -142,7 +142,28 @@ class TimelineHomeRouterTests(unittest.TestCase):
             },
             refreshed_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
         )
-        self.session.add(snapshot)
+        other_user = User(
+            email="timeline-other@example.com",
+            email_normalized="timeline-other@example.com",
+            hashed_password="hashed",
+            status="ACTIVE",
+            is_active=True,
+            role="user",
+        )
+        self.session.add(other_user)
+        self.session.flush()
+        other_snapshot = DerivedTimelineSnapshot(
+            user_id=other_user.id,
+            trading_position_public_id="tp-other-snapshot",
+            source="truth.lifecycle.bridge",
+            snapshot_json={
+                "position_title": "SHOULD_NOT_LEAK",
+                "lifecycle_node_count": 1,
+                "position_event_type": "OPEN",
+            },
+            refreshed_at=datetime(2026, 5, 3, 11, 0, tzinfo=timezone.utc),
+        )
+        self.session.add_all([snapshot, other_snapshot])
         self.session.commit()
 
         response = self.client.get("/api/timeline/home")
@@ -156,6 +177,7 @@ class TimelineHomeRouterTests(unittest.TestCase):
         ]
         snapshot_items = [item for item in items if item["event_public_id"].startswith("derived-timeline:")]
         self.assertEqual(len(snapshot_items), 1)
+        self.assertNotIn("SHOULD_NOT_LEAK", [item["headline"] for item in items])
         self.assertEqual(snapshot_items[0]["thread_public_id"], "tp-snapshot")
         self.assertEqual(snapshot_items[0]["event_type"], "REDUCE")
         self.assertEqual(snapshot_items[0]["headline"], "AAPL read model refreshed")
