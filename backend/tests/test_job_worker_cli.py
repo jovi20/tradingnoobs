@@ -11,6 +11,8 @@ from database import Base
 from job_worker_cli import run_worker_batch
 from models import (
     AssetMaster,
+    BusinessLock,
+    BusinessLockStatus,
     JobRun,
     JobRunStatus,
     OutboxEvent,
@@ -203,6 +205,7 @@ class JobWorkerCliTests(unittest.TestCase):
                 db,
                 now=datetime(2026, 5, 3, 9, 1, tzinfo=timezone.utc),
             )
+            position_public_id = position.public_id
             db.commit()
             db.close()
             processed = run_worker_batch(
@@ -221,6 +224,11 @@ class JobWorkerCliTests(unittest.TestCase):
             self.assertEqual(job_run.result["handler"], "derived.timeline.refresh")
             self.assertEqual(job_run.result["position_event_public_id"], "evt-worker")
             self.assertEqual(job_run.result["lifecycle_node_count"], 1)
+            business_lock = db.query(BusinessLock).one()
+            self.assertEqual(business_lock.scope, "derived.timeline.refresh")
+            self.assertEqual(business_lock.resource_key, position_public_id)
+            self.assertEqual(business_lock.owner_id, job_run.public_id)
+            self.assertEqual(business_lock.status, BusinessLockStatus.RELEASED)
         finally:
             db.close()
             engine.dispose()
