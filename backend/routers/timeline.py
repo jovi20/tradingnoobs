@@ -11,7 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import AIAnalysisResult, AISummary, Position, PositionStatus, TradingAccount, User
+from models import AIAnalysisResult, AISummary, DerivedTimelineSnapshot, Position, PositionStatus, TradingAccount, User
 from schemas import (
     ContextRail,
     ContextRailSelectedObject,
@@ -47,6 +47,7 @@ from schemas import (
     WeeklyDisciplineSnapshot,
 )
 from services.auth_service import get_current_user
+from services.derived_timeline_read_service import list_recent_timeline_snapshots
 from services.market_data_service import MarketDataService
 from services.platform_config_service import get_llm_runtime_config
 
@@ -389,6 +390,45 @@ def _build_timeline_events(positions: list[Position], ai_summaries: list[AISumma
     return sorted(events, key=lambda event: event.occurred_at, reverse=True)
 
 
+def _build_materialized_timeline_events(
+    snapshots: list[DerivedTimelineSnapshot],
+    *,
+    as_of: str,
+) -> list[TimelineEventCard]:
+    events: list[TimelineEventCard] = []
+    for snapshot in snapshots:
+        snapshot_json = snapshot.snapshot_json or {}
+        position_title = snapshot_json.get("position_title") or snapshot.trading_position_public_id
+        lifecycle_node_count = snapshot_json.get("lifecycle_node_count")
+        occurred_at = snapshot.refreshed_at or snapshot.updated_at or snapshot.created_at or datetime.now(timezone.utc)
+        if occurred_at.tzinfo is None:
+            occurred_at = occurred_at.replace(tzinfo=timezone.utc)
+        events.append(
+            TimelineEventCard(
+                event_public_id=f"derived-timeline:{snapshot.public_id}",
+                thread_public_id=snapshot.trading_position_public_id,
+                event_type=TimelineEventTypeEnum.OPEN,
+                occurred_at=occurred_at.isoformat().replace("+00:00", "Z"),
+                headline=f"{position_title} read model refreshed",
+                summary=f"Truth lifecycle materialized with {lifecycle_node_count or 0} nodes.",
+                instrument=TimelineInstrumentRef(
+                    asset_label=position_title,
+                    instrument_label="Truth Lifecycle",
+                    symbol=position_title,
+                    href=f"/positions/{snapshot.trading_position_public_id}",
+                ),
+                href=f"/positions/{snapshot.trading_position_public_id}",
+                trust=_trust_meta(
+                    as_of=as_of,
+                    source=DataSourceEnum.DERIVED,
+                    maturity=MaturityEnum.EARLY_SIGNAL,
+                    value_status=ValueStatusEnum.FINAL,
+                ),
+            )
+        )
+    return events
+
+
 def _build_ai_insight_events(ai_results: list[AIAnalysisResult]) -> list[TimelineEventCard]:
     events: list[TimelineEventCard] = []
     for result in ai_results:
@@ -717,6 +757,10 @@ def get_timeline_home(
     llm_config = get_llm_runtime_config(db)
     timeline_events = (
         _build_timeline_events(positions, ai_summaries)
+        + _build_materialized_timeline_events(
+            list_recent_timeline_snapshots(db, user_id=current_user.id, limit=50),
+            as_of=as_of,
+        )
         + _build_ai_insight_events(ai_results)
         + _build_losing_streak_events(positions)
         + _build_data_stale_events(inbox_items, positions)

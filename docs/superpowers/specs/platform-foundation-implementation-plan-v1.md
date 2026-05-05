@@ -63,13 +63,13 @@
 ### 0.4 当前主要缺口
 
 - 仍未完成真正的 hard cutover：后端已有首个 truth trade event 写入口、最新 active event reversal 与 position-level manual adjustment，前端新增/加仓/平仓入口已 truth-first，详情页已守护式暴露最新事件撤销和现金调整录入，truth lifecycle 存在时旧批次编辑已降级只读且整仓 legacy 删除受保护；旧 `Position / TradeBatch` 的 MAE/MFE 和部分复盘控件仍是迁移工具。
-- Timeline Home 当前仍从 legacy `Position`、`AISummary`、`AIAnalysisResult` 派生，不是基于 `TradingPosition / PositionEvent / InsightArtifact` 的最终 read model。
+- Timeline Home 当前已能把 `DerivedTimelineSnapshot` 混入 timeline event feed，但仍与 legacy `Position`、`AISummary`、`AIAnalysisResult` 并行，不是最终 hard-cut truth-only read model。
 - Lifecycle Detail 用户侧 public_id-only contract 已补回归测试并落地；前端已能展示 evidence / ledger / AI sidecar，但后端 AI sidecar 生成、InsightArtifact 正式写入与最终 evidence 覆盖仍未完成。
 - `AccountLedgerEntry` 现金真相基础已建立，账户余额 read model 已对有 opening balance 的账户优先走 ledger-derived；正式 opening-balance、manual cash adjustment、dividend、首个 realized PnL truth event 写入口、最新 active trade-event reversal 与 position-level manual adjustment 已落地；前端新增/加仓/平仓已接 truth event，详情页已能撤销最新未撤销的 `ADD / REDUCE / CLOSE` 并记录 cash adjustment，旧批次编辑在 truth lifecycle 存在时只读，整仓 legacy 删除受保护，非最新历史撤销仍需后续补齐。
 - Lifecycle `ledger_summary.cash_effects` 与 `total_dividends` 已读取 ledger；`total_fees` 的最终 fee 归属、adjustment 汇总与 AI workflow 写入仍未完成，不能标为最终 evidence/AI sidecar 完成。
 - FIFO / fee / FX 口径已有 C4 服务起点并接入 legacy truth sync、legacy batch router/import recalculation、positions open-position display、dashboard mark-to-market、account signed market value、ledger-derived cash read model、opening-balance ledger write、manual cash-adjustment write、dividend ledger write、首个 ADD/REDUCE/CLOSE truth write route 与最新 active trade-event reversal 后端路由；前端新增/加仓/平仓已 truth-first，编辑/删除旧批次、部分 analytics/timeline legacy realized PnL 汇总仍未彻底收敛到 truth/ledger-derived。
 - D1/D2/D3/D4 异步地基已有 schema 起点：`job_definitions`, `job_runs`, `job_run_events`, `idempotency_keys`, `outbox_events`, `business_locks`, `derived_timeline_snapshots` 表与 SQLAlchemy 模型已落地；truth position event 创建路径已开始在同一事务写入 durable outbox rows；DB relay 已能把 pending outbox 转成 queued job run，并可在已有 idempotency key 指向 job run 的 crash-resume 场景下补标 outbox 为 published；truth-derived refresh job 已自动声明 trading-position 级 `business_locks`；通用 `idempotency_service` 已支持 canonical request hash、same-key replay 与不同 payload 拒绝；本地 relay CLI 已可手动/cron 触发 DB relay；最小 job execution service 已支持 claim due job、running lock、heartbeat、stale running timeout recovery、payload-declared business lock acquire/release、attempt event、handler dispatch、success completion、retry scheduling 与 final failure；本地 DB worker CLI 已可批量消费 due jobs、可选回收超时 running jobs，并提交每个 job；`derived.timeline.refresh` handler 已能读取 truth lifecycle、返回可审计 refresh 摘要，并 upsert 最小 `DerivedTimelineSnapshot`；admin job read/action API 与前端 `/admin/jobs` 控制台已可查询 job 列表、详情事件并执行 requeue/cancel；Redis worker / broader idempotent execution 仍未完成，Timeline Home API 尚未切到 materialized snapshot 读路径。
-- Timeline contract 中的 `cursor` / `limit` 已有 bridge 级实现；最终 truth-backed Timeline read model 已有 `DerivedTimelineSnapshot` 最小落点与读取服务，但 `/api/timeline/home` 尚未切读该 materialized snapshot。
+- Timeline contract 中的 `cursor` / `limit` 已有 bridge 级实现；最终 truth-backed Timeline read model 已有 `DerivedTimelineSnapshot` 最小落点与读取服务，`/api/timeline/home` 已开始读取并混入 materialized snapshot event，但尚未 hard-cut 到 snapshot-only。
 - 市场数据分层、provider symbol mapping、derived/materialized analytics 还未开始。
 - AI schema / prompt registry / insight workflow / usage metering 仍未进入正式平台化阶段。
 - `dev` 分支当前改动量较大且未形成阶段性提交边界，后续对比评估风险上升。
@@ -466,7 +466,8 @@
 - 已新增 `DerivedTimelineSnapshot` / `derived_timeline_snapshots` 最小 materialized read-model 落点：按 `user_id + trading_position_public_id` 唯一保存 refresh snapshot、source、refreshed job 与刷新时间。
 - 已增强 `derived.timeline.refresh` handler：可基于 `trading_position_public_id` 读取 truth lifecycle，返回 handler/source/position/event/node count 等 job result 摘要，并 upsert `DerivedTimelineSnapshot`。
 - 已新增 `derived_timeline_read_service.list_recent_timeline_snapshots`，可按用户读取最近刷新 snapshot，为后续 Timeline Home snapshot read cutover 预留受测入口。
-- 已具备 asset/timeframe、broker connection、content source、AI scope 等资源锁与 request idempotency 的通用承载方式；尚未把所有业务入口系统性写入对应 `business_locks` payload / `idempotency_service`，也尚未接入 Redis worker，Timeline Home API 也尚未切到 `DerivedTimelineSnapshot`。
+- `/api/timeline/home` 已开始读取 `DerivedTimelineSnapshot` 并转成 derived timeline event card，进入现有 view filter、cursor pagination 与 grouping；legacy-derived events 仍保留为 fallback/并行来源。
+- 已具备 asset/timeframe、broker connection、content source、AI scope 等资源锁与 request idempotency 的通用承载方式；尚未把所有业务入口系统性写入对应 `business_locks` payload / `idempotency_service`，也尚未接入 Redis worker，Timeline Home API 也尚未 hard-cut 到 `DerivedTimelineSnapshot` snapshot-only。
 
 完成定义：
 
@@ -490,7 +491,7 @@
 - 已新增 admin requeue API：`POST /api/admin/jobs/{job_public_id}/requeue` 可将 `FAILED` / `RETRYING` job 重置为可立即执行的 `QUEUED`，并写入状态事件；`RUNNING` / `SUCCEEDED` 等状态会拒绝。
 - 已新增 admin cancel API：`POST /api/admin/jobs/{job_public_id}/cancel` 可取消 `QUEUED` / `RETRYING` job 并写入 `CANCELLED` 事件；`RUNNING` job 暂不强杀。
 - 已新增前端 `/admin/jobs` 控制台，可查看状态统计、筛选 job、查看详情事件与 payload/result，并触发安全的 requeue/cancel 操作。
-- 已在 service/worker 层接入 heartbeat 与 stale timeout recovery，并已新增最小 `DerivedTimelineSnapshot` 写入链路；尚未接入 Redis worker、running interrupt/强杀语义与 Timeline Home materialized snapshot 读路径。
+- 已在 service/worker 层接入 heartbeat 与 stale timeout recovery，并已新增最小 `DerivedTimelineSnapshot` 写入链路与 Timeline Home snapshot event 混入读路径；尚未接入 Redis worker、running interrupt/强杀语义与 Timeline Home snapshot-only hard cut。
 
 完成定义：
 

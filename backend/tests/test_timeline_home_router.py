@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 
 from database import Base, get_db
 from main import app
-from models import AIAnalysisResult, Position, PositionDirection, PositionStatus, TradingAccount, User
+from models import AIAnalysisResult, DerivedTimelineSnapshot, Position, PositionDirection, PositionStatus, TradingAccount, User
 from services.auth_service import get_current_user
 
 
@@ -105,6 +105,59 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.assertEqual(payload["data"]["summary_bar"]["trade_count"], 1)
         self.assertEqual(payload["data"]["summary_bar"]["priority_alert_count"], 0)
         self.assertEqual(payload["meta"]["maturity"], "INSUFFICIENT_SAMPLE")
+
+    def test_timeline_home_surfaces_materialized_timeline_snapshots(self):
+        account = TradingAccount(
+            user_id=self.user.id,
+            public_id="acct-snapshot",
+            name="Snapshot Account",
+            broker="IBKR",
+            currency="USD",
+            is_active=True,
+        )
+        self.session.add(account)
+        self.session.flush()
+        position = Position(
+            user_id=self.user.id,
+            account_id=account.id,
+            public_id="pos-snapshot",
+            symbol="AAPL",
+            exchange="NASDAQ",
+            direction=PositionDirection.LONG,
+            status=PositionStatus.OPEN,
+            total_quantity=1,
+            opened_at=datetime(2026, 5, 3, 9, 30, tzinfo=timezone.utc),
+        )
+        self.session.add(position)
+        self.session.flush()
+        snapshot = DerivedTimelineSnapshot(
+            user_id=self.user.id,
+            trading_position_public_id="tp-snapshot",
+            source="truth.lifecycle.bridge",
+            snapshot_json={
+                "position_title": "AAPL",
+                "lifecycle_node_count": 2,
+                "position_event_public_id": "evt-snapshot",
+            },
+            refreshed_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+        )
+        self.session.add(snapshot)
+        self.session.commit()
+
+        response = self.client.get("/api/timeline/home")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        items = [
+            item
+            for group in payload["data"]["timeline"]["groups"]
+            for item in group["items"]
+        ]
+        snapshot_items = [item for item in items if item["event_public_id"].startswith("derived-timeline:")]
+        self.assertEqual(len(snapshot_items), 1)
+        self.assertEqual(snapshot_items[0]["thread_public_id"], "tp-snapshot")
+        self.assertEqual(snapshot_items[0]["headline"], "AAPL read model refreshed")
+        self.assertEqual(snapshot_items[0]["trust"]["source"], "DERIVED")
 
     def test_timeline_home_builds_review_inbox_for_closed_position_without_review(self):
         account = TradingAccount(
