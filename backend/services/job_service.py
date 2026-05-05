@@ -147,6 +147,67 @@ def fail_job_run(
     return job_run
 
 
+def heartbeat_job_run(
+    db: Session,
+    *,
+    job_run: JobRun,
+    worker_id: str,
+    now: datetime | None = None,
+) -> JobRun:
+    now = _as_utc(now or datetime.now(timezone.utc))
+    if job_run.status != JobRunStatus.RUNNING:
+        raise ValueError(f"Cannot heartbeat job in status {job_run.status.value}")
+    if job_run.locked_by != worker_id:
+        raise ValueError(f"Cannot heartbeat job locked by {job_run.locked_by}")
+
+    job_run.locked_at = now
+    db.add(
+        JobRunEvent(
+            job_run_id=job_run.id,
+            event_type=JobRunEventType.LOG,
+            from_status=JobRunStatus.RUNNING,
+            to_status=JobRunStatus.RUNNING,
+            message=f"Heartbeat from worker {worker_id}",
+            metadata_json={"worker_id": worker_id, "heartbeat_at": now.isoformat()},
+        )
+    )
+    db.flush()
+    return job_run
+
+
+def recover_stale_running_jobs(
+    db: Session,
+    *,
+    queue_name: str,
+    stale_after_seconds: int,
+    retry_delay_seconds: int = 60,
+    now: datetime | None = None,
+) -> int:
+    now = _as_utc(now or datetime.now(timezone.utc))
+    stale_before = now - timedelta(seconds=stale_after_seconds)
+    stale_runs = (
+        db.query(JobRun)
+        .filter(
+            JobRun.status == JobRunStatus.RUNNING,
+            JobRun.queue_name == queue_name,
+            JobRun.locked_at.is_not(None),
+            JobRun.locked_at <= stale_before,
+        )
+        .order_by(JobRun.locked_at.asc(), JobRun.id.asc())
+        .all()
+    )
+
+    for job_run in stale_runs:
+        fail_job_run(
+            db,
+            job_run=job_run,
+            error_message=f"Job lock timed out after {stale_after_seconds} seconds.",
+            retry_delay_seconds=retry_delay_seconds,
+            now=now,
+        )
+    return len(stale_runs)
+
+
 def run_next_due_job(
     db: Session,
     *,

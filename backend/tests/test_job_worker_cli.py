@@ -70,6 +70,37 @@ class JobWorkerCliTests(unittest.TestCase):
         db.rollback.assert_called_once()
         db.close.assert_called_once()
 
+    def test_run_worker_batch_can_recover_stale_running_jobs_before_processing(self):
+        db = Mock()
+        session_factory = Mock(return_value=db)
+
+        with patch("job_worker_cli.recover_stale_running_jobs", return_value=2) as recover:
+            with patch("job_worker_cli.run_next_due_job", return_value=None) as run_next:
+                processed = run_worker_batch(
+                    session_factory=session_factory,
+                    queue_name="derived",
+                    worker_id="worker-a",
+                    handlers={},
+                    limit=1,
+                    recover_stale=True,
+                    stale_after_seconds=300,
+                    retry_delay_seconds=120,
+                    now=datetime(2026, 5, 3, 10, 5, tzinfo=timezone.utc),
+                )
+
+        self.assertEqual(processed, 0)
+        recover.assert_called_once_with(
+            db,
+            queue_name="derived",
+            stale_after_seconds=300,
+            retry_delay_seconds=120,
+            now=datetime(2026, 5, 3, 10, 5, tzinfo=timezone.utc),
+        )
+        run_next.assert_called_once()
+        db.commit.assert_called_once()
+        db.rollback.assert_not_called()
+        db.close.assert_called_once()
+
     def test_run_worker_batch_consumes_job_created_from_outbox_relay(self):
         fd, db_path = tempfile.mkstemp(suffix=".db")
         os.close(fd)

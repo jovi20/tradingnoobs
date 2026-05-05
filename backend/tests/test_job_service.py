@@ -8,7 +8,16 @@ from sqlalchemy.orm import sessionmaker
 
 from database import Base
 from models import JobDefinition, JobRun, JobRunEvent, JobRunEventType, JobRunStatus
-from services.job_service import cancel_job_run, claim_next_due_job, complete_job_run, fail_job_run, requeue_job_run, run_next_due_job
+from services.job_service import (
+    cancel_job_run,
+    claim_next_due_job,
+    complete_job_run,
+    fail_job_run,
+    heartbeat_job_run,
+    recover_stale_running_jobs,
+    requeue_job_run,
+    run_next_due_job,
+)
 
 
 class JobServiceTests(unittest.TestCase):
@@ -360,6 +369,124 @@ class JobServiceTests(unittest.TestCase):
             now=datetime(2026, 5, 3, 10, 3, tzinfo=timezone.utc),
         )
         self.assertIsNone(claimed)
+
+    def test_heartbeat_job_run_refreshes_running_lock_for_same_worker(self):
+        definition = self._definition()
+        run = JobRun(
+            job_definition_id=definition.id,
+            status=JobRunStatus.RUNNING,
+            priority=1,
+            payload={"position_event_public_id": "evt-heartbeat"},
+            max_attempts=3,
+            attempt_count=1,
+            queue_name="derived",
+            locked_by="worker-a",
+            locked_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+            started_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+        )
+        self.db.add(run)
+        self.db.commit()
+
+        heartbeaten = heartbeat_job_run(
+            self.db,
+            job_run=run,
+            worker_id="worker-a",
+            now=datetime(2026, 5, 3, 10, 4, tzinfo=timezone.utc),
+        )
+        self.db.commit()
+
+        self.assertEqual(heartbeaten.status, JobRunStatus.RUNNING)
+        self.assertEqual(heartbeaten.locked_by, "worker-a")
+        self.assertEqual(
+            heartbeaten.locked_at.replace(tzinfo=timezone.utc),
+            datetime(2026, 5, 3, 10, 4, tzinfo=timezone.utc),
+        )
+        event = self.db.query(JobRunEvent).filter(JobRunEvent.job_run_id == run.id).one()
+        self.assertEqual(event.event_type, JobRunEventType.LOG)
+        self.assertEqual(event.metadata_json["worker_id"], "worker-a")
+
+    def test_recover_stale_running_jobs_retries_only_timed_out_runs(self):
+        definition = self._definition()
+        stale = JobRun(
+            job_definition_id=definition.id,
+            status=JobRunStatus.RUNNING,
+            priority=1,
+            payload={"position_event_public_id": "evt-stale"},
+            max_attempts=3,
+            attempt_count=1,
+            queue_name="derived",
+            locked_by="worker-a",
+            locked_at=datetime(2026, 5, 3, 9, 50, tzinfo=timezone.utc),
+            started_at=datetime(2026, 5, 3, 9, 49, tzinfo=timezone.utc),
+        )
+        fresh = JobRun(
+            job_definition_id=definition.id,
+            status=JobRunStatus.RUNNING,
+            priority=1,
+            payload={"position_event_public_id": "evt-fresh"},
+            max_attempts=3,
+            attempt_count=1,
+            queue_name="derived",
+            locked_by="worker-b",
+            locked_at=datetime(2026, 5, 3, 10, 4, tzinfo=timezone.utc),
+            started_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+        )
+        self.db.add_all([stale, fresh])
+        self.db.commit()
+
+        recovered_count = recover_stale_running_jobs(
+            self.db,
+            queue_name="derived",
+            stale_after_seconds=300,
+            retry_delay_seconds=120,
+            now=datetime(2026, 5, 3, 10, 5, tzinfo=timezone.utc),
+        )
+        self.db.commit()
+
+        self.assertEqual(recovered_count, 1)
+        self.db.refresh(stale)
+        self.db.refresh(fresh)
+        self.assertEqual(stale.status, JobRunStatus.RETRYING)
+        self.assertEqual(stale.error_message, "Job lock timed out after 300 seconds.")
+        self.assertIsNone(stale.locked_by)
+        self.assertIsNone(stale.locked_at)
+        self.assertEqual(
+            stale.next_run_at.replace(tzinfo=timezone.utc),
+            datetime(2026, 5, 3, 10, 7, tzinfo=timezone.utc),
+        )
+        self.assertEqual(fresh.status, JobRunStatus.RUNNING)
+        self.assertEqual(fresh.locked_by, "worker-b")
+
+    def test_recover_stale_running_jobs_fails_exhausted_runs(self):
+        definition = self._definition()
+        run = JobRun(
+            job_definition_id=definition.id,
+            status=JobRunStatus.RUNNING,
+            priority=1,
+            payload={"position_event_public_id": "evt-stale-exhausted"},
+            max_attempts=1,
+            attempt_count=1,
+            queue_name="derived",
+            locked_by="worker-a",
+            locked_at=datetime(2026, 5, 3, 9, 50, tzinfo=timezone.utc),
+            started_at=datetime(2026, 5, 3, 9, 49, tzinfo=timezone.utc),
+        )
+        self.db.add(run)
+        self.db.commit()
+
+        recovered_count = recover_stale_running_jobs(
+            self.db,
+            queue_name="derived",
+            stale_after_seconds=300,
+            now=datetime(2026, 5, 3, 10, 5, tzinfo=timezone.utc),
+        )
+        self.db.commit()
+
+        self.assertEqual(recovered_count, 1)
+        self.assertEqual(run.status, JobRunStatus.FAILED)
+        self.assertEqual(run.error_message, "Job lock timed out after 300 seconds.")
+        self.assertIsNone(run.next_run_at)
+        self.assertIsNotNone(run.finished_at)
 
 
 if __name__ == "__main__":
