@@ -11,7 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import AIAnalysisResult, AISummary, DerivedTimelineSnapshot, Position, PositionStatus, TradingAccount, User
+from models import AIAnalysisResult, AISummary, DerivedTimelineSnapshot, FeatureFlag, Position, PositionStatus, TradingAccount, User
 from schemas import (
     ContextRail,
     ContextRailSelectedObject,
@@ -89,6 +89,11 @@ def _trust_meta(
         maturity=maturity,
         value_status=value_status,
     )
+
+
+def _feature_flag_enabled(db: Session, key: str) -> bool:
+    feature_flag = db.query(FeatureFlag).filter(FeatureFlag.key == key).first()
+    return bool(feature_flag and feature_flag.enabled)
 
 
 def _position_route(position: Position) -> str:
@@ -771,17 +776,21 @@ def get_timeline_home(
         .all()
     )
     llm_config = get_llm_runtime_config(db)
-    timeline_events = (
-        _build_timeline_events(positions, ai_summaries)
-        + _build_materialized_timeline_events(
-            list_recent_timeline_snapshots(db, user_id=current_user.id, limit=50),
-            as_of=as_of,
-        )
-        + _build_ai_insight_events(ai_results)
-        + _build_losing_streak_events(positions)
-        + _build_data_stale_events(inbox_items, positions)
-        + _build_sync_exception_events(ai_results, llm_config)
+    materialized_timeline_events = _build_materialized_timeline_events(
+        list_recent_timeline_snapshots(db, user_id=current_user.id, limit=50),
+        as_of=as_of,
     )
+    if _feature_flag_enabled(db, "timeline_snapshot_only_enabled"):
+        timeline_events = materialized_timeline_events
+    else:
+        timeline_events = (
+            _build_timeline_events(positions, ai_summaries)
+            + materialized_timeline_events
+            + _build_ai_insight_events(ai_results)
+            + _build_losing_streak_events(positions)
+            + _build_data_stale_events(inbox_items, positions)
+            + _build_sync_exception_events(ai_results, llm_config)
+        )
     filtered_events = _filter_events(timeline_events, view)
     paged_events, next_cursor = _paginate_timeline_events(filtered_events, cursor=cursor, limit=limit)
     grouped_events = _group_events(paged_events)

@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 
 from database import Base, get_db
 from main import app
-from models import AIAnalysisResult, DerivedTimelineSnapshot, Position, PositionDirection, PositionStatus, TradingAccount, User
+from models import AIAnalysisResult, DerivedTimelineSnapshot, FeatureFlag, Position, PositionDirection, PositionStatus, TradingAccount, User
 from services.auth_service import get_current_user
 
 
@@ -185,6 +185,58 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.assertEqual(snapshot_items[0]["headline"], "AAPL 减仓")
         self.assertEqual(snapshot_items[0]["summary"], "Truth lifecycle snapshot refreshed with 2 nodes.")
         self.assertEqual(snapshot_items[0]["trust"]["source"], "DERIVED")
+
+    def test_timeline_home_snapshot_only_flag_hides_legacy_position_events(self):
+        account = TradingAccount(
+            user_id=self.user.id,
+            public_id="acct-snapshot-only",
+            name="Snapshot Only Account",
+            broker="IBKR",
+            currency="USD",
+            is_active=True,
+        )
+        self.session.add(account)
+        self.session.flush()
+        self.session.add(
+            Position(
+                user_id=self.user.id,
+                account_id=account.id,
+                public_id="pos-legacy-hidden",
+                symbol="MSFT",
+                exchange="NASDAQ",
+                direction=PositionDirection.LONG,
+                status=PositionStatus.OPEN,
+                total_quantity=1,
+                opened_at=datetime(2026, 5, 3, 9, 30, tzinfo=timezone.utc),
+            )
+        )
+        self.session.add(
+            DerivedTimelineSnapshot(
+                user_id=self.user.id,
+                trading_position_public_id="tp-snapshot-only",
+                source="truth.lifecycle.bridge",
+                snapshot_json={
+                    "position_title": "MSFT",
+                    "lifecycle_node_count": 1,
+                    "position_event_type": "OPEN",
+                    "position_event_occurred_at": "2026-05-03T09:30:00Z",
+                },
+                refreshed_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+            )
+        )
+        self.session.add(FeatureFlag(key="timeline_snapshot_only_enabled", enabled=True))
+        self.session.commit()
+
+        response = self.client.get("/api/timeline/home")
+
+        self.assertEqual(response.status_code, 200)
+        items = [
+            item
+            for group in response.json()["data"]["timeline"]["groups"]
+            for item in group["items"]
+        ]
+        self.assertEqual(len(items), 1)
+        self.assertTrue(items[0]["event_public_id"].startswith("derived-timeline:"))
 
     def test_timeline_home_builds_review_inbox_for_closed_position_without_review(self):
         account = TradingAccount(
