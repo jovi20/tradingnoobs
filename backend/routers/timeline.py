@@ -396,6 +396,12 @@ def _build_materialized_timeline_events(
     as_of: str,
 ) -> list[TimelineEventCard]:
     events: list[TimelineEventCard] = []
+    action_labels = {
+        TimelineEventTypeEnum.OPEN: "开仓",
+        TimelineEventTypeEnum.ADD: "加仓",
+        TimelineEventTypeEnum.REDUCE: "减仓",
+        TimelineEventTypeEnum.CLOSE: "平仓",
+    }
     for snapshot in snapshots:
         snapshot_json = snapshot.snapshot_json or {}
         position_title = snapshot_json.get("position_title") or snapshot.trading_position_public_id
@@ -419,8 +425,8 @@ def _build_materialized_timeline_events(
                 thread_public_id=snapshot.trading_position_public_id,
                 event_type=event_type,
                 occurred_at=occurred_at_iso,
-                headline=f"{position_title} read model refreshed",
-                summary=f"Truth lifecycle materialized with {lifecycle_node_count or 0} nodes.",
+                headline=f"{position_title} {action_labels.get(event_type, '生命周期更新')}",
+                summary=f"Truth lifecycle snapshot refreshed with {lifecycle_node_count or 0} nodes.",
                 instrument=TimelineInstrumentRef(
                     asset_label=position_title,
                     instrument_label="Truth Lifecycle",

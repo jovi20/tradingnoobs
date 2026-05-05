@@ -182,7 +182,8 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.assertEqual(snapshot_items[0]["thread_public_id"], "tp-snapshot")
         self.assertEqual(snapshot_items[0]["event_type"], "REDUCE")
         self.assertEqual(snapshot_items[0]["occurred_at"], "2026-05-02T15:30:00Z")
-        self.assertEqual(snapshot_items[0]["headline"], "AAPL read model refreshed")
+        self.assertEqual(snapshot_items[0]["headline"], "AAPL 减仓")
+        self.assertEqual(snapshot_items[0]["summary"], "Truth lifecycle snapshot refreshed with 2 nodes.")
         self.assertEqual(snapshot_items[0]["trust"]["source"], "DERIVED")
 
     def test_timeline_home_builds_review_inbox_for_closed_position_without_review(self):
