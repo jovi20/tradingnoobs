@@ -3,6 +3,8 @@ Trading Noobs Backend - TradingPosition Truth Read Service
 """
 from __future__ import annotations
 
+from decimal import Decimal
+
 from sqlalchemy.orm import Session, joinedload
 
 from models import AccountLedgerEntry, AccountLedgerEntryType, PositionEventType, TradeInstrument, TradingPosition, TradingPositionStatus
@@ -56,8 +58,12 @@ def _ledger_cash_effects(truth_position: TradingPosition) -> list[dict]:
 
 def _ledger_total(truth_position: TradingPosition, entry_type: AccountLedgerEntryType):
     return sum(
-        (entry.amount for entry in truth_position.ledger_entries if entry.entry_type == entry_type),
-        0,
+        (
+            entry.amount_account_ccy if entry.amount_account_ccy is not None else entry.amount
+            for entry in truth_position.ledger_entries
+            if entry.entry_type == entry_type
+        ),
+        Decimal("0"),
     )
 
 
