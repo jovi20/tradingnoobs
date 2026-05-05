@@ -139,6 +139,7 @@ class TimelineHomeRouterTests(unittest.TestCase):
                 "lifecycle_node_count": 2,
                 "position_event_public_id": "evt-snapshot",
                 "position_event_type": "REDUCE",
+                "position_event_occurred_at": "2026-05-02T15:30:00Z",
             },
             refreshed_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
         )
@@ -180,6 +181,7 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.assertNotIn("SHOULD_NOT_LEAK", [item["headline"] for item in items])
         self.assertEqual(snapshot_items[0]["thread_public_id"], "tp-snapshot")
         self.assertEqual(snapshot_items[0]["event_type"], "REDUCE")
+        self.assertEqual(snapshot_items[0]["occurred_at"], "2026-05-02T15:30:00Z")
         self.assertEqual(snapshot_items[0]["headline"], "AAPL read model refreshed")
         self.assertEqual(snapshot_items[0]["trust"]["source"], "DERIVED")
 

@@ -466,7 +466,7 @@
 - 已新增 `DerivedTimelineSnapshot` / `derived_timeline_snapshots` 最小 materialized read-model 落点：按 `user_id + trading_position_public_id` 唯一保存 refresh snapshot、source、refreshed job 与刷新时间。
 - 已增强 `derived.timeline.refresh` handler：可基于 `trading_position_public_id` 读取 truth lifecycle，返回 handler/source/position/event/node count 等 job result 摘要，并 upsert `DerivedTimelineSnapshot`。
 - 已新增 `derived_timeline_read_service.list_recent_timeline_snapshots`，可按用户读取最近刷新 snapshot，为后续 Timeline Home snapshot read cutover 预留受测入口。
-- `/api/timeline/home` 已开始读取 `DerivedTimelineSnapshot` 并转成 derived timeline event card，进入现有 view filter、cursor pagination 与 grouping；legacy-derived events 仍保留为 fallback/并行来源。
+- `/api/timeline/home` 已开始读取 `DerivedTimelineSnapshot` 并转成 derived timeline event card，优先使用 truth event type 与 truth event occurred_at，进入现有 view filter、cursor pagination 与 grouping；legacy-derived events 仍保留为 fallback/并行来源。
 - 已具备 asset/timeframe、broker connection、content source、AI scope 等资源锁与 request idempotency 的通用承载方式；尚未把所有业务入口系统性写入对应 `business_locks` payload / `idempotency_service`，也尚未接入 Redis worker，Timeline Home API 也尚未 hard-cut 到 `DerivedTimelineSnapshot` snapshot-only。
 
 完成定义：

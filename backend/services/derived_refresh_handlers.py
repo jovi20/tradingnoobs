@@ -27,12 +27,31 @@ def refresh_timeline_read_model(db: Session, job_run: JobRun) -> dict:
         raise ValueError(f"TradingPosition not found for public_id {position_public_id}")
 
     lifecycle = build_trading_position_lifecycle_payload(truth_position)
+    position_event_public_id = payload.get("position_event_public_id")
+    source_node = next(
+        (
+            node
+            for node in lifecycle["lifecycle_thread"]["nodes"]
+            if node.get("related_event_public_id") == position_event_public_id
+        ),
+        None,
+    )
+    position_event_occurred_at = None
+    if source_node and source_node.get("occurred_at"):
+        occurred_at = source_node["occurred_at"]
+        if isinstance(occurred_at, datetime):
+            if occurred_at.tzinfo is None:
+                occurred_at = occurred_at.replace(tzinfo=timezone.utc)
+            position_event_occurred_at = occurred_at.isoformat().replace("+00:00", "Z")
+        else:
+            position_event_occurred_at = str(occurred_at)
     result = {
         "handler": "derived.timeline.refresh",
         "source": "truth.lifecycle.bridge",
         "trading_position_public_id": position_public_id,
-        "position_event_public_id": payload.get("position_event_public_id"),
+        "position_event_public_id": position_event_public_id,
         "position_event_type": payload.get("position_event_type"),
+        "position_event_occurred_at": position_event_occurred_at,
         "position_title": lifecycle["position_summary"]["title"],
         "review_status": lifecycle["review_status"],
         "lifecycle_node_count": len(lifecycle["lifecycle_thread"]["nodes"]),

@@ -156,6 +156,10 @@ class DerivedRefreshHandlerTests(unittest.TestCase):
         self.assertIsNotNone(snapshot.refreshed_at)
         self.assertEqual(snapshot.snapshot_json["position_title"], "AAPL")
         self.assertEqual(snapshot.snapshot_json["position_event_type"], "OPEN")
+        self.assertEqual(
+            snapshot.snapshot_json["position_event_occurred_at"],
+            "2026-05-03T09:30:00Z",
+        )
         self.assertEqual(snapshot.snapshot_json["lifecycle_node_count"], 1)
 
 
