@@ -400,6 +400,11 @@ def _build_materialized_timeline_events(
         snapshot_json = snapshot.snapshot_json or {}
         position_title = snapshot_json.get("position_title") or snapshot.trading_position_public_id
         lifecycle_node_count = snapshot_json.get("lifecycle_node_count")
+        event_type = TimelineEventTypeEnum.OPEN
+        try:
+            event_type = TimelineEventTypeEnum(snapshot_json.get("position_event_type") or TimelineEventTypeEnum.OPEN.value)
+        except ValueError:
+            event_type = TimelineEventTypeEnum.OPEN
         occurred_at = snapshot.refreshed_at or snapshot.updated_at or snapshot.created_at or datetime.now(timezone.utc)
         if occurred_at.tzinfo is None:
             occurred_at = occurred_at.replace(tzinfo=timezone.utc)
@@ -407,7 +412,7 @@ def _build_materialized_timeline_events(
             TimelineEventCard(
                 event_public_id=f"derived-timeline:{snapshot.public_id}",
                 thread_public_id=snapshot.trading_position_public_id,
-                event_type=TimelineEventTypeEnum.OPEN,
+                event_type=event_type,
                 occurred_at=occurred_at.isoformat().replace("+00:00", "Z"),
                 headline=f"{position_title} read model refreshed",
                 summary=f"Truth lifecycle materialized with {lifecycle_node_count or 0} nodes.",

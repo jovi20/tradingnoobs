@@ -32,6 +32,7 @@ def refresh_timeline_read_model(db: Session, job_run: JobRun) -> dict:
         "source": "truth.lifecycle.bridge",
         "trading_position_public_id": position_public_id,
         "position_event_public_id": payload.get("position_event_public_id"),
+        "position_event_type": payload.get("position_event_type"),
         "position_title": lifecycle["position_summary"]["title"],
         "review_status": lifecycle["review_status"],
         "lifecycle_node_count": len(lifecycle["lifecycle_thread"]["nodes"]),

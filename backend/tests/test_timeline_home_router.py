@@ -138,6 +138,7 @@ class TimelineHomeRouterTests(unittest.TestCase):
                 "position_title": "AAPL",
                 "lifecycle_node_count": 2,
                 "position_event_public_id": "evt-snapshot",
+                "position_event_type": "REDUCE",
             },
             refreshed_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
         )
@@ -156,6 +157,7 @@ class TimelineHomeRouterTests(unittest.TestCase):
         snapshot_items = [item for item in items if item["event_public_id"].startswith("derived-timeline:")]
         self.assertEqual(len(snapshot_items), 1)
         self.assertEqual(snapshot_items[0]["thread_public_id"], "tp-snapshot")
+        self.assertEqual(snapshot_items[0]["event_type"], "REDUCE")
         self.assertEqual(snapshot_items[0]["headline"], "AAPL read model refreshed")
         self.assertEqual(snapshot_items[0]["trust"]["source"], "DERIVED")
 

@@ -131,6 +131,7 @@ class DerivedRefreshHandlerTests(unittest.TestCase):
             payload={
                 "trading_position_public_id": position.public_id,
                 "position_event_public_id": event.public_id,
+                "position_event_type": event.event_type.value,
             },
             max_attempts=3,
             queue_name="derived",
@@ -143,6 +144,7 @@ class DerivedRefreshHandlerTests(unittest.TestCase):
         self.assertEqual(result["handler"], "derived.timeline.refresh")
         self.assertEqual(result["trading_position_public_id"], position.public_id)
         self.assertEqual(result["position_event_public_id"], event.public_id)
+        self.assertEqual(result["position_event_type"], "OPEN")
         self.assertEqual(result["lifecycle_node_count"], 1)
         self.assertEqual(result["position_title"], "AAPL")
         self.assertEqual(result["source"], "truth.lifecycle.bridge")
@@ -153,6 +155,7 @@ class DerivedRefreshHandlerTests(unittest.TestCase):
         self.assertEqual(snapshot.refreshed_by_job_run_public_id, job_run.public_id)
         self.assertIsNotNone(snapshot.refreshed_at)
         self.assertEqual(snapshot.snapshot_json["position_title"], "AAPL")
+        self.assertEqual(snapshot.snapshot_json["position_event_type"], "OPEN")
         self.assertEqual(snapshot.snapshot_json["lifecycle_node_count"], 1)
 
 
