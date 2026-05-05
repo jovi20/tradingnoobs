@@ -72,7 +72,7 @@ cd backend && ../.venv313/bin/python -m unittest discover -s tests
 Result:
 
 ```text
-Ran 116 tests in 8.234s
+Ran 118 tests in 8.065s
 OK
 LLM Test Success: {'ok': True}
 ```
@@ -119,7 +119,7 @@ cd backend && ../.venv313/bin/python -m unittest discover -s tests -p test_timel
 Result:
 
 ```text
-Ran 13 tests in 0.959s
+Ran 14 tests in 1.191s
 OK
 ```
 
