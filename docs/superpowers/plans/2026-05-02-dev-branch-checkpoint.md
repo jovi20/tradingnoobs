@@ -72,7 +72,7 @@ cd backend && ../.venv313/bin/python -m unittest discover -s tests
 Result:
 
 ```text
-Ran 114 tests in 7.634s
+Ran 116 tests in 8.234s
 OK
 LLM Test Success: {'ok': True}
 ```
