@@ -3,6 +3,8 @@ Trading Noobs Backend - Derived Refresh Job Handlers
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from sqlalchemy.orm import Session
 
 from models import DerivedTimelineSnapshot, JobRun
@@ -50,7 +52,7 @@ def refresh_timeline_read_model(db: Session, job_run: JobRun) -> dict:
     snapshot.source = result["source"]
     snapshot.snapshot_json = result
     snapshot.refreshed_by_job_run_public_id = job_run.public_id
-    snapshot.refreshed_at = job_run.started_at
+    snapshot.refreshed_at = job_run.started_at or datetime.now(timezone.utc)
     db.add(snapshot)
     db.flush()
     return result

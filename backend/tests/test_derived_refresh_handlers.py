@@ -151,6 +151,7 @@ class DerivedRefreshHandlerTests(unittest.TestCase):
         self.assertEqual(snapshot.trading_position_public_id, position.public_id)
         self.assertEqual(snapshot.source, "truth.lifecycle.bridge")
         self.assertEqual(snapshot.refreshed_by_job_run_public_id, job_run.public_id)
+        self.assertIsNotNone(snapshot.refreshed_at)
         self.assertEqual(snapshot.snapshot_json["position_title"], "AAPL")
         self.assertEqual(snapshot.snapshot_json["lifecycle_node_count"], 1)
 
