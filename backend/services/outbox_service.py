@@ -92,6 +92,29 @@ def _get_or_create_job_definition(db: Session, *, event_type: str, queue_name: s
     return definition
 
 
+def _job_payload_for_outbox_event(outbox_event: OutboxEvent) -> dict:
+    payload = {
+        **(outbox_event.payload or {}),
+        "outbox_event_public_id": outbox_event.public_id,
+        "outbox_event_type": outbox_event.event_type,
+        "aggregate_type": outbox_event.aggregate_type,
+        "aggregate_public_id": outbox_event.aggregate_public_id,
+    }
+    trading_position_public_id = payload.get("trading_position_public_id")
+    if outbox_event.queue_name == "derived" and trading_position_public_id:
+        payload.setdefault(
+            "business_locks",
+            [
+                {
+                    "scope": "derived.timeline.refresh",
+                    "resource_key": trading_position_public_id,
+                    "ttl_seconds": 300,
+                }
+            ],
+        )
+    return payload
+
+
 def relay_pending_outbox_events(
     db: Session,
     *,
@@ -140,13 +163,7 @@ def relay_pending_outbox_events(
             idempotency_key=idempotency_key,
             status=JobRunStatus.QUEUED,
             priority=0,
-            payload={
-                **(outbox_event.payload or {}),
-                "outbox_event_public_id": outbox_event.public_id,
-                "outbox_event_type": outbox_event.event_type,
-                "aggregate_type": outbox_event.aggregate_type,
-                "aggregate_public_id": outbox_event.aggregate_public_id,
-            },
+            payload=_job_payload_for_outbox_event(outbox_event),
             max_attempts=(definition.retry_policy or {}).get("max_attempts", 1),
             queue_name=outbox_event.queue_name,
             next_run_at=now,

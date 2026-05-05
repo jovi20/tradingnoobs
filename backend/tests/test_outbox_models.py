@@ -120,6 +120,16 @@ class OutboxModelTests(unittest.TestCase):
         self.assertEqual(job_run.idempotency_key, event.dedupe_key)
         self.assertEqual(job_run.payload["outbox_event_public_id"], event.public_id)
         self.assertEqual(job_run.payload["position_event_public_id"], "evt-1")
+        self.assertEqual(
+            job_run.payload["business_locks"],
+            [
+                {
+                    "scope": "derived.timeline.refresh",
+                    "resource_key": "tp-1",
+                    "ttl_seconds": 300,
+                }
+            ],
+        )
 
         job_event = self.db.query(JobRunEvent).one()
         self.assertEqual(job_event.job_run_id, job_run.id)
