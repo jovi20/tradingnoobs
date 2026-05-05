@@ -616,6 +616,19 @@ export interface AdminJobRunEvent {
     created_at: string
 }
 
+export interface AdminJobBusinessLock {
+    public_id: string
+    scope: string
+    resource_key: string
+    owner_id: string
+    owner_type: string
+    status: 'ACTIVE' | 'RELEASED' | 'EXPIRED'
+    metadata: Record<string, unknown>
+    acquired_at: string | null
+    expires_at: string
+    released_at: string | null
+}
+
 export interface AdminJobRunDetail extends AdminJobRunSummary {
     user_public_id: string | null
     idempotency_key: string | null
@@ -624,6 +637,7 @@ export interface AdminJobRunDetail extends AdminJobRunSummary {
     locked_by: string | null
     locked_at: string | null
     updated_at: string | null
+    business_locks: AdminJobBusinessLock[]
     events: AdminJobRunEvent[]
 }
 

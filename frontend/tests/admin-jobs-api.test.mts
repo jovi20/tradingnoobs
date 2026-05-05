@@ -34,6 +34,7 @@ test('admin job API client lists and reads jobs through admin endpoints', async 
       finished_at: null,
       created_at: '2026-05-05T10:00:00Z',
       updated_at: null,
+      business_locks: [],
       events: [],
     }), {
       status: 200,
@@ -80,6 +81,7 @@ test('admin job API client posts requeue and cancel actions', async () => {
       finished_at: null,
       created_at: '2026-05-05T10:00:00Z',
       updated_at: null,
+      business_locks: [],
       events: [],
     }), {
       status: 200,

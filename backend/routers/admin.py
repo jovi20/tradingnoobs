@@ -2,7 +2,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from database import get_db
-from models import FeatureFlag, IntegrationCredential, JobRun, JobRunStatus, PlatformSetting, SystemSetting, User
+from models import BusinessLock, FeatureFlag, IntegrationCredential, JobRun, JobRunStatus, PlatformSetting, SystemSetting, User
 from schemas import (
     FeatureFlagResponse,
     FeatureFlagUpdate,
@@ -30,7 +30,31 @@ def _enum_value(value):
     return value.value if hasattr(value, "value") else value
 
 
-def _job_run_detail(job_run: JobRun) -> dict:
+def _business_lock_detail(business_lock: BusinessLock) -> dict:
+    return {
+        "public_id": business_lock.public_id,
+        "scope": business_lock.scope,
+        "resource_key": business_lock.resource_key,
+        "owner_id": business_lock.owner_id,
+        "owner_type": business_lock.owner_type,
+        "status": _enum_value(business_lock.status),
+        "metadata": business_lock.metadata_json or {},
+        "acquired_at": business_lock.acquired_at,
+        "expires_at": business_lock.expires_at,
+        "released_at": business_lock.released_at,
+    }
+
+
+def _business_locks_for_job_run(db: Session, job_run: JobRun) -> list[BusinessLock]:
+    return (
+        db.query(BusinessLock)
+        .filter(BusinessLock.owner_type == "job_run", BusinessLock.owner_id == job_run.public_id)
+        .order_by(BusinessLock.created_at.asc(), BusinessLock.id.asc())
+        .all()
+    )
+
+
+def _job_run_detail(job_run: JobRun, business_locks: list[BusinessLock] | None = None) -> dict:
     return {
         "public_id": job_run.public_id,
         "definition": {
@@ -56,6 +80,7 @@ def _job_run_detail(job_run: JobRun) -> dict:
         "finished_at": job_run.finished_at,
         "created_at": job_run.created_at,
         "updated_at": job_run.updated_at,
+        "business_locks": [_business_lock_detail(business_lock) for business_lock in (business_locks or [])],
         "events": [
             {
                 "public_id": event.public_id,
@@ -109,7 +134,7 @@ async def get_job_run_detail(
     job_run = db.query(JobRun).filter(JobRun.public_id == job_public_id).first()
     if not job_run:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job run not found")
-    return _job_run_detail(job_run)
+    return _job_run_detail(job_run, business_locks=_business_locks_for_job_run(db, job_run))
 
 
 @router.post("/jobs/{job_public_id}/requeue")
@@ -127,7 +152,7 @@ async def requeue_job_run_endpoint(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     db.commit()
     db.refresh(requeued)
-    return _job_run_detail(requeued)
+    return _job_run_detail(requeued, business_locks=_business_locks_for_job_run(db, requeued))
 
 
 @router.post("/jobs/{job_public_id}/cancel")
@@ -145,7 +170,7 @@ async def cancel_job_run_endpoint(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     db.commit()
     db.refresh(cancelled)
-    return _job_run_detail(cancelled)
+    return _job_run_detail(cancelled, business_locks=_business_locks_for_job_run(db, cancelled))
 
 
 @router.get("/jobs")

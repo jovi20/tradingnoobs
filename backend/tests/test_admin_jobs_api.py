@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -8,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 
 from database import Base, get_db
 from main import app
-from models import JobDefinition, JobRun, JobRunEvent, JobRunEventType, JobRunStatus, User
+from models import BusinessLock, BusinessLockStatus, JobDefinition, JobRun, JobRunEvent, JobRunEventType, JobRunStatus, User
 from routers.admin import get_current_admin
 
 
@@ -82,6 +83,16 @@ class AdminJobsApiTests(unittest.TestCase):
             db.add(job_run)
             db.flush()
             db.add(
+                BusinessLock(
+                    scope="derived.timeline.refresh",
+                    resource_key="tp-1",
+                    owner_id=job_run.public_id,
+                    owner_type="job_run",
+                    status=BusinessLockStatus.RELEASED,
+                    expires_at=datetime(2026, 5, 3, 10, 5, tzinfo=timezone.utc),
+                )
+            )
+            db.add(
                 JobRunEvent(
                     job_run_id=job_run.id,
                     event_type=JobRunEventType.STATUS_CHANGED,
@@ -105,6 +116,9 @@ class AdminJobsApiTests(unittest.TestCase):
         self.assertEqual(payload["queue_name"], "derived")
         self.assertEqual(payload["payload"], {"position_event_public_id": "evt-1"})
         self.assertEqual(payload["result"]["lifecycle_node_count"], 1)
+        self.assertEqual(payload["business_locks"][0]["scope"], "derived.timeline.refresh")
+        self.assertEqual(payload["business_locks"][0]["resource_key"], "tp-1")
+        self.assertEqual(payload["business_locks"][0]["status"], "RELEASED")
         self.assertEqual(len(payload["events"]), 1)
         self.assertEqual(payload["events"][0]["event_type"], "STATUS_CHANGED")
         self.assertEqual(payload["events"][0]["to_status"], "SUCCEEDED")

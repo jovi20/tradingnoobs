@@ -229,6 +229,29 @@ export function AdminJobsConsole({
                                 <Metric label="Next run" value={selectedJob.next_run_at ? new Date(selectedJob.next_run_at).toLocaleString('zh-CN') : 'None'} />
                             </div>
 
+                            <div>
+                                <h4 className="mb-3 text-sm font-bold">Business locks</h4>
+                                {selectedJob.business_locks.length === 0 ? (
+                                    <p className="rounded-2xl border border-dashed border-slate-200 p-3 text-sm text-slate-500 dark:border-slate-800">
+                                        No business locks recorded for this job.
+                                    </p>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {selectedJob.business_locks.map((businessLock) => (
+                                            <div key={businessLock.public_id} className="rounded-2xl border border-slate-100 p-3 text-sm dark:border-slate-800">
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <span className="font-semibold">{businessLock.scope}</span>
+                                                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                                        {businessLock.status}
+                                                    </span>
+                                                </div>
+                                                <p className="mt-1 break-all font-mono text-xs text-slate-500">{businessLock.resource_key}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
                             <div className="flex gap-2">
                                 <button
                                     type="button"

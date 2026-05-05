@@ -484,6 +484,7 @@
 
 - 已新增 admin job read API：`GET /api/admin/jobs` 支持按 `status`、`queue_name` 和 `limit` 查询 job summary。
 - 已新增 admin job detail API：`GET /api/admin/jobs/{job_public_id}` 返回 job definition、payload、result、error、attempt/lock/timing 字段以及 job events。
+- 已增强 admin job detail API 与前端 `/admin/jobs` 详情侧栏：可查看 job 关联的 `business_locks` scope/resource/status，便于排查锁冲突和释放状态。
 - 已新增 admin requeue API：`POST /api/admin/jobs/{job_public_id}/requeue` 可将 `FAILED` / `RETRYING` job 重置为可立即执行的 `QUEUED`，并写入状态事件；`RUNNING` / `SUCCEEDED` 等状态会拒绝。
 - 已新增 admin cancel API：`POST /api/admin/jobs/{job_public_id}/cancel` 可取消 `QUEUED` / `RETRYING` job 并写入 `CANCELLED` 事件；`RUNNING` job 暂不强杀。
 - 已新增前端 `/admin/jobs` 控制台，可查看状态统计、筛选 job、查看详情事件与 payload/result，并触发安全的 requeue/cancel 操作。
