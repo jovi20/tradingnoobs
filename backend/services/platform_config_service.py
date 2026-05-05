@@ -2,12 +2,13 @@
 Trading Noobs Backend - Platform Config Resolution Helpers
 """
 import os
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
 from config import get_settings
-from models import IntegrationCredential, PlatformSetting, SystemSetting
+from models import FeatureFlag, IntegrationCredential, PlatformSetting, SystemSetting
 from services.credential_service import decrypt_secret
 
 
@@ -38,6 +39,19 @@ def get_integration_credential_secret(
     if credential:
         return decrypt_secret(credential.secret_ciphertext)
     return None
+
+
+def get_feature_flag_enabled(db: Session, key: str) -> bool:
+    feature_flag = db.query(FeatureFlag).filter(FeatureFlag.key == key).first()
+    if not feature_flag or not feature_flag.enabled:
+        return False
+    if feature_flag.expires_at:
+        expires_at = feature_flag.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at <= datetime.now(timezone.utc):
+            return False
+    return True
 
 
 def get_llm_runtime_config(db: Session) -> dict[str, Optional[str]]:

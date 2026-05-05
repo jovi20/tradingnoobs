@@ -14,9 +14,9 @@
   - Alembic setup and revisions
   - Backend bootstrap, timeline, trading position, platform config, public id, ledger, and truth sync services
   - Backend tests
-  - Platform/frontend contract docs
-  - Timeline/dashboard/settings/position frontend domain components
-  - Frontend read models, adapters, and adapter tests
+- Platform/frontend contract docs
+- Timeline/dashboard/settings/position frontend domain components
+- Frontend read models, adapters, and adapter tests
 
 Committed diff summary at checkpoint:
 
@@ -179,6 +179,7 @@ Scope covered:
 - D3 `derived.timeline.refresh` handler can read the truth lifecycle for a `trading_position_public_id`, return an auditable refresh result summary for the job run, and upsert a minimal `DerivedTimelineSnapshot` row keyed by `user_id + trading_position_public_id`.
 - D3 derived timeline materialization foundation has `DerivedTimelineSnapshot` / `derived_timeline_snapshots` model, migration, write-handler coverage, and a small read service for listing recent snapshots; `/api/timeline/home` now mixes materialized snapshot events into the existing legacy bridge feed using truth event type and truth event occurred_at.
 - Timeline Home now has a pre-hard-cut `timeline_snapshot_only_enabled` feature flag: when enabled and unexpired, `/api/timeline/home` returns only `DerivedTimelineSnapshot` materialized timeline events and hides legacy position/AI/system timeline events; absence/disabled/expired keeps the default mixed bridge feed.
+- Platform config runtime now has a shared `get_feature_flag_enabled` service helper for enabled/expired flag resolution; Timeline Home uses this instead of a router-local flag check.
 - D4 admin job API can list jobs by status/queue, read a job detail with definition, payload, result, error, timing/lock fields, associated business locks, and event history, requeue failed/retrying jobs for immediate execution, and cancel queued/retrying jobs while rejecting unsafe completed/running status transitions.
 - D2 outbox foundation has `OutboxEvent` SQLAlchemy model and `outbox_events` migration.
 - Outbox events can persist aggregate reference, event type, queue, dedupe key, dispatch payload, pending status, and attempt metadata.

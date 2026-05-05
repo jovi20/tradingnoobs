@@ -11,7 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import AIAnalysisResult, AISummary, DerivedTimelineSnapshot, FeatureFlag, Position, PositionStatus, TradingAccount, User
+from models import AIAnalysisResult, AISummary, DerivedTimelineSnapshot, Position, PositionStatus, TradingAccount, User
 from schemas import (
     ContextRail,
     ContextRailSelectedObject,
@@ -49,7 +49,7 @@ from schemas import (
 from services.auth_service import get_current_user
 from services.derived_timeline_read_service import list_recent_timeline_snapshots
 from services.market_data_service import MarketDataService
-from services.platform_config_service import get_llm_runtime_config
+from services.platform_config_service import get_feature_flag_enabled, get_llm_runtime_config
 
 router = APIRouter(prefix="/api/timeline", tags=["Timeline"])
 
@@ -89,19 +89,6 @@ def _trust_meta(
         maturity=maturity,
         value_status=value_status,
     )
-
-
-def _feature_flag_enabled(db: Session, key: str) -> bool:
-    feature_flag = db.query(FeatureFlag).filter(FeatureFlag.key == key).first()
-    if not feature_flag or not feature_flag.enabled:
-        return False
-    if feature_flag.expires_at:
-        expires_at = feature_flag.expires_at
-        if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=timezone.utc)
-        if expires_at <= datetime.now(timezone.utc):
-            return False
-    return True
 
 
 def _position_route(position: Position) -> str:
@@ -788,7 +775,7 @@ def get_timeline_home(
         list_recent_timeline_snapshots(db, user_id=current_user.id, limit=50),
         as_of=as_of,
     )
-    if _feature_flag_enabled(db, "timeline_snapshot_only_enabled"):
+    if get_feature_flag_enabled(db, "timeline_snapshot_only_enabled"):
         timeline_events = materialized_timeline_events
     else:
         timeline_events = (
