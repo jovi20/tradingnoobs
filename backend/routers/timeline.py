@@ -93,7 +93,15 @@ def _trust_meta(
 
 def _feature_flag_enabled(db: Session, key: str) -> bool:
     feature_flag = db.query(FeatureFlag).filter(FeatureFlag.key == key).first()
-    return bool(feature_flag and feature_flag.enabled)
+    if not feature_flag or not feature_flag.enabled:
+        return False
+    if feature_flag.expires_at:
+        expires_at = feature_flag.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at <= datetime.now(timezone.utc):
+            return False
+    return True
 
 
 def _position_route(position: Position) -> str:

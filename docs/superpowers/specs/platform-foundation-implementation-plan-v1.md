@@ -63,7 +63,7 @@
 ### 0.4 当前主要缺口
 
 - 仍未完成真正的 hard cutover：后端已有首个 truth trade event 写入口、最新 active event reversal 与 position-level manual adjustment，前端新增/加仓/平仓入口已 truth-first，详情页已守护式暴露最新事件撤销和现金调整录入，truth lifecycle 存在时旧批次编辑已降级只读且整仓 legacy 删除受保护；旧 `Position / TradeBatch` 的 MAE/MFE 和部分复盘控件仍是迁移工具。
-- Timeline Home 当前已能把 `DerivedTimelineSnapshot` 混入 timeline event feed；默认仍与 legacy `Position`、`AISummary`、`AIAnalysisResult` 并行，同时已新增 `timeline_snapshot_only_enabled` feature flag 作为 snapshot-only 预硬切质量闸，不是最终默认 hard-cut truth-only read model。
+- Timeline Home 当前已能把 `DerivedTimelineSnapshot` 混入 timeline event feed；默认仍与 legacy `Position`、`AISummary`、`AIAnalysisResult` 并行，同时已新增尊重 `expires_at` 的 `timeline_snapshot_only_enabled` feature flag 作为 snapshot-only 预硬切质量闸，不是最终默认 hard-cut truth-only read model。
 - Lifecycle Detail 用户侧 public_id-only contract 已补回归测试并落地；前端已能展示 evidence / ledger / AI sidecar，但后端 AI sidecar 生成、InsightArtifact 正式写入与最终 evidence 覆盖仍未完成。
 - `AccountLedgerEntry` 现金真相基础已建立，账户余额 read model 已对有 opening balance 的账户优先走 ledger-derived；正式 opening-balance、manual cash adjustment、dividend、首个 realized PnL truth event 写入口、最新 active trade-event reversal 与 position-level manual adjustment 已落地；前端新增/加仓/平仓已接 truth event，详情页已能撤销最新未撤销的 `ADD / REDUCE / CLOSE` 并记录 cash adjustment，旧批次编辑在 truth lifecycle 存在时只读，整仓 legacy 删除受保护，非最新历史撤销仍需后续补齐。
 - Lifecycle `ledger_summary.cash_effects` 与 `total_dividends` / `total_adjustments` 已读取 ledger，ledger 汇总口径已按 account currency 金额聚合；`total_fees` 的最终 fee 归属与 AI workflow 写入仍未完成，不能标为最终 evidence/AI sidecar 完成。
@@ -467,7 +467,7 @@
 - 已增强 `derived.timeline.refresh` handler：可基于 `trading_position_public_id` 读取 truth lifecycle，返回 handler/source/position/event/node count 等 job result 摘要，并 upsert `DerivedTimelineSnapshot`。
 - 已新增 `derived_timeline_read_service.list_recent_timeline_snapshots`，可按用户读取最近刷新 snapshot，为后续 Timeline Home snapshot read cutover 预留受测入口。
 - `/api/timeline/home` 已开始读取 `DerivedTimelineSnapshot` 并转成 derived timeline event card，优先使用 truth event type 与 truth event occurred_at，进入现有 view filter、cursor pagination 与 grouping；legacy-derived events 默认仍保留为 fallback/并行来源。
-- 已新增 `timeline_snapshot_only_enabled` feature flag 质量闸：开启后 `/api/timeline/home` 仅返回 `DerivedTimelineSnapshot` materialized timeline events，用于验证 snapshot-only 读路径；缺省/关闭时仍保持现有混合 feed。
+- 已新增 `timeline_snapshot_only_enabled` feature flag 质量闸：开启且未过期时 `/api/timeline/home` 仅返回 `DerivedTimelineSnapshot` materialized timeline events，用于验证 snapshot-only 读路径；缺省、关闭或过期时仍保持现有混合 feed。
 - 已具备 asset/timeframe、broker connection、content source、AI scope 等资源锁与 request idempotency 的通用承载方式；尚未把所有业务入口系统性写入对应 `business_locks` payload / `idempotency_service`，也尚未接入 Redis worker，Timeline Home API 默认也尚未 hard-cut 到 `DerivedTimelineSnapshot` snapshot-only。
 
 完成定义：
