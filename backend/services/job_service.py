@@ -183,3 +183,38 @@ def run_next_due_job(
         )
 
     return complete_job_run(db, job_run=job_run, result=result or {}, now=now)
+
+
+def requeue_job_run(
+    db: Session,
+    *,
+    job_run: JobRun,
+    reason: str = "Requeued by admin.",
+    now: datetime | None = None,
+) -> JobRun:
+    now = _as_utc(now or datetime.now(timezone.utc))
+    if job_run.status not in [JobRunStatus.FAILED, JobRunStatus.RETRYING]:
+        raise ValueError(f"Cannot requeue job in status {job_run.status.value}")
+
+    previous_status = job_run.status
+    job_run.status = JobRunStatus.QUEUED
+    job_run.result = {}
+    job_run.error_message = None
+    job_run.attempt_count = 0
+    job_run.locked_by = None
+    job_run.locked_at = None
+    job_run.next_run_at = now
+    job_run.started_at = None
+    job_run.finished_at = None
+    db.add(
+        JobRunEvent(
+            job_run_id=job_run.id,
+            event_type=JobRunEventType.STATUS_CHANGED,
+            from_status=previous_status,
+            to_status=JobRunStatus.QUEUED,
+            message=reason,
+            metadata_json={"source": "admin", "reset_attempts": True},
+        )
+    )
+    db.flush()
+    return job_run

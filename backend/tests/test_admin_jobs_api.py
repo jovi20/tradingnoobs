@@ -173,6 +173,87 @@ class AdminJobsApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 404)
 
+    def test_admin_can_requeue_failed_job(self):
+        db = self.SessionLocal()
+        try:
+            db.add(self.admin_user)
+            db.flush()
+            definition = JobDefinition(
+                key="derived.timeline.refresh",
+                display_name="Refresh Timeline Read Model",
+                queue_name="derived",
+                retry_policy={"max_attempts": 3},
+                timeout_seconds=300,
+                is_active=True,
+            )
+            db.add(definition)
+            db.flush()
+            job_run = JobRun(
+                user_id=self.admin_user.id,
+                job_definition_id=definition.id,
+                public_id="job-failed",
+                status=JobRunStatus.FAILED,
+                payload={"position_event_public_id": "evt-failed"},
+                result={"partial": True},
+                error_message="handler exploded",
+                max_attempts=3,
+                attempt_count=3,
+                queue_name="derived",
+                locked_by="worker-a",
+            )
+            db.add(job_run)
+            db.commit()
+        finally:
+            db.close()
+
+        response = self.client.post("/api/admin/jobs/job-failed/requeue")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "QUEUED")
+        self.assertEqual(payload["attempt_count"], 0)
+        self.assertIsNone(payload["error_message"])
+        self.assertEqual(payload["result"], {})
+        self.assertIsNone(payload["locked_by"])
+        self.assertEqual(payload["events"][-1]["from_status"], "FAILED")
+        self.assertEqual(payload["events"][-1]["to_status"], "QUEUED")
+
+    def test_admin_requeue_rejects_succeeded_job(self):
+        db = self.SessionLocal()
+        try:
+            db.add(self.admin_user)
+            db.flush()
+            definition = JobDefinition(
+                key="derived.timeline.refresh",
+                display_name="Refresh Timeline Read Model",
+                queue_name="derived",
+                retry_policy={"max_attempts": 3},
+                timeout_seconds=300,
+                is_active=True,
+            )
+            db.add(definition)
+            db.flush()
+            db.add(
+                JobRun(
+                    user_id=self.admin_user.id,
+                    job_definition_id=definition.id,
+                    public_id="job-succeeded",
+                    status=JobRunStatus.SUCCEEDED,
+                    payload={"position_event_public_id": "evt-done"},
+                    result={"done": True},
+                    max_attempts=3,
+                    attempt_count=1,
+                    queue_name="derived",
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        response = self.client.post("/api/admin/jobs/job-succeeded/requeue")
+
+        self.assertEqual(response.status_code, 409)
+
 
 if __name__ == "__main__":
     unittest.main()
