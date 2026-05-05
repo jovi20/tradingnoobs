@@ -57,6 +57,20 @@ class PlatformConfigServiceTests(unittest.TestCase):
 
         self.assertTrue(get_feature_flag_enabled(self.db, "active_flag"))
 
+    def test_feature_flag_enabled_respects_actor_targets_when_present(self):
+        self.db.add(
+            FeatureFlag(
+                key="targeted_flag",
+                enabled=True,
+                actor_targets=["user-public-id"],
+            )
+        )
+        self.db.commit()
+
+        self.assertTrue(get_feature_flag_enabled(self.db, "targeted_flag", actor_key="user-public-id"))
+        self.assertFalse(get_feature_flag_enabled(self.db, "targeted_flag", actor_key="other-user"))
+        self.assertFalse(get_feature_flag_enabled(self.db, "targeted_flag"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -775,7 +775,7 @@ def get_timeline_home(
         list_recent_timeline_snapshots(db, user_id=current_user.id, limit=50),
         as_of=as_of,
     )
-    if get_feature_flag_enabled(db, "timeline_snapshot_only_enabled"):
+    if get_feature_flag_enabled(db, "timeline_snapshot_only_enabled", actor_key=current_user.public_id):
         timeline_events = materialized_timeline_events
     else:
         timeline_events = (

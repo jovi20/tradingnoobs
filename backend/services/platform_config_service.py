@@ -41,9 +41,12 @@ def get_integration_credential_secret(
     return None
 
 
-def get_feature_flag_enabled(db: Session, key: str) -> bool:
+def get_feature_flag_enabled(db: Session, key: str, *, actor_key: str | None = None) -> bool:
     feature_flag = db.query(FeatureFlag).filter(FeatureFlag.key == key).first()
     if not feature_flag or not feature_flag.enabled:
+        return False
+    actor_targets = feature_flag.actor_targets or []
+    if actor_targets and actor_key not in actor_targets:
         return False
     if feature_flag.expires_at:
         expires_at = feature_flag.expires_at
