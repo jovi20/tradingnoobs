@@ -218,3 +218,35 @@ def requeue_job_run(
     )
     db.flush()
     return job_run
+
+
+def cancel_job_run(
+    db: Session,
+    *,
+    job_run: JobRun,
+    reason: str = "Cancelled by admin.",
+    now: datetime | None = None,
+) -> JobRun:
+    now = _as_utc(now or datetime.now(timezone.utc))
+    if job_run.status not in [JobRunStatus.QUEUED, JobRunStatus.RETRYING]:
+        raise ValueError(f"Cannot cancel job in status {job_run.status.value}")
+
+    previous_status = job_run.status
+    job_run.status = JobRunStatus.CANCELLED
+    job_run.error_message = reason
+    job_run.locked_by = None
+    job_run.locked_at = None
+    job_run.next_run_at = None
+    job_run.finished_at = now
+    db.add(
+        JobRunEvent(
+            job_run_id=job_run.id,
+            event_type=JobRunEventType.CANCELLED,
+            from_status=previous_status,
+            to_status=JobRunStatus.CANCELLED,
+            message=reason,
+            metadata_json={"source": "admin"},
+        )
+    )
+    db.flush()
+    return job_run

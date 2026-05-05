@@ -254,6 +254,82 @@ class AdminJobsApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 409)
 
+    def test_admin_can_cancel_queued_job(self):
+        db = self.SessionLocal()
+        try:
+            db.add(self.admin_user)
+            db.flush()
+            definition = JobDefinition(
+                key="derived.timeline.refresh",
+                display_name="Refresh Timeline Read Model",
+                queue_name="derived",
+                retry_policy={"max_attempts": 3},
+                timeout_seconds=300,
+                is_active=True,
+            )
+            db.add(definition)
+            db.flush()
+            db.add(
+                JobRun(
+                    user_id=self.admin_user.id,
+                    job_definition_id=definition.id,
+                    public_id="job-queued-cancel",
+                    status=JobRunStatus.QUEUED,
+                    payload={"position_event_public_id": "evt-cancel"},
+                    max_attempts=3,
+                    queue_name="derived",
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        response = self.client.post("/api/admin/jobs/job-queued-cancel/cancel")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "CANCELLED")
+        self.assertIsNotNone(payload["finished_at"])
+        self.assertEqual(payload["events"][-1]["event_type"], "CANCELLED")
+        self.assertEqual(payload["events"][-1]["from_status"], "QUEUED")
+        self.assertEqual(payload["events"][-1]["to_status"], "CANCELLED")
+
+    def test_admin_cancel_rejects_running_job(self):
+        db = self.SessionLocal()
+        try:
+            db.add(self.admin_user)
+            db.flush()
+            definition = JobDefinition(
+                key="derived.timeline.refresh",
+                display_name="Refresh Timeline Read Model",
+                queue_name="derived",
+                retry_policy={"max_attempts": 3},
+                timeout_seconds=300,
+                is_active=True,
+            )
+            db.add(definition)
+            db.flush()
+            db.add(
+                JobRun(
+                    user_id=self.admin_user.id,
+                    job_definition_id=definition.id,
+                    public_id="job-running-cancel",
+                    status=JobRunStatus.RUNNING,
+                    payload={"position_event_public_id": "evt-running"},
+                    max_attempts=3,
+                    attempt_count=1,
+                    queue_name="derived",
+                    locked_by="worker-a",
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        response = self.client.post("/api/admin/jobs/job-running-cancel/cancel")
+
+        self.assertEqual(response.status_code, 409)
+
 
 if __name__ == "__main__":
     unittest.main()

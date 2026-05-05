@@ -72,7 +72,7 @@ cd backend && ../.venv313/bin/python -m unittest discover -s tests
 Result:
 
 ```text
-Ran 92 tests in 6.989s
+Ran 95 tests in 6.924s
 OK
 LLM Test Success: {'ok': True}
 ```
@@ -155,12 +155,12 @@ Result:
 
 ```text
 job models: 1 OK
-job service: 7 OK
+job service: 8 OK
 outbox models: 3 OK
 outbox relay CLI: 2 OK
 job worker CLI: 3 OK
 derived refresh handlers: 1 OK
-admin jobs API: 5 OK
+admin jobs API: 7 OK
 alembic chain: 1 OK
 ```
 
@@ -172,7 +172,7 @@ Scope covered:
 - D3 minimum job execution service can claim due queued/retrying jobs, lock them to a worker, increment attempt count, record start events, dispatch registered handlers by `JobDefinition.key`, complete jobs successfully, schedule retries, and mark exhausted jobs failed.
 - D3 local DB worker CLI can process a bounded batch of due jobs, commit each processed job, rollback/close on failure, and consume a queued job produced by outbox relay through a registered handler.
 - D3 `derived.timeline.refresh` bridge handler can read the truth lifecycle for a `trading_position_public_id` and return an auditable refresh result summary for the job run.
-- D4 admin job API can list jobs by status/queue, read a job detail with definition, payload, result, error, timing/lock fields, and event history, and requeue failed/retrying jobs for immediate execution while rejecting completed/running statuses.
+- D4 admin job API can list jobs by status/queue, read a job detail with definition, payload, result, error, timing/lock fields, and event history, requeue failed/retrying jobs for immediate execution, and cancel queued/retrying jobs while rejecting unsafe completed/running status transitions.
 - D2 outbox foundation has `OutboxEvent` SQLAlchemy model and `outbox_events` migration.
 - Outbox events can persist aggregate reference, event type, queue, dedupe key, dispatch payload, pending status, and attempt metadata.
 - Outbox relay service can turn pending outbox rows into queued `JobRun`s with a status event and idempotency-key record, then mark the outbox row `PUBLISHED`.
@@ -289,7 +289,7 @@ OK
 - Legacy review/batch/MAE controls are still present only as migration tools; batch edit is read-only and whole-position delete is protected when truth lifecycle is available, while guarded frontend latest-event reversal exposure and position-level manual adjustment entry are wired.
 - Truth trade event write slice started: `POST /api/trading-positions/{position_public_id}/events` can append manual `ADD / REDUCE / CLOSE` events to an existing `TradingPosition`; current regression covers `ADD` FIFO replay without cash ledger, `REDUCE` FIFO replay, full `CLOSE` status transition, partial `CLOSE` 422, closed-position `ADD` rejection, realized PnL ledger sync, and latest active event reversal through `POST /api/trading-positions/{position_public_id}/events/{event_public_id}/reverse`.
 - Truth manual adjustment slice started: `POST /api/trading-positions/{position_public_id}/adjustments` can append position-level cash adjustments without touching FIFO quantities or realized PnL.
-- D1/D2/D3/D4 async foundation started: unified job definition/run/event/idempotency-key tables and outbox event table/model are landed; truth position event creation writes durable outbox rows in the same transaction; DB relay can create queued job runs from pending outbox rows and resume safely when an idempotency key already points at an existing job run; local relay CLI can run one bounded relay batch; job execution service can claim, dispatch handlers, complete, retry, fail, and requeue job runs; local DB worker CLI can process bounded due-job batches; `derived.timeline.refresh` bridge handler can produce truth lifecycle refresh summaries; admin job API exposes list/detail/requeue status. Redis queue, final derived materialization, broader business locks, and job admin UI are not connected yet.
+- D1/D2/D3/D4 async foundation started: unified job definition/run/event/idempotency-key tables and outbox event table/model are landed; truth position event creation writes durable outbox rows in the same transaction; DB relay can create queued job runs from pending outbox rows and resume safely when an idempotency key already points at an existing job run; local relay CLI can run one bounded relay batch; job execution service can claim, dispatch handlers, complete, retry, fail, requeue, and cancel job runs; local DB worker CLI can process bounded due-job batches; `derived.timeline.refresh` bridge handler can produce truth lifecycle refresh summaries; admin job API exposes list/detail/requeue/cancel status. Redis queue, final derived materialization, broader business locks, and job admin UI are not connected yet.
 - The next implementation slice should either harden manual adjustment edge cases or move into broader historical/non-latest reversal design; non-latest reversal remains intentionally blocked until its UX and accounting rules are explicit.
 
 ## Next Checkpoint Criteria

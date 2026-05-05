@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 
 from database import Base
 from models import JobDefinition, JobRun, JobRunEvent, JobRunEventType, JobRunStatus
-from services.job_service import claim_next_due_job, complete_job_run, fail_job_run, requeue_job_run, run_next_due_job
+from services.job_service import cancel_job_run, claim_next_due_job, complete_job_run, fail_job_run, requeue_job_run, run_next_due_job
 
 
 class JobServiceTests(unittest.TestCase):
@@ -325,6 +325,41 @@ class JobServiceTests(unittest.TestCase):
         )
         self.assertEqual(claimed.id, run.id)
         self.assertEqual(claimed.status, JobRunStatus.RUNNING)
+
+    def test_cancel_job_run_removes_retrying_job_from_claimable_queue(self):
+        definition = self._definition()
+        run = JobRun(
+            job_definition_id=definition.id,
+            status=JobRunStatus.RETRYING,
+            priority=1,
+            payload={"position_event_public_id": "evt-cancel"},
+            max_attempts=3,
+            attempt_count=1,
+            queue_name="derived",
+            error_message="temporary timeout",
+            next_run_at=datetime(2026, 5, 3, 10, 2, tzinfo=timezone.utc),
+        )
+        self.db.add(run)
+        self.db.commit()
+
+        cancelled = cancel_job_run(
+            self.db,
+            job_run=run,
+            now=datetime(2026, 5, 3, 10, 1, tzinfo=timezone.utc),
+        )
+        self.db.commit()
+
+        self.assertEqual(cancelled.status, JobRunStatus.CANCELLED)
+        self.assertIsNone(cancelled.next_run_at)
+        self.assertIsNotNone(cancelled.finished_at)
+
+        claimed = claim_next_due_job(
+            self.db,
+            queue_name="derived",
+            worker_id="worker-a",
+            now=datetime(2026, 5, 3, 10, 3, tzinfo=timezone.utc),
+        )
+        self.assertIsNone(claimed)
 
 
 if __name__ == "__main__":

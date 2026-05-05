@@ -16,7 +16,7 @@ from schemas import (
 from routers.auth import get_current_user
 import httpx
 from services.credential_service import decrypt_secret, encrypt_secret, mask_secret
-from services.job_service import requeue_job_run
+from services.job_service import cancel_job_run, requeue_job_run
 from services.platform_config_service import get_llm_runtime_config
 
 router = APIRouter(
@@ -128,6 +128,24 @@ async def requeue_job_run_endpoint(
     db.commit()
     db.refresh(requeued)
     return _job_run_detail(requeued)
+
+
+@router.post("/jobs/{job_public_id}/cancel")
+async def cancel_job_run_endpoint(
+    job_public_id: str,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    job_run = db.query(JobRun).filter(JobRun.public_id == job_public_id).first()
+    if not job_run:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job run not found")
+    try:
+        cancelled = cancel_job_run(db, job_run=job_run)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    db.commit()
+    db.refresh(cancelled)
+    return _job_run_detail(cancelled)
 
 
 @router.get("/jobs")
