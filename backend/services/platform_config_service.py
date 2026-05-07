@@ -1,6 +1,7 @@
 """
 Trading Noobs Backend - Platform Config Resolution Helpers
 """
+import hashlib
 import os
 from datetime import datetime, timezone
 from typing import Optional
@@ -13,6 +14,11 @@ from services.credential_service import decrypt_secret
 
 
 settings = get_settings()
+
+
+def _stable_rollout_bucket(key: str, actor_key: str) -> int:
+    digest = hashlib.sha256(f"{key}:{actor_key}".encode("utf-8")).hexdigest()
+    return int(digest[:8], 16) % 100
 
 
 def get_platform_setting_value(db: Session, key: str) -> Optional[str]:
@@ -45,15 +51,21 @@ def get_feature_flag_enabled(db: Session, key: str, *, actor_key: str | None = N
     feature_flag = db.query(FeatureFlag).filter(FeatureFlag.key == key).first()
     if not feature_flag or not feature_flag.enabled:
         return False
-    actor_targets = feature_flag.actor_targets or []
-    if actor_targets and actor_key not in actor_targets:
-        return False
     if feature_flag.expires_at:
         expires_at = feature_flag.expires_at
         if expires_at.tzinfo is None:
             expires_at = expires_at.replace(tzinfo=timezone.utc)
         if expires_at <= datetime.now(timezone.utc):
             return False
+    actor_targets = feature_flag.actor_targets or []
+    if actor_key and actor_key in actor_targets:
+        return True
+    if actor_targets:
+        return False
+    if feature_flag.rollout_percentage is not None:
+        if actor_key is None:
+            return False
+        return _stable_rollout_bucket(key, actor_key) < feature_flag.rollout_percentage
     return True
 
 
