@@ -68,6 +68,39 @@ class IdempotencyServiceTests(unittest.TestCase):
                 request_payload={"prompt_version": "v2"},
             )
 
+    def test_begin_idempotent_request_restarts_expired_key(self):
+        first = begin_idempotent_request(
+            self.db,
+            scope="manual_sync",
+            key="user-1:broker:expired",
+            request_payload={"broker": "ibkr", "account": "old"},
+            now=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+            ttl_seconds=60,
+        )
+        complete_idempotent_request(
+            self.db,
+            record=first.record,
+            response_json={"status": "old"},
+            now=datetime(2026, 5, 3, 10, 1, tzinfo=timezone.utc),
+        )
+        self.db.commit()
+
+        restarted = begin_idempotent_request(
+            self.db,
+            scope="manual_sync",
+            key="user-1:broker:expired",
+            request_payload={"broker": "ibkr", "account": "new"},
+            now=datetime(2026, 5, 3, 10, 2, tzinfo=timezone.utc),
+            ttl_seconds=120,
+        )
+        self.db.commit()
+
+        self.assertTrue(restarted.created)
+        self.assertEqual(restarted.record.id, first.record.id)
+        self.assertEqual(restarted.record.status, "IN_PROGRESS")
+        self.assertIsNone(restarted.record.response_json)
+        self.assertEqual(self.db.query(IdempotencyKey).count(), 1)
+
     def test_complete_idempotent_request_stores_replayable_response(self):
         started = begin_idempotent_request(
             self.db,

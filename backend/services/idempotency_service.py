@@ -48,6 +48,16 @@ def begin_idempotent_request(
         .first()
     )
     if existing:
+        if existing.expires_at and _as_utc(existing.expires_at) <= now:
+            existing.request_hash = hashed_request
+            existing.status = "IN_PROGRESS"
+            existing.response_json = None
+            existing.job_run_id = None
+            existing.user_id = user_id
+            existing.expires_at = now + timedelta(seconds=ttl_seconds) if ttl_seconds else None
+            db.add(existing)
+            db.flush()
+            return IdempotencyBeginResult(record=existing, created=True)
         if existing.request_hash != hashed_request:
             raise ValueError("Idempotency key reuse with a different request payload.")
         return IdempotencyBeginResult(record=existing, created=False)
