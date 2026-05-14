@@ -72,7 +72,7 @@ cd backend && ../.venv313/bin/python -m unittest discover -s tests
 Result:
 
 ```text
-Ran 120 tests in 8.209s
+Ran 121 tests in 9.556s
 OK
 LLM Test Success: {'ok': True}
 ```
@@ -157,7 +157,7 @@ Result:
 job models: 2 OK
 job service: 13 OK
 business lock service: 3 OK
-idempotency service: 3 OK
+idempotency service: 4 OK
 outbox models: 3 OK
 outbox relay CLI: 2 OK
 job worker CLI: 4 OK
