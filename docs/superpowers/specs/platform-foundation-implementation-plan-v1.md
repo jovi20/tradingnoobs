@@ -43,7 +43,7 @@
 - 用户体系已补 `public_id`, `email_normalized`, `status`, `last_login_at`, `locale`, `timezone`。
 - 认证支撑表 `user_credentials`, `user_sessions`, `user_identities`, `auth_tokens` 已落地，并接到登录/登出/鉴权链路。
 - 平台配置治理 `platform_settings`, `integration_credentials`, `feature_flags` 已落地，后台已能管理平台级配置。
-- 平台配置服务已提供统一 feature flag runtime resolver，当前会尊重 `enabled`、`expires_at`、`actor_targets` 与稳定 `rollout_percentage` 分桶，Timeline snapshot-only 质量闸已改用该服务入口。
+- 平台配置服务已提供统一 feature flag runtime resolver，当前会尊重 `enabled`、`expires_at`、additive `actor_targets` allowlist 与稳定 `rollout_percentage` 分桶，Timeline snapshot-only 质量闸已改用该服务入口。
 - 高频用户路由已大面积切到 `public_id`。
 - `AssetMaster`, `TradeInstrument`, `TradingPosition`, `PositionEvent` 已有初版 truth schema 与同步服务。
 - `AccountLedgerEntry` 已有初版 schema / migration / service；legacy realized PnL 与账户 transaction 会写入 ledger，Lifecycle `cash_effects` 已从 ledger 读取。

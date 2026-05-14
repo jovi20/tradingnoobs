@@ -80,7 +80,7 @@ class PlatformConfigServiceTests(unittest.TestCase):
         self.assertFalse(get_feature_flag_enabled(self.db, "rollout_all"))
         self.assertTrue(get_feature_flag_enabled(self.db, "rollout_all", actor_key="user-public-id"))
 
-    def test_feature_flag_actor_targets_override_rollout_percentage(self):
+    def test_feature_flag_actor_targets_are_additive_to_rollout_percentage(self):
         self.db.add(
             FeatureFlag(
                 key="targeted_rollout_zero",
@@ -89,10 +89,19 @@ class PlatformConfigServiceTests(unittest.TestCase):
                 rollout_percentage=0,
             )
         )
+        self.db.add(
+            FeatureFlag(
+                key="targeted_rollout_all",
+                enabled=True,
+                actor_targets=["beta-user"],
+                rollout_percentage=100,
+            )
+        )
         self.db.commit()
 
         self.assertTrue(get_feature_flag_enabled(self.db, "targeted_rollout_zero", actor_key="beta-user"))
         self.assertFalse(get_feature_flag_enabled(self.db, "targeted_rollout_zero", actor_key="other-user"))
+        self.assertTrue(get_feature_flag_enabled(self.db, "targeted_rollout_all", actor_key="other-user"))
 
 
 if __name__ == "__main__":

@@ -60,12 +60,12 @@ def get_feature_flag_enabled(db: Session, key: str, *, actor_key: str | None = N
     actor_targets = feature_flag.actor_targets or []
     if actor_key and actor_key in actor_targets:
         return True
-    if actor_targets:
-        return False
     if feature_flag.rollout_percentage is not None:
         if actor_key is None:
             return False
         return _stable_rollout_bucket(key, actor_key) < feature_flag.rollout_percentage
+    if actor_targets:
+        return False
     return True
 
 
