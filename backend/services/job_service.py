@@ -47,6 +47,7 @@ def claim_next_due_job(
     job_run.locked_by = worker_id
     job_run.locked_at = now
     job_run.started_at = now
+    job_run.next_run_at = None
     job_run.attempt_count = (job_run.attempt_count or 0) + 1
     db.add(
         JobRunEvent(

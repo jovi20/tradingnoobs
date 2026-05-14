@@ -96,6 +96,7 @@ class JobServiceTests(unittest.TestCase):
         self.assertEqual(claimed.status, JobRunStatus.RUNNING)
         self.assertEqual(claimed.locked_by, "worker-a")
         self.assertEqual(claimed.attempt_count, 1)
+        self.assertIsNone(claimed.next_run_at)
         self.assertIsNotNone(claimed.locked_at)
         self.assertIsNotNone(claimed.started_at)
 
