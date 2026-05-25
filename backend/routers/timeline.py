@@ -742,6 +742,11 @@ def get_timeline_home(
         review_completion_rate = reviewed_closed_count / closed_count
 
     as_of = _utc_now_iso()
+    snapshot_only_enabled = get_feature_flag_enabled(
+        db,
+        "timeline_snapshot_only_enabled",
+        actor_key=current_user.public_id,
+    )
     meta = _trust_meta(
         as_of=as_of,
         source=DataSourceEnum.DERIVED,
@@ -751,7 +756,8 @@ def get_timeline_home(
     review_inbox = _build_review_inbox(positions, as_of)
     inbox_items = list(review_inbox.items)
     _append_losing_streak_inbox_item(inbox_items, positions, as_of)
-    inbox_items.extend(_build_data_stale_items(positions, db, as_of))
+    if not snapshot_only_enabled:
+        inbox_items.extend(_build_data_stale_items(positions, db, as_of))
     review_inbox = ReviewInbox(
         counts=ReviewInboxCounts(
             total=len(inbox_items),
@@ -763,21 +769,21 @@ def get_timeline_home(
         trust=review_inbox.trust,
     )
 
-    ai_results = (
-        db.query(AIAnalysisResult)
-        .filter(AIAnalysisResult.user_id == current_user.id)
-        .order_by(AIAnalysisResult.created_at.desc())
-        .limit(5)
-        .all()
-    )
-    llm_config = get_llm_runtime_config(db)
     materialized_timeline_events = _build_materialized_timeline_events(
         list_recent_timeline_snapshots(db, user_id=current_user.id, limit=50),
         as_of=as_of,
     )
-    if get_feature_flag_enabled(db, "timeline_snapshot_only_enabled", actor_key=current_user.public_id):
+    if snapshot_only_enabled:
         timeline_events = materialized_timeline_events
     else:
+        ai_results = (
+            db.query(AIAnalysisResult)
+            .filter(AIAnalysisResult.user_id == current_user.id)
+            .order_by(AIAnalysisResult.created_at.desc())
+            .limit(5)
+            .all()
+        )
+        llm_config = get_llm_runtime_config(db)
         timeline_events = (
             _build_timeline_events(positions, ai_summaries)
             + materialized_timeline_events

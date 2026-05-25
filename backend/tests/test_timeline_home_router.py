@@ -2,6 +2,7 @@ import os
 import tempfile
 import unittest
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -237,6 +238,65 @@ class TimelineHomeRouterTests(unittest.TestCase):
         ]
         self.assertEqual(len(items), 1)
         self.assertTrue(items[0]["event_public_id"].startswith("derived-timeline:"))
+
+    def test_timeline_home_snapshot_only_flag_skips_legacy_exception_builders(self):
+        account = TradingAccount(
+            user_id=self.user.id,
+            public_id="acct-snapshot-only-side-effects",
+            name="Snapshot Only Side Effects Account",
+            broker="IBKR",
+            currency="USD",
+            is_active=True,
+        )
+        self.session.add(account)
+        self.session.flush()
+        self.session.add(
+            Position(
+                user_id=self.user.id,
+                account_id=account.id,
+                public_id="pos-snapshot-only-side-effects",
+                symbol="AAPL",
+                exchange="NASDAQ",
+                direction=PositionDirection.LONG,
+                status=PositionStatus.OPEN,
+                total_quantity=1,
+                opened_at=datetime(2026, 5, 3, 9, 30, tzinfo=timezone.utc),
+            )
+        )
+        self.session.add(
+            AIAnalysisResult(
+                user_id=self.user.id,
+                analysis_type="strategy_health",
+                ai_insights="Legacy AI signal should not be consulted for snapshot-only feed.",
+                raw_data={"scope": "weekly"},
+            )
+        )
+        self.session.add(
+            DerivedTimelineSnapshot(
+                user_id=self.user.id,
+                trading_position_public_id="tp-snapshot-only-side-effects",
+                source="truth.lifecycle.bridge",
+                snapshot_json={
+                    "position_title": "AAPL",
+                    "lifecycle_node_count": 1,
+                    "position_event_type": "OPEN",
+                    "position_event_occurred_at": "2026-05-03T09:30:00Z",
+                },
+                refreshed_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+            )
+        )
+        self.session.add(FeatureFlag(key="timeline_snapshot_only_enabled", enabled=True))
+        self.session.commit()
+
+        with (
+            patch("routers.timeline.MarketDataService.get_quote", new_callable=AsyncMock) as get_quote,
+            patch("routers.timeline.get_llm_runtime_config", return_value={"api_url": None, "api_key": None, "model": None}) as get_llm_config,
+        ):
+            response = self.client.get("/api/timeline/home")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(get_quote.await_count, 0)
+        get_llm_config.assert_not_called()
 
     def test_timeline_home_snapshot_only_flag_ignores_expired_flag(self):
         account = TradingAccount(
