@@ -1,12 +1,15 @@
 # Dev Branch Checkpoint - 2026-05-02
 
+Last refreshed: 2026-05-25
+
 ## Branch
 
 - Worktree: `/Users/a1/vibecoding/tradingnoobs/.worktrees/docs-platform-frontend-contracts`
 - Current branch: `dev`
 - Baseline branch kept for comparison: `main`
 - Stage boundary commit: `e4c6544 feat: land platform foundation and frontend read models`
-- Current `main...dev` committed diff: review from `main` to current `dev`; use focused diffs by area and the stage boundary below to avoid treating the full branch as one undifferentiated patch.
+- Implementation HEAD before this docs-only checkpoint refresh: `d4ff1a5 fix: clear job schedule on claim`
+- Current `main...dev` committed diff should be reviewed from `main` to current `dev`; use focused diffs by area and the stage boundary below to avoid treating the full branch as one undifferentiated patch.
 
 ## Current Working Tree Shape
 
@@ -18,11 +21,30 @@
 - Timeline/dashboard/settings/position frontend domain components
 - Frontend read models, adapters, and adapter tests
 
-Committed diff summary at checkpoint:
+Committed implementation diff summary before this docs-only checkpoint refresh:
 
 ```text
-103 files changed, 13132 insertions(+), 1005 deletions(-)
+142 files changed, 22079 insertions(+), 1165 deletions(-)
 ```
+
+Recent focused commits since the previous checkpoint refresh:
+
+- `d4ff1a5 fix: clear job schedule on claim`
+- `49b736c docs: refresh idempotency test count`
+- `fe04498 fix: restart expired idempotency keys`
+- `e434d69 fix: combine feature flag targets with rollouts`
+- `9e1938c docs: refresh rollout gate test count`
+- `d600780 feat: apply stable feature flag rollouts`
+- `4e79e1d docs: refresh actor-target gate test counts`
+- `cbd7f41 feat: target timeline feature flags by actor`
+- `cb013d6 docs: refresh feature flag service test count`
+- `6ee92bc refactor: centralize feature flag resolution`
+- `a8e234d docs: refresh timeline quality gate counts`
+- `d9c9da4 fix: honor timeline snapshot flag expiry`
+- `58a5286 docs: refresh dev checkpoint verification counts`
+- `fdc5043 feat: support dividend account-currency fx`
+- `ea40603 fix: summarize ledger totals in account currency`
+- `f644098 feat: gate timeline snapshot-only feed`
 
 ## Verification
 
@@ -72,7 +94,7 @@ cd backend && ../.venv313/bin/python -m unittest discover -s tests
 Result:
 
 ```text
-Ran 121 tests in 9.556s
+Ran 121 tests in 8.668s
 OK
 LLM Test Success: {'ok': True}
 ```
@@ -301,7 +323,9 @@ OK
 - Truth manual adjustment slice started: `POST /api/trading-positions/{position_public_id}/adjustments` can append position-level cash adjustments without touching FIFO quantities or realized PnL.
 - Lifecycle ledger summary totals for ledger-backed dividends/adjustments now aggregate `amount_account_ccy`, with original `amount` as a fallback for older rows; manual adjustment regressions cover non-account-currency adjustments.
 - D1/D2/D3/D4 async foundation started: unified job definition/run/event/idempotency-key tables, outbox event table/model, business lock table/model, derived timeline snapshot table/model/read service, and reusable idempotency service are landed; truth position event creation writes durable outbox rows in the same transaction; DB relay can create queued job runs from pending outbox rows and resume safely when an idempotency key already points at an existing job run; truth-derived relay jobs now carry default trading-position refresh locks; local relay CLI can run one bounded relay batch; job execution service can claim, heartbeat, recover stale running jobs, acquire/release payload-declared business locks, dispatch handlers, complete, retry, fail, requeue, and cancel job runs; local DB worker CLI can process bounded due-job batches and optionally recover timed-out running locks before consuming; `derived.timeline.refresh` handler can produce truth lifecycle refresh summaries and upsert `DerivedTimelineSnapshot`; `/api/timeline/home` can mix snapshot-backed derived events into the existing feed and can be switched to snapshot-only with `timeline_snapshot_only_enabled`; admin job API and `/admin/jobs` frontend expose list/detail/business-locks/requeue/cancel status. Redis queue, default Timeline Home snapshot-only hard cut, systematic business-lock/idempotency wiring beyond timeline refresh/outbox, and running interrupt/force-cancel semantics are not connected yet.
-- The next implementation slice should either harden manual adjustment edge cases or move into broader historical/non-latest reversal design; non-latest reversal remains intentionally blocked until its UX and accounting rules are explicit.
+- The next implementation slice should preferably stay in the D3/D4 hardening lane before expanding into new domains: tighten outbox failure metadata, broaden idempotency/business-lock wiring beyond timeline refresh, define safe running interrupt/force-cancel semantics, and prepare the Timeline Home snapshot-only hard cut.
+- Historical/non-latest reversal remains intentionally blocked until its UX and accounting rules are explicit; `OPEN` reversal remains blocked until void/archive semantics exist.
+- If we decide to leave truth/async foundation for a new domain, the cleanest next starts are Stage 4 market data provider mapping/orchestration or Stage 5 AI schema/prompt registry/usage-metering foundations.
 
 ## Next Checkpoint Criteria
 
