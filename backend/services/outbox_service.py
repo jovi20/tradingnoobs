@@ -3,8 +3,9 @@ Trading Noobs Backend - Transactional Outbox Service
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from models import (
@@ -115,11 +116,97 @@ def _job_payload_for_outbox_event(outbox_event: OutboxEvent) -> dict:
     return payload
 
 
+def _record_outbox_relay_failure(
+    outbox_event: OutboxEvent,
+    *,
+    error: Exception,
+    now: datetime,
+    max_attempts: int,
+    retry_delay_seconds: int,
+) -> None:
+    next_attempt_count = (outbox_event.attempt_count or 0) + 1
+    outbox_event.attempt_count = next_attempt_count
+    outbox_event.last_error = f"{type(error).__name__}: {error}"[:2000]
+
+    if next_attempt_count >= max_attempts:
+        outbox_event.status = OutboxEventStatus.FAILED
+        outbox_event.available_at = None
+        return
+
+    outbox_event.status = OutboxEventStatus.PENDING
+    outbox_event.available_at = now + timedelta(seconds=retry_delay_seconds * next_attempt_count)
+
+
+def _relay_one_pending_outbox_event(db: Session, *, outbox_event: OutboxEvent, now: datetime) -> bool:
+    idempotency_key = outbox_event.dedupe_key or outbox_event.public_id
+    existing_idempotency = (
+        db.query(IdempotencyKey)
+        .filter(
+            IdempotencyKey.scope == "outbox_event",
+            IdempotencyKey.key == idempotency_key,
+        )
+        .first()
+    )
+    if existing_idempotency and existing_idempotency.job_run_id:
+        outbox_event.status = OutboxEventStatus.PUBLISHED
+        outbox_event.published_at = now
+        outbox_event.attempt_count = (outbox_event.attempt_count or 0) + 1
+        db.flush()
+        return True
+
+    definition = _get_or_create_job_definition(
+        db,
+        event_type=outbox_event.event_type,
+        queue_name=outbox_event.queue_name,
+    )
+    job_run = JobRun(
+        user_id=outbox_event.user_id,
+        job_definition_id=definition.id,
+        idempotency_key=idempotency_key,
+        status=JobRunStatus.QUEUED,
+        priority=0,
+        payload=_job_payload_for_outbox_event(outbox_event),
+        max_attempts=(definition.retry_policy or {}).get("max_attempts", 1),
+        queue_name=outbox_event.queue_name,
+        next_run_at=now,
+    )
+    db.add(job_run)
+    db.flush()
+
+    db.add(
+        JobRunEvent(
+            job_run_id=job_run.id,
+            event_type=JobRunEventType.STATUS_CHANGED,
+            from_status=None,
+            to_status=JobRunStatus.QUEUED,
+            message=f"Queued from outbox event {outbox_event.public_id}",
+            metadata_json={"source": "outbox", "outbox_event_public_id": outbox_event.public_id},
+        )
+    )
+    db.add(
+        IdempotencyKey(
+            user_id=outbox_event.user_id,
+            scope="outbox_event",
+            key=idempotency_key,
+            request_hash=outbox_event.public_id,
+            status="COMPLETED",
+            job_run_id=job_run.id,
+        )
+    )
+    outbox_event.status = OutboxEventStatus.PUBLISHED
+    outbox_event.published_at = now
+    outbox_event.attempt_count = (outbox_event.attempt_count or 0) + 1
+    db.flush()
+    return True
+
+
 def relay_pending_outbox_events(
     db: Session,
     *,
     now: datetime | None = None,
     limit: int = 100,
+    max_relay_attempts: int = 3,
+    retry_delay_seconds: int = 60,
 ) -> int:
     now = _as_utc(now or datetime.now(timezone.utc))
     pending_events = (
@@ -135,66 +222,23 @@ def relay_pending_outbox_events(
         if outbox_event.available_at and _as_utc(outbox_event.available_at) > now:
             continue
 
-        idempotency_key = outbox_event.dedupe_key or outbox_event.public_id
-        existing_idempotency = (
-            db.query(IdempotencyKey)
-            .filter(
-                IdempotencyKey.scope == "outbox_event",
-                IdempotencyKey.key == idempotency_key,
+        try:
+            with db.begin_nested():
+                did_relay = _relay_one_pending_outbox_event(db, outbox_event=outbox_event, now=now)
+        except SQLAlchemyError:
+            raise
+        except Exception as error:
+            _record_outbox_relay_failure(
+                outbox_event,
+                error=error,
+                now=now,
+                max_attempts=max_relay_attempts,
+                retry_delay_seconds=retry_delay_seconds,
             )
-            .first()
-        )
-        if existing_idempotency and existing_idempotency.job_run_id:
-            outbox_event.status = OutboxEventStatus.PUBLISHED
-            outbox_event.published_at = now
-            outbox_event.attempt_count = (outbox_event.attempt_count or 0) + 1
             db.flush()
-            relayed_count += 1
             continue
 
-        definition = _get_or_create_job_definition(
-            db,
-            event_type=outbox_event.event_type,
-            queue_name=outbox_event.queue_name,
-        )
-        job_run = JobRun(
-            user_id=outbox_event.user_id,
-            job_definition_id=definition.id,
-            idempotency_key=idempotency_key,
-            status=JobRunStatus.QUEUED,
-            priority=0,
-            payload=_job_payload_for_outbox_event(outbox_event),
-            max_attempts=(definition.retry_policy or {}).get("max_attempts", 1),
-            queue_name=outbox_event.queue_name,
-            next_run_at=now,
-        )
-        db.add(job_run)
-        db.flush()
-
-        db.add(
-            JobRunEvent(
-                job_run_id=job_run.id,
-                event_type=JobRunEventType.STATUS_CHANGED,
-                from_status=None,
-                to_status=JobRunStatus.QUEUED,
-                message=f"Queued from outbox event {outbox_event.public_id}",
-                metadata_json={"source": "outbox", "outbox_event_public_id": outbox_event.public_id},
-            )
-        )
-        db.add(
-            IdempotencyKey(
-                user_id=outbox_event.user_id,
-                scope="outbox_event",
-                key=idempotency_key,
-                request_hash=outbox_event.public_id,
-                status="COMPLETED",
-                job_run_id=job_run.id,
-            )
-        )
-        outbox_event.status = OutboxEventStatus.PUBLISHED
-        outbox_event.published_at = now
-        outbox_event.attempt_count = (outbox_event.attempt_count or 0) + 1
-        db.flush()
-        relayed_count += 1
+        if did_relay:
+            relayed_count += 1
 
     return relayed_count

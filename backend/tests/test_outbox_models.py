@@ -2,6 +2,7 @@ import os
 import tempfile
 import unittest
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -212,6 +213,52 @@ class OutboxModelTests(unittest.TestCase):
         self.db.refresh(event)
         self.assertEqual(event.status, OutboxEventStatus.PUBLISHED)
         self.assertEqual(event.attempt_count, 1)
+
+    def test_relay_pending_outbox_events_records_failure_metadata_for_retry(self):
+        user = User(
+            email="relay-failure@example.com",
+            email_normalized="relay-failure@example.com",
+            hashed_password="hashed",
+            public_id="user-relay-failure-public-id",
+            status="ACTIVE",
+            is_active=True,
+            role="user",
+        )
+        self.db.add(user)
+        self.db.commit()
+        self.db.refresh(user)
+
+        event = OutboxEvent(
+            user_id=user.id,
+            aggregate_type="TradingPosition",
+            aggregate_public_id="tp-failure",
+            event_type="truth.position_event.created",
+            queue_name="derived",
+            dedupe_key="truth.position_event.created:evt-failure",
+            payload={"position_event_public_id": "evt-failure"},
+            available_at=datetime(2026, 5, 3, 9, 0, tzinfo=timezone.utc),
+        )
+        self.db.add(event)
+        self.db.commit()
+
+        with patch(
+            "services.outbox_service._get_or_create_job_definition",
+            side_effect=RuntimeError("job definition unavailable"),
+        ):
+            relayed = relay_pending_outbox_events(
+                self.db,
+                now=datetime(2026, 5, 3, 9, 1, tzinfo=timezone.utc),
+            )
+        self.db.commit()
+
+        self.assertEqual(relayed, 0)
+        self.assertEqual(self.db.query(JobRun).count(), 0)
+        self.assertEqual(self.db.query(IdempotencyKey).count(), 0)
+        self.db.refresh(event)
+        self.assertEqual(event.status, OutboxEventStatus.PENDING)
+        self.assertEqual(event.attempt_count, 1)
+        self.assertIn("job definition unavailable", event.last_error)
+        self.assertGreater(event.available_at, datetime(2026, 5, 3, 9, 1))
 
 
 if __name__ == "__main__":
