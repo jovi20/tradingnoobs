@@ -239,12 +239,24 @@ def reverse_trading_position_trade_event(
 def create_trading_position_dividend(
     position_public_id: str,
     payload: TradingPositionDividendCreate,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     truth_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
     if not truth_position:
         raise HTTPException(status_code=404, detail="Trading position not found")
+
+    idempotency_record, replay_response = _begin_idempotent_lifecycle_write(
+        db,
+        scope="trading_position.dividend.create",
+        idempotency_key=idempotency_key,
+        current_user=current_user,
+        position_public_id=position_public_id,
+        payload=payload,
+    )
+    if replay_response is not None:
+        return replay_response
 
     event = PositionEvent(
         user_id=current_user.id,
@@ -263,10 +275,14 @@ def create_trading_position_dividend(
     db.flush()
     sync_dividend_event_to_account_ledger(db, event=event)
     enqueue_position_event_created_outbox(db, position=truth_position, event=event)
-    db.commit()
 
+    db.flush()
+    db.expire_all()
     updated_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
-    return _lifecycle_response(updated_position, source="MANUAL", status_code=201)
+    response_content = _lifecycle_response_content(updated_position, source="MANUAL")
+    _complete_idempotent_lifecycle_write(db, record=idempotency_record, response_content=response_content)
+    db.commit()
+    return JSONResponse(status_code=201, content=jsonable_encoder(response_content))
 
 
 @router.post("/{position_public_id}/adjustments", status_code=201)

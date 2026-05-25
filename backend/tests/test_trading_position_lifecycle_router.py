@@ -372,6 +372,84 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         self.assertEqual(ledger_entry.amount_account_ccy, Decimal("12.80000000"))
         self.assertEqual(ledger_entry.currency, "HKD")
 
+    def test_dividend_write_replays_completed_idempotency_key_without_duplicate_ledger(self):
+        truth_position = self._seed_synced_position()
+        request_body = {
+            "amount": "12.50",
+            "currency": "USD",
+            "occurred_at": "2026-04-04T12:00:00+00:00",
+            "note": "Quarterly dividend",
+        }
+        headers = {"Idempotency-Key": "dividend-retry-1"}
+
+        first_response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/dividends",
+            json=request_body,
+            headers=headers,
+        )
+        second_response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/dividends",
+            json=request_body,
+            headers=headers,
+        )
+
+        self.assertEqual(first_response.status_code, 201)
+        self.assertEqual(second_response.status_code, 201)
+        self.assertEqual(second_response.json(), first_response.json())
+
+        self.db.expire_all()
+        dividend_events = self.db.query(PositionEvent).filter(
+            PositionEvent.position_id == truth_position.id,
+            PositionEvent.event_type == PositionEventType.DIVIDEND,
+        ).all()
+        self.assertEqual(len(dividend_events), 1)
+        self.assertEqual(
+            self.db.query(AccountLedgerEntry).filter(
+                AccountLedgerEntry.position_id == truth_position.id,
+                AccountLedgerEntry.entry_type == AccountLedgerEntryType.DIVIDEND,
+            ).count(),
+            1,
+        )
+        idempotency_record = self.db.query(IdempotencyKey).filter(
+            IdempotencyKey.scope == "trading_position.dividend.create",
+        ).one()
+        self.assertEqual(idempotency_record.status, "COMPLETED")
+
+    def test_dividend_write_rejects_idempotency_key_reuse_with_different_payload(self):
+        truth_position = self._seed_synced_position()
+        headers = {"Idempotency-Key": "dividend-conflict-1"}
+
+        first_response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/dividends",
+            json={
+                "amount": "12.50",
+                "currency": "USD",
+                "occurred_at": "2026-04-04T12:00:00+00:00",
+            },
+            headers=headers,
+        )
+        conflict_response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/dividends",
+            json={
+                "amount": "13.00",
+                "currency": "USD",
+                "occurred_at": "2026-04-04T12:00:00+00:00",
+            },
+            headers=headers,
+        )
+
+        self.assertEqual(first_response.status_code, 201)
+        self.assertEqual(conflict_response.status_code, 409)
+        self.assertEqual(conflict_response.json()["detail"], "Idempotency key reuse with a different request payload.")
+        self.db.expire_all()
+        self.assertEqual(
+            self.db.query(PositionEvent).filter(
+                PositionEvent.position_id == truth_position.id,
+                PositionEvent.event_type == PositionEventType.DIVIDEND,
+            ).count(),
+            1,
+        )
+
     def test_manual_adjustment_event_write_creates_adjustment_event_and_ledger_entry(self):
         truth_position = self._seed_open_synced_position()
 
