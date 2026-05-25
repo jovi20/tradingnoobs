@@ -15,6 +15,7 @@ from models import (
     AccountLedgerEntryType,
     AssetMetadata,
     BatchType,
+    IdempotencyKey,
     OutboxEvent,
     OutboxEventStatus,
     Position,
@@ -559,6 +560,84 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
             self.db.query(AccountLedgerEntry).filter(AccountLedgerEntry.position_event_id == add_event.id).count(),
             0,
         )
+
+    def test_trade_event_write_replays_completed_idempotency_key_without_duplicate_event(self):
+        truth_position = self._seed_open_synced_position()
+        request_body = {
+            "event_type": "ADD",
+            "quantity": "3",
+            "price": "190",
+            "currency": "USD",
+            "occurred_at": "2026-04-03T15:30:00+00:00",
+            "reason": "Add on continuation",
+        }
+        headers = {"Idempotency-Key": "truth-add-retry-1"}
+
+        first_response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events",
+            json=request_body,
+            headers=headers,
+        )
+        second_response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events",
+            json=request_body,
+            headers=headers,
+        )
+
+        self.assertEqual(first_response.status_code, 201)
+        self.assertEqual(second_response.status_code, 201)
+        self.assertEqual(second_response.json(), first_response.json())
+
+        self.db.expire_all()
+        add_events = self.db.query(PositionEvent).filter(
+            PositionEvent.position_id == truth_position.id,
+            PositionEvent.event_type == PositionEventType.ADD,
+        ).all()
+        self.assertEqual(len(add_events), 1)
+        self.assertEqual(self.db.query(OutboxEvent).filter(OutboxEvent.aggregate_public_id == truth_position.public_id).count(), 1)
+        idempotency_record = self.db.query(IdempotencyKey).filter(
+            IdempotencyKey.scope == "trading_position.trade_event.create",
+        ).one()
+        self.assertEqual(idempotency_record.status, "COMPLETED")
+        self.assertIsNotNone(idempotency_record.response_json)
+
+    def test_trade_event_write_rejects_idempotency_key_reuse_with_different_payload(self):
+        truth_position = self._seed_open_synced_position()
+        headers = {"Idempotency-Key": "truth-add-conflict-1"}
+
+        first_response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events",
+            json={
+                "event_type": "ADD",
+                "quantity": "3",
+                "price": "190",
+                "currency": "USD",
+                "occurred_at": "2026-04-03T15:30:00+00:00",
+            },
+            headers=headers,
+        )
+        conflict_response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events",
+            json={
+                "event_type": "ADD",
+                "quantity": "4",
+                "price": "190",
+                "currency": "USD",
+                "occurred_at": "2026-04-03T15:30:00+00:00",
+            },
+            headers=headers,
+        )
+
+        self.assertEqual(first_response.status_code, 201)
+        self.assertEqual(conflict_response.status_code, 409)
+        self.assertEqual(conflict_response.json()["detail"], "Idempotency key reuse with a different request payload.")
+
+        self.db.expire_all()
+        add_events = self.db.query(PositionEvent).filter(
+            PositionEvent.position_id == truth_position.id,
+            PositionEvent.event_type == PositionEventType.ADD,
+        ).all()
+        self.assertEqual(len(add_events), 1)
 
     def test_trade_event_reverse_latest_event_preserves_audit_trail_and_replays_fifo(self):
         truth_position = self._seed_open_synced_position()

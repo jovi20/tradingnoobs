@@ -3,7 +3,7 @@ Trading Noobs Backend - TradingPosition Truth Read Router
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -22,6 +22,7 @@ from services.account_ledger_service import (
     sync_manual_adjustment_event_to_account_ledger,
 )
 from services.auth_service import get_current_user
+from services.idempotency_service import begin_idempotent_request, complete_idempotent_request
 from services.outbox_service import enqueue_position_event_created_outbox
 from services.trading_position_read_service import build_trading_position_lifecycle_payload, resolve_truth_position_by_public_id
 from services.trading_position_write_service import append_truth_trade_event, reverse_latest_truth_trade_event
@@ -29,24 +30,25 @@ from services.trading_position_write_service import append_truth_trade_event, re
 router = APIRouter(prefix="/api/trading-positions", tags=["Trading Positions"])
 
 
-def _lifecycle_response(truth_position, source: str = "DERIVED", status_code: int = 200) -> JSONResponse:
+def _lifecycle_response_content(truth_position, source: str = "DERIVED") -> dict:
     data = build_trading_position_lifecycle_payload(truth_position)
+    return {
+        "data": data,
+        "meta": {
+            "as_of": truth_position.updated_at or truth_position.created_at,
+            "generated_at": truth_position.updated_at or truth_position.created_at,
+            "freshness": "FRESH",
+            "source": source,
+            "maturity": "EARLY_SIGNAL",
+            "value_status": "FINAL",
+        },
+    }
 
+
+def _lifecycle_response(truth_position, source: str = "DERIVED", status_code: int = 200) -> JSONResponse:
     return JSONResponse(
         status_code=status_code,
-        content=jsonable_encoder(
-            {
-                "data": data,
-                "meta": {
-                    "as_of": truth_position.updated_at or truth_position.created_at,
-                    "generated_at": truth_position.updated_at or truth_position.created_at,
-                    "freshness": "FRESH",
-                    "source": source,
-                    "maturity": "EARLY_SIGNAL",
-                    "value_status": "FINAL",
-                },
-            }
-        )
+        content=jsonable_encoder(_lifecycle_response_content(truth_position, source=source))
     )
 
 
@@ -97,12 +99,37 @@ def update_trading_position_event_narrative(
 def create_trading_position_trade_event(
     position_public_id: str,
     payload: TradingPositionTradeEventCreate,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     truth_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
     if not truth_position:
         raise HTTPException(status_code=404, detail="Trading position not found")
+
+    idempotency_record = None
+    if idempotency_key:
+        try:
+            idempotency_begin = begin_idempotent_request(
+                db,
+                scope="trading_position.trade_event.create",
+                key=f"{current_user.public_id}:{idempotency_key}",
+                request_payload={
+                    "position_public_id": position_public_id,
+                    "payload": jsonable_encoder(payload),
+                },
+                user_id=current_user.id,
+                ttl_seconds=24 * 60 * 60,
+            )
+        except ValueError as exc:
+            db.rollback()
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        idempotency_record = idempotency_begin.record
+        if not idempotency_begin.created:
+            if idempotency_record.status == "COMPLETED" and idempotency_record.response_json is not None:
+                return JSONResponse(status_code=201, content=jsonable_encoder(idempotency_record.response_json))
+            raise HTTPException(status_code=409, detail="Idempotent request is already in progress.")
 
     try:
         event = append_truth_trade_event(
@@ -125,10 +152,19 @@ def create_trading_position_trade_event(
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    db.commit()
 
+    db.flush()
+    db.expire_all()
     updated_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
-    return _lifecycle_response(updated_position, source="MANUAL", status_code=201)
+    response_content = _lifecycle_response_content(updated_position, source="MANUAL")
+    if idempotency_record is not None:
+        complete_idempotent_request(
+            db,
+            record=idempotency_record,
+            response_json=jsonable_encoder(response_content),
+        )
+    db.commit()
+    return JSONResponse(status_code=201, content=jsonable_encoder(response_content))
 
 
 @router.post("/{position_public_id}/events/{event_public_id}/reverse", status_code=201)
