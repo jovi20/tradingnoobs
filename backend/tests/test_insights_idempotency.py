@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 
 from database import Base, get_db
 from main import app
-from models import AIAnalysisResult, AISummary, IdempotencyKey, User
+from models import AIAnalysisResult, AISummary, IdempotencyKey, User, WeeklyReport
 from services.auth_service import get_current_user
 
 
@@ -84,6 +84,54 @@ class InsightsIdempotencyTests(unittest.TestCase):
         record = self.db.query(IdempotencyKey).one()
         self.assertEqual(record.scope, "insights.analysis.create")
         self.assertEqual(record.key, "user-insights-idempotency:analysis-retry-1")
+        self.assertEqual(record.status, "COMPLETED")
+        self.assertIsNotNone(record.response_json)
+
+    def test_weekly_report_generate_replays_completed_idempotency_key_without_duplicate_report(self):
+        payload = {
+            "week_start": "2026-05-04",
+            "week_end": "2026-05-10",
+        }
+        headers = {"Idempotency-Key": "weekly-report-retry-1"}
+
+        async def fake_generate_weekly_report(db, user_id, week_start, week_end):
+            report = WeeklyReport(
+                user_id=user_id,
+                week_start=week_start,
+                week_end=week_end,
+                trades_summary="Weekly trades summary.",
+                munger_evaluation="Munger notes.",
+                suggestions="Keep position sizing consistent.",
+            )
+            db.add(report)
+            db.commit()
+            db.refresh(report)
+            return report
+
+        with (
+            patch(
+                "routers.insights.get_llm_runtime_config",
+                return_value={"api_url": "https://llm.example.test", "api_key": "key", "model": "model"},
+            ),
+            patch(
+                "routers.insights.generate_weekly_report",
+                new_callable=AsyncMock,
+                side_effect=fake_generate_weekly_report,
+            ) as generate_report,
+        ):
+            first = self.client.post("/api/insights/generate", json=payload, headers=headers)
+            second = self.client.post("/api/insights/generate", json=payload, headers=headers)
+
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(second.status_code, 201)
+        self.assertEqual(second.json(), first.json())
+        self.assertEqual(generate_report.await_count, 1)
+        self.assertEqual(self.db.query(WeeklyReport).count(), 1)
+
+        record = self.db.query(IdempotencyKey).filter(
+            IdempotencyKey.scope == "insights.weekly_report.generate",
+            IdempotencyKey.key == "user-insights-idempotency:weekly-report-retry-1",
+        ).one()
         self.assertEqual(record.status, "COMPLETED")
         self.assertIsNotNone(record.response_json)
 

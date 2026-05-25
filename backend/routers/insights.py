@@ -65,6 +65,19 @@ def _complete_idempotent_insights_request(db: Session, *, record, response_conte
     )
 
 
+def _weekly_report_response_content(report: WeeklyReport) -> dict:
+    return jsonable_encoder(WeeklyReportResponse(
+        id=report.id,
+        user_id=report.user_id,
+        week_start=report.week_start,
+        week_end=report.week_end,
+        trades_summary=report.trades_summary,
+        munger_evaluation=report.munger_evaluation,
+        suggestions=report.suggestions,
+        created_at=report.created_at,
+    ))
+
+
 @router.get("", response_model=List[WeeklyReportResponse])
 async def get_weekly_reports(
     current_user: User = Depends(get_current_user),
@@ -97,10 +110,22 @@ async def get_weekly_report(
 @router.post("/generate", response_model=WeeklyReportResponse, status_code=status.HTTP_201_CREATED)
 async def generate_report(
     report_data: WeeklyReportCreate,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Generate a new weekly report using LLM"""
+    idempotency_record, replay_response = _begin_idempotent_insights_request(
+        db,
+        scope="insights.weekly_report.generate",
+        idempotency_key=idempotency_key,
+        current_user=current_user,
+        request_payload=jsonable_encoder(report_data),
+        replay_status_code=201,
+    )
+    if replay_response is not None:
+        return replay_response
+
     llm_config = get_llm_runtime_config(db)
     if not llm_config["api_url"] or not llm_config["api_key"]:
         raise HTTPException(
@@ -140,7 +165,11 @@ async def generate_report(
             detail="Failed to generate report"
         )
     
-    return report
+    response_content = _weekly_report_response_content(report)
+    _complete_idempotent_insights_request(db, record=idempotency_record, response_content=response_content)
+    db.commit()
+
+    return JSONResponse(status_code=201, content=response_content)
 
 
 @router.post("/generate-current-week", response_model=WeeklyReportResponse, status_code=status.HTTP_201_CREATED)
