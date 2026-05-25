@@ -20,12 +20,14 @@ from services.platform_config_service import get_llm_runtime_config
 router = APIRouter(prefix="/api/insights", tags=["Insights"])
 
 
-def _begin_idempotent_analysis(
+def _begin_idempotent_insights_request(
     db: Session,
     *,
+    scope: str,
     idempotency_key: str | None,
     current_user: User,
-    request: AnalysisRequest,
+    request_payload,
+    replay_status_code: int = 200,
 ) -> tuple[object | None, JSONResponse | None]:
     if not idempotency_key:
         return None, None
@@ -33,9 +35,9 @@ def _begin_idempotent_analysis(
     try:
         idempotency_begin = begin_idempotent_request(
             db,
-            scope="insights.analysis.create",
+            scope=scope,
             key=f"{current_user.public_id}:{idempotency_key}",
-            request_payload=jsonable_encoder(request),
+            request_payload=jsonable_encoder(request_payload),
             user_id=current_user.id,
             ttl_seconds=24 * 60 * 60,
         )
@@ -48,12 +50,12 @@ def _begin_idempotent_analysis(
         return record, None
 
     if record.status == "COMPLETED" and record.response_json is not None:
-        return record, JSONResponse(status_code=200, content=jsonable_encoder(record.response_json))
+        return record, JSONResponse(status_code=replay_status_code, content=jsonable_encoder(record.response_json))
 
     raise HTTPException(status_code=409, detail="Idempotent request is already in progress.")
 
 
-def _complete_idempotent_analysis(db: Session, *, record, response_content: dict) -> None:
+def _complete_idempotent_insights_request(db: Session, *, record, response_content: dict) -> None:
     if record is None:
         return
     complete_idempotent_request(
@@ -218,11 +220,22 @@ async def get_today_summary(
 
 @router.post("/summary/generate", response_model=AISummaryResponse, status_code=status.HTTP_201_CREATED)
 async def generate_summary(
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """生成今日 AI 总结（每天限一次）"""
     today = date.today()
+    idempotency_record, replay_response = _begin_idempotent_insights_request(
+        db,
+        scope="insights.summary.generate",
+        idempotency_key=idempotency_key,
+        current_user=current_user,
+        request_payload={"date": today.isoformat()},
+        replay_status_code=201,
+    )
+    if replay_response is not None:
+        return replay_response
     
     # 检查今天是否已生成
     existing = db.query(AISummary).filter(
@@ -267,10 +280,20 @@ async def generate_summary(
         content=content
     )
     db.add(summary)
-    db.commit()
+    db.flush()
     db.refresh(summary)
+
+    response_content = jsonable_encoder(AISummaryResponse(
+        id=summary.id,
+        user_id=summary.user_id,
+        date=summary.date,
+        content=summary.content,
+        created_at=summary.created_at,
+    ))
+    _complete_idempotent_insights_request(db, record=idempotency_record, response_content=response_content)
+    db.commit()
     
-    return summary
+    return JSONResponse(status_code=201, content=response_content)
 
 
 # ============== Advanced Analytics Endpoints ==============
@@ -285,11 +308,12 @@ async def analyze_trading_data(
     """
     Perform advanced AI analysis on trading data.
     """
-    idempotency_record, replay_response = _begin_idempotent_analysis(
+    idempotency_record, replay_response = _begin_idempotent_insights_request(
         db,
+        scope="insights.analysis.create",
         idempotency_key=idempotency_key,
         current_user=current_user,
-        request=request,
+        request_payload=request,
     )
     if replay_response is not None:
         return replay_response
@@ -329,7 +353,7 @@ async def analyze_trading_data(
         ai_insights=ai_insights,
         created_at=ai_result.created_at
     ))
-    _complete_idempotent_analysis(db, record=idempotency_record, response_content=response_content)
+    _complete_idempotent_insights_request(db, record=idempotency_record, response_content=response_content)
     db.commit()
 
     return JSONResponse(status_code=200, content=response_content)

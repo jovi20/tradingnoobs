@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 
 from database import Base, get_db
 from main import app
-from models import AIAnalysisResult, IdempotencyKey, User
+from models import AIAnalysisResult, AISummary, IdempotencyKey, User
 from services.auth_service import get_current_user
 
 
@@ -84,6 +84,36 @@ class InsightsIdempotencyTests(unittest.TestCase):
         record = self.db.query(IdempotencyKey).one()
         self.assertEqual(record.scope, "insights.analysis.create")
         self.assertEqual(record.key, "user-insights-idempotency:analysis-retry-1")
+        self.assertEqual(record.status, "COMPLETED")
+        self.assertIsNotNone(record.response_json)
+
+    def test_summary_generate_replays_completed_idempotency_key_without_duplicate_ai_summary(self):
+        headers = {"Idempotency-Key": "summary-retry-1"}
+
+        with (
+            patch(
+                "routers.insights.get_llm_runtime_config",
+                return_value={"api_url": "https://llm.example.test", "api_key": "key", "model": "model"},
+            ),
+            patch(
+                "routers.insights.generate_journal_summary",
+                new_callable=AsyncMock,
+                return_value="Today summary.",
+            ) as generate_summary,
+        ):
+            first = self.client.post("/api/insights/summary/generate", headers=headers)
+            second = self.client.post("/api/insights/summary/generate", headers=headers)
+
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(second.status_code, 201)
+        self.assertEqual(second.json(), first.json())
+        self.assertEqual(generate_summary.await_count, 1)
+        self.assertEqual(self.db.query(AISummary).count(), 1)
+
+        record = self.db.query(IdempotencyKey).filter(
+            IdempotencyKey.scope == "insights.summary.generate",
+            IdempotencyKey.key == "user-insights-idempotency:summary-retry-1",
+        ).one()
         self.assertEqual(record.status, "COMPLETED")
         self.assertIsNotNone(record.response_json)
 
