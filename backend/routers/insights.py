@@ -1,7 +1,9 @@
 """
 Trading Noobs Backend - Weekly Report Router
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date, timedelta
@@ -12,9 +14,53 @@ from schemas import WeeklyReportCreate, WeeklyReportResponse, AISummaryResponse,
 from services.auth_service import get_current_user
 from services.llm_service import generate_weekly_report, generate_journal_summary, get_analysis_insight
 from services.analytics_service import AnalyticsService
+from services.idempotency_service import begin_idempotent_request, complete_idempotent_request
 from services.platform_config_service import get_llm_runtime_config
 
 router = APIRouter(prefix="/api/insights", tags=["Insights"])
+
+
+def _begin_idempotent_analysis(
+    db: Session,
+    *,
+    idempotency_key: str | None,
+    current_user: User,
+    request: AnalysisRequest,
+) -> tuple[object | None, JSONResponse | None]:
+    if not idempotency_key:
+        return None, None
+
+    try:
+        idempotency_begin = begin_idempotent_request(
+            db,
+            scope="insights.analysis.create",
+            key=f"{current_user.public_id}:{idempotency_key}",
+            request_payload=jsonable_encoder(request),
+            user_id=current_user.id,
+            ttl_seconds=24 * 60 * 60,
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    record = idempotency_begin.record
+    if idempotency_begin.created:
+        return record, None
+
+    if record.status == "COMPLETED" and record.response_json is not None:
+        return record, JSONResponse(status_code=200, content=jsonable_encoder(record.response_json))
+
+    raise HTTPException(status_code=409, detail="Idempotent request is already in progress.")
+
+
+def _complete_idempotent_analysis(db: Session, *, record, response_content: dict) -> None:
+    if record is None:
+        return
+    complete_idempotent_request(
+        db,
+        record=record,
+        response_json=jsonable_encoder(response_content),
+    )
 
 
 @router.get("", response_model=List[WeeklyReportResponse])
@@ -232,12 +278,22 @@ async def generate_summary(
 @router.post("/analyze", response_model=AnalysisResponse)
 async def analyze_trading_data(
     request: AnalysisRequest,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Perform advanced AI analysis on trading data.
     """
+    idempotency_record, replay_response = _begin_idempotent_analysis(
+        db,
+        idempotency_key=idempotency_key,
+        current_user=current_user,
+        request=request,
+    )
+    if replay_response is not None:
+        return replay_response
+
     # 1. Calculate Statistics
     analytics_service = AnalyticsService(db)
     raw_data = analytics_service.analyze(
@@ -264,15 +320,19 @@ async def analyze_trading_data(
         ai_insights=ai_insights
     )
     db.add(ai_result)
-    db.commit()
+    db.flush()
     db.refresh(ai_result)
 
-    return AnalysisResponse(
+    response_content = jsonable_encoder(AnalysisResponse(
         analysis_type=request.analysis_type,
         raw_data=raw_data,
         ai_insights=ai_insights,
         created_at=ai_result.created_at
-    )
+    ))
+    _complete_idempotent_analysis(db, record=idempotency_record, response_content=response_content)
+    db.commit()
+
+    return JSONResponse(status_code=200, content=response_content)
 
 
 @router.get("/analyze/latest/{analysis_type}", response_model=Optional[AnalysisResponse])
