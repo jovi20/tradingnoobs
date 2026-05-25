@@ -52,6 +52,54 @@ def _lifecycle_response(truth_position, source: str = "DERIVED", status_code: in
     )
 
 
+def _begin_idempotent_lifecycle_write(
+    db: Session,
+    *,
+    scope: str,
+    idempotency_key: str | None,
+    current_user: User,
+    position_public_id: str,
+    payload,
+) -> tuple[object | None, JSONResponse | None]:
+    if not idempotency_key:
+        return None, None
+
+    try:
+        idempotency_begin = begin_idempotent_request(
+            db,
+            scope=scope,
+            key=f"{current_user.public_id}:{idempotency_key}",
+            request_payload={
+                "position_public_id": position_public_id,
+                "payload": jsonable_encoder(payload),
+            },
+            user_id=current_user.id,
+            ttl_seconds=24 * 60 * 60,
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    record = idempotency_begin.record
+    if idempotency_begin.created:
+        return record, None
+
+    if record.status == "COMPLETED" and record.response_json is not None:
+        return record, JSONResponse(status_code=201, content=jsonable_encoder(record.response_json))
+
+    raise HTTPException(status_code=409, detail="Idempotent request is already in progress.")
+
+
+def _complete_idempotent_lifecycle_write(db: Session, *, record, response_content: dict) -> None:
+    if record is None:
+        return
+    complete_idempotent_request(
+        db,
+        record=record,
+        response_json=jsonable_encoder(response_content),
+    )
+
+
 @router.get("/{position_public_id}/lifecycle")
 def get_trading_position_lifecycle(
     position_public_id: str,
@@ -107,29 +155,16 @@ def create_trading_position_trade_event(
     if not truth_position:
         raise HTTPException(status_code=404, detail="Trading position not found")
 
-    idempotency_record = None
-    if idempotency_key:
-        try:
-            idempotency_begin = begin_idempotent_request(
-                db,
-                scope="trading_position.trade_event.create",
-                key=f"{current_user.public_id}:{idempotency_key}",
-                request_payload={
-                    "position_public_id": position_public_id,
-                    "payload": jsonable_encoder(payload),
-                },
-                user_id=current_user.id,
-                ttl_seconds=24 * 60 * 60,
-            )
-        except ValueError as exc:
-            db.rollback()
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-
-        idempotency_record = idempotency_begin.record
-        if not idempotency_begin.created:
-            if idempotency_record.status == "COMPLETED" and idempotency_record.response_json is not None:
-                return JSONResponse(status_code=201, content=jsonable_encoder(idempotency_record.response_json))
-            raise HTTPException(status_code=409, detail="Idempotent request is already in progress.")
+    idempotency_record, replay_response = _begin_idempotent_lifecycle_write(
+        db,
+        scope="trading_position.trade_event.create",
+        idempotency_key=idempotency_key,
+        current_user=current_user,
+        position_public_id=position_public_id,
+        payload=payload,
+    )
+    if replay_response is not None:
+        return replay_response
 
     try:
         event = append_truth_trade_event(
@@ -157,12 +192,7 @@ def create_trading_position_trade_event(
     db.expire_all()
     updated_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
     response_content = _lifecycle_response_content(updated_position, source="MANUAL")
-    if idempotency_record is not None:
-        complete_idempotent_request(
-            db,
-            record=idempotency_record,
-            response_json=jsonable_encoder(response_content),
-        )
+    _complete_idempotent_lifecycle_write(db, record=idempotency_record, response_content=response_content)
     db.commit()
     return JSONResponse(status_code=201, content=jsonable_encoder(response_content))
 
@@ -243,6 +273,7 @@ def create_trading_position_dividend(
 def create_trading_position_manual_adjustment(
     position_public_id: str,
     payload: TradingPositionManualAdjustmentCreate,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -252,6 +283,17 @@ def create_trading_position_manual_adjustment(
 
     if payload.amount == 0:
         raise HTTPException(status_code=422, detail="Manual adjustment amount cannot be zero")
+
+    idempotency_record, replay_response = _begin_idempotent_lifecycle_write(
+        db,
+        scope="trading_position.manual_adjustment.create",
+        idempotency_key=idempotency_key,
+        current_user=current_user,
+        position_public_id=position_public_id,
+        payload=payload,
+    )
+    if replay_response is not None:
+        return replay_response
 
     event = PositionEvent(
         user_id=current_user.id,
@@ -271,7 +313,11 @@ def create_trading_position_manual_adjustment(
     db.flush()
     sync_manual_adjustment_event_to_account_ledger(db, event=event)
     enqueue_position_event_created_outbox(db, position=truth_position, event=event)
-    db.commit()
 
+    db.flush()
+    db.expire_all()
     updated_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
-    return _lifecycle_response(updated_position, source="MANUAL", status_code=201)
+    response_content = _lifecycle_response_content(updated_position, source="MANUAL")
+    _complete_idempotent_lifecycle_write(db, record=idempotency_record, response_content=response_content)
+    db.commit()
+    return JSONResponse(status_code=201, content=jsonable_encoder(response_content))
