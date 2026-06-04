@@ -18,8 +18,9 @@ import {
     Calendar,
     Clock
 } from 'lucide-react'
+import { EvidenceLinkedInsightSidecar } from '@/components/insights/EvidenceLinkedInsightSidecar'
 import { useAuth } from '@/contexts/AuthContext'
-import ReactMarkdown from 'react-markdown'
+import { useInsightRuns } from '@/hooks/useInsightRuns'
 import { insightsAPI, WeeklyReport, AISummary, AnalysisType, AnalysisResponse } from '@/lib/api'
 import { useTrendColor } from '@/hooks/useTrendColor'
 import {
@@ -45,6 +46,7 @@ const ANALYSIS_OPTIONS: { type: AnalysisType; label: string; icon: any; desc: st
 export default function InsightsPage() {
     const { token } = useAuth()
     const trendColor = useTrendColor()
+    const insightRunsQuery = useInsightRuns(token)
 
     // 周报状态
     const [reports, setReports] = useState<WeeklyReport[]>([])
@@ -277,6 +279,15 @@ export default function InsightsPage() {
                 </div>
             </div>
 
+            <EvidenceLinkedInsightSidecar
+                title="Auditable Insight Artifacts"
+                runs={insightRunsQuery.data}
+                isLoading={insightRunsQuery.isLoading}
+                error={insightRunsQuery.error ? insightRunsQuery.error.message : null}
+                limit={5}
+                onRefresh={() => insightRunsQuery.refetch()}
+            />
+
             {/* Error */}
             {error && (
                 <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 text-sm">
@@ -313,9 +324,7 @@ export default function InsightsPage() {
                                 </div>
                             ) : dailySummary ? (
                                 <div>
-                                    <div className="prose prose-sm dark:prose-invert max-w-none">
-                                        <ReactMarkdown>{dailySummary.content}</ReactMarkdown>
-                                    </div>
+                                    <LegacyInsightText label="旧版随笔摘要" content={dailySummary.content} />
                                     <p className="text-[11px] text-slate-400 mt-4 flex items-center gap-1">
                                         <Clock className="w-3 h-3" />
                                         生成于 {new Date(dailySummary.created_at).toLocaleString('zh-CN')}
@@ -436,9 +445,10 @@ export default function InsightsPage() {
                                             <h3 className="text-xs font-bold uppercase tracking-wider text-indigo-500 mb-3 flex items-center gap-1.5">
                                                 <Sparkles className="w-3.5 h-3.5" /> AI 深度诊断
                                             </h3>
-                                            <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-5 border border-slate-100 dark:border-slate-800 prose prose-sm dark:prose-invert max-w-none break-words overflow-hidden">
-                                                <ReactMarkdown>{cachedResult.ai_insights || '暂无分析结论'}</ReactMarkdown>
-                                            </div>
+                                            <LegacyInsightText
+                                                label="旧版分析正文"
+                                                content={cachedResult.ai_insights || '暂无分析结论'}
+                                            />
                                         </div>
                                     </div>
                                 )
@@ -574,8 +584,32 @@ function ReportSection({ icon, title, content, bgClass }: {
                 <span>{title}</span>
             </h4>
             <div className="prose prose-xs dark:prose-invert max-w-none text-slate-600 dark:text-slate-400 text-[13px] leading-relaxed">
-                <ReactMarkdown>{content}</ReactMarkdown>
+                <LegacyInsightText label={`旧版${title}`} content={content} compact />
             </div>
+        </div>
+    )
+}
+
+function LegacyInsightText({
+    label,
+    content,
+    compact = false,
+}: {
+    label: string
+    content: string
+    compact?: boolean
+}) {
+    return (
+        <div className={`rounded-xl border border-amber-200/70 bg-amber-50/80 dark:border-amber-500/20 dark:bg-amber-500/10 ${compact ? 'p-2.5' : 'p-4'}`}>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700 dark:text-amber-200">
+                Legacy unlinked output · {label}
+            </p>
+            <p className="mt-1 text-xs leading-5 text-amber-800 dark:text-amber-100">
+                仅作历史读取；新的 AI 展示以 auditable artifacts、evidence refs 和 trust meta 为准。
+            </p>
+            <pre className="mt-3 whitespace-pre-wrap break-words font-sans text-sm leading-6 text-slate-700 dark:text-slate-200">
+                {content}
+            </pre>
         </div>
     )
 }

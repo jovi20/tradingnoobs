@@ -2,7 +2,7 @@
 Trading Noobs Backend - Pydantic Schemas
 """
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, List
+from typing import Any, Optional, List
 from datetime import datetime, date
 from decimal import Decimal
 from enum import Enum
@@ -89,8 +89,14 @@ class UserBase(BaseModel):
 
 class UserResponse(UserBase):
     id: int
+    public_id: str
+    email_normalized: EmailStr
     is_active: bool
+    status: str
     role: str
+    last_login_at: Optional[datetime] = None
+    locale: str
+    timezone: str
     created_at: datetime
     
     class Config:
@@ -607,6 +613,41 @@ class PositionListResponse(BaseModel):
         from_attributes = True
 
 
+# ============== Trading Truth Model V1 Schemas ==============
+
+class TradingPositionCreate(BaseModel):
+    account_id: int
+    symbol: str = Field(..., max_length=50)
+    side: PositionDirectionEnum
+    quantity: Decimal = Field(..., gt=0)
+    price: Decimal = Field(..., gt=0)
+    fee: Decimal = Field(Decimal("0"), ge=0)
+    event_time: datetime
+    thesis: Optional[str] = None
+    edge_source: Optional[str] = None
+    disconfirming_evidence: Optional[str] = None
+    invalidation_rule: Optional[str] = None
+    expected_holding_period: Optional[str] = None
+    planned_exit_rule: Optional[str] = None
+    sizing_rationale: Optional[str] = None
+    checklist_snapshot: Optional[dict[str, Any]] = None
+
+
+class TradingPositionEventCreate(BaseModel):
+    quantity: Decimal = Field(..., gt=0)
+    price: Decimal = Field(..., gt=0)
+    fee: Decimal = Field(Decimal("0"), ge=0)
+    event_time: datetime
+
+
+class AccountLedgerAdjustmentCreate(BaseModel):
+    account_id: int
+    amount: Decimal
+    currency: str = Field("USD", max_length=10)
+    occurred_at: datetime
+    reason: Optional[str] = None
+
+
 # ============== Import Schemas ==============
 
 class ImportPreviewRow(BaseModel):
@@ -627,4 +668,3 @@ class ImportConfirmRequest(BaseModel):
     file_token: str
     account_id: Optional[int] = None # Target account if not specified in file
     selected_indices: Optional[List[int]] = None # If None, import all valid rows
-

@@ -3,11 +3,14 @@ from typing import List, Dict, Any, Optional
 from datetime import date, timedelta
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-import pandas as pd
-import numpy as np
 
 from models import Position, PositionStatus, TradeBatch, BatchType
 from schemas import AnalysisType
+
+
+def _get_pandas():
+    import pandas as pd
+    return pd
 
 class AnalyticsService:
     def __init__(self, db: Session):
@@ -49,6 +52,7 @@ class AnalyticsService:
         Analyze performance by holding duration buckets.
         buckets: <1 Day, 1-3 Days, 3-7 Days, 1-2 Weeks, 2 Weeks+
         """
+        pd = _get_pandas()
         if not positions:
             return {"message": "No data found"}
             
@@ -160,6 +164,7 @@ class AnalyticsService:
         Analyze PnL based on Entry Emotion.
         Note: Emotion is stored on TradeBatch. 
         """
+        pd = _get_pandas()
         query = self.db.query(Position).filter(
             Position.user_id == user_id,
             Position.status == PositionStatus.CLOSED
@@ -192,6 +197,7 @@ class AnalyticsService:
         """
         Compare trades depending on if checklist was fully completed.
         """
+        pd = _get_pandas()
         # Need to know if checklist was 'full'. 
         # Currently we store 'checklist_responses' (JSON) and 'checklist_completed_at'.
         # We assume if 'checklist_completed_at' is present, it was completed. 
@@ -228,6 +234,7 @@ class AnalyticsService:
         """
         Analyze Strategy Performance.
         """
+        pd = _get_pandas()
         data = []
         for p in positions:
             strat = str(p.strategy_id) if p.strategy_id else "No Strategy"
@@ -248,4 +255,3 @@ class AnalyticsService:
         ).to_dict(orient="index")
         
         return {"stats": stats}
-

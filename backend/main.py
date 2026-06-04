@@ -7,8 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from config import get_settings
-from database import engine, Base
-from routers import auth, strategies, dashboard, daily, settings as settings_router, insights, accounts, admin, positions, market, journal, transactions
+from observability import RequestIDMiddleware
+from routers import auth, strategies, dashboard, daily, settings as settings_router, insights, accounts, admin, positions, market, journal, transactions, trading_positions, read_models, insight_artifacts
 
 app_settings = get_settings()
 
@@ -16,8 +16,6 @@ app_settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events"""
-    # Startup: Create database tables
-    Base.metadata.create_all(bind=engine)
     yield
     # Shutdown: cleanup if needed
 
@@ -28,6 +26,8 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+app.add_middleware(RequestIDMiddleware)
 
 # CORS Configuration
 origins = [origin.strip() for origin in app_settings.cors_origins.split(",")]
@@ -41,6 +41,7 @@ app.add_middleware(
 
 # Include Routers
 app.include_router(auth.router)
+app.include_router(auth.v1_router)
 app.include_router(strategies.router)
 app.include_router(dashboard.router)
 app.include_router(daily.router)
@@ -49,6 +50,9 @@ app.include_router(insights.router)
 app.include_router(accounts.router)
 app.include_router(admin.router)
 app.include_router(positions.router)
+app.include_router(trading_positions.router)
+app.include_router(read_models.router)
+app.include_router(insight_artifacts.router)
 app.include_router(market.router)
 app.include_router(journal.router)
 app.include_router(transactions.router)

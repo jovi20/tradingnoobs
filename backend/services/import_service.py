@@ -1,20 +1,27 @@
-import pandas as pd
 import io
 import uuid
 import logging
+from decimal import Decimal
 from typing import List, Dict, Any, Tuple
 from datetime import datetime
 from sqlalchemy.orm import Session
 from fastapi import UploadFile, HTTPException
 
-from models import AssetCoreType, PositionDirection, BatchType, Position, TradeBatch, Strategy
+from models import AssetCoreType, PositionDirection, BatchType, Position, TradeBatch, Strategy, TradeInstrument, TradingPosition
 from schemas import PositionCreate, BatchTypeEnum, PositionDirectionEnum
+from services.trading_accounting_service import TradingAccountingService
 
 # In-memory cache for uploaded files preview (in production use Redis)
 # format: {token: {rows: [], df: DataFrame, meta: {}}}
 IMPORT_CACHE = {}
 
 logger = logging.getLogger(__name__)
+
+
+def _get_pandas():
+    import pandas as pd
+    return pd
+
 
 class ImportService:
     def __init__(self, db: Session):
@@ -24,6 +31,7 @@ class ImportService:
         """
         Parse uploaded file (CSV/Excel) and return a token and preview items.
         """
+        pd = _get_pandas()
         content = await file.read()
         filename = file.filename.lower()
         
@@ -94,6 +102,7 @@ class ImportService:
         Validate a single row of data.
         Returns: (is_valid, errors, parsed_data)
         """
+        pd = _get_pandas()
         errors = []
         parsed = {}
         
@@ -234,96 +243,68 @@ class ImportService:
 
     def _save_trade(self, data: Dict, account_id: int, user_id: int):
         """
-        Save a single trade row as a Position or Batch.
+        Save a single trade row through the trading truth model.
         """
         symbol = data['symbol']
         direction = data['direction'] # Enum
         batch_type = data['type'] # Enum
-        
-        # 1. Find existing open position
-        # Rules: Same Symbol, Same Direction, Same Account, Open
-        # Note: Direction check is strict. You can't add a SHORT batch to a LONG position usually, unless it's a flip (not supported yet).
-        
-        # Map Schemas Enum to Model Enum checks
-        # models.PositionDirection[data['direction'].value]
-        
-        position = self.db.query(Position).filter(
-            Position.user_id == user_id,
-            Position.account_id == account_id,
-            Position.symbol == symbol,
-            Position.status == "OPEN"
-        ).first()
-        
-        # If no open position, and it's an ENTRY, create new Position
-        if not position:
-            if batch_type == BatchTypeEnum.ENTRY:
-                # Create Position
-                # Detect asset type logic could be here, or default to generic
-                position = Position(
+        accounting_service = TradingAccountingService(self.db)
+        quantity = Decimal(str(data['quantity']))
+        price = Decimal(str(data['price']))
+        fee = Decimal(str(data.get('commission') or 0))
+        open_position = self._find_open_trading_position(user_id=user_id, account_id=account_id, symbol=symbol)
+
+        if batch_type == BatchTypeEnum.ENTRY:
+            if open_position:
+                accounting_service.add_to_position(
+                    position_public_id=open_position.public_id,
+                    quantity=quantity,
+                    price=price,
+                    fee=fee,
+                    event_time=data['entry_time'],
+                )
+            else:
+                accounting_service.open_position(
                     user_id=user_id,
                     account_id=account_id,
                     symbol=symbol,
-                    exchange="Imported", # Default
-                    asset_type=data.get('asset_type') or "EQUITY", # Use imported type or default
-                    direction=direction,
-                    strategy_id=data.get('strategy_id'), # Link Strategy
-                    status="OPEN",
-                    total_quantity=0, # Will be updated by batch
-                    average_entry_price=0,
-                    opened_at=data['entry_time'],
-                    entry_emotion=data.get('emotion'), # Store initial emotion
-                    entry_confidence=data.get('confidence'), # Store initial confidence
-                    planned_entry_price=data.get('planned_entry_price'),
-                    planned_stop_loss=data.get('planned_stop_loss')
+                    side=direction.value,
+                    quantity=quantity,
+                    price=price,
+                    fee=fee,
+                    event_time=data['entry_time'],
+                    thesis=data.get('reason'),
+                    edge_source="import",
+                    checklist_snapshot={
+                        "emotion": data.get('emotion'),
+                        "confidence": data.get('confidence'),
+                        "planned_entry_price": data.get('planned_entry_price'),
+                        "planned_stop_loss": data.get('planned_stop_loss'),
+                    },
                 )
-                self.db.add(position)
-                self.db.flush()
-            else:
-                # EXIT on no position? 
-                # Option A: Create a dummy closed position? 
-                # Option B: Skip/Error?
-                # For import, we might be importing a full history.
-                # If we see a CLOSE without OPEN, it might be data gap.
-                # Let's Skip for now to be safe, or error.
-                print(f"Skipping orphan exit for {symbol}")
-                return
+        elif open_position:
+            remaining_quantity = Decimal(str(open_position.quantity_opened)) - Decimal(str(open_position.quantity_closed))
+            close_method = accounting_service.close_position if quantity >= remaining_quantity else accounting_service.reduce_position
+            close_method(
+                position_public_id=open_position.public_id,
+                quantity=quantity,
+                price=price,
+                fee=fee,
+                event_time=data['entry_time'],
+            )
 
-        # 2. Add Batch
-        # Calculate PnL if Exit
-        pnl = None
-        if batch_type == BatchTypeEnum.EXIT:
-             if position.average_entry_price and position.total_quantity > 0:
-                 entry_price = float(position.average_entry_price)
-                 exit_price = float(data['price'])
-                 qty = float(data['quantity'])
-                 
-                 if direction == PositionDirectionEnum.LONG:
-                     pnl = (exit_price - entry_price) * qty
-                 else:
-                     pnl = (entry_price - exit_price) * qty
-
-        batch = TradeBatch(
-            position_id=position.id,
-            type=batch_type,
-            price=data['price'],
-            quantity=data['quantity'],
-            time=data['entry_time'],
-            reason=data.get('reason'),
-            emotion=data.get('emotion'),
-            confidence=data.get('confidence'),
-            pnl=pnl
-        )
-        self.db.add(batch)
-        self.db.flush()
-        
-        # 3. Update Position Aggregates (Recalculate)
-        # We use strict chronological recalculation logic
-        # But we need to make sure we don't break logic if we insert a batch in the past.
-        # Since we sorted by time, we are hopefully appending mostly. 
-        # But importing history might insert into a currently open position's past.
-        # Ideally, we should call the router's recalculate_position logic.
-        
-        from routers.positions import recalculate_position
-        recalculate_position(position, self.db)
-        
         self.db.commit()
+
+    def _find_open_trading_position(self, *, user_id: int, account_id: int, symbol: str) -> TradingPosition | None:
+        normalized_symbol = symbol.strip().upper()
+        return (
+            self.db.query(TradingPosition)
+            .join(TradeInstrument, TradingPosition.instrument_id == TradeInstrument.id)
+            .filter(
+                TradingPosition.user_id == user_id,
+                TradingPosition.account_id == account_id,
+                TradingPosition.status == "OPEN",
+                TradeInstrument.symbol == normalized_symbol,
+            )
+            .one_or_none()
+        )

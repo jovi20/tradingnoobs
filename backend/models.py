@@ -3,11 +3,12 @@ Trading Noobs Backend - Database Models
 """
 from sqlalchemy import (
     Column, Integer, String, Text, Boolean, DateTime, Date,
-    ForeignKey, Numeric, JSON, Enum as SQLEnum, Index
+    ForeignKey, Numeric, JSON, Enum as SQLEnum, Index, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
+from services.identity_service import generate_public_id
 import enum
 
 
@@ -94,10 +95,16 @@ class User(Base):
     __tablename__ = "users"
     
     id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(26), unique=True, index=True, nullable=False)
     email = Column(String(255), unique=True, index=True, nullable=False)
+    email_normalized = Column(String(255), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True)
+    status = Column(String(32), default="ACTIVE", nullable=False)
     role = Column(String, default="user")  # user, admin
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
+    locale = Column(String(16), default="en-US", nullable=False)
+    timezone = Column(String(64), default="UTC", nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relationships
@@ -110,6 +117,52 @@ class User(Base):
     daily_snapshots = relationship("DailySnapshot", back_populates="user")
     journal_entries = relationship("JournalEntry", back_populates="user")
     ai_summaries = relationship("AISummary", back_populates="user")
+
+
+class UserCredential(Base):
+    __tablename__ = "user_credentials"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    credential_type = Column(String(32), nullable=False)
+    credential_hash = Column(String(255), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(26), unique=True, index=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    status = Column(String(32), default="ACTIVE", nullable=False)
+    issued_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class UserIdentity(Base):
+    __tablename__ = "user_identities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    provider = Column(String(64), nullable=False)
+    provider_subject = Column(String(255), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class AuthToken(Base):
+    __tablename__ = "auth_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(26), unique=True, index=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    token_type = Column(String(32), nullable=False)
+    token_hash = Column(String(255), nullable=False)
+    issued_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
 
 
 
@@ -267,6 +320,340 @@ class TradingAccount(Base):
     # Relationships
     user = relationship("User", back_populates="trading_accounts")
     transactions = relationship("Transaction", back_populates="trading_account", cascade="all, delete-orphan")
+
+
+class AssetMaster(Base):
+    """Canonical tradable asset identity."""
+    __tablename__ = "asset_master"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(26), unique=True, index=True, nullable=False, default=generate_public_id)
+    symbol = Column(String(50), unique=True, index=True, nullable=False)
+    name = Column(String(255), nullable=True)
+    asset_class = Column(String(50), nullable=False, default="EQUITY")
+    currency = Column(String(10), nullable=False, default="USD")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    instruments = relationship("TradeInstrument", back_populates="asset")
+
+
+class TradeInstrument(Base):
+    """Venue-specific instrument used by trading positions."""
+    __tablename__ = "trade_instruments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(26), unique=True, index=True, nullable=False, default=generate_public_id)
+    asset_id = Column(Integer, ForeignKey("asset_master.id"), nullable=False)
+    symbol = Column(String(50), index=True, nullable=False)
+    venue = Column(String(50), nullable=False, default="UNKNOWN")
+    instrument_type = Column(String(50), nullable=False, default="EQUITY")
+    currency = Column(String(10), nullable=False, default="USD")
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    asset = relationship("AssetMaster", back_populates="instruments")
+    positions = relationship("TradingPosition", back_populates="instrument")
+
+    __table_args__ = (
+        Index("idx_trade_instruments_symbol_venue", "symbol", "venue"),
+    )
+
+
+class TradingPosition(Base):
+    """One complete trading lifecycle from open to close."""
+    __tablename__ = "trading_positions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(26), unique=True, index=True, nullable=False, default=generate_public_id)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    account_id = Column(Integer, ForeignKey("trading_accounts.id"), nullable=False)
+    instrument_id = Column(Integer, ForeignKey("trade_instruments.id"), nullable=False)
+    side = Column(String(10), nullable=False)
+    status = Column(String(20), nullable=False, default="OPEN", index=True)
+    cost_method = Column(String(20), nullable=False, default="FIFO")
+    quantity_opened = Column(Numeric(20, 8), nullable=False, default=0)
+    quantity_closed = Column(Numeric(20, 8), nullable=False, default=0)
+    realized_pnl_gross = Column(Numeric(20, 8), nullable=False, default=0)
+    realized_pnl_net = Column(Numeric(20, 8), nullable=False, default=0)
+    fifo_lots = Column(JSON, nullable=False, default=list)
+    thesis = Column(Text, nullable=True)
+    opened_at = Column(DateTime(timezone=True), nullable=False)
+    closed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    instrument = relationship("TradeInstrument", back_populates="positions")
+    events = relationship("PositionEvent", back_populates="position", order_by="PositionEvent.event_time")
+    ledger_entries = relationship("AccountLedgerEntry", back_populates="related_position")
+
+    __table_args__ = (
+        Index("idx_trading_positions_user_status", "user_id", "status"),
+        Index("idx_trading_positions_account_status", "account_id", "status"),
+    )
+
+
+class PositionEvent(Base):
+    """Append-only event that changes or documents a trading position."""
+    __tablename__ = "position_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(26), unique=True, index=True, nullable=False, default=generate_public_id)
+    position_id = Column(Integer, ForeignKey("trading_positions.id"), nullable=False)
+    event_type = Column(String(32), nullable=False)
+    quantity = Column(Numeric(20, 8), nullable=False)
+    price = Column(Numeric(20, 8), nullable=False)
+    fee = Column(Numeric(20, 8), nullable=False, default=0)
+    realized_pnl_gross = Column(Numeric(20, 8), nullable=False, default=0)
+    realized_pnl_net = Column(Numeric(20, 8), nullable=False, default=0)
+    thesis = Column(Text, nullable=True)
+    edge_source = Column(String(100), nullable=True)
+    disconfirming_evidence = Column(Text, nullable=True)
+    invalidation_rule = Column(Text, nullable=True)
+    expected_holding_period = Column(String(100), nullable=True)
+    planned_exit_rule = Column(Text, nullable=True)
+    sizing_rationale = Column(Text, nullable=True)
+    checklist_snapshot = Column(JSON, nullable=True)
+    event_time = Column(DateTime(timezone=True), nullable=False, index=True)
+    payload = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    position = relationship("TradingPosition", back_populates="events")
+
+
+class AccountLedgerEntry(Base):
+    """Cash ledger truth for account and position-linked movements."""
+    __tablename__ = "account_ledger_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(26), unique=True, index=True, nullable=False, default=generate_public_id)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    account_id = Column(Integer, ForeignKey("trading_accounts.id"), nullable=False)
+    related_position_id = Column(Integer, ForeignKey("trading_positions.id"), nullable=True)
+    related_position_event_id = Column(Integer, ForeignKey("position_events.id"), nullable=True)
+    entry_type = Column(String(32), nullable=False)
+    amount = Column(Numeric(20, 8), nullable=False)
+    currency = Column(String(10), nullable=False, default="USD")
+    occurred_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    payload = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    related_position = relationship("TradingPosition", back_populates="ledger_entries")
+
+    __table_args__ = (
+        Index("idx_account_ledger_entries_account_time", "account_id", "occurred_at"),
+    )
+
+
+class OutboxEvent(Base):
+    """Pending domain event awaiting asynchronous publication."""
+    __tablename__ = "outbox_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(26), unique=True, index=True, nullable=False, default=generate_public_id)
+    event_type = Column(String(100), nullable=False)
+    aggregate_type = Column(String(100), nullable=False)
+    aggregate_public_id = Column(String(26), nullable=False, index=True)
+    payload = Column(JSON, nullable=False)
+    status = Column(String(32), nullable=False, default="PENDING", index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    published_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class JobDefinition(Base):
+    """Catalog entry for a visible asynchronous job type."""
+    __tablename__ = "job_definitions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(26), unique=True, index=True, nullable=False, default=generate_public_id)
+    job_key = Column(String(100), unique=True, index=True, nullable=False)
+    description = Column(Text, nullable=True)
+    queue_name = Column(String(100), nullable=False, default="default")
+    max_attempts = Column(Integer, nullable=False, default=3)
+    timeout_seconds = Column(Integer, nullable=False, default=300)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class IdempotencyKey(Base):
+    """Retry-safety key scoped to an operation family."""
+    __tablename__ = "idempotency_keys"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(26), unique=True, index=True, nullable=False, default=generate_public_id)
+    scope = Column(String(100), nullable=False)
+    key = Column(String(255), nullable=False)
+    status = Column(String(32), nullable=False, default="IN_PROGRESS")
+    request_hash = Column(String(128), nullable=True)
+    response_payload = Column(JSON, nullable=True)
+    locked_resource = Column(String(255), nullable=True, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("scope", "key", name="uq_idempotency_keys_scope_key"),
+    )
+
+
+class JobRun(Base):
+    """Visible execution record for queued, running, failed, or completed jobs."""
+    __tablename__ = "job_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(26), unique=True, index=True, nullable=False, default=generate_public_id)
+    job_definition_id = Column(Integer, ForeignKey("job_definitions.id"), nullable=True)
+    idempotency_key_id = Column(Integer, ForeignKey("idempotency_keys.id"), nullable=True)
+    job_key = Column(String(100), nullable=False, index=True)
+    status = Column(String(32), nullable=False, default="QUEUED", index=True)
+    locked_resource = Column(String(255), nullable=True, index=True)
+    attempts = Column(Integer, nullable=False, default=0)
+    max_attempts = Column(Integer, nullable=False, default=3)
+    payload = Column(JSON, nullable=False, default=dict)
+    result_payload = Column(JSON, nullable=True)
+    error_code = Column(String(100), nullable=True)
+    error_message = Column(Text, nullable=True)
+    queued_at = Column(DateTime(timezone=True), server_default=func.now())
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class JobRunEvent(Base):
+    """Append-only status/event line for a job run."""
+    __tablename__ = "job_run_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(26), unique=True, index=True, nullable=False, default=generate_public_id)
+    job_run_id = Column(Integer, ForeignKey("job_runs.id"), nullable=False)
+    event_type = Column(String(64), nullable=False)
+    message = Column(Text, nullable=True)
+    payload = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class EvidenceItem(Base):
+    """Source-backed evidence available to timeline, lifecycle, review, and AI artifacts."""
+    __tablename__ = "evidence_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(26), unique=True, index=True, nullable=False, default=generate_public_id)
+    kind = Column(String(64), nullable=False)
+    source_name = Column(String(255), nullable=False)
+    source_url_or_ref = Column(String(500), nullable=True)
+    captured_at = Column(DateTime(timezone=True), nullable=False)
+    summary = Column(Text, nullable=False)
+    linked_tickers = Column(JSON, nullable=False, default=list)
+    confidence = Column(String(32), nullable=False, default="MEDIUM")
+    invalidates_if = Column(Text, nullable=True)
+    linked_object_public_id = Column(String(26), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class ExternalCatalyst(Base):
+    """Evidence-linked catalyst; not a raw news feed."""
+    __tablename__ = "external_catalysts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(26), unique=True, index=True, nullable=False, default=generate_public_id)
+    catalyst_type = Column(String(64), nullable=False)
+    title = Column(String(255), nullable=False)
+    summary = Column(Text, nullable=False)
+    evidence_public_id = Column(String(26), nullable=False, index=True)
+    linked_object_public_id = Column(String(26), nullable=False, index=True)
+    occurred_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class NarrativeSignal(Base):
+    """Derived interpretation over evidence items."""
+    __tablename__ = "narrative_signals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(26), unique=True, index=True, nullable=False, default=generate_public_id)
+    signal_type = Column(String(64), nullable=False)
+    direction = Column(String(32), nullable=False)
+    strength = Column(String(32), nullable=False)
+    sample_size = Column(Integer, nullable=False, default=1)
+    time_window = Column(String(64), nullable=True)
+    linked_evidence_public_ids = Column(JSON, nullable=False, default=list)
+    linked_object_public_id = Column(String(26), nullable=False, index=True)
+    trust_meta = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class ProviderSymbolMapping(Base):
+    """Provider-specific symbol mapping distinct from asset and instrument identity."""
+    __tablename__ = "provider_symbol_mappings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(26), unique=True, index=True, nullable=False, default=generate_public_id)
+    asset_id = Column(Integer, ForeignKey("asset_master.id"), nullable=True)
+    instrument_id = Column(Integer, ForeignKey("trade_instruments.id"), nullable=True)
+    provider_key = Column(String(100), nullable=False, index=True)
+    provider_symbol = Column(String(100), nullable=False)
+    provider_market = Column(String(50), nullable=True)
+    capabilities_json = Column(JSON, nullable=False, default=dict)
+    quality_status = Column(String(32), nullable=False, default="ACTIVE")
+    first_seen_at = Column(DateTime(timezone=True), server_default=func.now())
+    last_verified_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("idx_provider_symbol_mappings_provider_symbol", "provider_key", "provider_symbol"),
+    )
+
+
+class MarketDataCoverage(Base):
+    """Coverage status for a provider mapping and data capability."""
+    __tablename__ = "market_data_coverage"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(26), unique=True, index=True, nullable=False, default=generate_public_id)
+    provider_symbol_mapping_id = Column(Integer, ForeignKey("provider_symbol_mappings.id"), nullable=False)
+    capability = Column(String(64), nullable=False)
+    quality_status = Column(String(32), nullable=False, default="ACTIVE")
+    first_seen_at = Column(DateTime(timezone=True), server_default=func.now())
+    last_verified_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class DashboardCache(Base):
+    """Materialized dashboard/read-model payload with freshness metadata."""
+    __tablename__ = "dashboard_cache"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(26), unique=True, index=True, nullable=False, default=generate_public_id)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    cache_key = Column(String(100), nullable=False)
+    payload = Column(JSON, nullable=False, default=dict)
+    as_of = Column(DateTime(timezone=True), nullable=False)
+    freshness = Column(String(32), nullable=False, default="FRESH")
+    source = Column(String(32), nullable=False, default="DERIVED")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "cache_key", name="uq_dashboard_cache_user_key"),
+    )
+
+
+class PositionMetric(Base):
+    """Materialized per-position metric payload with freshness metadata."""
+    __tablename__ = "position_metrics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(26), unique=True, index=True, nullable=False, default=generate_public_id)
+    position_public_id = Column(String(26), nullable=False, index=True)
+    metric_key = Column(String(100), nullable=False)
+    payload = Column(JSON, nullable=False, default=dict)
+    as_of = Column(DateTime(timezone=True), nullable=False)
+    freshness = Column(String(32), nullable=False, default="FRESH")
+    source = Column(String(32), nullable=False, default="DERIVED")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("position_public_id", "metric_key", name="uq_position_metrics_position_key"),
+    )
 
 
 class SystemSetting(Base):
@@ -430,3 +817,38 @@ class AIAnalysisResult(Base):
     # Relationships
     user = relationship("User")
 
+
+class InsightRun(Base):
+    """Auditable AI or analytics run that can produce evidence-linked artifacts."""
+    __tablename__ = "insight_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(26), unique=True, index=True, nullable=False, default=generate_public_id)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    run_type = Column(String(64), nullable=False)
+    status = Column(String(32), nullable=False, default="RUNNING")
+    prompt_version = Column(String(100), nullable=True)
+    input_refs = Column(JSON, nullable=False, default=list)
+    started_at = Column(DateTime(timezone=True), nullable=False)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    error_code = Column(String(100), nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class InsightArtifact(Base):
+    """Evidence-linked output produced by an InsightRun."""
+    __tablename__ = "insight_artifacts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(26), unique=True, index=True, nullable=False, default=generate_public_id)
+    insight_run_id = Column(Integer, ForeignKey("insight_runs.id"), nullable=False, index=True)
+    artifact_type = Column(String(64), nullable=False)
+    title = Column(String(255), nullable=False)
+    summary = Column(Text, nullable=False)
+    content_markdown = Column(Text, nullable=True)
+    payload = Column(JSON, nullable=False, default=dict)
+    evidence_refs = Column(JSON, nullable=False, default=list)
+    chart_schema = Column(JSON, nullable=True)
+    trust_meta = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

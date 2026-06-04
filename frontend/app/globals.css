@@ -22,6 +22,11 @@ body {
   min-height: 100vh;
 }
 
+.tn-app-shell {
+  font-family: "Aptos", "IBM Plex Sans", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", sans-serif;
+  font-feature-settings: "tnum" 1, "ss01" 1;
+}
+
 /* Glass morphism effects */
 .glass {
   background: rgba(255, 255, 255, 0.1);

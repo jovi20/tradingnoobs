@@ -1,11 +1,16 @@
-# Trading Noobs 开发任务清单
+# Trading Noobs Legacy 开发任务清单
 
-本文档是当前唯一执行清单，只记录：
+> 状态：Legacy backlog / historical progress snapshot.
+>
+> 当前执行计划已经切换到 [superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md](./superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md)。本文档保留架构收敛前的功能完成度，用于回看旧产品骨架中的已完成能力和未完成 backlog，不再作为新增开发任务的唯一入口。
+
+本文档只记录旧阶段：
 - 阶段划分
 - 任务项
-- 完成状态
+- 历史完成状态
 
 设计说明、架构说明和专题细节请查看：
+- [superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md](./superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md)
 - [superpowers/specs/2026-04-06-platform-foundation-design.md](./superpowers/specs/2026-04-06-platform-foundation-design.md)
 - [DEVELOPER_GUIDE.md](./DEVELOPER_GUIDE.md)
 - [market_data_sources.md](./market_data_sources.md)

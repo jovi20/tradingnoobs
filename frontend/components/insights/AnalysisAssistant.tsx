@@ -15,7 +15,6 @@ import {
 } from 'lucide-react'
 import { insightsAPI, AnalysisType, AnalysisResponse } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
-import ReactMarkdown from 'react-markdown'
 import {
     BarChart,
     Bar,
@@ -240,14 +239,28 @@ export default function AnalysisAssistant() {
                                     <Sparkles className="w-4 h-4" />
                                     AI 深度诊断
                                 </h3>
-                                <div className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 prose prose-sm dark:prose-invert max-w-none break-words whitespace-pre-wrap">
-                                    <ReactMarkdown>{result.ai_insights || '暂无分析结论'}</ReactMarkdown>
-                                </div>
+                                <LegacyInsightText content={result.ai_insights || '暂无分析结论'} />
                             </div>
                         </div>
                     ) : null}
                 </div>
             </div>
+        </div>
+    )
+}
+
+function LegacyInsightText({ content }: { content: string }) {
+    return (
+        <div className="rounded-xl border border-amber-200/70 bg-amber-50/80 p-4 shadow-sm dark:border-amber-500/20 dark:bg-amber-500/10">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700 dark:text-amber-200">
+                Legacy unlinked output
+            </p>
+            <p className="mt-1 text-xs leading-5 text-amber-800 dark:text-amber-100">
+                仅作历史读取；新的 AI 展示需要先写入 insight artifacts 并关联 evidence refs。
+            </p>
+            <pre className="mt-3 whitespace-pre-wrap break-words font-sans text-sm leading-6 text-slate-700 dark:text-slate-200">
+                {content}
+            </pre>
         </div>
     )
 }

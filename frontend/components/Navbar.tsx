@@ -3,15 +3,16 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-    LayoutDashboard,
-    TrendingUp,
+    Activity,
+    BarChart3,
     Calendar,
     Settings,
     FileText,
     Layers,
     LogOut,
     User,
-    Briefcase
+    Briefcase,
+    PlusCircle
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useTheme } from 'next-themes'
@@ -19,12 +20,20 @@ import { ThemeToggle } from './ThemeToggle'
 import { useAuth } from '@/contexts/AuthContext'
 
 const navItems = [
-    { href: '/', label: '看板', icon: LayoutDashboard },
+    { href: '/', label: '时间线', icon: Activity },
+    { href: '/dashboard', label: 'Dashboard', icon: BarChart3 },
     { href: '/positions', label: '交易', icon: Briefcase },
-    { href: '/strategies', label: '策略', icon: Layers },
+    { href: '/strategies', label: '规则与清单', icon: Layers },
     { href: '/daily', label: '日历', icon: Calendar },
-    { href: '/insights', label: 'AI洞察', icon: FileText },
+    { href: '/insights', label: '复盘/洞察', icon: FileText },
     { href: '/settings', label: '设置', icon: Settings },
+]
+
+const mobileNavItems = [
+    { href: '/', label: '首页', icon: Activity },
+    { href: '/positions', label: '交易', icon: Briefcase },
+    { href: '/insights', label: '复盘', icon: FileText },
+    { href: '/settings', label: '我的', icon: User },
 ]
 
 export function Navbar() {
@@ -113,8 +122,35 @@ export function Navbar() {
             {/* Mobile Bottom Nav */}
             {isAuthenticated && (
                 <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-t border-slate-200 dark:border-slate-700 pb-safe">
-                    <div className="flex justify-around py-2">
-                        {navItems.map((item) => {
+                    <div className="grid grid-cols-5 items-end px-2 py-2">
+                        {mobileNavItems.slice(0, 2).map((item) => {
+                            const isActive = pathname === item.href
+                            const Icon = item.icon
+                            return (
+                                <Link
+                                    key={item.href}
+                                    href={item.href}
+                                    className={`
+                                        flex flex-col items-center p-2 rounded-xl transition-all
+                                        ${isActive
+                                            ? 'text-primary-600 dark:text-primary-400'
+                                            : 'text-slate-500 dark:text-slate-400'
+                                        }
+                                    `}
+                                >
+                                    <Icon className="w-5 h-5" />
+                                    <span className="text-xs mt-1">{item.label}</span>
+                                </Link>
+                            )
+                        })}
+                        <Link
+                            href="/positions/new"
+                            className="mx-auto -mt-8 flex h-16 w-16 flex-col items-center justify-center rounded-2xl bg-slate-950 text-white shadow-xl shadow-slate-900/30 transition-transform active:scale-95 dark:bg-white dark:text-slate-950"
+                        >
+                            <PlusCircle className="h-6 w-6" />
+                            <span className="mt-1 text-[10px] font-semibold">记录</span>
+                        </Link>
+                        {mobileNavItems.slice(2).map((item) => {
                             const isActive = pathname === item.href
                             const Icon = item.icon
                             return (

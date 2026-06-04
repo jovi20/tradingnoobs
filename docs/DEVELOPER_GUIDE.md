@@ -4,9 +4,10 @@
 
 文档约定：
 - [superpowers/specs/2026-04-06-platform-foundation-design.md](./superpowers/specs/2026-04-06-platform-foundation-design.md) 是当前唯一目标架构来源。
+- [superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md](./superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md) 是当前执行计划来源。
 - 本文档是当前代码实现与运行方式的说明。
 - [current-state-baseline.md](./current-state-baseline.md) 是 2026-04-05 的历史审计基线，不再作为长期主真相来源持续维护。
-- [TODO.md](./TODO.md) 是唯一执行清单，只记录任务状态与阶段。
+- [TODO.md](./TODO.md) 是 legacy backlog，只记录架构收敛前的功能任务状态与历史完成度。
 - 专题细节拆分到附录：
   - [market_data_sources.md](./market_data_sources.md)
   - [trading-metrics.md](./trading-metrics.md)
@@ -135,7 +136,7 @@
 
 ### 3.2 当前主要未完成项
 
-以 [TODO.md](./TODO.md) 为准，当前开发重心仍集中在：
+当前新增开发以 [superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md](./superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md) 为准。旧 [TODO.md](./TODO.md) 中仍保留以下未完成 backlog，但在进入实现前需要重新映射到平台底座、timeline-first 前端和 schema-first 契约：
 - Phase 3：组合风险监控、单日亏损上限、实时预警
 - Phase 4：PDF 报告导出
 - Phase 5：AI 分析助手的日期范围选择与进一步完善
@@ -302,21 +303,20 @@ npm run dev
 
 ## 7. 当前开发状态与路线图
 
-执行细节以 [TODO.md](./TODO.md) 为准，这里只保留阶段级摘要，避免维护第二套路线图。
+执行细节以 [superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md](./superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md) 为准。旧 [TODO.md](./TODO.md) 只作为 legacy backlog 和历史完成度参考。
 
 | 阶段 | 当前状态 | 说明 |
 |------|----------|------|
-| Phase 1 交易规划模块 | `部分完成` | 后端、开仓清单、计划偏移已落地；部分列表/看板展示待补 |
-| Phase 2 绩效分析增强 | `已实现` | 风险调整收益指标和 MAE/MFE 已进入主流程 |
-| Phase 3 风控预警系统 | `规划中` | 尚未建立风险预警服务与前端面板 |
-| Phase 4 数据导入导出 | `部分完成` | CSV/Excel 导入已完成，PDF 导出未做 |
-| Phase 5 AI 高级分析中心 | `部分完成` | 分析助手主链路已落地，仍需补日期范围等体验层功能 |
-| Phase 6 运维及测试任务 | `规划中` | 管理员运维能力与配套测试仍需梳理 |
+| 当前计划 Task 1 | `待启动` | 冻结 `TradingPosition / PositionEvent / AccountLedgerEntry / public_id / FIFO`、trust metadata、timeline/review inbox/lifecycle detail 契约 |
+| 当前计划 Task 2 | `待启动` | Alembic、public_id、auth/session、日志错误码和测试基线 |
+| 当前计划 Task 3 | `待启动` | 交易真相模型、FIFO/fee/FX/PnL 口径、outbox/job/idempotency |
+| 当前计划 Task 4 | `可并行但受限` | 只允许前端 shell、nav、设计系统、trust primitives、adapter skeleton，不绑定旧 DTO |
+| Legacy Phase 1-6 | `历史参考` | 旧 TODO 显示 50 项完成 31 项；未完成项进入新计划前需要重新评估依赖和契约 |
 
 路线图使用规则：
-- 是否已完成，以代码和 `TODO.md` 勾选项共同判断
+- 是否已完成，以代码和当前 sequencing plan 勾选项共同判断
 - 本文档不维护独立任务数量
-- 任何新增 Phase 或模块，先更新 `TODO.md`，再同步本节摘要
+- 任何新增 Phase 或模块，先更新当前 sequencing plan；如属于旧产品 backlog，再在 `TODO.md` 中保留引用
 
 ---
 
@@ -324,15 +324,17 @@ npm run dev
 
 建议阅读顺序：
 1. [superpowers/specs/2026-04-06-platform-foundation-design.md](./superpowers/specs/2026-04-06-platform-foundation-design.md)：目标架构与设计结论
-2. 本文档：当前代码实现、现状与开发入口
-3. [TODO.md](./TODO.md)：当前任务与阶段状态
-4. [market_data_sources.md](./market_data_sources.md)：当前行情接入与 provider 说明
-5. [trading-metrics.md](./trading-metrics.md)：指标算法与实现状态
-6. [trading-fields-design.md](./trading-fields-design.md)：当前 / 实施中的字段边界
+2. [superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md](./superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md)：当前执行计划与前端 gate
+3. 本文档：当前代码实现、现状与开发入口
+4. [TODO.md](./TODO.md)：legacy backlog 与历史任务状态
+5. [market_data_sources.md](./market_data_sources.md)：当前行情接入与 provider 说明
+6. [trading-metrics.md](./trading-metrics.md)：指标算法与实现状态
+7. [trading-fields-design.md](./trading-fields-design.md)：当前 / 实施中的字段边界
 
 维护原则：
 - `spec` 负责“目标架构与未来设计”
+- `superpowers/plans` 负责“当前执行顺序与 gate”
 - 本文档负责“当前真实实现与运行方式”
-- `TODO` 负责“当前要做什么”
+- `TODO` 负责“legacy backlog 与历史完成度”
 - 附录负责“专题细节”
 - 历史基线只保留背景与审计价值

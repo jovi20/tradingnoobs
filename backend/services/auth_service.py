@@ -12,6 +12,7 @@ from fastapi.security import OAuth2PasswordBearer
 from config import get_settings
 from database import get_db
 from models import User
+from services.identity_service import generate_public_id, normalize_email
 
 settings = get_settings()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -37,7 +38,8 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 def get_user_by_email(db: Session, email: str) -> Optional[User]:
     """Get user by email"""
-    return db.query(User).filter(User.email == email).first()
+    normalized_email = normalize_email(email)
+    return db.query(User).filter(User.email_normalized == normalized_email).first()
 
 
 def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
@@ -50,8 +52,17 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
 
 def create_user(db: Session, email: str, password: str) -> User:
     """Create a new user"""
+    normalized_email = normalize_email(email)
     hashed_password = get_password_hash(password)
-    user = User(email=email, hashed_password=hashed_password)
+    user = User(
+        public_id=generate_public_id(),
+        email=normalized_email,
+        email_normalized=normalized_email,
+        hashed_password=hashed_password,
+        status="ACTIVE",
+        locale="en-US",
+        timezone="UTC",
+    )
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -73,12 +84,17 @@ async def get_current_user(
         user_id_raw = payload.get("sub")
         if user_id_raw is None:
             raise credentials_exception
-        # 确保 user_id 是整数类型
-        user_id = int(user_id_raw)
-    except (JWTError, ValueError):
+    except JWTError:
         raise credentials_exception
     
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.public_id == user_id_raw).first()
+    if user is None:
+        try:
+            legacy_user_id = int(user_id_raw)
+        except ValueError:
+            raise credentials_exception
+        user = db.query(User).filter(User.id == legacy_user_id).first()
+
     if user is None:
         raise credentials_exception
     if not user.is_active:

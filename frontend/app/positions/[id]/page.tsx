@@ -20,7 +20,10 @@ import {
     Award
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { LifecycleThread } from '@/components/lifecycle/LifecycleThread'
 import { positionsAPI, Position, TradeBatch } from '@/lib/api'
+import { useInsightRuns } from '@/hooks/useInsightRuns'
+import { useLifecycleReadModel } from '@/hooks/useLifecycleReadModel'
 
 import {
     getCoreTypeLabel,
@@ -38,10 +41,40 @@ import CustomSelect from '@/components/CustomSelect'
 import DateTimePicker from '@/components/DateTimePicker'
 
 export default function PositionDetailPage() {
+    const params = useParams()
+    const rawPositionId = params.id as string
+    const numericPositionId = Number.parseInt(rawPositionId, 10)
+    const isNumericId = rawPositionId === numericPositionId.toString()
+
+    if (!isNumericId) {
+        return <LifecyclePositionDetailPage positionPublicId={rawPositionId} />
+    }
+
+    return <LegacyPositionDetailPage positionId={numericPositionId} />
+}
+
+function LifecyclePositionDetailPage({ positionPublicId }: { positionPublicId: string }) {
+    const { token } = useAuth()
+    const lifecycleQuery = useLifecycleReadModel(token, positionPublicId)
+    const insightRunsQuery = useInsightRuns(token)
+
+    return (
+        <LifecycleThread
+            lifecycle={lifecycleQuery.data}
+            isLoading={lifecycleQuery.isLoading}
+            error={lifecycleQuery.error ? lifecycleQuery.error.message : null}
+            insightRuns={insightRunsQuery.data}
+            isInsightLoading={insightRunsQuery.isLoading}
+            insightError={insightRunsQuery.error ? insightRunsQuery.error.message : null}
+            onRefresh={() => lifecycleQuery.refetch()}
+            onInsightRefresh={() => insightRunsQuery.refetch()}
+        />
+    )
+}
+
+function LegacyPositionDetailPage({ positionId }: { positionId: number }) {
     const { token } = useAuth()
     const router = useRouter()
-    const params = useParams()
-    const positionId = parseInt(params.id as string)
 
     const [position, setPosition] = useState<Position | null>(null)
     const [isLoading, setIsLoading] = useState(true)

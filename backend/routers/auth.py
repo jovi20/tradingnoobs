@@ -18,6 +18,7 @@ from models import User, UserSettings, Strategy
 from app_config.default_strategies import DEFAULT_STRATEGIES
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
+v1_router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -83,3 +84,24 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 async def get_me(current_user: User = Depends(get_current_user)):
     """Get current user info"""
     return current_user
+
+
+v1_router.add_api_route(
+    "/register",
+    register,
+    methods=["POST"],
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+v1_router.add_api_route(
+    "/login",
+    login,
+    methods=["POST"],
+    response_model=Token,
+)
+v1_router.add_api_route(
+    "/me",
+    get_me,
+    methods=["GET"],
+    response_model=UserResponse,
+)

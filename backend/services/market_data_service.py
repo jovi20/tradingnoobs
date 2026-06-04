@@ -7,18 +7,26 @@ Routes requests to appropriate providers based on asset type:
 """
 import re
 from datetime import datetime, timedelta
-import finnhub
 from sqlalchemy.orm import Session
 from typing import Dict, Any, Optional, List
 import asyncio
 from fastapi.concurrency import run_in_threadpool
 
 from models import SystemSetting, AssetMetadata, AssetCoreType, AssetMarket, AssetCurrency, AssetRiskLevel
-from services.providers import akshare_provider, binance_provider
 from services.llm_service import classify_asset, classify_asset_rich
 
 # Cache TTL in seconds (1 minute)
 CACHE_TTL_SECONDS = 60
+
+
+def _get_akshare_provider():
+    from services.providers import akshare_provider
+    return akshare_provider
+
+
+def _get_binance_provider():
+    from services.providers import binance_provider
+    return binance_provider
 
 
 class MarketDataService:
@@ -67,6 +75,8 @@ class MarketDataService:
     def _get_finnhub_client(self):
         """Lazy load Finnhub client"""
         if self._finnhub_client is None:
+            import finnhub
+
             setting = self.db.query(SystemSetting).filter(
                 SystemSetting.key == 'finnhub_api_key'
             ).first()
@@ -231,6 +241,9 @@ class MarketDataService:
         
         # Mapping hints to our internal provider routing logic
         async def fetch_wrapper():
+            akshare_provider = _get_akshare_provider()
+            binance_provider = _get_binance_provider()
+
             if asset_type == 'CRYPTO' or market == 'CRYPTO':
                 return await self._fetch_with_timeout(run_in_threadpool(binance_provider.get_crypto_quote, symbol))
             
@@ -467,6 +480,9 @@ class MarketDataService:
         end_ts = int(end.timestamp() * 1000)
         
         try:
+            akshare_provider = _get_akshare_provider()
+            binance_provider = _get_binance_provider()
+
             if asset_type == 'A_STOCK' or asset_type == 'HK_STOCK':
                 return await run_in_threadpool(akshare_provider.get_history_k_data, symbol, start_str, end_str)
                 
