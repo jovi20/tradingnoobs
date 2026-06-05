@@ -126,7 +126,7 @@ node --experimental-strip-types --test frontend/tests/*.test.mts
 
 Expected: all selected backend and frontend tests pass.
 
-- [ ] **Step 6: Commit and push Task 1**
+- [x] **Step 6: Commit and push Task 1**
 
 Run:
 ```bash
@@ -149,7 +149,7 @@ git push origin dev
 - Modify: lifecycle adapter files under `frontend/lib` / `frontend/components`
 - Test: existing lifecycle/frontend adapter tests
 
-- [ ] **Step 1: Add backend failing tests for final lifecycle semantics**
+- [x] **Step 1: Add backend failing tests for final lifecycle semantics**
 
 Cover:
 - truth lifecycle returns ledger cash effects, evidence refs, and AI artifacts in one envelope
@@ -157,22 +157,22 @@ Cover:
 - unsupported historical reversal and `OPEN` reversal remain rejected with explicit messages
 - review/narrative updates target `PositionEvent` fields rather than legacy `Position` fields
 
-- [ ] **Step 2: Implement minimal backend hard cutover behavior**
+- [x] **Step 2: Implement minimal backend hard cutover behavior**
 
 Keep migration bridge routes available only as explicitly labeled bridge paths, and make ordinary lifecycle/detail behavior truth-first.
 
-- [ ] **Step 3: Add frontend failing tests for migration-tool labeling**
+- [x] **Step 3: Add frontend failing tests for migration-tool labeling**
 
 Cover:
 - truth lifecycle page renders edit/review/batch legacy controls as migration tools or disables them
 - latest allowed reversal and manual adjustment remain available
 - AI sidecar reads artifact-backed content
 
-- [ ] **Step 4: Implement minimal frontend hard cutover behavior**
+- [x] **Step 4: Implement minimal frontend hard cutover behavior**
 
 Move user-facing detail actions onto truth routes or label old flows as migration tools.
 
-- [ ] **Step 5: Verify Task 2**
+- [x] **Step 5: Verify Task 2**
 
 Run:
 ```bash

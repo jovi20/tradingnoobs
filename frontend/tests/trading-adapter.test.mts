@@ -5,6 +5,7 @@ import {
   buildTruthTradeEventFromBatchForm,
   getLegacyBatchMutationState,
   getLegacyPositionDeleteState,
+  getLegacyReviewDisplayState,
 } from '../lib/adapters/trading.ts'
 
 test('buildTruthTradeEventFromBatchForm maps entry batches to ADD truth events', () => {
@@ -79,5 +80,26 @@ test('getLegacyPositionDeleteState disables destructive legacy deletes once trut
     canDelete: true,
     label: '删除',
     reason: '尚未解析到 truth lifecycle，保留 legacy position 迁移删除入口。',
+  })
+})
+
+test('getLegacyReviewDisplayState labels legacy reviews as migration-only beside truth lifecycle', () => {
+  assert.deepEqual(getLegacyReviewDisplayState(true, true), {
+    shouldDisplay: true,
+    isMigrationOnly: true,
+    label: 'Legacy review migration',
+    reason: '复盘正文仍来自 legacy Position.trade_review；新的结构化叙事请写入 truth narrative 或 evidence-linked artifact。',
+  })
+  assert.deepEqual(getLegacyReviewDisplayState(true, false), {
+    shouldDisplay: false,
+    isMigrationOnly: true,
+    label: 'Legacy review migration',
+    reason: 'truth lifecycle 已接管详情主叙事，且 legacy Position.trade_review 为空。',
+  })
+  assert.deepEqual(getLegacyReviewDisplayState(false, true), {
+    shouldDisplay: true,
+    isMigrationOnly: false,
+    label: '交易复盘',
+    reason: '尚未解析到 truth lifecycle，继续展示 legacy Position.trade_review。',
   })
 })

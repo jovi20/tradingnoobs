@@ -132,6 +132,34 @@ export function getLegacyPositionDeleteState(hasTruthLifecycle: boolean): {
     }
 }
 
+export function getLegacyReviewDisplayState(
+    hasTruthLifecycle: boolean,
+    hasLegacyReview: boolean
+): {
+    shouldDisplay: boolean
+    isMigrationOnly: boolean
+    label: string
+    reason: string
+} {
+    if (hasTruthLifecycle) {
+        return {
+            shouldDisplay: hasLegacyReview,
+            isMigrationOnly: true,
+            label: 'Legacy review migration',
+            reason: hasLegacyReview
+                ? '复盘正文仍来自 legacy Position.trade_review；新的结构化叙事请写入 truth narrative 或 evidence-linked artifact。'
+                : 'truth lifecycle 已接管详情主叙事，且 legacy Position.trade_review 为空。',
+        }
+    }
+
+    return {
+        shouldDisplay: hasLegacyReview,
+        isMigrationOnly: false,
+        label: '交易复盘',
+        reason: '尚未解析到 truth lifecycle，继续展示 legacy Position.trade_review。',
+    }
+}
+
 export function adaptTransactions(transactions: Transaction[]): TransactionViewModel[] {
     return transactions.map(adaptTransaction)
 }

@@ -74,8 +74,10 @@ def _build_ai_sidecar_items(db: Session, truth_position: TradingPosition) -> lis
         linked_object_public_id=truth_position.public_id,
         limit=5,
     )
-    return [
-        {
+    items = []
+    for artifact in artifacts:
+        artifact_href = f"/insights/{artifact['public_id']}"
+        items.append({
             "insight_artifact_public_id": artifact["public_id"],
             "title": artifact["title"],
             "conclusion": artifact["summary"],
@@ -87,14 +89,13 @@ def _build_ai_sidecar_items(db: Session, truth_position: TradingPosition) -> lis
                     "ref_type": "EVIDENCE_REF",
                     "public_id": ref,
                     "label": ref,
-                    "href": "/insights",
+                    "href": artifact_href,
                 }
                 for ref in artifact.get("evidence_refs", [])
             ],
-            "href": "/insights",
-        }
-        for artifact in artifacts
-    ]
+            "href": artifact_href,
+        })
+    return items
 
 
 def build_trading_position_lifecycle_payload(db: Session, truth_position: TradingPosition) -> dict:

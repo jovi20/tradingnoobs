@@ -27,6 +27,7 @@ import {
     adaptPosition,
     getLegacyBatchMutationState,
     getLegacyPositionDeleteState,
+    getLegacyReviewDisplayState,
     PositionViewModel,
     TradeBatchViewModel
 } from '@/lib/adapters/trading'
@@ -435,6 +436,7 @@ export default function PositionDetailPage() {
     )
     const legacyBatchMutationState = getLegacyBatchMutationState(Boolean(truthLifecycle))
     const legacyDeleteState = getLegacyPositionDeleteState(Boolean(truthLifecycle))
+    const legacyReviewDisplayState = getLegacyReviewDisplayState(Boolean(truthLifecycle), Boolean(position?.trade_review))
     const truthReversalAction = truthLifecycle ? getLifecycleReversalAction(truthLifecycle) : null
 
     return (
@@ -910,12 +912,20 @@ export default function PositionDetailPage() {
             </div>
 
             {/* Review Section */}
-            {position.trade_review && (
+            {legacyReviewDisplayState.shouldDisplay && position.trade_review && (
                 <div className="card p-6">
                     <h2 className="text-lg font-semibold mb-4 flex items-center space-x-2">
                         <Edit3 className="w-5 h-5 text-slate-400" />
-                        <span>交易复盘</span>
+                        <span>{legacyReviewDisplayState.label}</span>
+                        {legacyReviewDisplayState.isMigrationOnly && (
+                            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                                migration-only
+                            </span>
+                        )}
                     </h2>
+                    <p className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400">
+                        {legacyReviewDisplayState.reason}
+                    </p>
                     <p className="text-slate-600 dark:text-slate-400 whitespace-pre-wrap">
                         {position.trade_review}
                     </p>

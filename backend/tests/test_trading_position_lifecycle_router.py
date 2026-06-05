@@ -284,7 +284,12 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["data"]["ai_sidecar"]["items"][0]["insight_artifact_public_id"], artifact.public_id)
         self.assertEqual(payload["data"]["ai_sidecar"]["items"][0]["title"], "Position review artifact")
+        self.assertEqual(payload["data"]["ai_sidecar"]["items"][0]["href"], f"/insights/{artifact.public_id}")
         self.assertEqual(len(payload["data"]["ai_sidecar"]["items"][0]["evidence_refs"]), 2)
+        self.assertEqual(
+            payload["data"]["ai_sidecar"]["items"][0]["evidence_refs"][0]["href"],
+            f"/insights/{artifact.public_id}",
+        )
 
     def test_lifecycle_route_rejects_internal_numeric_id(self):
         truth_position = self._seed_synced_position()
