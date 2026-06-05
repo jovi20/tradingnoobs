@@ -39,6 +39,7 @@ from schemas import (
     TimelineHomeData,
     TimelineHomePageStateEnum,
     TimelineHomeResponse,
+    TimelineAiAnnotation,
     TimelineImpactValue,
     TimelineInstrumentRef,
     TimelineViewEnum,
@@ -478,22 +479,47 @@ def _build_ai_insight_events_from_runs(runs: list[dict]) -> list[TimelineEventCa
         for artifact in run.get("artifacts", []):
             if not artifact.get("summary"):
                 continue
+            artifact_public_id = artifact["public_id"]
+            artifact_trust = artifact.get("trust_meta") if isinstance(artifact.get("trust_meta"), dict) else {}
+            occurred_at = artifact.get("created_at") or run["started_at"]
             events.append(
                 TimelineEventCard(
-                    event_public_id=f"insight-artifact:{artifact['public_id']}",
+                    event_public_id=f"insight-artifact:{artifact_public_id}",
                     thread_public_id=run["public_id"],
                     event_type=TimelineEventTypeEnum.AI_INSIGHT,
-                    occurred_at=artifact.get("created_at") or run["started_at"],
+                    occurred_at=occurred_at,
                     headline=artifact.get("title") or f"AI 分析：{run['run_type']}",
                     summary=artifact["summary"][:120],
                     instrument=TimelineInstrumentRef(
                         asset_label="Trading Noobs",
                         instrument_label="Insight Artifact",
                         symbol="AI",
-                        href="/insights",
+                        href=f"/insights/{artifact_public_id}",
                     ),
-                    href="/insights",
-                    trust=None,
+                    ai_annotation=TimelineAiAnnotation(
+                        artifact_public_id=artifact_public_id,
+                        summary=artifact["summary"][:120],
+                        href=f"/insights/{artifact_public_id}",
+                    ),
+                    href=f"/insights/{artifact_public_id}",
+                    trust=TrustMeta(
+                        as_of=occurred_at,
+                        generated_at=occurred_at,
+                        freshness=FreshnessStatusEnum(artifact_trust.get("freshness", FreshnessStatusEnum.FRESH.value)),
+                        source=DataSourceEnum(artifact_trust.get("source", DataSourceEnum.AI_GENERATED.value)),
+                        maturity=(
+                            MaturityEnum(artifact_trust["maturity"])
+                            if artifact_trust.get("maturity")
+                            else None
+                        ),
+                        value_status=(
+                            ValueStatusEnum(artifact_trust["value_status"])
+                            if artifact_trust.get("value_status")
+                            else ValueStatusEnum.FINAL
+                        ),
+                        source_refs=artifact_trust.get("source_refs", []),
+                        note=artifact_trust.get("note"),
+                    ),
                 )
             )
     return events
@@ -801,8 +827,10 @@ def get_timeline_home(
         list_recent_timeline_snapshots(db, user_id=current_user.id, limit=50),
         as_of=as_of,
     )
+    insight_runs = InsightArtifactService(db).list_runs(user_id=current_user.id, limit=5)
+    artifact_events = _build_ai_insight_events_from_runs(insight_runs)
     if snapshot_only_enabled:
-        timeline_events = materialized_timeline_events
+        timeline_events = materialized_timeline_events + artifact_events
     else:
         ai_results = (
             db.query(AIAnalysisResult)
@@ -811,8 +839,6 @@ def get_timeline_home(
             .limit(5)
             .all()
         )
-        insight_runs = InsightArtifactService(db).list_runs(user_id=current_user.id, limit=5)
-        artifact_events = _build_ai_insight_events_from_runs(insight_runs)
         llm_config = get_llm_runtime_config(db)
         timeline_events = (
             _build_timeline_events(positions, ai_summaries)

@@ -63,7 +63,7 @@ Append a 2026-06-05 refresh section that records:
 Run: `git diff -- docs/superpowers/plans`
 Expected: only plan/checkpoint status updates and this execution plan.
 
-- [ ] **Step 4: Commit and push Task 0**
+- [x] **Step 4: Commit and push Task 0**
 
 Run:
 ```bash
@@ -88,7 +88,7 @@ Expected: commit succeeds and `origin/dev` advances.
 - Modify: `frontend/app/timeline/page.tsx`
 - Test: `frontend/tests/*timeline*.test.mts` or create `frontend/tests/timeline-snapshot-contract.test.mts`
 
-- [ ] **Step 1: Add backend failing test for snapshot-only default readiness**
+- [x] **Step 1: Add backend failing test for snapshot-only default readiness**
 
 Cover `/api/timeline/home` when the snapshot-only flag is enabled for a user:
 - returns only derived timeline snapshot events
@@ -97,14 +97,14 @@ Cover `/api/timeline/home` when the snapshot-only flag is enabled for a user:
 - returns an empty but valid feed when no snapshots exist
 - does not build legacy quote/LLM exception paths
 
-- [ ] **Step 2: Implement minimal backend read behavior**
+- [x] **Step 2: Implement minimal backend read behavior**
 
 Make the snapshot-only path the complete contract path behind the feature flag:
 - `summary_bar`, `review_inbox`, `timeline`, and `context_rail` remain present
 - each module carries trust metadata when its freshness/source differs
 - AI events link to `artifact_public_id`
 
-- [ ] **Step 3: Add frontend adapter failing test**
+- [x] **Step 3: Add frontend adapter failing test**
 
 Cover a snapshot-only response containing:
 - a truth trade event
@@ -112,11 +112,11 @@ Cover a snapshot-only response containing:
 - an empty review inbox
 - module trust metadata
 
-- [ ] **Step 4: Implement minimal frontend adapter/page behavior**
+- [x] **Step 4: Implement minimal frontend adapter/page behavior**
 
 Ensure Timeline Home renders snapshot-only payloads without legacy assumptions and without treating AI markdown as the primary audited surface.
 
-- [ ] **Step 5: Verify Task 1**
+- [x] **Step 5: Verify Task 1**
 
 Run:
 ```bash

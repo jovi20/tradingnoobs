@@ -7,6 +7,7 @@ import {
   getReviewInboxSummary,
   getTimelineEmptyState,
   getTimelineEventAccent,
+  getTimelineEventHref,
 } from '../lib/adapters/timeline.ts'
 
 test('formatTrustLabel joins freshness, value status, and maturity', () => {
@@ -41,4 +42,30 @@ test('getTimelineEmptyState returns copy for zero and small-data states', () => 
 test('accent helpers stay deterministic for timeline and inbox severity', () => {
   assert.equal(getTimelineEventAccent('AI_INSIGHT'), 'bg-slate-700')
   assert.match(getInboxSeverityAccent('CRITICAL'), /border-red-300/)
+})
+
+test('timeline event href prefers auditable AI artifact links', () => {
+  assert.equal(
+    getTimelineEventHref({
+      event_public_id: 'insight-artifact:artifact-1',
+      thread_public_id: 'run-1',
+      event_type: 'AI_INSIGHT',
+      occurred_at: '2026-06-05T00:00:00Z',
+      headline: 'AI review',
+      summary: 'Evidence-linked summary',
+      instrument: {
+        asset_label: 'Trading Noobs',
+        instrument_label: 'Insight Artifact',
+        symbol: 'AI',
+        href: '/insights',
+      },
+      ai_annotation: {
+        artifact_public_id: 'artifact-1',
+        summary: 'Evidence-linked summary',
+        href: '/insights/artifact-1',
+      },
+      href: '/insights',
+    }),
+    '/insights/artifact-1'
+  )
 })

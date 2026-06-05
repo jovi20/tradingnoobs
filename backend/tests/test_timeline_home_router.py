@@ -10,7 +10,18 @@ from sqlalchemy.orm import sessionmaker
 
 from database import Base, get_db
 from main import app
-from models import AIAnalysisResult, DerivedTimelineSnapshot, FeatureFlag, Position, PositionDirection, PositionStatus, TradingAccount, User
+from models import (
+    AIAnalysisResult,
+    DerivedTimelineSnapshot,
+    FeatureFlag,
+    InsightArtifact,
+    InsightRun,
+    Position,
+    PositionDirection,
+    PositionStatus,
+    TradingAccount,
+    User,
+)
 from services.auth_service import get_current_user
 
 
@@ -238,6 +249,71 @@ class TimelineHomeRouterTests(unittest.TestCase):
         ]
         self.assertEqual(len(items), 1)
         self.assertTrue(items[0]["event_public_id"].startswith("derived-timeline:"))
+
+    def test_timeline_home_snapshot_only_flag_includes_artifact_backed_ai_events(self):
+        self.session.add(
+            DerivedTimelineSnapshot(
+                user_id=self.user.id,
+                trading_position_public_id="tp-snapshot-ai",
+                source="truth.lifecycle.bridge",
+                snapshot_json={
+                    "position_title": "NVDA",
+                    "lifecycle_node_count": 2,
+                    "position_event_type": "REDUCE",
+                    "position_event_occurred_at": "2026-05-03T09:30:00Z",
+                },
+                refreshed_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+            )
+        )
+        run = InsightRun(
+            user_id=self.user.id,
+            public_id="run-timeline-ai",
+            run_type="position_review",
+            status="COMPLETED",
+            prompt_version="position-review.v1",
+            input_refs=["tp-snapshot-ai"],
+            started_at=datetime(2026, 5, 3, 11, 0, tzinfo=timezone.utc),
+            completed_at=datetime(2026, 5, 3, 11, 1, tzinfo=timezone.utc),
+        )
+        self.session.add(run)
+        self.session.flush()
+        self.session.add(
+            InsightArtifact(
+                insight_run_id=run.id,
+                public_id="artifact-timeline-ai",
+                artifact_type="position_review",
+                title="NVDA review artifact",
+                summary="Exit discipline improved after reducing into strength.",
+                content_markdown="## Review\nExit discipline improved.",
+                payload={"linked_object_public_id": "tp-snapshot-ai"},
+                evidence_refs=["tp-snapshot-ai", "evt-reduce"],
+                chart_schema=None,
+                trust_meta={
+                    "freshness": "FRESH",
+                    "source": "AI_GENERATED",
+                    "value_status": "FINAL",
+                    "source_refs": ["tp-snapshot-ai"],
+                },
+                created_at=datetime(2026, 5, 3, 11, 2, tzinfo=timezone.utc),
+            )
+        )
+        self.session.add(FeatureFlag(key="timeline_snapshot_only_enabled", enabled=True))
+        self.session.commit()
+
+        response = self.client.get("/api/timeline/home?view=AI")
+
+        self.assertEqual(response.status_code, 200)
+        items = [
+            item
+            for group in response.json()["data"]["timeline"]["groups"]
+            for item in group["items"]
+        ]
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["event_type"], "AI_INSIGHT")
+        self.assertEqual(items[0]["event_public_id"], "insight-artifact:artifact-timeline-ai")
+        self.assertEqual(items[0]["ai_annotation"]["artifact_public_id"], "artifact-timeline-ai")
+        self.assertEqual(items[0]["ai_annotation"]["href"], "/insights/artifact-timeline-ai")
+        self.assertEqual(items[0]["trust"]["source"], "AI_GENERATED")
 
     def test_timeline_home_snapshot_only_flag_skips_legacy_exception_builders(self):
         account = TradingAccount(

@@ -111,6 +111,13 @@ export function getTimelineEventAccent(event: TimelineEventCard['event_type']): 
     }
 }
 
+export function getTimelineEventHref(event: TimelineEventCard): string {
+    if (event.event_type === 'AI_INSIGHT' && event.ai_annotation?.href) {
+        return event.ai_annotation.href
+    }
+    return event.href
+}
+
 export function getInboxSeverityAccent(severity: ReviewInboxItem['severity']): string {
     switch (severity) {
         case 'CRITICAL':

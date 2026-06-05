@@ -1,6 +1,6 @@
 import Link from 'next/link'
 
-import { getTimelineEventAccent } from '@/lib/adapters/timeline'
+import { getTimelineEventAccent, getTimelineEventHref } from '@/lib/adapters/timeline'
 import type { TimelineEventCard as TimelineEventCardData } from '@/lib/read-models'
 
 interface TimelineEventCardProps {
@@ -10,7 +10,7 @@ interface TimelineEventCardProps {
 export function TimelineEventCard({ event }: TimelineEventCardProps) {
     return (
         <Link
-            href={event.href}
+            href={getTimelineEventHref(event)}
             className="block rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-slate-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-800"
         >
             <div className="flex items-start gap-3">
