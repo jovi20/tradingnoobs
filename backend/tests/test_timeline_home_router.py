@@ -71,6 +71,10 @@ class TimelineHomeRouterTests(unittest.TestCase):
         if os.path.exists(self.db_path):
             os.remove(self.db_path)
 
+    def enable_legacy_mixed_feed(self):
+        self.session.add(FeatureFlag(key="timeline_legacy_mixed_feed_enabled", enabled=True))
+        self.session.commit()
+
     def test_timeline_home_returns_zero_state_when_user_has_no_accounts_or_positions(self):
         response = self.client.get("/api/timeline/home")
 
@@ -197,6 +201,60 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.assertEqual(snapshot_items[0]["headline"], "AAPL 减仓")
         self.assertEqual(snapshot_items[0]["summary"], "Truth lifecycle snapshot refreshed with 2 nodes.")
         self.assertEqual(snapshot_items[0]["trust"]["source"], "DERIVED")
+
+    def test_timeline_home_defaults_to_snapshot_only_without_feature_flag(self):
+        account = TradingAccount(
+            user_id=self.user.id,
+            public_id="acct-default-snapshot",
+            name="Default Snapshot Account",
+            broker="IBKR",
+            currency="USD",
+            is_active=True,
+        )
+        self.session.add(account)
+        self.session.flush()
+        self.session.add(
+            Position(
+                user_id=self.user.id,
+                account_id=account.id,
+                public_id="legacy-pos-default-hidden",
+                symbol="MSFT",
+                exchange="NASDAQ",
+                direction=PositionDirection.LONG,
+                status=PositionStatus.OPEN,
+                total_quantity=1,
+                opened_at=datetime(2026, 6, 5, 10, 0, tzinfo=timezone.utc),
+            )
+        )
+        self.session.add(
+            DerivedTimelineSnapshot(
+                user_id=self.user.id,
+                trading_position_public_id="tp-default-snapshot",
+                source="truth.lifecycle.bridge",
+                snapshot_json={
+                    "position_title": "AAPL",
+                    "lifecycle_node_count": 1,
+                    "position_event_public_id": "truth-event-default",
+                    "position_event_type": "OPEN",
+                    "position_event_occurred_at": "2026-06-05T10:00:00Z",
+                },
+                refreshed_at=datetime(2026, 6, 5, 10, 1, tzinfo=timezone.utc),
+            )
+        )
+        self.session.commit()
+
+        response = self.client.get("/api/timeline/home")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        headlines = [
+            item["headline"]
+            for group in payload["data"]["timeline"]["groups"]
+            for item in group["items"]
+        ]
+        joined_headlines = " ".join(headlines)
+        self.assertIn("AAPL 开仓", headlines)
+        self.assertNotIn("MSFT", joined_headlines)
 
     def test_timeline_home_snapshot_only_flag_hides_legacy_position_events(self):
         account = TradingAccount(
@@ -374,7 +432,7 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.assertEqual(get_quote.await_count, 0)
         get_llm_config.assert_not_called()
 
-    def test_timeline_home_snapshot_only_flag_ignores_expired_flag(self):
+    def test_timeline_home_defaults_to_snapshot_only_even_when_old_positive_flag_expires(self):
         account = TradingAccount(
             user_id=self.user.id,
             public_id="acct-snapshot-expired",
@@ -429,11 +487,11 @@ class TimelineHomeRouterTests(unittest.TestCase):
             for group in response.json()["data"]["timeline"]["groups"]
             for item in group["items"]
         ]
-        self.assertEqual(len(items), 2)
+        self.assertEqual(len(items), 1)
         self.assertTrue(any(item["event_public_id"].startswith("derived-timeline:") for item in items))
-        self.assertTrue(any(item["event_public_id"].startswith("pos-legacy-visible:") for item in items))
+        self.assertFalse(any(item["event_public_id"].startswith("pos-legacy-visible:") for item in items))
 
-    def test_timeline_home_snapshot_only_flag_respects_actor_targets(self):
+    def test_timeline_home_legacy_mixed_feed_flag_restores_legacy_events(self):
         self.user.public_id = "timeline-target-user"
         self.session.commit()
         account = TradingAccount(
@@ -475,9 +533,9 @@ class TimelineHomeRouterTests(unittest.TestCase):
         )
         self.session.add(
             FeatureFlag(
-                key="timeline_snapshot_only_enabled",
+                key="timeline_legacy_mixed_feed_enabled",
                 enabled=True,
-                actor_targets=["other-user"],
+                actor_targets=["timeline-target-user"],
             )
         )
         self.session.commit()
@@ -535,6 +593,8 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.assertEqual(payload["data"]["summary_bar"]["priority_alert_count"], 1)
 
     def test_timeline_home_groups_open_close_and_review_events(self):
+        self.enable_legacy_mixed_feed()
+
         account = TradingAccount(
             user_id=self.user.id,
             public_id="acct-events",
@@ -615,6 +675,8 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.assertEqual(selected["title"], "MSFT")
 
     def test_timeline_home_surfaces_ai_insight_events(self):
+        self.enable_legacy_mixed_feed()
+
         ai_result = AIAnalysisResult(
             user_id=self.user.id,
             analysis_type="strategy_health",
@@ -638,6 +700,8 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.assertIn("rule execution", ai_item["summary"])
 
     def test_timeline_home_surfaces_losing_streak_alerts_in_inbox_and_timeline(self):
+        self.enable_legacy_mixed_feed()
+
         account = TradingAccount(
             user_id=self.user.id,
             public_id="acct-streak",
@@ -687,6 +751,8 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.assertIn("LOSING_STREAK_ALERT", event_types)
 
     def test_timeline_home_paginates_timeline_events_with_limit_and_cursor(self):
+        self.enable_legacy_mixed_feed()
+
         account = TradingAccount(
             user_id=self.user.id,
             public_id="acct-pagination",
@@ -749,6 +815,8 @@ class TimelineHomeRouterTests(unittest.TestCase):
         )
 
     def test_timeline_home_surfaces_data_stale_when_quote_fetch_fails_for_open_position(self):
+        self.enable_legacy_mixed_feed()
+
         account = TradingAccount(
             user_id=self.user.id,
             public_id="acct-stale",
@@ -795,6 +863,8 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.assertIn("DATA_STALE", inbox_kinds)
 
     def test_timeline_home_surfaces_sync_exception_for_missing_llm_config_with_ai_signal(self):
+        self.enable_legacy_mixed_feed()
+
         ai_result = AIAnalysisResult(
             user_id=self.user.id,
             analysis_type="emotion_pnl",

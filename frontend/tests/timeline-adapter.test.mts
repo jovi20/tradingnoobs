@@ -8,6 +8,7 @@ import {
   getTimelineEmptyState,
   getTimelineEventAccent,
   getTimelineEventHref,
+  getTimelineSourceModeLabel,
 } from '../lib/adapters/timeline.ts'
 
 test('formatTrustLabel joins freshness, value status, and maturity', () => {
@@ -68,4 +69,9 @@ test('timeline event href prefers auditable AI artifact links', () => {
     }),
     '/insights/artifact-1'
   )
+})
+
+test('getTimelineSourceModeLabel explains snapshot default and legacy fallback', () => {
+  assert.equal(getTimelineSourceModeLabel('SNAPSHOT_ONLY'), 'Snapshot-first')
+  assert.equal(getTimelineSourceModeLabel('LEGACY_MIXED'), 'Legacy mixed fallback')
 })

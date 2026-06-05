@@ -26,6 +26,8 @@ export interface TimelineHomeViewModel {
     pageMeta: TrustMeta
 }
 
+export type TimelineSourceMode = 'SNAPSHOT_ONLY' | 'LEGACY_MIXED'
+
 export function adaptTimelineHome(response: TimelineHomeResponse): TimelineHomeViewModel {
     return {
         pageState: response.data.page_state,
@@ -116,6 +118,13 @@ export function getTimelineEventHref(event: TimelineEventCard): string {
         return event.ai_annotation.href
     }
     return event.href
+}
+
+export function getTimelineSourceModeLabel(mode: TimelineSourceMode): string {
+    if (mode === 'LEGACY_MIXED') {
+        return 'Legacy mixed fallback'
+    }
+    return 'Snapshot-first'
 }
 
 export function getInboxSeverityAccent(severity: ReviewInboxItem['severity']): string {

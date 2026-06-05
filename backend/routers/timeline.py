@@ -52,6 +52,7 @@ from services.derived_timeline_read_service import list_recent_timeline_snapshot
 from services.insight_artifact_service import InsightArtifactService
 from services.market_data_service import MarketDataService
 from services.platform_config_service import get_feature_flag_enabled, get_llm_runtime_config
+from services.timeline_source_policy import get_timeline_source_mode
 
 router = APIRouter(prefix="/api/timeline", tags=["Timeline"])
 
@@ -796,11 +797,13 @@ def get_timeline_home(
         review_completion_rate = reviewed_closed_count / closed_count
 
     as_of = _utc_now_iso()
-    snapshot_only_enabled = get_feature_flag_enabled(
+    legacy_mixed_feed_enabled = get_feature_flag_enabled(
         db,
-        "timeline_snapshot_only_enabled",
+        "timeline_legacy_mixed_feed_enabled",
         actor_key=current_user.public_id,
     )
+    source_mode = get_timeline_source_mode(legacy_mixed_feed_enabled=legacy_mixed_feed_enabled)
+    snapshot_only_enabled = source_mode == "SNAPSHOT_ONLY"
     meta = _trust_meta(
         as_of=as_of,
         source=DataSourceEnum.DERIVED,

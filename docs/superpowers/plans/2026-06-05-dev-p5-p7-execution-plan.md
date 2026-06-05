@@ -196,7 +196,7 @@ Commit succeeds and origin/dev advances.
 - Modify: `frontend/app/timeline/page.tsx`
 - Test: `frontend/tests/timeline-adapter.test.mts`
 
-- [ ] **Step 1: Add backend failing tests for snapshot-first default**
+- [x] **Step 1: Add backend failing tests for snapshot-first default**
 
 Create `backend/tests/test_timeline_source_policy.py` with:
 ```python
@@ -258,7 +258,7 @@ def test_timeline_home_defaults_to_snapshot_only_without_feature_flag(self):
     self.assertNotIn("MSFT", " ".join(headlines))
 ```
 
-- [ ] **Step 2: Run backend tests to verify RED**
+- [x] **Step 2: Run backend tests to verify RED**
 
 Run:
 ```bash
@@ -270,7 +270,7 @@ Expected:
 Fails because services.timeline_source_policy does not exist or Timeline still defaults to mixed legacy feed.
 ```
 
-- [ ] **Step 3: Implement minimal backend source policy**
+- [x] **Step 3: Implement minimal backend source policy**
 
 Create `backend/services/timeline_source_policy.py`:
 ```python
@@ -303,7 +303,7 @@ snapshot_only_enabled = (
 
 Keep the older `timeline_snapshot_only_enabled` tests only if they are explicitly rewritten as legacy compatibility tests; new default behavior must not require that flag.
 
-- [ ] **Step 4: Run backend tests to verify GREEN**
+- [x] **Step 4: Run backend tests to verify GREEN**
 
 Run:
 ```bash
@@ -315,7 +315,7 @@ Expected:
 All selected tests pass.
 ```
 
-- [ ] **Step 5: Add frontend failing test for snapshot-first source badge copy**
+- [x] **Step 5: Add frontend failing test for snapshot-first source badge copy**
 
 Modify `frontend/tests/timeline-adapter.test.mts`:
 ```ts
@@ -327,7 +327,7 @@ test('timeline source mode labels snapshot-first default clearly', () => {
 })
 ```
 
-- [ ] **Step 6: Run frontend test to verify RED**
+- [x] **Step 6: Run frontend test to verify RED**
 
 Run:
 ```bash
@@ -340,7 +340,7 @@ Expected:
 Fails because getTimelineSourceModeLabel is not exported.
 ```
 
-- [ ] **Step 7: Implement minimal frontend copy**
+- [x] **Step 7: Implement minimal frontend copy**
 
 Modify `frontend/lib/adapters/timeline.ts`:
 ```ts
@@ -354,7 +354,7 @@ export function getTimelineSourceModeLabel(mode: TimelineSourceMode) {
 
 Modify `frontend/app/timeline/page.tsx` only if the backend response exposes mode metadata in this slice. If mode metadata is not added to the API response, do not invent page state; keep this adapter helper as the copy contract for a later metadata display slice.
 
-- [ ] **Step 8: Verify P6**
+- [x] **Step 8: Verify P6**
 
 Run:
 ```bash
@@ -372,6 +372,12 @@ Frontend Node tests pass.
 TypeScript exits 0.
 Build exits 0.
 ```
+
+Execution note:
+
+- RED observed for missing `services.timeline_source_policy`, default mixed feed still surfacing `MSFT`, and missing frontend `getTimelineSourceModeLabel` export.
+- GREEN observed with `timeline_legacy_mixed_feed_enabled` as the explicit mixed-feed rollback flag.
+- Existing legacy mixed-feed router tests now opt into `timeline_legacy_mixed_feed_enabled`; default tests no longer require `timeline_snapshot_only_enabled`.
 
 - [ ] **Step 9: Commit and push P6**
 
