@@ -43,6 +43,7 @@ interface AdminJobsConsoleProps {
     onSelectJob: (jobPublicId: string) => void
     onRequeueJob: (jobPublicId: string) => void
     onCancelJob: (jobPublicId: string) => void
+    onForceCancelJob: (jobPublicId: string) => void
 }
 
 export function AdminJobsConsole({
@@ -63,6 +64,7 @@ export function AdminJobsConsole({
     onSelectJob,
     onRequeueJob,
     onCancelJob,
+    onForceCancelJob,
 }: AdminJobsConsoleProps) {
     const selectedTone = selectedJob ? getAdminJobStatusTone(selectedJob.status) : null
 
@@ -270,6 +272,16 @@ export function AdminJobsConsole({
                                 >
                                     <Ban className="mr-2 h-4 w-4" />
                                     Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={isActionRunning || selectedJob.status !== 'RUNNING'}
+                                    onClick={() => onForceCancelJob(selectedJob.public_id)}
+                                    className="btn btn-danger flex-1 disabled:opacity-50"
+                                    title="Force-cancel only applies to RUNNING jobs and releases active business locks owned by this job."
+                                >
+                                    <ShieldAlert className="mr-2 h-4 w-4" />
+                                    Force
                                 </button>
                             </div>
 

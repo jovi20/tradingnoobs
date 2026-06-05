@@ -13,6 +13,7 @@ from services.job_service import (
     claim_next_due_job,
     complete_job_run,
     fail_job_run,
+    force_cancel_running_job_run,
     heartbeat_job_run,
     recover_stale_running_jobs,
     requeue_job_run,
@@ -460,6 +461,56 @@ class JobServiceTests(unittest.TestCase):
             now=datetime(2026, 5, 3, 10, 3, tzinfo=timezone.utc),
         )
         self.assertIsNone(claimed)
+
+    def test_force_cancel_running_job_clears_worker_lock_and_releases_business_locks(self):
+        definition = self._definition()
+        run = JobRun(
+            job_definition_id=definition.id,
+            public_id="job-force-cancel",
+            status=JobRunStatus.RUNNING,
+            priority=1,
+            payload={"position_event_public_id": "evt-running"},
+            max_attempts=3,
+            attempt_count=1,
+            queue_name="derived",
+            locked_by="worker-a",
+            locked_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+            started_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+        )
+        self.db.add(run)
+        self.db.flush()
+        lock = BusinessLock(
+            scope="derived.timeline.refresh",
+            resource_key="tp-force-cancel",
+            owner_id=run.public_id,
+            owner_type="job_run",
+            status=BusinessLockStatus.ACTIVE,
+            expires_at=datetime(2026, 5, 3, 10, 5, tzinfo=timezone.utc),
+        )
+        self.db.add(lock)
+        self.db.commit()
+
+        cancelled = force_cancel_running_job_run(
+            self.db,
+            job_run=run,
+            reason="Worker lost heartbeat; operator force-cancelled.",
+            now=datetime(2026, 5, 3, 10, 2, tzinfo=timezone.utc),
+        )
+        self.db.commit()
+
+        self.assertEqual(cancelled.status, JobRunStatus.CANCELLED)
+        self.assertEqual(cancelled.error_message, "Worker lost heartbeat; operator force-cancelled.")
+        self.assertIsNone(cancelled.locked_by)
+        self.assertIsNone(cancelled.locked_at)
+        self.assertIsNone(cancelled.next_run_at)
+        self.assertIsNotNone(cancelled.finished_at)
+        self.db.refresh(lock)
+        self.assertEqual(lock.status, BusinessLockStatus.RELEASED)
+        event = self.db.query(JobRunEvent).filter(JobRunEvent.job_run_id == run.id).one()
+        self.assertEqual(event.event_type, JobRunEventType.CANCELLED)
+        self.assertEqual(event.from_status, JobRunStatus.RUNNING)
+        self.assertEqual(event.to_status, JobRunStatus.CANCELLED)
+        self.assertEqual(event.metadata_json["force"], True)
 
     def test_heartbeat_job_run_refreshes_running_lock_for_same_worker(self):
         definition = self._definition()

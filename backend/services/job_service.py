@@ -9,7 +9,7 @@ from typing import Callable
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from models import JobRun, JobRunEvent, JobRunEventType, JobRunStatus
+from models import BusinessLock, BusinessLockStatus, JobRun, JobRunEvent, JobRunEventType, JobRunStatus
 from services.business_lock_service import acquire_business_lock, release_business_lock
 
 JobHandler = Callable[[JobRun], dict | None]
@@ -376,6 +376,54 @@ def cancel_job_run(
             to_status=JobRunStatus.CANCELLED,
             message=reason,
             metadata_json={"source": "admin"},
+        )
+    )
+    db.flush()
+    return job_run
+
+
+def force_cancel_running_job_run(
+    db: Session,
+    *,
+    job_run: JobRun,
+    reason: str = "Force-cancelled by admin.",
+    now: datetime | None = None,
+) -> JobRun:
+    now = _as_utc(now or datetime.now(timezone.utc))
+    if job_run.status != JobRunStatus.RUNNING:
+        raise ValueError(f"Cannot force-cancel job in status {job_run.status.value}")
+
+    previous_status = job_run.status
+    active_locks = (
+        db.query(BusinessLock)
+        .filter(
+            BusinessLock.owner_id == job_run.public_id,
+            BusinessLock.owner_type == "job_run",
+            BusinessLock.status == BusinessLockStatus.ACTIVE,
+        )
+        .all()
+    )
+    for business_lock in active_locks:
+        release_business_lock(db, business_lock=business_lock, owner_id=job_run.public_id, now=now)
+
+    job_run.status = JobRunStatus.CANCELLED
+    job_run.error_message = reason
+    job_run.locked_by = None
+    job_run.locked_at = None
+    job_run.next_run_at = None
+    job_run.finished_at = now
+    db.add(
+        JobRunEvent(
+            job_run_id=job_run.id,
+            event_type=JobRunEventType.CANCELLED,
+            from_status=previous_status,
+            to_status=JobRunStatus.CANCELLED,
+            message=reason,
+            metadata_json={
+                "source": "admin",
+                "force": True,
+                "released_business_locks": [lock.public_id for lock in active_locks],
+            },
         )
     )
     db.flush()

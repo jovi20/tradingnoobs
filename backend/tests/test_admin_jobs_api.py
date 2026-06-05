@@ -344,6 +344,62 @@ class AdminJobsApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 409)
 
+    def test_admin_can_force_cancel_running_job(self):
+        db = self.SessionLocal()
+        try:
+            db.add(self.admin_user)
+            db.flush()
+            definition = JobDefinition(
+                key="derived.timeline.refresh",
+                display_name="Refresh Timeline Read Model",
+                queue_name="derived",
+                retry_policy={"max_attempts": 3},
+                timeout_seconds=300,
+                is_active=True,
+            )
+            db.add(definition)
+            db.flush()
+            job_run = JobRun(
+                user_id=self.admin_user.id,
+                job_definition_id=definition.id,
+                public_id="job-running-force-cancel",
+                status=JobRunStatus.RUNNING,
+                payload={"position_event_public_id": "evt-running"},
+                max_attempts=3,
+                attempt_count=1,
+                queue_name="derived",
+                locked_by="worker-a",
+                locked_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+            )
+            db.add(job_run)
+            db.flush()
+            db.add(
+                BusinessLock(
+                    scope="derived.timeline.refresh",
+                    resource_key="tp-force-cancel",
+                    owner_id=job_run.public_id,
+                    owner_type="job_run",
+                    status=BusinessLockStatus.ACTIVE,
+                    expires_at=datetime(2026, 5, 3, 10, 5, tzinfo=timezone.utc),
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        response = self.client.post("/api/admin/jobs/job-running-force-cancel/force-cancel")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "CANCELLED")
+        self.assertIsNone(payload["locked_by"])
+        self.assertIsNone(payload["locked_at"])
+        self.assertEqual(payload["business_locks"][0]["status"], "RELEASED")
+        self.assertEqual(payload["events"][-1]["event_type"], "CANCELLED")
+        self.assertEqual(payload["events"][-1]["from_status"], "RUNNING")
+        self.assertEqual(payload["events"][-1]["to_status"], "CANCELLED")
+        self.assertEqual(payload["events"][-1]["metadata"]["force"], True)
+
 
 if __name__ == "__main__":
     unittest.main()

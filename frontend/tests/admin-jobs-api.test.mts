@@ -92,11 +92,14 @@ test('admin job API client posts requeue and cancel actions', async () => {
   try {
     await adminAPI.requeueJob('token-1', 'job-1')
     await adminAPI.cancelJob('token-1', 'job-1')
+    await adminAPI.forceCancelJob('token-1', 'job-1')
 
     assert.equal(String(calls[0].input), 'http://localhost:8000/api/admin/jobs/job-1/requeue')
     assert.equal(calls[0].init?.method, 'POST')
     assert.equal(String(calls[1].input), 'http://localhost:8000/api/admin/jobs/job-1/cancel')
     assert.equal(calls[1].init?.method, 'POST')
+    assert.equal(String(calls[2].input), 'http://localhost:8000/api/admin/jobs/job-1/force-cancel')
+    assert.equal(calls[2].init?.method, 'POST')
   } finally {
     globalThis.fetch = originalFetch
   }

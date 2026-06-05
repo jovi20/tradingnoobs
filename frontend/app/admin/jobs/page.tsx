@@ -76,14 +76,16 @@ export default function AdminJobsPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [token, isAdmin, statusFilter, queueFilter])
 
-    const runAction = async (action: 'requeue' | 'cancel', jobPublicId: string) => {
+    const runAction = async (action: 'requeue' | 'cancel' | 'force-cancel', jobPublicId: string) => {
         if (!token) return
         setError('')
         setIsActionRunning(true)
         try {
             const detail = action === 'requeue'
                 ? await adminAPI.requeueJob(token, jobPublicId)
-                : await adminAPI.cancelJob(token, jobPublicId)
+                : action === 'force-cancel'
+                    ? await adminAPI.forceCancelJob(token, jobPublicId)
+                    : await adminAPI.cancelJob(token, jobPublicId)
             setSelectedJob(detail)
             await loadJobs()
         } catch (err: any) {
@@ -135,6 +137,7 @@ export default function AdminJobsPage() {
             onSelectJob={loadJobDetail}
             onRequeueJob={(jobPublicId) => runAction('requeue', jobPublicId)}
             onCancelJob={(jobPublicId) => runAction('cancel', jobPublicId)}
+            onForceCancelJob={(jobPublicId) => runAction('force-cancel', jobPublicId)}
         />
     )
 }

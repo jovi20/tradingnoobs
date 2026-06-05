@@ -744,6 +744,12 @@ export const adminAPI = {
             method: 'POST',
         }, token)
     },
+
+    forceCancelJob: async (token: string, jobPublicId: string): Promise<AdminJobRunDetail> => {
+        return fetchAPI(`/api/admin/jobs/${jobPublicId}/force-cancel`, {
+            method: 'POST',
+        }, token)
+    },
 }
 
 // ============== Position & Batch Types ==============

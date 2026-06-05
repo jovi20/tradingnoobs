@@ -73,11 +73,11 @@ test('adaptAdminJobsPageData summarizes job status counts and latest failures', 
 })
 
 test('admin job adapter exposes safe actions by status', () => {
-  assert.deepEqual(getAdminJobActions('FAILED'), { canRequeue: true, canCancel: false })
-  assert.deepEqual(getAdminJobActions('RETRYING'), { canRequeue: true, canCancel: true })
-  assert.deepEqual(getAdminJobActions('QUEUED'), { canRequeue: false, canCancel: true })
-  assert.deepEqual(getAdminJobActions('RUNNING'), { canRequeue: false, canCancel: false })
-  assert.deepEqual(getAdminJobActions('SUCCEEDED'), { canRequeue: false, canCancel: false })
+  assert.deepEqual(getAdminJobActions('FAILED'), { canRequeue: true, canCancel: false, canForceCancel: false })
+  assert.deepEqual(getAdminJobActions('RETRYING'), { canRequeue: true, canCancel: true, canForceCancel: false })
+  assert.deepEqual(getAdminJobActions('QUEUED'), { canRequeue: false, canCancel: true, canForceCancel: false })
+  assert.deepEqual(getAdminJobActions('RUNNING'), { canRequeue: false, canCancel: false, canForceCancel: true })
+  assert.deepEqual(getAdminJobActions('SUCCEEDED'), { canRequeue: false, canCancel: false, canForceCancel: false })
 })
 
 test('admin job status tones stay deterministic', () => {

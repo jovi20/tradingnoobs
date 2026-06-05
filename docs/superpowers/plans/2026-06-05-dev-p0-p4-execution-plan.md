@@ -180,7 +180,7 @@ PYTHONPATH=backend /Users/a1/vibecoding/tradingnoobs/.worktrees/execute-plan-tas
 node --experimental-strip-types --test frontend/tests/*.test.mts
 ```
 
-- [ ] **Step 6: Commit and push Task 2**
+- [x] **Step 6: Commit and push Task 2**
 
 Run:
 ```bash
@@ -203,7 +203,7 @@ git push origin dev
 - Test: `backend/tests/test_outbox_models.py` or current outbox service tests
 - Test: admin jobs API/frontend adapter tests
 
-- [ ] **Step 1: Add failing tests for running job control semantics**
+- [x] **Step 1: Add failing tests for running job control semantics**
 
 Cover:
 - queued/retrying jobs can be canceled
@@ -212,22 +212,22 @@ Cover:
 - business locks are released or marked according to final status
 - idempotency keys retain enough result/error state for replay/debugging
 
-- [ ] **Step 2: Implement minimal safe job control**
+- [x] **Step 2: Implement minimal safe job control**
 
 Define and implement the smallest safe status model for interrupt/force-cancel semantics without adding Redis dependency yet.
 
-- [ ] **Step 3: Add admin UI/adapter tests**
+- [x] **Step 3: Add admin UI/adapter tests**
 
 Cover:
 - unsafe actions are hidden or disabled for running jobs
 - failed/retrying jobs expose requeue
 - canceled jobs display final event history
 
-- [ ] **Step 4: Implement admin UI hardening**
+- [x] **Step 4: Implement admin UI hardening**
 
 Expose clear job state and action availability using the existing admin jobs page patterns.
 
-- [ ] **Step 5: Verify Task 3**
+- [x] **Step 5: Verify Task 3**
 
 Run:
 ```bash

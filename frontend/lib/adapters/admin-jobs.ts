@@ -42,6 +42,7 @@ export interface AdminJobViewModel extends AdminJobRunSummary {
     actionState: {
         canRequeue: boolean
         canCancel: boolean
+        canForceCancel: boolean
     }
 }
 
@@ -53,6 +54,7 @@ export function getAdminJobActions(status: AdminJobStatus) {
     return {
         canRequeue: status === 'FAILED' || status === 'RETRYING',
         canCancel: status === 'QUEUED' || status === 'RETRYING',
+        canForceCancel: status === 'RUNNING',
     }
 }
 
