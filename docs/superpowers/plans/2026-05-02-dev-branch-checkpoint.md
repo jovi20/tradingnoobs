@@ -385,3 +385,61 @@ Execution plan created for the next slices:
 - D1 unified job model, D2 outbox event schema/relay/CLI, and D3 minimum job execution state machine plus local DB worker CLI/handler have migration/model/service regressions, including relay crash-resume idempotency, relay failure metadata/retry scheduling, truth trade event request idempotency, dividend request idempotency, manual adjustment request idempotency, AI analyze request idempotency, AI summary request idempotency, weekly report request idempotency, outbox-to-worker local dispatch, heartbeat lock refresh, stale running recovery, business lock acquire/release, handler skip/retry on lock contention, reusable request idempotency service behavior including expired-key restart, `DerivedTimelineSnapshot` upsert from `derived.timeline.refresh`, Timeline Home snapshot event mixing, truth event type preservation, truth event occurred_at ordering, user isolation, and the `timeline_snapshot_only_enabled` snapshot-only quality gate including expiry, actor-target, stable-rollout handling, and legacy exception-builder bypass; Redis worker, default Timeline Home snapshot-only hard cut, and systematic D3 business-lock/idempotent execution wiring remain pending.
 - Frontend adapter tests remain green.
 - Stage boundary commit exists on `dev`; next checkpoint should record each focused slice commit separately for `main` vs `dev` review.
+
+## 2026-06-05 Dev P0-P4 Completion
+
+Branch target remained `dev`; no PR to `main` was created.
+
+Completed stage commits:
+
+- P0: `5c60523 docs: refresh dev p0 p4 execution plan`
+- P1: `0c103f5 feat: harden timeline snapshot home contract`
+- P2: `d1cbb44 feat: complete truth lifecycle detail cutover`
+- P3: `344de3e feat: harden async job operations`
+- P4: `c626e2c feat: prepare dashboard insights schema contracts`
+
+Scope completed:
+
+- Timeline Home snapshot-only readiness now includes artifact-backed AI events, trust metadata, audited artifact hrefs, and snapshot-only empty feed behavior.
+- Lifecycle Detail is truth-first for ordinary detail behavior; legacy review/batch/delete paths are labeled or disabled as migration tools when truth lifecycle exists.
+- Async job operations now distinguish normal queued/retrying cancel from explicit running force-cancel, with lock release and admin UI/API coverage.
+- Dashboard now exposes schema-first `chart.v1` chart payloads while retaining legacy allocation arrays for bridge compatibility.
+- Insights now reuses the same chart schema builder for analysis artifacts, and frontend AI cards use artifact summaries/evidence/source refs as the primary auditable presentation path.
+
+Verification recorded during the stages:
+
+```text
+P1 backend timeline/derived: 17 passed
+P1 frontend node tests: 30 passed
+P2 backend lifecycle/artifact: 27 passed
+P2 frontend node tests: 31 passed
+P3 backend job/admin/business-lock: 25 passed
+P3 frontend node tests: 31 passed
+P4 backend full tests: 141 passed, 20 warnings
+P4 frontend node tests: 36 passed
+P4 frontend tsc --noEmit --pretty false: passed
+P4 frontend npm run build: passed
+P4 git diff --check: clean
+```
+
+Final verification before closeout:
+
+```text
+git diff --check: clean
+backend/tests: 141 passed, 20 warnings
+frontend tsc --noEmit --pretty false: passed
+frontend npm run build: passed
+alembic upgrade head on /private/tmp/tradingnoobs_dev_p0_p4_final.db: reached 5e6f7a8b9cad
+```
+
+Dependency note:
+
+- `npm ci` was required in `frontend/` to restore local verification dependencies.
+- npm reported `next@14.1.0` as deprecated for a security update and reported 4 audit vulnerabilities; this is a dependency maintenance follow-up, not part of the P0-P4 contract work.
+
+Remaining migration-only / intentionally blocked paths:
+
+- Legacy lifecycle and legacy AI markdown surfaces remain read-only or migration-only fallbacks.
+- Legacy batch edit/delete controls remain protected when truth lifecycle exists.
+- Historical/non-latest reversal and `OPEN` reversal remain blocked until accounting and audit semantics are designed.
+- `docs/superpowers/demos/` remains untracked user content and was not touched.

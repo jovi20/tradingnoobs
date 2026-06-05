@@ -316,7 +316,7 @@ git push origin dev
 - Modify: `docs/superpowers/plans/2026-06-05-dev-p0-p4-execution-plan.md`
 - Modify: `docs/superpowers/plans/2026-05-02-dev-branch-checkpoint.md`
 
-- [ ] **Step 1: Mark completed plan items**
+- [x] **Step 1: Mark completed plan items**
 
 Update this plan and the checkpoint with:
 - completed task list
@@ -324,7 +324,29 @@ Update this plan and the checkpoint with:
 - exact verification commands and results
 - any remaining migration-only paths
 
-- [ ] **Step 2: Run final verification**
+Completion record:
+
+- P0 `5c60523 docs: refresh dev p0 p4 execution plan`
+- P1 `0c103f5 feat: harden timeline snapshot home contract`
+- P2 `d1cbb44 feat: complete truth lifecycle detail cutover`
+- P3 `344de3e feat: harden async job operations`
+- P4 `c626e2c feat: prepare dashboard insights schema contracts`
+
+Stage verification recorded during execution:
+
+- P1: `17 passed` backend timeline/derived tests; `30 passed` frontend tests.
+- P2: `27 passed` backend lifecycle/artifact tests; `31 passed` frontend tests.
+- P3: `25 passed` backend job/admin/business-lock tests; `31 passed` frontend tests.
+- P4: `141 passed, 20 warnings` backend full tests; `36 passed` frontend Node tests; frontend `tsc --noEmit --pretty false` passed; frontend `npm run build` passed.
+
+Remaining migration-only paths:
+
+- Legacy lifecycle routes and legacy position review/batch/delete controls remain bridge/migration surfaces when truth lifecycle is missing.
+- Legacy AI markdown remains read-only fallback; auditable `InsightArtifact` summary/evidence/trust metadata is the primary AI presentation contract.
+- Historical/non-latest reversal and `OPEN` reversal remain intentionally blocked until audit/accounting semantics are explicitly designed.
+- `docs/superpowers/demos/` remains untouched user content.
+
+- [x] **Step 2: Run final verification**
 
 Run:
 ```bash
@@ -335,7 +357,15 @@ npm run build
 PYTHONPATH=backend DATABASE_URL=sqlite:////private/tmp/tradingnoobs_dev_p0_p4_final.db /Users/a1/vibecoding/tradingnoobs/.worktrees/execute-plan-task0/.venv/bin/alembic -c backend/alembic.ini upgrade head
 ```
 
-- [ ] **Step 3: Commit and push final docs**
+Final verification result:
+
+- `git diff --check`: clean.
+- `PYTHONPATH=backend /Users/a1/vibecoding/tradingnoobs/.worktrees/execute-plan-task0/.venv/bin/python -m pytest backend/tests -q`: `141 passed, 20 warnings`.
+- `cd frontend && ./node_modules/.bin/tsc --noEmit --pretty false`: passed.
+- `cd frontend && npm run build`: passed.
+- `PYTHONPATH=backend DATABASE_URL=sqlite:////private/tmp/tradingnoobs_dev_p0_p4_final.db /Users/a1/vibecoding/tradingnoobs/.worktrees/execute-plan-task0/.venv/bin/alembic -c backend/alembic.ini upgrade head`: upgraded through `5e6f7a8b9cad`.
+
+- [x] **Step 3: Commit and push final docs**
 
 Run:
 ```bash
@@ -344,6 +374,6 @@ git commit -m "docs: record dev p0 p4 completion"
 git push origin dev
 ```
 
-- [ ] **Step 4: Mark goal complete**
+- [x] **Step 4: Mark goal complete**
 
 Only mark the long-running goal complete after all P0-P4 tasks pass verification and `origin/dev` includes the final commits.
