@@ -923,7 +923,7 @@ Execution note:
 - GREEN observed for `buildInsightArtifactDetailView`, `/insights/[artifactId]`, `InsightArtifactDetailCard`, and Dashboard allocation schema/trust/empty-state metadata display.
 - Frontend verification passed with 41 Node tests, TypeScript exit 0, and Next build output including `/insights/[artifactId]`.
 
-- [ ] **Step 8: Commit and push P7 UI**
+- [x] **Step 8: Commit and push P7 UI**
 
 Run:
 ```bash
@@ -945,7 +945,7 @@ Commit succeeds and origin/dev advances.
 - Modify: `docs/superpowers/plans/2026-06-05-dev-p5-p7-execution-plan.md`
 - Modify: `docs/superpowers/plans/2026-05-02-dev-branch-checkpoint.md`
 
-- [ ] **Step 1: Run final verification**
+- [x] **Step 1: Run final verification**
 
 Run:
 ```bash
@@ -970,7 +970,7 @@ Build exits 0.
 Alembic reaches head.
 ```
 
-- [ ] **Step 2: Update checkpoint and this plan**
+- [x] **Step 2: Update checkpoint and this plan**
 
 Record:
 ```text
@@ -981,6 +981,16 @@ Exact final verification commands and results.
 Remaining migration-only paths.
 docs/superpowers/demos/ untouched status.
 ```
+
+Execution note:
+
+- P5 commit: `c8fe99c chore: resolve frontend dependency audit findings`.
+- P6 commit: `e2fd08b feat: default timeline home to snapshot source`.
+- P7 API/client commit: `7991ce9 feat: expose auditable insight artifact details`.
+- P7 UI commit: `bb3d851 feat: add auditable insight artifact detail UI`.
+- Final verification: `git diff --check` clean; backend unittest discovery 146 passed; frontend Node tests 41 passed; TypeScript passed; Next build passed and included `/insights/[artifactId]`; Alembic reached `5e6f7a8b9cad`.
+- Final `npm audit --json`: 2 accepted remaining vulnerabilities (`next` high, nested `next/node_modules/postcss` moderate), both with semver-major-only `next@16.2.7` fix path.
+- `docs/superpowers/demos/` remained untracked and untouched.
 
 - [ ] **Step 3: Commit and push final docs**
 

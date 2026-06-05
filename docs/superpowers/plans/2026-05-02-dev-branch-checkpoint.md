@@ -490,3 +490,35 @@ Decision:
 - Temporarily accept the remaining Next/PostCSS audit findings because npm only offers a semver-major `next@16.2.7` fix path.
 - Continue P6/P7 on the existing Next 14 line after frontend behavior verification.
 - Treat the Next 16 / React migration as a separate dependency-hardening task rather than silently expanding P5.
+
+## 2026-06-05 P5-P7 Dev Completion
+
+Stage commits pushed to `origin/dev`:
+
+- `c8fe99c chore: resolve frontend dependency audit findings`
+- `e2fd08b feat: default timeline home to snapshot source`
+- `7991ce9 feat: expose auditable insight artifact details`
+- `bb3d851 feat: add auditable insight artifact detail UI`
+
+Scope completed:
+
+- P5 upgraded the frontend non-major dependency path to `next@14.2.35` and `postcss@^8.5.15`, removed the resolved lodash/picomatch/direct PostCSS audit findings, and recorded the remaining semver-major-only Next/PostCSS advisories.
+- P6 made Timeline Home snapshot-first by default and added `timeline_legacy_mixed_feed_enabled` as the explicit mixed-feed rollback flag.
+- P7 added user-scoped artifact detail reads at `/api/v1/insights/artifacts/{artifact_public_id}`, frontend artifact detail client/hook support, `/insights/[artifactId]`, an auditable artifact detail card, and Dashboard schema/trust/empty-state metadata display.
+
+Final P5-P7 verification:
+
+```text
+git diff --check: clean
+backend unittest discovery: 146 tests passed
+frontend npm audit --json: 2 accepted remaining vulnerabilities (next high, nested next/node_modules/postcss moderate); both fixAvailable next@16.2.7 isSemVerMajor true
+frontend node --experimental-strip-types --test tests/*.test.mts: 41 tests passed
+frontend ./node_modules/.bin/tsc --noEmit --pretty false: passed
+frontend npm run build: passed; build output included /insights/[artifactId]
+alembic upgrade head on /private/tmp/tradingnoobs_dev_p5_p7_final_20260605_retry.db: reached 5e6f7a8b9cad
+```
+
+Remaining follow-ups:
+
+- Next 16 / React migration remains a separate dependency-hardening task because npm reports it as the only available fix for the remaining Next/PostCSS advisories.
+- `docs/superpowers/demos/` remains untracked user content and was not touched.
