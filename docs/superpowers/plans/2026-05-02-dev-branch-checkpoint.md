@@ -443,3 +443,50 @@ Remaining migration-only / intentionally blocked paths:
 - Legacy batch edit/delete controls remain protected when truth lifecycle exists.
 - Historical/non-latest reversal and `OPEN` reversal remain blocked until accounting and audit semantics are designed.
 - `docs/superpowers/demos/` remains untracked user content and was not touched.
+
+## 2026-06-05 P5 Dependency Security Decision
+
+P5 non-major dependency remediation was started from `1a5b97a docs: add dev p5 p7 execution plan`.
+
+Actions applied locally:
+
+- `npm install next@14.2.35`
+- `npm install --save-dev postcss@^8.5.10`
+- `npm audit fix`
+
+Audit progress:
+
+```text
+Baseline: 4 vulnerabilities (1 critical, 2 high, 1 moderate)
+After non-major remediation: 2 vulnerabilities (1 high, 1 moderate)
+Resolved from audit output: lodash, picomatch, direct postcss, critical Next advisory set
+```
+
+Remaining audit entries:
+
+- `next` severity `high`; npm reports `fixAvailable` as `next@16.2.7` with `isSemVerMajor: true`.
+- Nested `next/node_modules/postcss` severity `moderate`; npm reports the same `next@16.2.7` semver-major fix path.
+
+Representative remaining advisory URLs from `npm audit --json`:
+
+- `https://github.com/advisories/GHSA-9g9p-9gw9-jx7f`
+- `https://github.com/advisories/GHSA-h25m-26qc-wcjf`
+- `https://github.com/advisories/GHSA-ggv3-7p47-pfv8`
+- `https://github.com/advisories/GHSA-3x4c-7xq6-9pq8`
+- `https://github.com/advisories/GHSA-q4gf-8mx6-v5v3`
+- `https://github.com/advisories/GHSA-8h8q-6873-q5fj`
+- `https://github.com/advisories/GHSA-3g8h-86w9-wvmq`
+- `https://github.com/advisories/GHSA-ffhc-5mcf-pf4q`
+- `https://github.com/advisories/GHSA-vfv6-92ff-j949`
+- `https://github.com/advisories/GHSA-gx5p-jg67-6x7h`
+- `https://github.com/advisories/GHSA-h64f-5h5j-jqjh`
+- `https://github.com/advisories/GHSA-c4j6-fc7j-m34r`
+- `https://github.com/advisories/GHSA-wfc6-r584-vfw7`
+- `https://github.com/advisories/GHSA-36qx-fr4f-26g5`
+- `https://github.com/advisories/GHSA-qx2v-qp2m-jg93`
+
+Decision:
+
+- Temporarily accept the remaining Next/PostCSS audit findings because npm only offers a semver-major `next@16.2.7` fix path.
+- Continue P6/P7 on the existing Next 14 line after frontend behavior verification.
+- Treat the Next 16 / React migration as a separate dependency-hardening task rather than silently expanding P5.

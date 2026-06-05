@@ -57,7 +57,7 @@
 - Test/verify: `frontend`
 - Modify docs if findings remain: `docs/superpowers/plans/2026-05-02-dev-branch-checkpoint.md`
 
-- [ ] **Step 1: Capture the baseline audit**
+- [x] **Step 1: Capture the baseline audit**
 
 Run:
 ```bash
@@ -74,7 +74,7 @@ metadata.vulnerabilities.moderate: 1
 next fixAvailable.version: 14.2.35
 ```
 
-- [ ] **Step 2: Upgrade Next on the non-major patch line**
+- [x] **Step 2: Upgrade Next on the non-major patch line**
 
 Run:
 ```bash
@@ -88,7 +88,7 @@ frontend/package.json updates "next" to "14.2.35" or a compatible pinned 14.2.35
 frontend/package-lock.json resolves next and its nested postcss chain to patched versions.
 ```
 
-- [ ] **Step 3: Refresh direct PostCSS if the audit still reports the direct devDependency**
+- [x] **Step 3: Refresh direct PostCSS if the audit still reports the direct devDependency**
 
 Run only if `npm audit --json` still reports direct `postcss` under `vulnerabilities.postcss.nodes` including `node_modules/postcss`:
 ```bash
@@ -101,7 +101,7 @@ Expected:
 Direct postcss resolves to >=8.5.10.
 ```
 
-- [ ] **Step 4: Apply safe transitive lockfile fixes if lodash or picomatch remain**
+- [x] **Step 4: Apply safe transitive lockfile fixes if lodash or picomatch remain**
 
 Run only if `npm audit --json` still reports `lodash` or `picomatch` and `fixAvailable` is `true` without semver-major package changes:
 ```bash
@@ -114,7 +114,7 @@ Expected:
 package-lock.json updates vulnerable transitive packages without adding a semver-major direct dependency upgrade.
 ```
 
-- [ ] **Step 5: Verify dependency security result**
+- [x] **Step 5: Verify dependency security result**
 
 Run:
 ```bash
@@ -128,6 +128,14 @@ metadata.vulnerabilities.total: 0
 ```
 
 If vulnerabilities remain, stop P5 and record each remaining package, advisory URL, severity, and `fixAvailable` value in the checkpoint before asking for a dependency-risk decision.
+
+Execution note:
+
+- Non-major path applied `next@14.2.35`, `postcss@^8.5.10`, and non-force `npm audit fix`.
+- `lodash` and `picomatch` were removed from the audit report.
+- Remaining audit entries are `next` high and nested `next/node_modules/postcss` moderate.
+- npm reports the only available fix as `next@16.2.7` with `isSemVerMajor: true`.
+- Decision: temporarily accept the remaining semver-major-only audit risk, record it in the checkpoint, and continue P6/P7 without expanding P5 into a Next 16 / React migration.
 
 - [ ] **Step 6: Verify frontend behavior after dependency upgrades**
 
