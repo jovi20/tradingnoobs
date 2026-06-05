@@ -1,4 +1,5 @@
 import type { LifecycleDetailResponse, TimelineHomeResponse } from './read-models'
+import type { DashboardChartPayload } from './chartSchemas'
 
 /**
  * Trading Noobs Frontend - API Client
@@ -138,6 +139,7 @@ export interface DashboardStats {
     top_movers: PositionMover[]
     bottom_movers: PositionMover[]
     portfolio_flow?: PortfolioFlow
+    chart_payloads?: Record<string, DashboardChartPayload<AssetAllocation>>
     // Risk Metrics
     sharpe_ratio?: number
     sortino_ratio?: number

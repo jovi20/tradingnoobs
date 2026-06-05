@@ -1,5 +1,10 @@
 import type { DashboardStats } from '../api.ts'
 import type { PositionViewModel } from './trading.ts'
+import {
+    adaptDashboardAllocationChartPayload,
+    getDashboardChartPayloadKey,
+    type DashboardAllocationDimension,
+} from '../chartSchemas.ts'
 import { getCurrencySymbol } from '../symbolUtils.ts'
 
 export interface DashboardPeriodMetrics {
@@ -38,12 +43,21 @@ interface AdaptDashboardPageDataInput {
 }
 
 export function getDashboardAllocationData(
-    stats: Pick<DashboardStats, 'core_type_allocation' | 'market_allocation' | 'risk_level_allocation'>,
-    dimension: 'CORE_TYPE' | 'MARKET' | 'RISK'
+    stats: Pick<DashboardStats, 'core_type_allocation' | 'market_allocation' | 'risk_level_allocation' | 'chart_payloads'>,
+    dimension: DashboardAllocationDimension
 ) {
+    const chartView = getDashboardAllocationChart(stats, dimension)
+    if (!chartView.isEmpty || stats.chart_payloads?.[getDashboardChartPayloadKey(dimension)]) return chartView.data
     if (dimension === 'MARKET') return stats.market_allocation
     if (dimension === 'RISK') return stats.risk_level_allocation
     return stats.core_type_allocation
+}
+
+export function getDashboardAllocationChart(
+    stats: Pick<DashboardStats, 'core_type_allocation' | 'market_allocation' | 'risk_level_allocation' | 'chart_payloads'>,
+    dimension: DashboardAllocationDimension
+) {
+    return adaptDashboardAllocationChartPayload(stats.chart_payloads?.[getDashboardChartPayloadKey(dimension)])
 }
 
 export function getDashboardMovers(stats: Pick<DashboardStats, 'top_movers' | 'bottom_movers'>) {
@@ -72,6 +86,11 @@ export function adaptDashboardPageData({
             coreType: stats.core_type_allocation,
             market: stats.market_allocation,
             risk: stats.risk_level_allocation,
+        },
+        allocationCharts: {
+            coreType: getDashboardAllocationChart(stats, 'CORE_TYPE'),
+            market: getDashboardAllocationChart(stats, 'MARKET'),
+            risk: getDashboardAllocationChart(stats, 'RISK'),
         },
         movers: getDashboardMovers(stats),
         stats,

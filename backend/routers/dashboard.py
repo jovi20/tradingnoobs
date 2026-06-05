@@ -12,6 +12,7 @@ from models import User, Position, PositionStatus, TradingAccount, TradeBatch, B
 from schemas import DashboardStats, AssetAllocation, PositionMover, AccountAllocation, PortfolioFlow, SankeyNode, SankeyLink
 from services.account_ledger_service import calculate_account_cash_balance_read_model
 from services.auth_service import get_current_user
+from services.chart_schema_service import build_dashboard_chart_payloads
 from services.market_data_service import MarketDataService
 from services.exchange_rate_service import get_exchange_rate, get_rates_batch
 import asyncio
@@ -602,6 +603,11 @@ async def get_dashboard_stats(
         top_movers=top_movers,
         bottom_movers=bottom_movers,
         portfolio_flow={"nodes": sankey_nodes, "links": sankey_links},
+        chart_payloads=build_dashboard_chart_payloads(
+            core_type_allocation=core_allocation,
+            market_allocation=market_allocation,
+            risk_level_allocation=risk_allocation,
+        ),
         sharpe_ratio=sharpe_ratio,
         sortino_ratio=sortino_ratio,
         calmar_ratio=calmar_ratio,

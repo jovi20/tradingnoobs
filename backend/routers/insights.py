@@ -13,6 +13,7 @@ from database import get_db
 from models import User, WeeklyReport, AISummary, AIAnalysisResult
 from schemas import WeeklyReportCreate, WeeklyReportResponse, AISummaryResponse, AnalysisRequest, AnalysisResponse
 from services.auth_service import get_current_user
+from services.chart_schema_service import build_analysis_chart_schema
 from services.insight_artifact_service import InsightArtifactService
 from services.llm_service import generate_weekly_report, generate_journal_summary, get_analysis_insight
 from services.analytics_service import AnalyticsService
@@ -79,13 +80,7 @@ def _create_insight_artifact_for_analysis(
         input_refs=["surface:insights", f"analysis:{analysis_type}"],
         started_at=created_at,
     )
-    chart_schema = None
-    if raw_data.get("stats"):
-        chart_schema = {
-            "schema_version": "chart.v1",
-            "chart_type": "bar",
-            "series": [{"field": "avg_pnl", "label": "Average PnL"}],
-        }
+    chart_schema = build_analysis_chart_schema(analysis_type=analysis_type, raw_data=raw_data)
     service.add_artifact(
         run_public_id=run.public_id,
         artifact_type="analysis_card",

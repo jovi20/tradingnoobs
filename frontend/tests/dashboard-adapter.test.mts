@@ -65,6 +65,36 @@ test('dashboard allocation helper selects the correct allocation slice for dimen
   assert.deepEqual(getDashboardAllocationData(stats, 'RISK'), stats.risk_level_allocation)
 })
 
+test('dashboard allocation helper prefers schema-first chart payloads when available', () => {
+  const stats = {
+    core_type_allocation: [{ name: 'LEGACY', value: 1, percent: 1 }],
+    market_allocation: [],
+    risk_level_allocation: [],
+    chart_payloads: {
+      core_type: {
+        chart_schema: {
+          schema_version: 'chart.v1',
+          chart_type: 'bar',
+          data_path: 'core_type_allocation',
+          dimensions: [{ field: 'name', label: 'Asset type allocation' }],
+          series: [{ field: 'value', label: 'Value' }],
+        },
+        data: [{ name: 'EQUITY', value: 700, percent: 70 }],
+        empty_state: { is_empty: false, reason: null },
+        trust_meta: {
+          freshness: 'FRESH',
+          source: 'DASHBOARD_DERIVED_READ_MODEL',
+          source_refs: ['dashboard:allocation:CORE_TYPE'],
+        },
+      },
+    },
+  }
+
+  assert.deepEqual(getDashboardAllocationData(stats, 'CORE_TYPE'), [
+    { name: 'EQUITY', value: 700, percent: 70 },
+  ])
+})
+
 test('dashboard movers helper preserves top and bottom movers', () => {
   const stats = {
     top_movers: [{ id: 1, symbol: 'NVDA', change_percent: 3.2, current_price: 910, currency: 'USD' }],

@@ -235,7 +235,7 @@ PYTHONPATH=backend /Users/a1/vibecoding/tradingnoobs/.worktrees/execute-plan-tas
 node --experimental-strip-types --test frontend/tests/*.test.mts
 ```
 
-- [ ] **Step 6: Commit and push Task 3**
+- [x] **Step 6: Commit and push Task 3**
 
 Run:
 ```bash
@@ -259,38 +259,38 @@ git push origin dev
 - Modify: `frontend/app/insights/page.tsx`
 - Test: frontend chart/insight adapter tests
 
-- [ ] **Step 1: Add failing backend tests for schema-first chart payloads**
+- [x] **Step 1: Add failing backend tests for schema-first chart payloads**
 
 Cover:
 - dashboard chart payloads expose stable chart type, dimensions, series, and trust metadata
 - legacy chart-specific payloads remain available only where needed for bridge compatibility
 
-- [ ] **Step 2: Implement minimal chart schema service**
+- [x] **Step 2: Implement minimal chart schema service**
 
 Create a small internal schema layer used by dashboard routes before touching frontend visual design.
 
-- [ ] **Step 3: Add failing frontend tests for chart schema adapters**
+- [x] **Step 3: Add failing frontend tests for chart schema adapters**
 
 Cover:
 - schema-first chart payload adapts into existing chart components
 - missing/partial data renders an explicit empty state
 
-- [ ] **Step 4: Implement frontend chart adapters**
+- [x] **Step 4: Implement frontend chart adapters**
 
 Keep current UI layout, but consume the schema-first adapter where available.
 
-- [ ] **Step 5: Add failing insight presentation tests**
+- [x] **Step 5: Add failing insight presentation tests**
 
 Cover:
 - `InsightArtifact` summaries are the primary AI card source
 - legacy markdown is displayed only as legacy read-only content
 - artifact evidence links are visible to Timeline, Lifecycle, and Insights consumers
 
-- [ ] **Step 6: Implement insight presentation hardening**
+- [x] **Step 6: Implement insight presentation hardening**
 
 Unify AI cards around auditable artifacts and keep old markdown as fallback/migration content.
 
-- [ ] **Step 7: Verify Task 4**
+- [x] **Step 7: Verify Task 4**
 
 Run:
 ```bash
@@ -299,7 +299,7 @@ PYTHONPATH=backend /Users/a1/vibecoding/tradingnoobs/.worktrees/execute-plan-tas
 npm run build
 ```
 
-- [ ] **Step 8: Commit and push Task 4**
+- [x] **Step 8: Commit and push Task 4**
 
 Run:
 ```bash

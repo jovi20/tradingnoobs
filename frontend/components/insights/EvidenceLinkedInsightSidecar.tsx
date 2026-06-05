@@ -1,6 +1,11 @@
 import { Bot, ExternalLink, RefreshCw, ShieldCheck, Sparkles } from 'lucide-react'
 
-import { assertSupportedChartSchema, type InsightArtifact, type InsightRun } from '@/lib/insightArtifacts'
+import {
+    assertSupportedChartSchema,
+    buildAuditableInsightCards,
+    type AuditableInsightCard,
+    type InsightRun,
+} from '@/lib/insightArtifacts'
 
 interface EvidenceLinkedInsightSidecarProps {
     runs?: InsightRun[]
@@ -19,7 +24,7 @@ export function EvidenceLinkedInsightSidecar({
     limit = 4,
     onRefresh,
 }: EvidenceLinkedInsightSidecarProps) {
-    const artifacts = runs.flatMap((run) => run.artifacts.map((artifact) => ({ run, artifact }))).slice(0, limit)
+    const cards = buildAuditableInsightCards(runs, limit)
 
     return (
         <div className="card p-4">
@@ -47,9 +52,9 @@ export function EvidenceLinkedInsightSidecar({
             )}
 
             <div className="mt-4 space-y-3">
-                {artifacts.length > 0 ? (
-                    artifacts.map(({ run, artifact }) => (
-                        <ArtifactCard key={artifact.public_id} artifact={artifact} run={run} />
+                {cards.length > 0 ? (
+                    cards.map((card) => (
+                        <ArtifactCard key={card.artifact.public_id} card={card} />
                     ))
                 ) : (
                     <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500 dark:border-slate-700">
@@ -61,37 +66,37 @@ export function EvidenceLinkedInsightSidecar({
     )
 }
 
-function ArtifactCard({ artifact, run }: { artifact: InsightArtifact; run: InsightRun }) {
+function ArtifactCard({ card }: { card: AuditableInsightCard }) {
     return (
         <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/40">
             <div className="flex items-start justify-between gap-3">
                 <div>
                     <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
                         <Sparkles className="w-3.5 h-3.5" />
-                        {artifact.artifact_type}
+                        {card.artifactType}
                     </div>
-                    <p className="mt-2 font-semibold text-slate-900 dark:text-white">{artifact.title}</p>
+                    <p className="mt-2 font-semibold text-slate-900 dark:text-white">{card.title}</p>
                 </div>
                 <Bot className="w-4 h-4 text-slate-400" />
             </div>
 
-            <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">{artifact.summary}</p>
+            <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">{card.primaryContent}</p>
 
             <div className="mt-3 flex flex-wrap gap-2">
                 <span className="rounded-full bg-slate-200 px-2.5 py-1 text-[11px] font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                    {run.run_type}
+                    {card.run.run_type}
                 </span>
-                {assertSupportedChartSchema(artifact.chart_schema) && (
+                {assertSupportedChartSchema(card.chartSchema) && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
                         <ShieldCheck className="w-3 h-3" />
-                        {artifact.chart_schema?.schema_version}
+                        {card.chartSchema?.schema_version}
                     </span>
                 )}
             </div>
 
-            {(artifact.evidence_refs?.length || 0) > 0 && (
+            {card.evidenceRefs.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-2">
-                    {artifact.evidence_refs.map((ref) => (
+                    {card.evidenceRefs.map((ref) => (
                         <span
                             key={ref}
                             className="rounded-full border border-slate-200 px-2.5 py-1 text-[11px] text-slate-500 dark:border-slate-700 dark:text-slate-400"
@@ -102,14 +107,14 @@ function ArtifactCard({ artifact, run }: { artifact: InsightArtifact; run: Insig
                 </div>
             )}
 
-            {(artifact.trust_meta.source_refs?.length || 0) > 0 && (
+            {card.sourceRefs.length > 0 && (
                 <p className="mt-3 text-xs text-slate-400">
-                    source refs: {artifact.trust_meta.source_refs?.join(', ')}
+                    source refs: {card.sourceRefs.join(', ')}
                 </p>
             )}
 
             <a
-                href="/insights"
+                href={card.href}
                 className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary-600"
             >
                 打开 AI 洞察

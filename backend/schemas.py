@@ -2,7 +2,7 @@
 Trading Noobs Backend - Pydantic Schemas
 """
 from pydantic import BaseModel, EmailStr, Field
-from typing import Generic, List, Optional, TypeVar
+from typing import Any, Dict, Generic, List, Optional, TypeVar
 from datetime import datetime, date
 from decimal import Decimal
 from enum import Enum
@@ -590,6 +590,38 @@ class PortfolioFlow(BaseModel):
     nodes: List[SankeyNode]
     links: List[SankeyLink]
 
+class ChartDimensionRef(BaseModel):
+    field: str
+    label: str
+
+class ChartSeriesRef(BaseModel):
+    field: str
+    label: str
+    color: Optional[str] = None
+
+class ChartSchema(BaseModel):
+    schema_version: str
+    chart_type: str
+    series: List[ChartSeriesRef]
+    dimensions: List[ChartDimensionRef] = Field(default_factory=list)
+    data_path: Optional[str] = None
+    options: Dict[str, Any] = Field(default_factory=dict)
+
+class ChartEmptyState(BaseModel):
+    is_empty: bool
+    reason: Optional[str] = None
+
+class ChartTrustMeta(BaseModel):
+    freshness: Optional[str] = None
+    source: Optional[str] = None
+    source_refs: List[str] = Field(default_factory=list)
+
+class DashboardChartPayload(BaseModel):
+    chart_schema: ChartSchema
+    data: List[Dict[str, Any]] = Field(default_factory=list)
+    empty_state: ChartEmptyState
+    trust_meta: ChartTrustMeta
+
 class DashboardStats(BaseModel):
     total_assets: float = 0.0  # Added for frontend percentage calculation
     total_pnl: float
@@ -606,6 +638,7 @@ class DashboardStats(BaseModel):
     top_movers: List[PositionMover] = []
     bottom_movers: List[PositionMover] = []
     portfolio_flow: Optional[PortfolioFlow] = None
+    chart_payloads: Dict[str, DashboardChartPayload] = Field(default_factory=dict)
     
     # Risk Metrics
     sharpe_ratio: Optional[float] = None
