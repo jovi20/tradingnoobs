@@ -3,10 +3,18 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from decimal import Decimal
+import sys
+import types
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
+sys.modules.setdefault("finnhub", types.SimpleNamespace(Client=lambda *args, **kwargs: object()))
+sys.modules.setdefault("pandas", types.SimpleNamespace(DataFrame=object))
+sys.modules.setdefault("numpy", types.SimpleNamespace())
+sys.modules.setdefault("binance", types.SimpleNamespace())
+sys.modules.setdefault("binance.spot", types.SimpleNamespace(Spot=lambda *args, **kwargs: object()))
 
 from database import Base, get_db
 from main import app
@@ -25,6 +33,8 @@ from models import (
     PositionStatus,
     TradeBatch,
     TradingAccount,
+    InsightArtifact,
+    InsightRun,
     User,
 )
 from services.auth_service import get_current_user
@@ -241,6 +251,40 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         self.assertEqual(cash_effects[0]["entry_type"], "REALIZED_PNL")
         self.assertEqual(float(cash_effects[0]["amount"]), 180.0)
         self.assertEqual(cash_effects[0]["currency"], "USD")
+
+    def test_lifecycle_route_includes_matching_ai_sidecar_artifacts(self):
+        truth_position = self._seed_synced_position()
+        run = InsightRun(
+            user_id=self.user.id,
+            run_type="analysis.position_review",
+            status="COMPLETED",
+            prompt_version="v1",
+            input_refs=[truth_position.public_id],
+            started_at=datetime(2026, 4, 6, 9, 0, tzinfo=timezone.utc),
+            completed_at=datetime(2026, 4, 6, 9, 1, tzinfo=timezone.utc),
+        )
+        self.db.add(run)
+        self.db.flush()
+        artifact = InsightArtifact(
+            insight_run_id=run.id,
+            artifact_type="position_review",
+            title="Position review artifact",
+            summary="The add was disciplined but the final exit still violated pace.",
+            content_markdown=None,
+            payload={"linked_object_public_id": truth_position.public_id},
+            evidence_refs=["analysis:position_review", "dataset:positions"],
+            trust_meta={"freshness": "FRESH", "source": "AI_GENERATED", "source_refs": [truth_position.public_id]},
+        )
+        self.db.add(artifact)
+        self.db.commit()
+
+        response = self.client.get(f"/api/trading-positions/{truth_position.public_id}/lifecycle")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["data"]["ai_sidecar"]["items"][0]["insight_artifact_public_id"], artifact.public_id)
+        self.assertEqual(payload["data"]["ai_sidecar"]["items"][0]["title"], "Position review artifact")
+        self.assertEqual(len(payload["data"]["ai_sidecar"]["items"][0]["evidence_refs"]), 2)
 
     def test_lifecycle_route_rejects_internal_numeric_id(self):
         truth_position = self._seed_synced_position()

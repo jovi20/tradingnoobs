@@ -22,6 +22,10 @@ body {
   min-height: 100vh;
 }
 
+.tn-app-shell {
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+}
+
 /* Glass morphism effects */
 .glass {
   background: rgba(255, 255, 255, 0.1);

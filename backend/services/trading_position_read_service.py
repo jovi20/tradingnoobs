@@ -8,6 +8,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session, joinedload
 
 from models import AccountLedgerEntry, AccountLedgerEntryType, PositionEventType, TradeInstrument, TradingPosition, TradingPositionStatus
+from services.insight_artifact_service import InsightArtifactService
 
 
 def resolve_truth_position_by_public_id(db: Session, user_id: int, public_id: str) -> TradingPosition | None:
@@ -67,7 +68,36 @@ def _ledger_total(truth_position: TradingPosition, entry_type: AccountLedgerEntr
     )
 
 
-def build_trading_position_lifecycle_payload(truth_position: TradingPosition) -> dict:
+def _build_ai_sidecar_items(db: Session, truth_position: TradingPosition) -> list[dict]:
+    artifacts = InsightArtifactService(db).list_artifacts_for_object(
+        user_id=truth_position.user_id,
+        linked_object_public_id=truth_position.public_id,
+        limit=5,
+    )
+    return [
+        {
+            "insight_artifact_public_id": artifact["public_id"],
+            "title": artifact["title"],
+            "conclusion": artifact["summary"],
+            "coverage_summary": artifact.get("artifact_type"),
+            "confidence_label": artifact.get("trust_meta", {}).get("freshness"),
+            "recommended_action": artifact.get("payload", {}).get("recommended_action"),
+            "evidence_refs": [
+                {
+                    "ref_type": "EVIDENCE_REF",
+                    "public_id": ref,
+                    "label": ref,
+                    "href": "/insights",
+                }
+                for ref in artifact.get("evidence_refs", [])
+            ],
+            "href": "/insights",
+        }
+        for artifact in artifacts
+    ]
+
+
+def build_trading_position_lifecycle_payload(db: Session, truth_position: TradingPosition) -> dict:
     opening_event = next((event for event in truth_position.events if event.event_type == PositionEventType.OPEN), None)
     checklist_snapshot = opening_event.checklist_snapshot or {} if opening_event else {}
     cash_effects = _ledger_cash_effects(truth_position)
@@ -205,5 +235,5 @@ def build_trading_position_lifecycle_payload(truth_position: TradingPosition) ->
                 for event in truth_position.events
             ]
         },
-        "ai_sidecar": {"items": []},
+        "ai_sidecar": {"items": _build_ai_sidecar_items(db, truth_position)},
     }

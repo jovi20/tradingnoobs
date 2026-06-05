@@ -2,14 +2,22 @@ import os
 import tempfile
 import unittest
 from unittest.mock import AsyncMock, patch
+import sys
+import types
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+sys.modules.setdefault("finnhub", types.SimpleNamespace(Client=lambda *args, **kwargs: object()))
+sys.modules.setdefault("pandas", types.SimpleNamespace(DataFrame=object))
+sys.modules.setdefault("numpy", types.SimpleNamespace())
+sys.modules.setdefault("binance", types.SimpleNamespace())
+sys.modules.setdefault("binance.spot", types.SimpleNamespace(Spot=lambda *args, **kwargs: object()))
+
 from database import Base, get_db
 from main import app
-from models import AIAnalysisResult, AISummary, IdempotencyKey, User, WeeklyReport
+from models import AIAnalysisResult, AISummary, IdempotencyKey, InsightArtifact, InsightRun, User, WeeklyReport
 from services.auth_service import get_current_user
 
 
@@ -80,6 +88,8 @@ class InsightsIdempotencyTests(unittest.TestCase):
         self.assertEqual(analyze.call_count, 1)
         self.assertEqual(insight.await_count, 1)
         self.assertEqual(self.db.query(AIAnalysisResult).count(), 1)
+        self.assertEqual(self.db.query(InsightRun).count(), 1)
+        self.assertEqual(self.db.query(InsightArtifact).count(), 1)
 
         record = self.db.query(IdempotencyKey).one()
         self.assertEqual(record.scope, "insights.analysis.create")
@@ -157,6 +167,8 @@ class InsightsIdempotencyTests(unittest.TestCase):
         self.assertEqual(second.json(), first.json())
         self.assertEqual(generate_summary.await_count, 1)
         self.assertEqual(self.db.query(AISummary).count(), 1)
+        self.assertEqual(self.db.query(InsightRun).count(), 1)
+        self.assertEqual(self.db.query(InsightArtifact).count(), 1)
 
         record = self.db.query(IdempotencyKey).filter(
             IdempotencyKey.scope == "insights.summary.generate",

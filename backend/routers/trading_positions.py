@@ -30,8 +30,8 @@ from services.trading_position_write_service import append_truth_trade_event, re
 router = APIRouter(prefix="/api/trading-positions", tags=["Trading Positions"])
 
 
-def _lifecycle_response_content(truth_position, source: str = "DERIVED") -> dict:
-    data = build_trading_position_lifecycle_payload(truth_position)
+def _lifecycle_response_content(db: Session, truth_position, source: str = "DERIVED") -> dict:
+    data = build_trading_position_lifecycle_payload(db, truth_position)
     return {
         "data": data,
         "meta": {
@@ -45,10 +45,10 @@ def _lifecycle_response_content(truth_position, source: str = "DERIVED") -> dict
     }
 
 
-def _lifecycle_response(truth_position, source: str = "DERIVED", status_code: int = 200) -> JSONResponse:
+def _lifecycle_response(db: Session, truth_position, source: str = "DERIVED", status_code: int = 200) -> JSONResponse:
     return JSONResponse(
         status_code=status_code,
-        content=jsonable_encoder(_lifecycle_response_content(truth_position, source=source))
+        content=jsonable_encoder(_lifecycle_response_content(db, truth_position, source=source))
     )
 
 
@@ -110,7 +110,7 @@ def get_trading_position_lifecycle(
     if not truth_position:
         raise HTTPException(status_code=404, detail="Trading position not found")
 
-    return _lifecycle_response(truth_position)
+    return _lifecycle_response(db, truth_position)
 
 
 @router.patch("/{position_public_id}/events/{event_public_id}")
@@ -140,7 +140,7 @@ def update_trading_position_event_narrative(
     db.commit()
 
     updated_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
-    return _lifecycle_response(updated_position, source="MANUAL")
+    return _lifecycle_response(db, updated_position, source="MANUAL")
 
 
 @router.post("/{position_public_id}/events", status_code=201)
@@ -191,7 +191,7 @@ def create_trading_position_trade_event(
     db.flush()
     db.expire_all()
     updated_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
-    response_content = _lifecycle_response_content(updated_position, source="MANUAL")
+    response_content = _lifecycle_response_content(db, updated_position, source="MANUAL")
     _complete_idempotent_lifecycle_write(db, record=idempotency_record, response_content=response_content)
     db.commit()
     return JSONResponse(status_code=201, content=jsonable_encoder(response_content))
@@ -232,7 +232,7 @@ def reverse_trading_position_trade_event(
     db.commit()
 
     updated_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
-    return _lifecycle_response(updated_position, source="MANUAL", status_code=201)
+    return _lifecycle_response(db, updated_position, source="MANUAL", status_code=201)
 
 
 @router.post("/{position_public_id}/dividends", status_code=201)
@@ -279,7 +279,7 @@ def create_trading_position_dividend(
     db.flush()
     db.expire_all()
     updated_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
-    response_content = _lifecycle_response_content(updated_position, source="MANUAL")
+    response_content = _lifecycle_response_content(db, updated_position, source="MANUAL")
     _complete_idempotent_lifecycle_write(db, record=idempotency_record, response_content=response_content)
     db.commit()
     return JSONResponse(status_code=201, content=jsonable_encoder(response_content))
@@ -333,7 +333,7 @@ def create_trading_position_manual_adjustment(
     db.flush()
     db.expire_all()
     updated_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
-    response_content = _lifecycle_response_content(updated_position, source="MANUAL")
+    response_content = _lifecycle_response_content(db, updated_position, source="MANUAL")
     _complete_idempotent_lifecycle_write(db, record=idempotency_record, response_content=response_content)
     db.commit()
     return JSONResponse(status_code=201, content=jsonable_encoder(response_content))

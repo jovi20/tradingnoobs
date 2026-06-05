@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from app_bootstrap import bootstrap_schema_if_enabled, resolve_auto_create_schema_enabled
 from config import get_settings
 from database import engine, Base
-from routers import auth, strategies, dashboard, daily, settings as settings_router, insights, accounts, admin, positions, market, journal, transactions, timeline, trading_positions
+from routers import auth, strategies, dashboard, daily, settings as settings_router, insights, accounts, admin, positions, market, journal, transactions, timeline, trading_positions, insight_artifacts
 
 app_settings = get_settings()
 
@@ -62,6 +62,7 @@ app.include_router(journal.router)
 app.include_router(transactions.router)
 app.include_router(timeline.router)
 app.include_router(trading_positions.router)
+app.include_router(insight_artifacts.router)
 
 
 @app.get("/")

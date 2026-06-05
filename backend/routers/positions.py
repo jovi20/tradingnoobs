@@ -422,7 +422,7 @@ async def get_position_truth_lifecycle(
         raise HTTPException(status_code=404, detail="Position not found")
 
     truth_position = sync_legacy_position_to_truth(db, legacy_position.id)
-    data = build_trading_position_lifecycle_payload(truth_position)
+    data = build_trading_position_lifecycle_payload(db, truth_position)
     return JSONResponse(
         content=jsonable_encoder(
             {

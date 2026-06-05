@@ -89,6 +89,12 @@ class AlembicChainTests(unittest.TestCase):
                 derived_timeline_snapshot_columns = conn.execute(
                     "PRAGMA table_info(derived_timeline_snapshots)"
                 ).fetchall()
+                insight_run_columns = conn.execute(
+                    "PRAGMA table_info(insight_runs)"
+                ).fetchall()
+                insight_artifact_columns = conn.execute(
+                    "PRAGMA table_info(insight_artifacts)"
+                ).fetchall()
             finally:
                 conn.close()
 
@@ -110,6 +116,8 @@ class AlembicChainTests(unittest.TestCase):
             outbox_event_column_names = {row[1] for row in outbox_event_columns}
             business_lock_column_names = {row[1] for row in business_lock_columns}
             derived_timeline_snapshot_column_names = {row[1] for row in derived_timeline_snapshot_columns}
+            insight_run_column_names = {row[1] for row in insight_run_columns}
+            insight_artifact_column_names = {row[1] for row in insight_artifact_columns}
             expected_tables = {
                 "alembic_version",
                 "users",
@@ -145,6 +153,8 @@ class AlembicChainTests(unittest.TestCase):
                 "outbox_events",
                 "business_locks",
                 "derived_timeline_snapshots",
+                "insight_runs",
+                "insight_artifacts",
                 "system_settings",
             }
 
@@ -201,6 +211,27 @@ class AlembicChainTests(unittest.TestCase):
                     "refreshed_by_job_run_public_id",
                     "refreshed_at",
                 }.issubset(derived_timeline_snapshot_column_names)
+            )
+            self.assertTrue(
+                {
+                    "public_id",
+                    "user_id",
+                    "run_type",
+                    "status",
+                    "input_refs",
+                    "started_at",
+                }.issubset(insight_run_column_names)
+            )
+            self.assertTrue(
+                {
+                    "public_id",
+                    "insight_run_id",
+                    "artifact_type",
+                    "summary",
+                    "payload",
+                    "evidence_refs",
+                    "trust_meta",
+                }.issubset(insight_artifact_column_names)
             )
         finally:
             if os.path.exists(db_path):

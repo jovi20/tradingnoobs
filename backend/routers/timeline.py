@@ -48,6 +48,7 @@ from schemas import (
 )
 from services.auth_service import get_current_user
 from services.derived_timeline_read_service import list_recent_timeline_snapshots
+from services.insight_artifact_service import InsightArtifactService
 from services.market_data_service import MarketDataService
 from services.platform_config_service import get_feature_flag_enabled, get_llm_runtime_config
 
@@ -471,6 +472,33 @@ def _build_ai_insight_events(ai_results: list[AIAnalysisResult]) -> list[Timelin
     return events
 
 
+def _build_ai_insight_events_from_runs(runs: list[dict]) -> list[TimelineEventCard]:
+    events: list[TimelineEventCard] = []
+    for run in runs:
+        for artifact in run.get("artifacts", []):
+            if not artifact.get("summary"):
+                continue
+            events.append(
+                TimelineEventCard(
+                    event_public_id=f"insight-artifact:{artifact['public_id']}",
+                    thread_public_id=run["public_id"],
+                    event_type=TimelineEventTypeEnum.AI_INSIGHT,
+                    occurred_at=artifact.get("created_at") or run["started_at"],
+                    headline=artifact.get("title") or f"AI 分析：{run['run_type']}",
+                    summary=artifact["summary"][:120],
+                    instrument=TimelineInstrumentRef(
+                        asset_label="Trading Noobs",
+                        instrument_label="Insight Artifact",
+                        symbol="AI",
+                        href="/insights",
+                    ),
+                    href="/insights",
+                    trust=None,
+                )
+            )
+    return events
+
+
 def _build_losing_streak_events(positions: list[Position]) -> list[TimelineEventCard]:
     streak = _get_latest_losing_streak(positions)
     if not streak:
@@ -783,11 +811,13 @@ def get_timeline_home(
             .limit(5)
             .all()
         )
+        insight_runs = InsightArtifactService(db).list_runs(user_id=current_user.id, limit=5)
+        artifact_events = _build_ai_insight_events_from_runs(insight_runs)
         llm_config = get_llm_runtime_config(db)
         timeline_events = (
             _build_timeline_events(positions, ai_summaries)
             + materialized_timeline_events
-            + _build_ai_insight_events(ai_results)
+            + (artifact_events if artifact_events else _build_ai_insight_events(ai_results))
             + _build_losing_streak_events(positions)
             + _build_data_stale_events(inbox_items, positions)
             + _build_sync_exception_events(ai_results, llm_config)

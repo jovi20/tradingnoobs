@@ -6,18 +6,107 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime, timezone
+import re
 
 from database import get_db
 from models import User, WeeklyReport, AISummary, AIAnalysisResult
 from schemas import WeeklyReportCreate, WeeklyReportResponse, AISummaryResponse, AnalysisRequest, AnalysisResponse
 from services.auth_service import get_current_user
+from services.insight_artifact_service import InsightArtifactService
 from services.llm_service import generate_weekly_report, generate_journal_summary, get_analysis_insight
 from services.analytics_service import AnalyticsService
 from services.idempotency_service import begin_idempotent_request, complete_idempotent_request
 from services.platform_config_service import get_llm_runtime_config
 
 router = APIRouter(prefix="/api/insights", tags=["Insights"])
+
+
+def _markdown_summary(value: str | None, limit: int = 220) -> str:
+    if not value:
+        return ""
+    compact = re.sub(r"\s+", " ", value).strip()
+    return compact[:limit]
+
+
+def _create_insight_artifact_for_summary(
+    db: Session,
+    *,
+    current_user: User,
+    summary: AISummary,
+) -> None:
+    service = InsightArtifactService(db)
+    run = service.start_run(
+        user_id=current_user.id,
+        run_type="summary.daily",
+        prompt_version="legacy-summary-bridge",
+        input_refs=["surface:timeline", "surface:insights", f"summary:{summary.date.isoformat()}"],
+        started_at=summary.created_at or datetime.now(timezone.utc),
+    )
+    service.add_artifact(
+        run_public_id=run.public_id,
+        artifact_type="summary_card",
+        title=f"{summary.date.isoformat()} Daily Summary",
+        summary=_markdown_summary(summary.content),
+        content_markdown=summary.content,
+        payload={"linked_surface": "insights", "summary_id": summary.id},
+        evidence_refs=[f"summary:{summary.date.isoformat()}", "surface:timeline"],
+        chart_schema=None,
+        trust_meta={
+            "freshness": "FRESH",
+            "source": "AI_GENERATED",
+            "source_refs": [f"summary:{summary.date.isoformat()}", "surface:timeline"],
+        },
+    )
+    service.complete_run(run_public_id=run.public_id)
+
+
+def _create_insight_artifact_for_analysis(
+    db: Session,
+    *,
+    current_user: User,
+    analysis_type: str,
+    raw_data: dict,
+    ai_insights: str | None,
+    created_at: datetime,
+    analysis_result_id: int,
+) -> None:
+    service = InsightArtifactService(db)
+    run = service.start_run(
+        user_id=current_user.id,
+        run_type=f"analysis.{analysis_type}",
+        prompt_version="legacy-analysis-bridge",
+        input_refs=["surface:insights", f"analysis:{analysis_type}"],
+        started_at=created_at,
+    )
+    chart_schema = None
+    if raw_data.get("stats"):
+        chart_schema = {
+            "schema_version": "chart.v1",
+            "chart_type": "bar",
+            "series": [{"field": "avg_pnl", "label": "Average PnL"}],
+        }
+    service.add_artifact(
+        run_public_id=run.public_id,
+        artifact_type="analysis_card",
+        title=f"Analysis · {analysis_type}",
+        summary=_markdown_summary(ai_insights) or f"Analysis generated for {analysis_type}.",
+        content_markdown=ai_insights,
+        payload={
+            "linked_surface": "insights",
+            "analysis_type": analysis_type,
+            "analysis_result_id": analysis_result_id,
+            "raw_data": raw_data,
+        },
+        evidence_refs=[f"analysis:{analysis_type}", "dataset:positions"],
+        chart_schema=chart_schema,
+        trust_meta={
+            "freshness": "FRESH",
+            "source": "AI_GENERATED",
+            "source_refs": [f"analysis:{analysis_type}", "dataset:positions"],
+        },
+    )
+    service.complete_run(run_public_id=run.public_id)
 
 
 def _begin_idempotent_insights_request(
@@ -311,6 +400,7 @@ async def generate_summary(
     db.add(summary)
     db.flush()
     db.refresh(summary)
+    _create_insight_artifact_for_summary(db, current_user=current_user, summary=summary)
 
     response_content = jsonable_encoder(AISummaryResponse(
         id=summary.id,
@@ -375,6 +465,15 @@ async def analyze_trading_data(
     db.add(ai_result)
     db.flush()
     db.refresh(ai_result)
+    _create_insight_artifact_for_analysis(
+        db,
+        current_user=current_user,
+        analysis_type=request.analysis_type.value,
+        raw_data=raw_data,
+        ai_insights=ai_insights,
+        created_at=ai_result.created_at,
+        analysis_result_id=ai_result.id,
+    )
 
     response_content = jsonable_encoder(AnalysisResponse(
         analysis_type=request.analysis_type,

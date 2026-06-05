@@ -5,7 +5,9 @@ import { useState } from 'react'
 import { Clock3, Loader2, RefreshCcw } from 'lucide-react'
 
 import { useAuth } from '@/contexts/AuthContext'
+import { EvidenceLinkedInsightSidecar } from '@/components/insights/EvidenceLinkedInsightSidecar'
 import { formatTrustLabel, getReviewInboxSummary, getTimelineEmptyState } from '@/lib/adapters/timeline'
+import { useInsightRuns } from '@/hooks/useInsightRuns'
 import { useTimelineHomeData } from '@/hooks/useTimelineHomeData'
 import type { TimelineView } from '@/lib/read-models'
 import { FreshnessPill } from '@/components/timeline/FreshnessPill'
@@ -26,6 +28,7 @@ export default function TimelinePage() {
     const { token } = useAuth()
     const [view, setView] = useState<TimelineView>('ALL')
     const { timelineHome, isLoading, error, refresh } = useTimelineHomeData(token, view)
+    const insightRunsQuery = useInsightRuns(token)
 
     if (isLoading) {
         return (
@@ -151,10 +154,19 @@ export default function TimelinePage() {
                     </div>
                 </div>
 
-                <TimelineContextRail
-                    contextRail={timelineHome.contextRail}
-                    onSelectView={(value) => setView(value as TimelineView)}
-                />
+                <div className="space-y-4">
+                    <EvidenceLinkedInsightSidecar
+                        runs={insightRunsQuery.data}
+                        isLoading={insightRunsQuery.isLoading}
+                        error={insightRunsQuery.error ? insightRunsQuery.error.message : null}
+                        title="Timeline AI Sidecar"
+                        onRefresh={() => insightRunsQuery.refetch()}
+                    />
+                    <TimelineContextRail
+                        contextRail={timelineHome.contextRail}
+                        onSelectView={(value) => setView(value as TimelineView)}
+                    />
+                </div>
             </div>
         </div>
     )

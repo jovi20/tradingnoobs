@@ -30,10 +30,11 @@ import {
     accountsAPI,
     adminAPI,
     UserSettings,
+    TradingAccount,
     TradingAccountCreate,
     API_BASE,
 } from '@/lib/api'
-import { TradingAccountViewModel, adaptTradingAccount } from '@/lib/adapters/trading'
+import { TradingAccountViewModel, adaptTradingAccount, adaptTradingAccounts } from '@/lib/adapters/trading'
 import {
     adaptSettingsPageData,
     buildIntegrationCredentialUpdates,

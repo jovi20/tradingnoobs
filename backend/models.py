@@ -953,3 +953,44 @@ class AIAnalysisResult(Base):
     
     # Relationships
     user = relationship("User")
+
+
+class InsightRun(Base):
+    """Auditable AI or analytics run that can produce evidence-linked artifacts."""
+    __tablename__ = "insight_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    run_type = Column(String(64), nullable=False)
+    status = Column(String(32), nullable=False, default="RUNNING")
+    prompt_version = Column(String(100), nullable=True)
+    input_refs = Column(JSON, nullable=False, default=list)
+    started_at = Column(DateTime(timezone=True), nullable=False)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    error_code = Column(String(100), nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User")
+    artifacts = relationship("InsightArtifact", back_populates="run", order_by="InsightArtifact.created_at")
+
+
+class InsightArtifact(Base):
+    """Evidence-linked output produced by an InsightRun."""
+    __tablename__ = "insight_artifacts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    insight_run_id = Column(Integer, ForeignKey("insight_runs.id"), nullable=False, index=True)
+    artifact_type = Column(String(64), nullable=False)
+    title = Column(String(255), nullable=False)
+    summary = Column(Text, nullable=False)
+    content_markdown = Column(Text, nullable=True)
+    payload = Column(JSON, nullable=False, default=dict)
+    evidence_refs = Column(JSON, nullable=False, default=list)
+    chart_schema = Column(JSON, nullable=True)
+    trust_meta = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    run = relationship("InsightRun", back_populates="artifacts")

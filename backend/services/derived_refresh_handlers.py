@@ -26,7 +26,7 @@ def refresh_timeline_read_model(db: Session, job_run: JobRun) -> dict:
     if not truth_position:
         raise ValueError(f"TradingPosition not found for public_id {position_public_id}")
 
-    lifecycle = build_trading_position_lifecycle_payload(truth_position)
+    lifecycle = build_trading_position_lifecycle_payload(db, truth_position)
     position_event_public_id = payload.get("position_event_public_id")
     source_node = next(
         (
