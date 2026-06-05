@@ -1,6 +1,6 @@
 # Dev Branch Checkpoint - 2026-05-02
 
-Last refreshed: 2026-05-25
+Last refreshed: 2026-06-05
 
 ## Branch
 
@@ -8,7 +8,8 @@ Last refreshed: 2026-05-25
 - Current branch: `dev`
 - Baseline branch kept for comparison: `main`
 - Stage boundary commit: `e4c6544 feat: land platform foundation and frontend read models`
-- Implementation HEAD before this docs-only checkpoint refresh: `d4ff1a5 fix: clear job schedule on claim`
+- Implementation HEAD before the 2026-05-25 docs-only checkpoint refresh: `d4ff1a5 fix: clear job schedule on claim`
+- Current implementation HEAD after the 2026-06-05 dev integration refresh: `61ed189 feat: integrate auditable insight artifacts into dev`
 - Current `main...dev` committed diff should be reviewed from `main` to current `dev`; use focused diffs by area and the stage boundary below to avoid treating the full branch as one undifferentiated patch.
 
 ## Current Working Tree Shape
@@ -29,6 +30,11 @@ Committed implementation diff summary before this docs-only checkpoint refresh:
 
 Recent focused commits since the previous checkpoint refresh:
 
+- `61ed189 feat: integrate auditable insight artifacts into dev`
+- `d299bb3 feat: idempotently generate weekly reports`
+- `74753af feat: idempotently generate AI summaries`
+- `3b2d0ea feat: idempotently run AI analysis`
+- `0e69508 fix: avoid legacy timeline checks in snapshot-only mode`
 - `d4ff1a5 fix: clear job schedule on claim`
 - `49b736c docs: refresh idempotency test count`
 - `fe04498 fix: restart expired idempotency keys`
@@ -308,9 +314,47 @@ Result:
 OK
 ```
 
+## 2026-06-05 Dev Integration Refresh
+
+This refresh records the user-confirmed branch target: work lands on `dev`, not through a PR to `main`.
+
+- Mistaken PR-to-main path was closed: `https://github.com/jovi20/tradingnoobs/pull/1`
+- Local `dev` was updated with native dev-architecture adaptations instead of force-merging the older execution branch.
+- `origin/dev` now tracks local `dev` at `61ed189f4d64688e7955f577dc7f2ae5d3a77d01`.
+- The temporary `frontend/node_modules` symlink used for local frontend verification was removed after verification.
+- Remaining local untracked content is `docs/superpowers/demos/`; it is pre-existing/user content and should stay untouched unless explicitly requested.
+
+Additional scope landed in `61ed189`:
+
+- Added auditable AI insight models: `InsightRun` and `InsightArtifact`.
+- Added `backend/services/insight_artifact_service.py` and V1 read routes under `/api/v1/insights/runs`.
+- Bridged `/api/insights/summary/generate` and `/api/insights/analyze` into audited artifact creation.
+- Updated Timeline to prefer artifact-backed AI events.
+- Updated lifecycle AI sidecar sourcing from matching artifacts.
+- Added frontend artifact types, API client, hook, and evidence-linked sidecar component.
+- Integrated the sidecar into Timeline and Insights while keeping legacy AI markdown as read-only migration content.
+- Removed the Google `Inter` dependency so local frontend builds do not depend on fetching Google font assets.
+
+Recorded verification from the `61ed189` integration slice:
+
+```text
+backend/tests: 135 passed, 20 warnings
+frontend tsc --noEmit --pretty false: passed
+frontend npm run build: passed
+alembic current: exit 0
+alembic upgrade head on temp SQLite DB: reached 5e6f7a8b9cad
+git diff --check: clean
+```
+
+Execution plan created for the next slices:
+
+- `docs/superpowers/plans/2026-06-05-dev-p0-p4-execution-plan.md`
+
 ## Current Plan State
 
 - Timeline and lifecycle user-facing paths are explicitly marked as `Bridge landed / partial`.
+- `InsightRun / InsightArtifact` is no longer a future-only Task 7 item; it is now the landed auditable AI foundation that Timeline, Lifecycle, and Insights should consume.
+- The next execution path is P0-P4: refresh planning truth, harden Timeline Home truth/snapshot contracts, finish Lifecycle Detail cutover, harden async operations, then prepare Dashboard/Insights schema-first migration.
 - `/api/trading-positions/{position_public_id}/lifecycle` is now public_id-only for ordinary user paths.
 - `/api/positions/{id}/truth-lifecycle` remains labeled as the legacy migration bridge.
 - `/api/timeline/home` now has bridge-level `limit` / `cursor` support over stabilized timeline event cards.
