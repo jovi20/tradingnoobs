@@ -109,6 +109,17 @@ class InsightArtifactService:
         )
         return self._run_dict(run=run, artifacts=artifacts)
 
+    def get_artifact(self, *, user_id: int, artifact_public_id: str) -> dict:
+        artifact = (
+            self.db.query(InsightArtifact)
+            .join(InsightRun)
+            .filter(InsightRun.user_id == user_id, InsightArtifact.public_id == artifact_public_id)
+            .one()
+        )
+        payload = self._artifact_dict(artifact)
+        payload["run"] = self._run_summary_dict(artifact.run)
+        return payload
+
     def list_artifacts_for_object(
         self,
         *,
@@ -149,6 +160,20 @@ class InsightArtifactService:
             "error_code": run.error_code,
             "error_message": run.error_message,
             "artifacts": [cls._artifact_dict(artifact) for artifact in artifacts],
+        }
+
+    @staticmethod
+    def _run_summary_dict(run: InsightRun) -> dict:
+        return {
+            "public_id": run.public_id,
+            "run_type": run.run_type,
+            "status": run.status,
+            "prompt_version": run.prompt_version,
+            "input_refs": run.input_refs or [],
+            "started_at": run.started_at.isoformat().replace("+00:00", "Z"),
+            "completed_at": run.completed_at.isoformat().replace("+00:00", "Z") if run.completed_at else None,
+            "error_code": run.error_code,
+            "error_message": run.error_message,
         }
 
     @staticmethod

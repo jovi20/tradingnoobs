@@ -39,6 +39,7 @@ class InsightArtifactApiTests(unittest.TestCase):
 
         app = FastAPI()
         app.include_router(insight_artifacts.router)
+        app.include_router(insight_artifacts.artifact_router)
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides[get_current_user] = override_get_current_user
         self.app = app
@@ -90,6 +91,38 @@ class InsightArtifactApiTests(unittest.TestCase):
         self.assertEqual(detail_payload["artifacts"][0]["chart_schema"]["schema_version"], "chart.v1")
         self.assertEqual(detail_payload["artifacts"][0]["evidence_refs"], ["journal:today", "dataset:positions"])
         self.assertNotIn("id", detail_payload["artifacts"][0])
+
+    def test_get_insight_artifact_detail(self):
+        service = InsightArtifactService(self.db)
+        run = service.start_run(
+            user_id=self.user.id,
+            run_type="analysis.strategy_health",
+            prompt_version="v1",
+            input_refs=[],
+            started_at=datetime(2026, 6, 5, 10, 0, tzinfo=timezone.utc),
+        )
+        artifact = service.add_artifact(
+            run_public_id=run.public_id,
+            artifact_type="analysis_card",
+            title="Strategy health",
+            summary="Average loss needs work.",
+            content_markdown=None,
+            payload={"linked_surface": "insights"},
+            evidence_refs=["analysis:strategy_health"],
+            chart_schema=None,
+            trust_meta={"freshness": "FRESH", "source": "AI_GENERATED", "source_refs": ["dataset:positions"]},
+        )
+        service.complete_run(run_public_id=run.public_id, status="COMPLETED")
+        self.db.commit()
+
+        response = self.client.get(f"/api/v1/insights/artifacts/{artifact.public_id}")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["public_id"], artifact.public_id)
+        self.assertEqual(payload["run"]["public_id"], run.public_id)
+        self.assertEqual(payload["summary"], "Average loss needs work.")
+        self.assertNotIn("id", payload)
 
 
 if __name__ == "__main__":

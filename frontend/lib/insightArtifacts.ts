@@ -47,6 +47,10 @@ export interface InsightRun {
     artifacts: InsightArtifact[]
 }
 
+export interface InsightArtifactDetail extends InsightArtifact {
+    run: Omit<InsightRun, 'artifacts'>
+}
+
 export interface AuditableInsightCard {
     artifact: InsightArtifact
     run: InsightRun

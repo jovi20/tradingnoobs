@@ -63,6 +63,7 @@ app.include_router(transactions.router)
 app.include_router(timeline.router)
 app.include_router(trading_positions.router)
 app.include_router(insight_artifacts.router)
+app.include_router(insight_artifacts.artifact_router)
 
 
 @app.get("/")

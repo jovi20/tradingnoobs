@@ -407,7 +407,7 @@ Commit succeeds and origin/dev advances.
 - Create: `frontend/hooks/useInsightArtifact.ts`
 - Test: `frontend/tests/insight-artifact-client.test.mts`
 
-- [ ] **Step 1: Add backend failing tests for artifact-by-id read**
+- [x] **Step 1: Add backend failing tests for artifact-by-id read**
 
 Modify `backend/tests/test_insight_artifact_service.py`:
 ```python
@@ -463,7 +463,7 @@ def test_get_insight_artifact_detail(self):
     self.assertEqual(response.json()["public_id"], artifact.public_id)
 ```
 
-- [ ] **Step 2: Run backend tests to verify RED**
+- [x] **Step 2: Run backend tests to verify RED**
 
 Run:
 ```bash
@@ -475,7 +475,7 @@ Expected:
 Fails because get_artifact and /api/v1/insights/artifacts/{artifact_public_id} do not exist.
 ```
 
-- [ ] **Step 3: Implement backend artifact detail**
+- [x] **Step 3: Implement backend artifact detail**
 
 Modify `backend/services/insight_artifact_service.py`:
 ```python
@@ -527,7 +527,7 @@ app.include_router(insight_artifacts.router)
 app.include_router(insight_artifacts.artifact_router)
 ```
 
-- [ ] **Step 4: Verify backend GREEN**
+- [x] **Step 4: Verify backend GREEN**
 
 Run:
 ```bash
@@ -539,7 +539,7 @@ Expected:
 All selected tests pass.
 ```
 
-- [ ] **Step 5: Add frontend client failing test**
+- [x] **Step 5: Add frontend client failing test**
 
 Create `frontend/tests/insight-artifact-client.test.mts`:
 ```ts
@@ -573,7 +573,7 @@ test('insight artifact client fetches artifact detail', async () => {
 })
 ```
 
-- [ ] **Step 6: Run frontend client test to verify RED**
+- [x] **Step 6: Run frontend client test to verify RED**
 
 Run:
 ```bash
@@ -586,7 +586,7 @@ Expected:
 Fails because insightArtifactDetailPath and getArtifact are not exported.
 ```
 
-- [ ] **Step 7: Implement frontend client and hook**
+- [x] **Step 7: Implement frontend client and hook**
 
 Modify `frontend/lib/insightArtifacts.ts`:
 ```ts
@@ -632,7 +632,7 @@ export function useInsightArtifact(token: string | null, artifactPublicId: strin
 }
 ```
 
-- [ ] **Step 8: Verify P7 API/client**
+- [x] **Step 8: Verify P7 API/client**
 
 Run:
 ```bash
@@ -648,6 +648,12 @@ Selected backend tests pass.
 Selected frontend tests pass.
 TypeScript exits 0.
 ```
+
+Execution note:
+
+- RED observed for missing `InsightArtifactService.get_artifact`, missing `artifact_router`, and missing frontend artifact detail client exports.
+- GREEN observed for user-scoped artifact detail service reads and `/api/v1/insights/artifacts/{artifact_public_id}` API reads.
+- Frontend client now exposes `insightArtifactDetailPath`, `insightArtifactsAPI.getArtifact`, `InsightArtifactDetail`, and `useInsightArtifact`.
 
 - [ ] **Step 9: Commit and push P7 API/client**
 

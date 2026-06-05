@@ -72,6 +72,37 @@ class InsightArtifactServiceTests(unittest.TestCase):
         self.assertEqual(hydrated["artifacts"][0]["chart_schema"]["schema_version"], "chart.v1")
         self.assertEqual(hydrated["artifacts"][0]["trust_meta"]["source"], "AI_GENERATED")
 
+    def test_get_artifact_by_public_id_is_user_scoped(self):
+        service = InsightArtifactService(self.db)
+        run = service.start_run(
+            user_id=self.user.id,
+            run_type="analysis.strategy_health",
+            prompt_version="v1",
+            input_refs=["analysis:strategy_health"],
+        )
+        artifact = service.add_artifact(
+            run_public_id=run.public_id,
+            artifact_type="analysis_card",
+            title="Strategy health",
+            summary="Average loss needs work.",
+            content_markdown="# Legacy body",
+            payload={"linked_surface": "insights"},
+            evidence_refs=["analysis:strategy_health"],
+            chart_schema={"schema_version": "chart.v1", "chart_type": "bar", "series": [{"field": "avg_pnl", "label": "Average PnL"}]},
+            trust_meta={"freshness": "FRESH", "source": "AI_GENERATED", "source_refs": ["dataset:positions"]},
+        )
+        service.complete_run(run_public_id=run.public_id)
+        other_user = create_user(self.db, "artifact-other@example.com", "password123")
+        self.db.commit()
+
+        payload = service.get_artifact(user_id=self.user.id, artifact_public_id=artifact.public_id)
+
+        self.assertEqual(payload["public_id"], artifact.public_id)
+        self.assertEqual(payload["run"]["public_id"], run.public_id)
+        self.assertEqual(payload["summary"], "Average loss needs work.")
+        with self.assertRaises(Exception):
+            service.get_artifact(user_id=other_user.id, artifact_public_id=artifact.public_id)
+
 
 if __name__ == "__main__":
     unittest.main()

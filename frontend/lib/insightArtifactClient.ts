@@ -1,10 +1,13 @@
-import { API_BASE } from '@/lib/api'
-import type { InsightRun } from '@/lib/insightArtifacts'
+import { API_BASE } from './api.ts'
+import type { InsightArtifactDetail, InsightRun } from './insightArtifacts.ts'
 
 export const insightRunsPath = '/api/v1/insights/runs' as const
 
 export const insightRunDetailPath = (runPublicId: string) =>
     `/api/v1/insights/runs/${runPublicId}` as const
+
+export const insightArtifactDetailPath = (artifactPublicId: string) =>
+    `/api/v1/insights/artifacts/${artifactPublicId}` as const
 
 async function fetchInsightArtifact<T>(path: string, token: string): Promise<T> {
     const response = await fetch(`${API_BASE}${path}`, {
@@ -26,4 +29,6 @@ export const insightArtifactsAPI = {
     listRuns: (token: string) => fetchInsightArtifact<InsightRun[]>(insightRunsPath, token),
     getRun: (token: string, runPublicId: string) =>
         fetchInsightArtifact<InsightRun>(insightRunDetailPath(runPublicId), token),
+    getArtifact: (token: string, artifactPublicId: string) =>
+        fetchInsightArtifact<InsightArtifactDetail>(insightArtifactDetailPath(artifactPublicId), token),
 }
