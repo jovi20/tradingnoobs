@@ -655,7 +655,7 @@ Execution note:
 - GREEN observed for user-scoped artifact detail service reads and `/api/v1/insights/artifacts/{artifact_public_id}` API reads.
 - Frontend client now exposes `insightArtifactDetailPath`, `insightArtifactsAPI.getArtifact`, `InsightArtifactDetail`, and `useInsightArtifact`.
 
-- [ ] **Step 9: Commit and push P7 API/client**
+- [x] **Step 9: Commit and push P7 API/client**
 
 Run:
 ```bash
@@ -681,7 +681,7 @@ Commit succeeds and origin/dev advances.
 - Test: `frontend/tests/insight-artifact-presentation.test.mts`
 - Test: `frontend/tests/dashboard-adapter.test.mts`
 
-- [ ] **Step 1: Add frontend failing tests for detail view model**
+- [x] **Step 1: Add frontend failing tests for detail view model**
 
 Modify `frontend/tests/insight-artifact-presentation.test.mts`:
 ```ts
@@ -719,7 +719,7 @@ test('insight artifact detail view keeps summary primary and legacy markdown rea
 })
 ```
 
-- [ ] **Step 2: Run test to verify RED**
+- [x] **Step 2: Run test to verify RED**
 
 Run:
 ```bash
@@ -732,7 +732,7 @@ Expected:
 Fails because buildInsightArtifactDetailView is not exported.
 ```
 
-- [ ] **Step 3: Implement detail view model**
+- [x] **Step 3: Implement detail view model**
 
 Modify `frontend/lib/insightArtifacts.ts`:
 ```ts
@@ -754,7 +754,7 @@ export function buildInsightArtifactDetailView(artifact: InsightArtifactDetail) 
 }
 ```
 
-- [ ] **Step 4: Create detail component and page**
+- [x] **Step 4: Create detail component and page**
 
 Create `frontend/components/insights/InsightArtifactDetailCard.tsx`:
 ```tsx
@@ -838,7 +838,7 @@ export default function InsightArtifactDetailPage({ params }: { params: { artifa
 }
 ```
 
-- [ ] **Step 5: Add dashboard schema metadata test**
+- [x] **Step 5: Add dashboard schema metadata test**
 
 Modify `frontend/tests/dashboard-adapter.test.mts`:
 ```ts
@@ -866,7 +866,7 @@ test('dashboard allocation chart exposes trust and empty state from schema paylo
 })
 ```
 
-- [ ] **Step 6: Show dashboard schema/trust metadata without changing chart layout**
+- [x] **Step 6: Show dashboard schema/trust metadata without changing chart layout**
 
 Modify `frontend/components/dashboard/domain/DashboardAllocationPanel.tsx` props:
 ```ts
@@ -900,7 +900,7 @@ Modify `frontend/app/dashboard/page.tsx` call:
 />
 ```
 
-- [ ] **Step 7: Verify P7 UI**
+- [x] **Step 7: Verify P7 UI**
 
 Run:
 ```bash
@@ -916,6 +916,12 @@ Frontend Node tests pass.
 TypeScript exits 0.
 Build exits 0 and includes /insights/[artifactId].
 ```
+
+Execution note:
+
+- RED observed for missing `buildInsightArtifactDetailView`; dashboard schema metadata adapter contract already existed and is now locked by test.
+- GREEN observed for `buildInsightArtifactDetailView`, `/insights/[artifactId]`, `InsightArtifactDetailCard`, and Dashboard allocation schema/trust/empty-state metadata display.
+- Frontend verification passed with 41 Node tests, TypeScript exit 0, and Next build output including `/insights/[artifactId]`.
 
 - [ ] **Step 8: Commit and push P7 UI**
 

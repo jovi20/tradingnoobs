@@ -64,6 +64,19 @@ export interface AuditableInsightCard {
     chartSchema: ChartSchema | null
 }
 
+export interface InsightArtifactDetailView {
+    title: string
+    artifactType: string
+    runType: string
+    primaryContent: string
+    legacyReadOnlyContent: string | null
+    evidenceRefs: string[]
+    sourceRefs: string[]
+    chartBadge: string | null
+    trustMeta: InsightArtifactTrustMeta
+    createdAt?: string | null
+}
+
 const supportedChartTypes: ReadonlySet<string> = new Set(['bar', 'line', 'scatter', 'sankey'])
 
 export function assertSupportedChartSchema(schema: ChartSchema | null | undefined): boolean {
@@ -93,4 +106,21 @@ export function buildAuditableInsightCards(runs: InsightRun[] = [], limit = Numb
             }
         }))
         .slice(0, limit)
+}
+
+export function buildInsightArtifactDetailView(artifact: InsightArtifactDetail): InsightArtifactDetailView {
+    return {
+        title: artifact.title,
+        artifactType: artifact.artifact_type,
+        runType: artifact.run.run_type,
+        primaryContent: artifact.summary,
+        legacyReadOnlyContent: artifact.content_markdown,
+        evidenceRefs: artifact.evidence_refs ?? [],
+        sourceRefs: artifact.trust_meta.source_refs ?? [],
+        chartBadge: assertSupportedChartSchema(artifact.chart_schema)
+            ? `${artifact.chart_schema?.schema_version} · ${artifact.chart_schema?.chart_type}`
+            : null,
+        trustMeta: artifact.trust_meta,
+        createdAt: artifact.created_at,
+    }
 }

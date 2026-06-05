@@ -19,7 +19,7 @@ import MarketStatus from '@/components/MarketStatus'
 import PortfolioSankey from '@/components/PortfolioSankey'
 import { useTrendColor } from '@/hooks/useTrendColor'
 import { useDashboardData } from '@/hooks/useDashboardData'
-import { adaptDashboardPageData, getDashboardAllocationData } from '@/lib/adapters/dashboard'
+import { adaptDashboardPageData, getDashboardAllocationChart, getDashboardAllocationData } from '@/lib/adapters/dashboard'
 import { DashboardSummaryStrip } from '@/components/dashboard/domain/DashboardSummaryStrip'
 import { DashboardAllocationPanel } from '@/components/dashboard/domain/DashboardAllocationPanel'
 import { DashboardMoversPanel } from '@/components/dashboard/domain/DashboardMoversPanel'
@@ -278,6 +278,7 @@ export default function DashboardPage() {
                         allocationDimension={allocationDimension}
                         onChangeDimension={setAllocationDimension}
                         data={getDashboardAllocationData(stats, allocationDimension)}
+                        chart={getDashboardAllocationChart(stats, allocationDimension)}
                     />
 
                     <div className="card p-4">

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import {
   adaptDashboardPageData,
   calculateDashboardPeriodMetrics,
+  getDashboardAllocationChart,
   getDashboardAllocationData,
   getDashboardMovers,
 } from '../lib/adapters/dashboard.ts'
@@ -93,6 +94,36 @@ test('dashboard allocation helper prefers schema-first chart payloads when avail
   assert.deepEqual(getDashboardAllocationData(stats, 'CORE_TYPE'), [
     { name: 'EQUITY', value: 700, percent: 70 },
   ])
+})
+
+test('dashboard allocation chart exposes trust and empty state from schema payload', () => {
+  const stats = {
+    core_type_allocation: [],
+    market_allocation: [],
+    risk_level_allocation: [],
+    chart_payloads: {
+      core_type: {
+        chart_schema: {
+          schema_version: 'chart.v1',
+          chart_type: 'bar',
+          data_path: 'core_type_allocation',
+          series: [{ field: 'value', label: 'Value' }],
+        },
+        data: [],
+        empty_state: { is_empty: true, reason: 'NO_ALLOCATION_DATA' },
+        trust_meta: {
+          freshness: 'FRESH',
+          source: 'DASHBOARD_DERIVED_READ_MODEL',
+          source_refs: ['dashboard:stats'],
+        },
+      },
+    },
+  }
+
+  const chart = getDashboardAllocationChart(stats, 'CORE_TYPE')
+  assert.equal(chart.isEmpty, true)
+  assert.equal(chart.emptyState.reason, 'NO_ALLOCATION_DATA')
+  assert.equal(chart.trustMeta.source, 'DASHBOARD_DERIVED_READ_MODEL')
 })
 
 test('dashboard movers helper preserves top and bottom movers', () => {
