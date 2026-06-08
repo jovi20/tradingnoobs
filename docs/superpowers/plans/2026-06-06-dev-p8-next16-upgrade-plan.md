@@ -538,7 +538,7 @@ Execution note:
 - `git diff --check` exited 0.
 - `git status --short --branch` shows only P8 source/docs changes plus the untouched untracked `docs/superpowers/demos/`.
 
-- [ ] **Step 4: Commit and push P8 framework upgrade**
+- [x] **Step 4: Commit and push P8 framework upgrade**
 
 Run:
 ```bash
@@ -553,6 +553,10 @@ Commit succeeds and origin/dev advances.
 If optional files were not created, omit them from git add rather than creating placeholders.
 ```
 
+Execution note:
+
+- P8 framework upgrade was committed and pushed as `facdf3e chore: upgrade frontend to next 16`.
+
 ---
 
 ### Task 6: Backend Smoke and Final Checkpoint
@@ -561,7 +565,7 @@ If optional files were not created, omit them from git add rather than creating 
 - Modify: `docs/superpowers/plans/2026-06-06-dev-p8-next16-upgrade-plan.md`
 - Modify: `docs/superpowers/plans/2026-05-02-dev-branch-checkpoint.md`
 
-- [ ] **Step 1: Run backend smoke after frontend framework upgrade**
+- [x] **Step 1: Run backend smoke after frontend framework upgrade**
 
 Run:
 ```bash
@@ -574,7 +578,7 @@ Expected:
 Backend tests pass.
 ```
 
-- [ ] **Step 2: Run Alembic smoke**
+- [x] **Step 2: Run Alembic smoke**
 
 Run from repo root:
 ```bash
@@ -586,7 +590,7 @@ Expected:
 Alembic reaches 5e6f7a8b9cad.
 ```
 
-- [ ] **Step 3: Update checkpoint docs**
+- [x] **Step 3: Update checkpoint docs**
 
 Record in this plan and `docs/superpowers/plans/2026-05-02-dev-branch-checkpoint.md`:
 ```text
@@ -599,7 +603,16 @@ Whether lint script was migrated, removed, or intentionally deferred.
 docs/superpowers/demos/ untouched status.
 ```
 
-- [ ] **Step 4: Commit and push final P8 docs**
+Execution note:
+
+- Backend unittest discovery passed: 146 tests, 0 failures. The run included the known sandbox DNS warning for Yahoo/yfinance lookup and still completed OK.
+- Alembic smoke on `/private/tmp/tradingnoobs_dev_p8_next16_final.db` reached `5e6f7a8b9cad`.
+- Final framework versions: `next@^16.2.7`, `react@^19.2.7`, `react-dom@^19.2.7`, `@types/react@^19.2.17`, `@types/react-dom@^19.2.3`.
+- Final audit result: 0 vulnerabilities.
+- Lint was migrated from removed `next lint` to ESLint CLI with `eslint-config-next`; React 19 broad refactor rules `react-hooks/purity` and `react-hooks/set-state-in-effect` are intentionally deferred in config.
+- `docs/superpowers/demos/` remained untracked and untouched.
+
+- [x] **Step 4: Commit and push final P8 docs**
 
 Run:
 ```bash

@@ -1,6 +1,6 @@
 # Dev Branch Checkpoint - 2026-05-02
 
-Last refreshed: 2026-06-05
+Last refreshed: 2026-06-08
 
 ## Branch
 
@@ -9,7 +9,7 @@ Last refreshed: 2026-06-05
 - Baseline branch kept for comparison: `main`
 - Stage boundary commit: `e4c6544 feat: land platform foundation and frontend read models`
 - Implementation HEAD before the 2026-05-25 docs-only checkpoint refresh: `d4ff1a5 fix: clear job schedule on claim`
-- Current implementation HEAD after the 2026-06-05 dev integration refresh: `61ed189 feat: integrate auditable insight artifacts into dev`
+- Current implementation HEAD after the 2026-06-08 P8 dependency-hardening refresh: `facdf3e chore: upgrade frontend to next 16`
 - Current `main...dev` committed diff should be reviewed from `main` to current `dev`; use focused diffs by area and the stage boundary below to avoid treating the full branch as one undifferentiated patch.
 
 ## Current Working Tree Shape
@@ -30,6 +30,9 @@ Committed implementation diff summary before this docs-only checkpoint refresh:
 
 Recent focused commits since the previous checkpoint refresh:
 
+- `facdf3e chore: upgrade frontend to next 16`
+- `18a625d docs: record next 16 upgrade baseline`
+- `160c4f0 docs: add dev p8 next 16 upgrade plan`
 - `61ed189 feat: integrate auditable insight artifacts into dev`
 - `d299bb3 feat: idempotently generate weekly reports`
 - `74753af feat: idempotently generate AI summaries`
@@ -521,4 +524,41 @@ alembic upgrade head on /private/tmp/tradingnoobs_dev_p5_p7_final_20260605_retry
 Remaining follow-ups:
 
 - Next 16 / React migration remains a separate dependency-hardening task because npm reports it as the only available fix for the remaining Next/PostCSS advisories.
+- `docs/superpowers/demos/` remains untracked user content and was not touched.
+
+## 2026-06-08 P8 Next 16 Dependency Hardening
+
+Stage commits pushed to `origin/dev`:
+
+- `160c4f0 docs: add dev p8 next 16 upgrade plan`
+- `18a625d docs: record next 16 upgrade baseline`
+- `facdf3e chore: upgrade frontend to next 16`
+
+Scope completed:
+
+- Upgraded frontend framework line to `next@^16.2.7`, `react@^19.2.7`, and `react-dom@^19.2.7`.
+- Upgraded React type packages to `@types/react@^19.2.17` and `@types/react-dom@^19.2.3`.
+- Upgraded `lucide-react` to `^1.17.0` for React 19 peer compatibility.
+- Added a PostCSS override to `^8.5.15`, resolving the nested Next/PostCSS audit finding.
+- Migrated `/insights/[artifactId]` and `/settings/accounts/[id]` client pages from page prop params to `useParams()`.
+- Migrated lint from removed `next lint` to ESLint CLI with `eslint-config-next`.
+- Deferred broad React 19 lint-hardening rules `react-hooks/purity` and `react-hooks/set-state-in-effect` in config; final lint exits 0 with 6 existing warnings.
+
+Final P8 verification:
+
+```text
+git diff --check: clean
+frontend npm audit --json: 0 vulnerabilities
+frontend node --experimental-strip-types --test tests/*.test.mts: 41 tests passed
+frontend ./node_modules/.bin/tsc --noEmit --pretty false: passed
+frontend npm run lint: passed with 6 warnings
+frontend npm run build: passed on Next 16.2.7; build output included /insights/[artifactId], /positions/[id], /positions/[id]/add-batch, and /settings/accounts/[id]
+backend unittest discovery: 146 tests passed
+alembic upgrade head on /private/tmp/tradingnoobs_dev_p8_next16_final.db: reached 5e6f7a8b9cad
+```
+
+Known notes:
+
+- Next 16 build warns that Turbopack inferred `/Users/a1` as workspace root because multiple lockfiles exist; this warning did not block production build.
+- Backend tests emitted the known Yahoo/yfinance DNS warning under restricted network conditions and still passed.
 - `docs/superpowers/demos/` remains untracked user content and was not touched.
