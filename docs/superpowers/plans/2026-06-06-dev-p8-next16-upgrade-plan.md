@@ -52,7 +52,7 @@
 - Modify: `docs/superpowers/plans/2026-06-06-dev-p8-next16-upgrade-plan.md`
 - Test/verify: `frontend`
 
-- [ ] **Step 1: Verify runtime and current clean state**
+- [x] **Step 1: Verify runtime and current clean state**
 
 Run:
 ```bash
@@ -67,7 +67,7 @@ dev is aligned with origin/dev.
 Only docs/superpowers/demos/ may appear as untracked local user content.
 ```
 
-- [ ] **Step 2: Capture pre-upgrade audit**
+- [x] **Step 2: Capture pre-upgrade audit**
 
 Run:
 ```bash
@@ -83,7 +83,7 @@ vulnerabilities.next.fixAvailable.isSemVerMajor: true
 vulnerabilities.postcss.nodes includes node_modules/next/node_modules/postcss
 ```
 
-- [ ] **Step 3: Capture pre-upgrade frontend verification**
+- [x] **Step 3: Capture pre-upgrade frontend verification**
 
 Run:
 ```bash
@@ -101,7 +101,7 @@ Next 14 production build exits 0.
 Build output includes /insights/[artifactId].
 ```
 
-- [ ] **Step 4: Confirm dynamic route files requiring async params review**
+- [x] **Step 4: Confirm dynamic route files requiring async params review**
 
 Run:
 ```bash
@@ -115,6 +115,14 @@ frontend/app/positions/[id]/page.tsx
 frontend/app/positions/[id]/add-batch/page.tsx
 frontend/app/settings/accounts/[id]/page.tsx
 ```
+
+Execution note:
+
+- `node --version`: `v25.8.1`, satisfying the Next 16 `20.9.0+` requirement.
+- `git status --short --branch`: `dev...origin/dev`, with only `docs/superpowers/demos/` untracked.
+- `npm audit --json`: 2 vulnerabilities (`next` high, nested `next/node_modules/postcss` moderate), with `next@16.2.7` semver-major fix path.
+- Baseline frontend checks passed: 41 Node tests, TypeScript exit 0, and Next 14.2.35 production build exit 0 including `/insights/[artifactId]`.
+- Dynamic route scan used `rg --files` because the original `find frontend/app -path '*[*]*' -name page.tsx -print` pattern did not match in this shell; it found the expected route set, with `positions/[id]/add-batch/page.tsx` captured by a nested dynamic route scan.
 
 - [ ] **Step 5: Commit baseline plan progress if this task records new evidence**
 
