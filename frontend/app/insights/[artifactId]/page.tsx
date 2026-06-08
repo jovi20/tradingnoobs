@@ -1,15 +1,18 @@
 'use client'
 
 import Link from 'next/link'
+import { useParams } from 'next/navigation'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 
 import { InsightArtifactDetailCard } from '@/components/insights/InsightArtifactDetailCard'
 import { useAuth } from '@/contexts/AuthContext'
 import { useInsightArtifact } from '@/hooks/useInsightArtifact'
 
-export default function InsightArtifactDetailPage({ params }: { params: { artifactId: string } }) {
+export default function InsightArtifactDetailPage() {
     const { token } = useAuth()
-    const query = useInsightArtifact(token, params.artifactId)
+    const params = useParams()
+    const artifactId = params.artifactId as string
+    const query = useInsightArtifact(token, artifactId)
 
     if (query.isLoading) {
         return (

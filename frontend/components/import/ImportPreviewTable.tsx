@@ -124,7 +124,7 @@ export function ImportPreviewTable({ rows, selectedIndices, onToggleSelection }:
                             <td className="p-4 text-xs">
                                 {row.data.reason && (
                                     <div className="mb-1 text-slate-600 dark:text-slate-400 italic">
-                                        "{row.data.reason}"
+                                        &quot;{row.data.reason}&quot;
                                     </div>
                                 )}
                                 {row.errors.length > 0 && (

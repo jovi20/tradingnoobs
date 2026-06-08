@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import {
     ArrowLeft,
     Briefcase,
@@ -29,8 +29,9 @@ const ACCOUNT_TYPES = [
     { value: 'Unified', label: '统一账户 (Unified)' },
 ]
 
-export default function AccountDetailPage({ params }: { params: { id: string } }) {
-    const { id } = params
+export default function AccountDetailPage() {
+    const params = useParams()
+    const id = params.id as string
     const router = useRouter()
     const { token } = useAuth()
 
