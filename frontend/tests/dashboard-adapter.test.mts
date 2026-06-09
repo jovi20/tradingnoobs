@@ -3,10 +3,16 @@ import assert from 'node:assert/strict'
 
 import {
   adaptDashboardPageData,
+  buildDashboardStatusMetrics,
   calculateDashboardPeriodMetrics,
+  formatDashboardAccountRows,
   getDashboardAllocationChart,
   getDashboardAllocationData,
+  getDashboardHistoryDays,
+  getDashboardMobileSectionOrder,
   getDashboardMovers,
+  getDashboardPeriodOptions,
+  getDashboardRiskPosture,
 } from '../lib/adapters/dashboard.ts'
 
 test('calculateDashboardPeriodMetrics returns deltas from pnl history', () => {
@@ -136,4 +142,83 @@ test('dashboard movers helper preserves top and bottom movers', () => {
   assert.equal(result.top.length, 1)
   assert.equal(result.bottom.length, 1)
   assert.equal(result.bottom[0].symbol, 'TSLA')
+})
+
+test('dashboard period helpers return stable day counts', () => {
+  const now = new Date('2026-06-09T08:00:00Z')
+  const options = getDashboardPeriodOptions(now)
+
+  assert.deepEqual(options.map((option) => option.label), ['1周', '本月', '1月', '3月', '本年', '1年', '全部'])
+  assert.equal(getDashboardHistoryDays('1周', now), 7)
+  assert.equal(getDashboardHistoryDays('本月', now), 9)
+  assert.equal(getDashboardHistoryDays('本年', now), 160)
+  assert.equal(getDashboardHistoryDays('全部', now), 9999)
+})
+
+test('dashboard period helpers clamp first day of month and year', () => {
+  const now = new Date('2026-01-01T08:00:00Z')
+
+  assert.equal(getDashboardHistoryDays('本月', now), 1)
+  assert.equal(getDashboardHistoryDays('本年', now), 1)
+})
+
+test('dashboard status metrics summarize portfolio state with tones', () => {
+  const result = buildDashboardStatusMetrics({
+    stats: {
+      total_pnl: -240,
+      win_rate: 42,
+      avg_pnl_ratio: 0.8,
+      open_positions: 3,
+      max_drawdown: 0.18,
+      total_assets: 10000,
+    },
+    currencySymbol: '$',
+  })
+
+  assert.equal(result[0].label, '总盈亏')
+  assert.equal(result[0].value, '-$240')
+  assert.equal(result[0].tone, 'negative')
+  assert.equal(result[2].label, '最大回撤')
+  assert.equal(result[2].tone, 'warning')
+  assert.equal(result[3].value, '3')
+})
+
+test('dashboard risk posture maps drawdown and ratios to readable state', () => {
+  assert.equal(getDashboardRiskPosture({ max_drawdown: 0.05, sharpe_ratio: 1.4 }).tone, 'positive')
+  assert.equal(getDashboardRiskPosture({ max_drawdown: 0.18, sharpe_ratio: 0.9 }).tone, 'warning')
+  assert.equal(getDashboardRiskPosture({ max_drawdown: 0.32, sharpe_ratio: 0.4 }).tone, 'danger')
+})
+
+test('dashboard account rows format values and preserve broker context', () => {
+  const rows = formatDashboardAccountRows([
+    { name: 'IBKR Main', broker: 'IBKR', value: 12345.67, percent: 61.2 },
+  ], '$')
+
+  assert.deepEqual(rows, [{
+    name: 'IBKR Main',
+    broker: 'IBKR',
+    valueLabel: '$12,346',
+    percentLabel: '61.2%',
+  }])
+})
+
+test('dashboard mobile section order keeps summary before evidence', () => {
+  assert.deepEqual(getDashboardMobileSectionOrder(true, true), [
+    'header',
+    'status',
+    'equity',
+    'risk',
+    'structure',
+    'movers',
+    'positions',
+    'evidence',
+  ])
+  assert.deepEqual(getDashboardMobileSectionOrder(false, false), [
+    'header',
+    'status',
+    'equity',
+    'risk',
+    'structure',
+    'movers',
+  ])
 })

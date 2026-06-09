@@ -44,7 +44,7 @@
 - Modify: `frontend/tests/dashboard-adapter.test.mts`
 - Modify: `frontend/lib/adapters/dashboard.ts`
 
-- [ ] **Step 1: Write failing tests for period helpers**
+- [x] **Step 1: Write failing tests for period helpers**
 
 Append this block to `frontend/tests/dashboard-adapter.test.mts`:
 
@@ -77,7 +77,7 @@ test('dashboard period helpers clamp first day of month and year', () => {
 })
 ```
 
-- [ ] **Step 2: Run tests and confirm failure**
+- [x] **Step 2: Run tests and confirm failure**
 
 Run:
 
@@ -88,7 +88,7 @@ node --experimental-strip-types --test tests/dashboard-adapter.test.mts
 
 Expected: FAIL because `getDashboardPeriodOptions` and `getDashboardHistoryDays` are not exported yet.
 
-- [ ] **Step 3: Implement period helper types and functions**
+- [x] **Step 3: Implement period helper types and functions**
 
 Add this near the top of `frontend/lib/adapters/dashboard.ts` after imports:
 
@@ -136,7 +136,7 @@ export function getDashboardPeriodOptions(now: Date = new Date()): Array<Dashboa
 }
 ```
 
-- [ ] **Step 4: Run tests and confirm period helpers pass**
+- [x] **Step 4: Run tests and confirm period helpers pass**
 
 Run:
 
@@ -147,7 +147,7 @@ node --experimental-strip-types --test tests/dashboard-adapter.test.mts
 
 Expected: PASS for existing tests and the new period helper tests.
 
-- [ ] **Step 5: Write failing tests for metrics, risk, account rows, and mobile order**
+- [x] **Step 5: Write failing tests for metrics, risk, account rows, and mobile order**
 
 Append this block to `frontend/tests/dashboard-adapter.test.mts`:
 
@@ -214,7 +214,7 @@ test('dashboard mobile section order keeps summary before evidence', () => {
 })
 ```
 
-- [ ] **Step 6: Run tests and confirm failure**
+- [x] **Step 6: Run tests and confirm failure**
 
 Run:
 
@@ -225,7 +225,7 @@ node --experimental-strip-types --test tests/dashboard-adapter.test.mts
 
 Expected: FAIL because metric, risk, account, and mobile-order helpers are not exported yet.
 
-- [ ] **Step 7: Implement helper types and functions**
+- [x] **Step 7: Implement helper types and functions**
 
 Add this to `frontend/lib/adapters/dashboard.ts` after the period helpers:
 
@@ -337,7 +337,7 @@ export function getDashboardMobileSectionOrder(hasPositions: boolean, hasEvidenc
 }
 ```
 
-- [ ] **Step 8: Run adapter tests**
+- [x] **Step 8: Run adapter tests**
 
 Run:
 
@@ -348,7 +348,7 @@ node --experimental-strip-types --test tests/dashboard-adapter.test.mts
 
 Expected: PASS for all Dashboard adapter tests.
 
-- [ ] **Step 9: Commit adapter helpers**
+- [x] **Step 9: Commit adapter helpers**
 
 Run:
 
