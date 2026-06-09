@@ -116,7 +116,7 @@ These legacy Timeline components should be deleted only if `rg` proves there are
 - Modify: `docs/superpowers/plans/2026-06-09-dev-p9a-frontend-workbench-plan.md`
 - Test/verify: `frontend`
 
-- [ ] **Step 1: Verify branch and working tree**
+- [x] **Step 1: Verify branch and working tree**
 
 Run:
 ```bash
@@ -131,7 +131,7 @@ Only docs/superpowers/demos/ may appear as untracked user content.
 Recent history includes a96c4ed docs: record dev p8 next 16 upgrade.
 ```
 
-- [ ] **Step 2: Capture current frontend verification**
+- [x] **Step 2: Capture current frontend verification**
 
 Run:
 ```bash
@@ -154,12 +154,12 @@ Next build exits 0 and includes /timeline.
 
 If `npm audit` fails because the sandbox cannot resolve `registry.npmjs.org`, rerun it with network approval and record that reason in this plan.
 
-- [ ] **Step 3: Capture existing strict React 19 lint baseline for likely touched files**
+- [x] **Step 3: Capture existing strict React 19 lint baseline for likely touched files**
 
 Run:
 ```bash
 cd frontend
-npm run lint -- --rule 'react-hooks/purity:error' --rule 'react-hooks/set-state-in-effect:error' app/timeline/page.tsx components/Navbar.tsx components/ThemeToggle.tsx components/timeline/FreshnessPill.tsx components/timeline/ReviewInboxCard.tsx components/timeline/TimelineContextRail.tsx components/timeline/TimelineEventCard.tsx components/timeline/TimelineSummaryStrip.tsx
+./node_modules/.bin/eslint app/timeline/page.tsx components/Navbar.tsx components/ThemeToggle.tsx components/timeline/FreshnessPill.tsx components/timeline/ReviewInboxCard.tsx components/timeline/TimelineContextRail.tsx components/timeline/TimelineEventCard.tsx components/timeline/TimelineSummaryStrip.tsx --rule 'react-hooks/purity:error' --rule 'react-hooks/set-state-in-effect:error'
 ```
 
 Expected:
@@ -168,7 +168,7 @@ The command may fail before P9A because Navbar/ThemeToggle currently use mounted
 Record exact files and rules. These are the touched-file hardening targets, not global blockers.
 ```
 
-- [ ] **Step 4: Record baseline notes in this plan**
+- [x] **Step 4: Record baseline notes in this plan**
 
 Add an `Execution note` under Task 1 with:
 ```text
@@ -179,6 +179,18 @@ Lint result and warning count.
 Build result.
 Strict React 19 touched-file lint findings.
 ```
+
+Execution note:
+
+- `git status --short --branch`: `dev...origin/dev`, with only `docs/superpowers/demos/` untracked.
+- Recent history includes `6d4ccd1 docs: add dev p9a frontend workbench plan` and `a96c4ed docs: record dev p8 next 16 upgrade`.
+- `npm audit --json` in sandbox failed on DNS resolution for `registry.npmjs.org`; rerun with network approval reported 0 vulnerabilities.
+- `node --experimental-strip-types --test tests/*.test.mts`: 41 tests passed, 0 failed.
+- `./node_modules/.bin/tsc --noEmit --pretty false`: exited 0.
+- `npm run lint`: exited 0 with 6 existing warnings.
+- `npm run build`: exited 0 on Next 16.2.7 and output included `/timeline`.
+- The original targeted lint command shape using `npm run lint -- ...files` is invalid for this repo because the script is `eslint .`, so it scans the whole frontend. The plan now uses `./node_modules/.bin/eslint <files> --rule ...` for true targeted strict lint.
+- Corrected strict React 19 touched-file baseline: 2 errors from `components/Navbar.tsx` and `components/ThemeToggle.tsx` for `react-hooks/set-state-in-effect`, plus 1 `@next/next/no-img-element` warning in `Navbar`.
 
 - [ ] **Step 5: Commit baseline notes**
 
@@ -1059,7 +1071,7 @@ TypeScript exits 0.
 Run:
 ```bash
 cd frontend
-npm run lint -- --rule 'react-hooks/purity:error' --rule 'react-hooks/set-state-in-effect:error' components/Navbar.tsx components/navigation/ProductTopNav.tsx components/navigation/MobileBottomNav.tsx lib/navigation.ts
+./node_modules/.bin/eslint components/Navbar.tsx components/navigation/ProductTopNav.tsx components/navigation/MobileBottomNav.tsx lib/navigation.ts --rule 'react-hooks/purity:error' --rule 'react-hooks/set-state-in-effect:error'
 ```
 
 Expected:
@@ -1624,7 +1636,7 @@ Timeline adapter and workbench helper tests pass.
 Run:
 ```bash
 cd frontend
-npm run lint -- --rule 'react-hooks/purity:error' --rule 'react-hooks/set-state-in-effect:error' app/timeline/page.tsx components/timeline/workbench/TimelineWorkbench.tsx components/timeline/workbench/TimelineWorkbenchHeader.tsx components/timeline/workbench/TimelineViewTabs.tsx components/timeline/workbench/TimelineEventCardV2.tsx components/timeline/workbench/TimelineFeedPanel.tsx components/timeline/workbench/ReviewInboxPanel.tsx components/timeline/workbench/TimelineDecisionRail.tsx
+./node_modules/.bin/eslint app/timeline/page.tsx components/timeline/workbench/TimelineWorkbench.tsx components/timeline/workbench/TimelineWorkbenchHeader.tsx components/timeline/workbench/TimelineViewTabs.tsx components/timeline/workbench/TimelineEventCardV2.tsx components/timeline/workbench/TimelineFeedPanel.tsx components/timeline/workbench/ReviewInboxPanel.tsx components/timeline/workbench/TimelineDecisionRail.tsx --rule 'react-hooks/purity:error' --rule 'react-hooks/set-state-in-effect:error'
 ```
 
 Expected:
@@ -1742,7 +1754,7 @@ TypeScript exits 0.
 Run:
 ```bash
 cd frontend
-npm run lint -- --rule 'react-hooks/purity:error' --rule 'react-hooks/set-state-in-effect:error' components/timeline/workbench/TimelineWorkbench.tsx components/timeline/workbench/TimelineDecisionRail.tsx
+./node_modules/.bin/eslint components/timeline/workbench/TimelineWorkbench.tsx components/timeline/workbench/TimelineDecisionRail.tsx --rule 'react-hooks/purity:error' --rule 'react-hooks/set-state-in-effect:error'
 ```
 
 Expected:
@@ -1797,7 +1809,7 @@ Next build exits 0 and includes /timeline.
 Run:
 ```bash
 cd frontend
-npm run lint -- --rule 'react-hooks/purity:error' --rule 'react-hooks/set-state-in-effect:error' app/timeline/page.tsx components/Navbar.tsx components/navigation/ProductTopNav.tsx components/navigation/MobileBottomNav.tsx components/timeline/workbench/TimelineWorkbench.tsx components/timeline/workbench/TimelineWorkbenchHeader.tsx components/timeline/workbench/TimelineViewTabs.tsx components/timeline/workbench/TimelineEventCardV2.tsx components/timeline/workbench/TimelineFeedPanel.tsx components/timeline/workbench/ReviewInboxPanel.tsx components/timeline/workbench/TimelineDecisionRail.tsx components/ui/PageFrame.tsx components/ui/Surface.tsx components/ui/SectionHeader.tsx components/ui/MetricTile.tsx components/ui/StatusPill.tsx components/ui/EmptyStatePanel.tsx lib/adapters/timeline-workbench.ts lib/navigation.ts
+./node_modules/.bin/eslint app/timeline/page.tsx components/Navbar.tsx components/navigation/ProductTopNav.tsx components/navigation/MobileBottomNav.tsx components/timeline/workbench/TimelineWorkbench.tsx components/timeline/workbench/TimelineWorkbenchHeader.tsx components/timeline/workbench/TimelineViewTabs.tsx components/timeline/workbench/TimelineEventCardV2.tsx components/timeline/workbench/TimelineFeedPanel.tsx components/timeline/workbench/ReviewInboxPanel.tsx components/timeline/workbench/TimelineDecisionRail.tsx components/ui/PageFrame.tsx components/ui/Surface.tsx components/ui/SectionHeader.tsx components/ui/MetricTile.tsx components/ui/StatusPill.tsx components/ui/EmptyStatePanel.tsx lib/adapters/timeline-workbench.ts lib/navigation.ts --rule 'react-hooks/purity:error' --rule 'react-hooks/set-state-in-effect:error'
 ```
 
 Expected:
