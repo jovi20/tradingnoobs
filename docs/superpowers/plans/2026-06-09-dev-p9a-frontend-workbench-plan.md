@@ -501,7 +501,7 @@ Commit succeeds and origin/dev advances.
 - Create: `frontend/components/ui/EmptyStatePanel.tsx`
 - Modify: `frontend/app/globals.css`
 
-- [ ] **Step 1: Create `Surface` primitive**
+- [x] **Step 1: Create `Surface` primitive**
 
 Create `frontend/components/ui/Surface.tsx`:
 ```tsx
@@ -533,7 +533,7 @@ export function Surface({ children, className = '', variant = 'panel', as: Compo
 }
 ```
 
-- [ ] **Step 2: Create `PageFrame` primitive**
+- [x] **Step 2: Create `PageFrame` primitive**
 
 Create `frontend/components/ui/PageFrame.tsx`:
 ```tsx
@@ -555,7 +555,7 @@ export function PageFrame({ children, className = '', density = 'wide' }: PageFr
 }
 ```
 
-- [ ] **Step 3: Create `SectionHeader` primitive**
+- [x] **Step 3: Create `SectionHeader` primitive**
 
 Create `frontend/components/ui/SectionHeader.tsx`:
 ```tsx
@@ -592,7 +592,7 @@ export function SectionHeader({ title, eyebrow, description, action }: SectionHe
 }
 ```
 
-- [ ] **Step 4: Create `MetricTile` primitive**
+- [x] **Step 4: Create `MetricTile` primitive**
 
 Create `frontend/components/ui/MetricTile.tsx`:
 ```tsx
@@ -628,7 +628,7 @@ export function MetricTile({ label, value, detail, tone = 'neutral' }: MetricTil
 }
 ```
 
-- [ ] **Step 5: Create `StatusPill` primitive**
+- [x] **Step 5: Create `StatusPill` primitive**
 
 Create `frontend/components/ui/StatusPill.tsx`:
 ```tsx
@@ -661,7 +661,7 @@ export function StatusPill({ children, tone = 'neutral', className = '' }: Statu
 }
 ```
 
-- [ ] **Step 6: Create `EmptyStatePanel` primitive**
+- [x] **Step 6: Create `EmptyStatePanel` primitive**
 
 Create `frontend/components/ui/EmptyStatePanel.tsx`:
 ```tsx
@@ -684,7 +684,7 @@ export function EmptyStatePanel({ title, detail, action }: EmptyStatePanelProps)
 }
 ```
 
-- [ ] **Step 7: Add scoped app-shell background tokens**
+- [x] **Step 7: Add scoped app-shell background tokens**
 
 Modify `frontend/app/globals.css` by adding this block after the `body` rule:
 ```css
@@ -703,7 +703,7 @@ Modify `frontend/app/globals.css` by adding this block after the `body` rule:
 }
 ```
 
-- [ ] **Step 8: Verify design-system primitives compile**
+- [x] **Step 8: Verify design-system primitives compile**
 
 Run:
 ```bash
@@ -715,6 +715,12 @@ Expected:
 ```text
 TypeScript exits 0.
 ```
+
+Execution note:
+
+- Created six presentational UI primitives under `frontend/components/ui/`.
+- Added scoped `.tn-decision-desk` background tokens to `frontend/app/globals.css`.
+- `./node_modules/.bin/tsc --noEmit --pretty false` exited 0.
 
 - [ ] **Step 9: Commit UI primitives**
 
