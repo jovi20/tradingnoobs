@@ -1207,7 +1207,7 @@ git add docs/superpowers/plans/2026-06-09-dev-p9b-dashboard-workbench-plan.md
 git commit -m "docs: close p9b dashboard smoke"
 ```
 
-- [ ] **Step 7: Push dev branch**
+- [x] **Step 7: Push dev branch**
 
 Run:
 
@@ -1231,7 +1231,7 @@ Expected: `origin/dev` receives P9B design, implementation, and verification com
 - [x] `docs/superpowers/demos/` remains untouched.
 - [x] Frontend audit, adapter tests, TypeScript, lint, and build pass.
 - [x] Browser smoke covers desktop Dashboard, mobile Dashboard, and `/` redirect.
-- [ ] P9B commits are pushed to `origin/dev`.
+- [x] P9B commits are pushed to `origin/dev`.
 
 ## Verification Evidence
 
@@ -1249,3 +1249,7 @@ Expected: `origin/dev` receives P9B design, implementation, and verification com
 - Desktop `/dashboard`: loaded at `http://localhost:3000/dashboard`; visible sections included `MACRO COMMAND CENTER`, `整体状态怎么样`, status rail (`总盈亏`, `胜率质量`, `最大回撤`, `持仓暴露`), `资金曲线`, `RISK POSTURE`, `资产分布`, `账户分布`, `历史表现`, and `持仓中`.
 - Mobile `/dashboard` at `390x844`: one-column order verified as Header -> Status -> Equity -> Risk -> Structure -> Movers -> Positions; bottom/product navigation remained present.
 - `/`: redirected to `http://localhost:3000/timeline` and displayed Timeline content.
+
+## Push Evidence
+
+- `git push origin dev`: exited 0 and updated `origin/dev` from `770294a` to `b8bebdb`.
