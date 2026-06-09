@@ -1130,7 +1130,7 @@ Commit succeeds and origin/dev advances.
 - Create: `frontend/components/timeline/workbench/TimelineWorkbench.tsx`
 - Modify: `frontend/app/timeline/page.tsx`
 
-- [ ] **Step 1: Create `TimelineWorkbenchHeader`**
+- [x] **Step 1: Create `TimelineWorkbenchHeader`**
 
 Create `frontend/components/timeline/workbench/TimelineWorkbenchHeader.tsx`:
 ```tsx
@@ -1176,7 +1176,7 @@ export function TimelineWorkbenchHeader({ pageMeta, onRefresh }: TimelineWorkben
 }
 ```
 
-- [ ] **Step 2: Create `TimelineViewTabs`**
+- [x] **Step 2: Create `TimelineViewTabs`**
 
 Create `frontend/components/timeline/workbench/TimelineViewTabs.tsx`:
 ```tsx
@@ -1217,7 +1217,7 @@ export function TimelineViewTabs({ value, onChange }: TimelineViewTabsProps) {
 }
 ```
 
-- [ ] **Step 3: Create `TimelineEventCardV2`**
+- [x] **Step 3: Create `TimelineEventCardV2`**
 
 Create `frontend/components/timeline/workbench/TimelineEventCardV2.tsx`:
 ```tsx
@@ -1306,7 +1306,7 @@ export function TimelineEventCardV2({ event }: TimelineEventCardV2Props) {
 }
 ```
 
-- [ ] **Step 4: Create `TimelineFeedPanel`**
+- [x] **Step 4: Create `TimelineFeedPanel`**
 
 Create `frontend/components/timeline/workbench/TimelineFeedPanel.tsx`:
 ```tsx
@@ -1359,7 +1359,7 @@ export function TimelineFeedPanel({ timelineHome }: TimelineFeedPanelProps) {
 }
 ```
 
-- [ ] **Step 5: Create `ReviewInboxPanel`**
+- [x] **Step 5: Create `ReviewInboxPanel`**
 
 Create `frontend/components/timeline/workbench/ReviewInboxPanel.tsx`:
 ```tsx
@@ -1420,7 +1420,7 @@ export function ReviewInboxPanel({ reviewInbox }: ReviewInboxPanelProps) {
 }
 ```
 
-- [ ] **Step 6: Create `TimelineDecisionRail`**
+- [x] **Step 6: Create `TimelineDecisionRail`**
 
 Create `frontend/components/timeline/workbench/TimelineDecisionRail.tsx`:
 ```tsx
@@ -1469,7 +1469,7 @@ export function TimelineDecisionRail({
 }
 ```
 
-- [ ] **Step 7: Create `TimelineWorkbench`**
+- [x] **Step 7: Create `TimelineWorkbench`**
 
 Create `frontend/components/timeline/workbench/TimelineWorkbench.tsx`:
 ```tsx
@@ -1564,7 +1564,7 @@ export function TimelineWorkbench({
 }
 ```
 
-- [ ] **Step 8: Replace `/timeline` page composition**
+- [x] **Step 8: Replace `/timeline` page composition**
 
 Modify `frontend/app/timeline/page.tsx` to reduce it to data orchestration:
 ```tsx
@@ -1628,7 +1628,7 @@ export default function TimelinePage() {
 }
 ```
 
-- [ ] **Step 9: Run TypeScript and fix exact type mismatches**
+- [x] **Step 9: Run TypeScript and fix exact type mismatches**
 
 Run:
 ```bash
@@ -1641,7 +1641,7 @@ Expected:
 TypeScript exits 0.
 ```
 
-- [ ] **Step 10: Run focused Timeline tests**
+- [x] **Step 10: Run focused Timeline tests**
 
 Run:
 ```bash
@@ -1654,7 +1654,7 @@ Expected:
 Timeline adapter and workbench helper tests pass.
 ```
 
-- [ ] **Step 11: Run targeted strict React 19 lint on Timeline workbench files**
+- [x] **Step 11: Run targeted strict React 19 lint on Timeline workbench files**
 
 Run:
 ```bash
@@ -1666,6 +1666,15 @@ Expected:
 ```text
 ESLint exits 0 for P9A Timeline files.
 ```
+
+Execution note:
+
+- Added `frontend/components/timeline/workbench/` component tree and reduced `/timeline` page to data orchestration.
+- Used the exact `InsightRun` type for AI sidecar props instead of temporary widened types.
+- Fixed the page error state to use the `string | null` returned by `useTimelineHomeData`.
+- Focused Timeline tests passed: 11 tests, 0 failures.
+- `./node_modules/.bin/tsc --noEmit --pretty false` exited 0.
+- Targeted strict React 19 lint for P9A Timeline files exited 0.
 
 - [ ] **Step 12: Commit Timeline workbench**
 
