@@ -48,7 +48,7 @@
 - Modify: `frontend/tests/lifecycle-adapter.test.mts`
 - Modify: `frontend/lib/adapters/lifecycle.ts`
 
-- [ ] **Step 1: Write failing tests for section order, review tone, and legacy panel state**
+- [x] **Step 1: Write failing tests for section order, review tone, and legacy panel state**
 
 Append this block to `frontend/tests/lifecycle-adapter.test.mts`:
 
@@ -122,7 +122,7 @@ test('lifecycle legacy panel state makes old DTO surfaces migration-only when tr
 })
 ```
 
-- [ ] **Step 2: Run lifecycle adapter test and confirm failure**
+- [x] **Step 2: Run lifecycle adapter test and confirm failure**
 
 Run:
 
@@ -133,7 +133,7 @@ node --experimental-strip-types --test tests/lifecycle-adapter.test.mts
 
 Expected: FAIL because `getLifecyclePageSections`, `getLifecycleReviewTone`, and `getLifecycleLegacyPanelState` are not exported yet.
 
-- [ ] **Step 3: Implement section, tone, and legacy helpers**
+- [x] **Step 3: Implement section, tone, and legacy helpers**
 
 Add this to `frontend/lib/adapters/lifecycle.ts` after `LifecycleReversalAction`:
 
@@ -229,7 +229,7 @@ export function getLifecycleLegacyPanelState(input: {
 }
 ```
 
-- [ ] **Step 4: Run lifecycle adapter test and confirm new tests pass**
+- [x] **Step 4: Run lifecycle adapter test and confirm new tests pass**
 
 Run:
 
@@ -240,7 +240,7 @@ node --experimental-strip-types --test tests/lifecycle-adapter.test.mts
 
 Expected: PASS for existing tests and the new helper tests.
 
-- [ ] **Step 5: Write failing tests for primary actions, event rail, evidence panel, and empty states**
+- [x] **Step 5: Write failing tests for primary actions, event rail, evidence panel, and empty states**
 
 Append this block to `frontend/tests/lifecycle-adapter.test.mts`:
 
@@ -314,7 +314,7 @@ test('lifecycle empty state copy distinguishes missing truth from missing all da
 })
 ```
 
-- [ ] **Step 6: Run lifecycle adapter test and confirm failure**
+- [x] **Step 6: Run lifecycle adapter test and confirm failure**
 
 Run:
 
@@ -325,7 +325,7 @@ node --experimental-strip-types --test tests/lifecycle-adapter.test.mts
 
 Expected: FAIL because `getLifecyclePrimaryActions`, `getLifecycleEventRailItems`, `getLifecycleEvidencePanelSummary`, and `getLifecycleEmptyState` are not exported yet.
 
-- [ ] **Step 7: Implement action, rail, evidence, and empty-state helpers**
+- [x] **Step 7: Implement action, rail, evidence, and empty-state helpers**
 
 Add this to `frontend/lib/adapters/lifecycle.ts` after `LifecycleLegacyPanelState`:
 
@@ -431,7 +431,7 @@ export function getLifecycleEmptyState(input: {
 }
 ```
 
-- [ ] **Step 8: Run lifecycle adapter test and confirm all helper tests pass**
+- [x] **Step 8: Run lifecycle adapter test and confirm all helper tests pass**
 
 Run:
 

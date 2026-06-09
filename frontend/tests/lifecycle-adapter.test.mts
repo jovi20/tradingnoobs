@@ -342,3 +342,139 @@ test('getLifecyclePreviewTrustSummary surfaces freshness, source, and value stat
     'fresh · derived · final · early_signal'
   )
 })
+
+test('lifecycle page sections keep truth story before legacy migration tools', () => {
+  assert.deepEqual(lifecycleAdapter.getLifecyclePageSections({ hasTruthLifecycle: true, hasLegacyPosition: true, viewport: 'desktop' }), [
+    'header',
+    'hero',
+    'actions',
+    'rail',
+    'evidence',
+    'migration',
+  ])
+
+  assert.deepEqual(lifecycleAdapter.getLifecyclePageSections({ hasTruthLifecycle: true, hasLegacyPosition: true, viewport: 'mobile' }), [
+    'header',
+    'hero',
+    'actions',
+    'rail',
+    'ai',
+    'evidence',
+    'cash',
+    'migration',
+  ])
+
+  assert.deepEqual(lifecycleAdapter.getLifecyclePageSections({ hasTruthLifecycle: false, hasLegacyPosition: true, viewport: 'desktop' }), [
+    'header',
+    'legacy-fallback',
+  ])
+})
+
+test('lifecycle review tone maps status to labels and readable tones', () => {
+  assert.deepEqual(lifecycleAdapter.getLifecycleReviewTone('OPEN'), {
+    label: 'Open',
+    tone: 'neutral',
+    description: 'Position is still open; review remains in progress.',
+  })
+  assert.deepEqual(lifecycleAdapter.getLifecycleReviewTone('CLOSED_PENDING_REVIEW'), {
+    label: 'Pending Review',
+    tone: 'warning',
+    description: 'Position is closed and waiting for review.',
+  })
+  assert.deepEqual(lifecycleAdapter.getLifecycleReviewTone('REVIEWED'), {
+    label: 'Reviewed',
+    tone: 'positive',
+    description: 'Review evidence has been recorded.',
+  })
+})
+
+test('lifecycle legacy panel state makes old DTO surfaces migration-only when truth exists', () => {
+  assert.deepEqual(lifecycleAdapter.getLifecycleLegacyPanelState({ hasTruthLifecycle: true, hasLegacyPosition: true }), {
+    shouldRender: true,
+    mode: 'migration',
+    title: 'Legacy migration tools',
+    description: 'These sections still read from legacy Position / TradeBatch data and are secondary to the truth lifecycle.',
+  })
+
+  assert.deepEqual(lifecycleAdapter.getLifecycleLegacyPanelState({ hasTruthLifecycle: true, hasLegacyPosition: false }), {
+    shouldRender: false,
+    mode: 'hidden',
+    title: 'Legacy migration tools',
+    description: 'No legacy Position / TradeBatch data was loaded for this truth lifecycle.',
+  })
+
+  assert.deepEqual(lifecycleAdapter.getLifecycleLegacyPanelState({ hasTruthLifecycle: false, hasLegacyPosition: true }), {
+    shouldRender: true,
+    mode: 'fallback',
+    title: 'Legacy fallback detail',
+    description: 'Truth lifecycle is unavailable, so this page is showing legacy Position / TradeBatch data.',
+  })
+})
+
+test('lifecycle primary actions combine narrative, reversal, and cash adjustment states', () => {
+  const actions = lifecycleAdapter.getLifecyclePrimaryActions({
+    hasEditableNarrativeEvent: true,
+    reversal: {
+      canReverse: true,
+      eventPublicId: 'evt-reduce',
+      nodeType: 'REDUCE',
+      label: '撤销最新 truth 事件',
+      reason: '将追加 REVERSAL 节点并重放 FIFO，不会静默改写历史事件。',
+    },
+  })
+
+  assert.equal(actions.narrative.canRun, true)
+  assert.equal(actions.narrative.label, '编辑 truth narrative')
+  assert.equal(actions.reversal.canRun, true)
+  assert.equal(actions.reversal.label, '撤销最新 truth 事件')
+  assert.equal(actions.cashAdjustment.canRun, true)
+  assert.equal(actions.cashAdjustment.label, '记录 cash adjustment')
+})
+
+test('lifecycle event rail items expose node tone and date labels', () => {
+  const items = lifecycleAdapter.getLifecycleEventRailItems({
+    nodes: [
+      { node_public_id: 'evt-open', node_type: 'OPEN', occurred_at: '2026-06-01T09:30:00Z', title: 'OPEN', summary: 'Opened thesis' },
+      { node_public_id: 'evt-ai', node_type: 'AI_CONCLUSION', occurred_at: '2026-06-02T09:30:00Z', title: 'AI', summary: 'AI conclusion' },
+    ],
+  })
+
+  assert.deepEqual(items, [
+    { id: 'evt-open', type: 'OPEN', title: 'OPEN', summary: 'Opened thesis', dateLabel: '2026/6/1', tone: 'entry' },
+    { id: 'evt-ai', type: 'AI_CONCLUSION', title: 'AI', summary: 'AI conclusion', dateLabel: '2026/6/2', tone: 'ai' },
+  ])
+})
+
+test('lifecycle evidence panel summary combines evidence, cash, and AI counts', () => {
+  assert.deepEqual(lifecycleAdapter.getLifecycleEvidencePanelSummary({
+    evidenceItems: [
+      { ref_type: 'POSITION_EVENT', public_id: 'evt-open', label: 'OPEN', href: '/positions/tp-1' },
+    ],
+    cashEffects: [
+      {
+        ledger_entry_public_id: 'ledger-1',
+        entry_type: 'REALIZED_PNL',
+        amount: 25,
+        amount_account_ccy: 25,
+        currency: 'USD',
+        occurred_at: '2026-06-02T09:30:00Z',
+      },
+    ],
+    aiItems: [{ title: 'AI conclusion', conclusion: 'Evidence-backed note.' }],
+  }), {
+    evidenceLabel: '1 条 evidence · POSITION_EVENT',
+    cashLabel: '1 条现金流水 · USD 25.00',
+    aiLabel: '1 条 AI 结论 · 0 条证据',
+  })
+})
+
+test('lifecycle empty state copy distinguishes missing truth from missing all data', () => {
+  assert.equal(
+    lifecycleAdapter.getLifecycleEmptyState({ hasTruthLifecycle: false, hasLegacyPosition: true }).title,
+    'Truth lifecycle unavailable'
+  )
+  assert.equal(
+    lifecycleAdapter.getLifecycleEmptyState({ hasTruthLifecycle: false, hasLegacyPosition: false }).title,
+    'Position not found'
+  )
+})
