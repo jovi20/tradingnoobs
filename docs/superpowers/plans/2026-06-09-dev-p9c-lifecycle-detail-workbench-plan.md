@@ -1341,7 +1341,7 @@ Expected: commit succeeds.
 **Files:**
 - Modify: `docs/superpowers/plans/2026-06-09-dev-p9c-lifecycle-detail-workbench-plan.md`
 
-- [ ] **Step 1: Run targeted lifecycle adapter test**
+- [x] **Step 1: Run targeted lifecycle adapter test**
 
 Run:
 
@@ -1352,7 +1352,7 @@ node --experimental-strip-types --test tests/lifecycle-adapter.test.mts
 
 Expected: PASS.
 
-- [ ] **Step 2: Run all frontend adapter tests**
+- [x] **Step 2: Run all frontend adapter tests**
 
 Run:
 
@@ -1363,7 +1363,7 @@ node --experimental-strip-types --test tests/*.test.mts
 
 Expected: PASS.
 
-- [ ] **Step 3: Run TypeScript**
+- [x] **Step 3: Run TypeScript**
 
 Run:
 
@@ -1374,7 +1374,7 @@ cd frontend
 
 Expected: PASS.
 
-- [ ] **Step 4: Run lint**
+- [x] **Step 4: Run lint**
 
 Run:
 
@@ -1385,7 +1385,7 @@ npm run lint
 
 Expected: PASS with no new errors. Existing warnings are acceptable only if they predate P9C.
 
-- [ ] **Step 5: Run production build**
+- [x] **Step 5: Run production build**
 
 Run:
 
@@ -1396,7 +1396,7 @@ npm run build
 
 Expected: PASS and route list includes `/positions/[id]`.
 
-- [ ] **Step 6: Browser smoke desktop and mobile**
+- [x] **Step 6: Browser smoke desktop and mobile**
 
 Start the local backend/frontend the same way P9B smoke did, using a temporary backend DB outside the repo. Then verify:
 
@@ -1415,7 +1415,7 @@ Mobile 390x844 /positions/[public_id]
 
 Expected: smoke passes or any blocker is recorded with exact failing route and visible symptom.
 
-- [ ] **Step 7: Restore generated files before committing**
+- [x] **Step 7: Restore generated files before committing**
 
 Run:
 
@@ -1425,7 +1425,7 @@ git restore frontend/next-env.d.ts frontend/tsconfig.tsbuildinfo
 
 Expected: generated files are not staged. If either file is absent from git status, continue.
 
-- [ ] **Step 8: Record verification evidence in this plan**
+- [x] **Step 8: Record verification evidence in this plan**
 
 Append a `## Verification Evidence` section to this file with exact commands run and outcomes:
 
@@ -1441,7 +1441,7 @@ Append a `## Verification Evidence` section to this file with exact commands run
 - Browser smoke mobile 390x844 `/positions/[public_id]`: PASS
 ```
 
-- [ ] **Step 9: Commit plan closure**
+- [x] **Step 9: Commit plan closure**
 
 Run:
 
@@ -1452,7 +1452,7 @@ git commit -m "docs: close p9c lifecycle workbench plan"
 
 Expected: commit succeeds with verification evidence and checked-off tasks.
 
-- [ ] **Step 10: Push dev**
+- [x] **Step 10: Push dev**
 
 Run:
 
@@ -1471,3 +1471,18 @@ Expected: push succeeds. Do not create a PR unless explicitly requested.
 - Test-first: Task 1 writes failing helper tests before implementation.
 - Component boundary: New lifecycle components live under `frontend/components/positions/lifecycle/`.
 - Verification coverage: Task 5 covers targeted tests, all adapter tests, TypeScript, lint, build, and desktop/mobile browser smoke.
+
+## Verification Evidence
+
+- `node --experimental-strip-types --test tests/lifecycle-adapter.test.mts`: exited 0; 14 tests passed, 0 failed. Node emitted existing `MODULE_TYPELESS_PACKAGE_JSON` warnings.
+- `node --experimental-strip-types --test tests/*.test.mts`: exited 0; 65 tests passed, 0 failed. Node emitted existing `MODULE_TYPELESS_PACKAGE_JSON` warnings.
+- `./node_modules/.bin/tsc --noEmit --pretty false`: exited 0.
+- `npm run lint`: exited 0 with 0 errors and 5 existing warnings in `app/insights/page.tsx`, `app/login/page.tsx`, `app/register/page.tsx`, `app/strategies/page.tsx`, and `hooks/useDashboardData.ts`.
+- `npm run build`: sandbox run failed because Turbopack could not create a local process/bind a port under sandbox restrictions; escalated rerun exited 0 on Next 16.2.7 and build output included dynamic route `/positions/[id]`.
+- Browser smoke local backend: temporary SQLite database at `/private/tmp/tradingnoobs_p9c_smoke_20260609_codex.db`, served by Uvicorn on `http://127.0.0.1:8000`, with temporary smoke user `p9c-smoke@example.com`.
+- Browser smoke local frontend: `npm run dev -- --hostname 127.0.0.1 --port 3000` served the app; browser login succeeded via `http://localhost:3000/login` to align with existing API/CORS defaults.
+- Browser smoke desktop `/positions/legacy-p9c-lifecycle` at `1280x720`: visible sections included `Lifecycle Command Center`, hero `Truth thesis and result`, truth actions (`编辑 truth narrative`, `撤销最新 truth 事件`, `记录 cash adjustment`), `Lifecycle event spine`, `AI evidence sidecar`, and amber `Legacy migration tools`; hero/actions appeared before migration tools and rail/AI occupied the right rail.
+- Browser smoke mobile `/positions/legacy-p9c-lifecycle` at `390x844`: one-column order verified as Header -> Hero -> Truth actions -> Evidence/cash -> Event spine -> AI sidecar -> Legacy migration tools; primary truth actions were above legacy data.
+- Browser dev error logs after smoke: empty.
+- Local smoke services on ports 3000 and 8000 were stopped; follow-up `lsof` checks showed no listeners.
+- `git restore frontend/next-env.d.ts frontend/tsconfig.tsbuildinfo`: restored generated files after TypeScript/build/dev-server runs. `docs/superpowers/demos/` remained untracked and untouched.
