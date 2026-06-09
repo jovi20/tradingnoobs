@@ -1137,7 +1137,7 @@ git commit -m "docs: record p9b dashboard verification"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-06-09-dev-p9b-dashboard-workbench-plan.md`
 
-- [ ] **Step 1: Start local frontend server**
+- [x] **Step 1: Start local frontend server**
 
 Run:
 
@@ -1148,7 +1148,7 @@ npm run dev
 
 Expected: local Next.js app is reachable on the printed localhost URL.
 
-- [ ] **Step 2: Browser smoke desktop Dashboard**
+- [x] **Step 2: Browser smoke desktop Dashboard**
 
 Open:
 
@@ -1162,7 +1162,7 @@ Expected:
 - Dashboard does not look like the default homepage.
 - Navigation still allows returning to Timeline.
 
-- [ ] **Step 3: Browser smoke mobile Dashboard**
+- [x] **Step 3: Browser smoke mobile Dashboard**
 
 Use a 390px wide viewport and open:
 
@@ -1176,7 +1176,7 @@ Expected:
 - Status rail and equity hero appear before secondary evidence charts.
 - Bottom navigation remains usable.
 
-- [ ] **Step 4: Browser smoke Timeline redirect**
+- [x] **Step 4: Browser smoke Timeline redirect**
 
 Open:
 
@@ -1186,7 +1186,7 @@ http://localhost:3000/
 
 Expected: app redirects to `/timeline`.
 
-- [ ] **Step 5: Record browser smoke evidence**
+- [x] **Step 5: Record browser smoke evidence**
 
 Add browser evidence to this plan:
 
@@ -1198,7 +1198,7 @@ Add browser evidence to this plan:
 - `/`: redirects to `/timeline`.
 ```
 
-- [ ] **Step 6: Commit browser smoke notes**
+- [x] **Step 6: Commit browser smoke notes**
 
 Run:
 
@@ -1221,16 +1221,16 @@ Expected: `origin/dev` receives P9B design, implementation, and verification com
 
 ## Final Acceptance Checklist
 
-- [ ] P9B design spec exists at `docs/superpowers/specs/2026-06-09-p9b-dashboard-workbench-design.md`.
-- [ ] `/dashboard` is a macro command center, not a revived homepage.
-- [ ] `/` still redirects to `/timeline`.
-- [ ] Dashboard page file is an orchestration shell.
-- [ ] New workbench components live under `frontend/components/dashboard/workbench/`.
-- [ ] Dashboard helper logic lives in `frontend/lib/adapters/dashboard.ts` and is covered by tests.
-- [ ] Existing backend/API contracts are unchanged.
-- [ ] `docs/superpowers/demos/` remains untouched.
-- [ ] Frontend audit, adapter tests, TypeScript, lint, and build pass.
-- [ ] Browser smoke covers desktop Dashboard, mobile Dashboard, and `/` redirect.
+- [x] P9B design spec exists at `docs/superpowers/specs/2026-06-09-p9b-dashboard-workbench-design.md`.
+- [x] `/dashboard` is a macro command center, not a revived homepage.
+- [x] `/` still redirects to `/timeline`.
+- [x] Dashboard page file is an orchestration shell.
+- [x] New workbench components live under `frontend/components/dashboard/workbench/`.
+- [x] Dashboard helper logic lives in `frontend/lib/adapters/dashboard.ts` and is covered by tests.
+- [x] Existing backend/API contracts are unchanged.
+- [x] `docs/superpowers/demos/` remains untouched.
+- [x] Frontend audit, adapter tests, TypeScript, lint, and build pass.
+- [x] Browser smoke covers desktop Dashboard, mobile Dashboard, and `/` redirect.
 - [ ] P9B commits are pushed to `origin/dev`.
 
 ## Verification Evidence
@@ -1241,3 +1241,11 @@ Expected: `origin/dev` receives P9B design, implementation, and verification com
 - `npm run lint`: exited 0 with 0 errors and 5 existing warnings in `app/insights/page.tsx`, `app/login/page.tsx`, `app/register/page.tsx`, `app/strategies/page.tsx`, and `hooks/useDashboardData.ts`.
 - `npm run build`: sandbox run failed because Turbopack could not create a local process/bind a port under sandbox restrictions; escalated rerun exited 0 on Next 16.2.7 and included `/dashboard`, `/timeline`, and `/`.
 - Restored generated files after build: `frontend/next-env.d.ts` and `frontend/tsconfig.tsbuildinfo`.
+
+## Browser Smoke
+
+- Local frontend: `npm run dev` required escalated local port permission and served `http://localhost:3000`.
+- Local backend: temporary SQLite database at `/private/tmp/tradingnoobs_p9b_smoke.db`, served by Uvicorn on `http://127.0.0.1:8000`, with one local smoke user `p9b-smoke@example.com`.
+- Desktop `/dashboard`: loaded at `http://localhost:3000/dashboard`; visible sections included `MACRO COMMAND CENTER`, `整体状态怎么样`, status rail (`总盈亏`, `胜率质量`, `最大回撤`, `持仓暴露`), `资金曲线`, `RISK POSTURE`, `资产分布`, `账户分布`, `历史表现`, and `持仓中`.
+- Mobile `/dashboard` at `390x844`: one-column order verified as Header -> Status -> Equity -> Risk -> Structure -> Movers -> Positions; bottom/product navigation remained present.
+- `/`: redirected to `http://localhost:3000/timeline` and displayed Timeline content.
