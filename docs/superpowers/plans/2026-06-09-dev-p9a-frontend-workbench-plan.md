@@ -1822,8 +1822,16 @@ Commit succeeds and origin/dev advances.
 
 **Files:**
 - Modify: `docs/superpowers/plans/2026-06-09-dev-p9a-frontend-workbench-plan.md`
+- Create: `frontend/lib/theme.ts`
+- Create: `frontend/tests/theme.test.mts`
+- Modify: `frontend/components/ThemeProvider.tsx`
+- Modify: `frontend/components/ThemeToggle.tsx`
+- Modify: `frontend/components/Providers.tsx`
+- Modify: `frontend/app/login/page.tsx`
+- Modify: `frontend/app/register/page.tsx`
+- Modify: `frontend/app/settings/page.tsx`
 
-- [ ] **Step 1: Run full frontend verification**
+- [x] **Step 1: Run full frontend verification**
 
 Run:
 ```bash
@@ -1844,7 +1852,7 @@ Lint exits 0, allowing existing warnings.
 Next build exits 0 and includes /timeline.
 ```
 
-- [ ] **Step 2: Run targeted strict React 19 lint for all P9A files**
+- [x] **Step 2: Run targeted strict React 19 lint for all P9A files**
 
 Run:
 ```bash
@@ -1857,7 +1865,7 @@ Expected:
 ESLint exits 0 for P9A-touched files with strict React 19 rules enabled.
 ```
 
-- [ ] **Step 3: Start local frontend for visual smoke**
+- [x] **Step 3: Start local frontend for visual smoke**
 
 Run:
 ```bash
@@ -1870,7 +1878,7 @@ Expected:
 Next dev server starts. If Turbopack sandbox permissions fail, rerun with approval.
 ```
 
-- [ ] **Step 4: Browser smoke `/timeline` desktop**
+- [x] **Step 4: Browser smoke `/timeline` desktop**
 
 Open:
 ```text
@@ -1887,7 +1895,7 @@ AI sidecar and context rail remain accessible.
 No runtime console error appears during initial render.
 ```
 
-- [ ] **Step 5: Browser smoke `/timeline` mobile viewport**
+- [x] **Step 5: Browser smoke `/timeline` mobile viewport**
 
 Use the browser's mobile viewport or narrow window.
 
@@ -1900,7 +1908,7 @@ Timeline feed is not hidden behind a secondary rail.
 Bottom navigation remains usable.
 ```
 
-- [ ] **Step 6: Browser smoke auth edge pages**
+- [x] **Step 6: Browser smoke auth edge pages**
 
 Open:
 ```text
@@ -1914,7 +1922,7 @@ Navbar remains hidden on login and register.
 No logo/theme hydration error appears.
 ```
 
-- [ ] **Step 7: Stop local dev server**
+- [x] **Step 7: Stop local dev server**
 
 Stop the dev server with `Ctrl-C`.
 
@@ -1923,7 +1931,7 @@ Expected:
 No background frontend dev server remains running.
 ```
 
-- [ ] **Step 8: Restore generated noise and verify repo hygiene**
+- [x] **Step 8: Restore generated noise and verify repo hygiene**
 
 Run:
 ```bash
@@ -1940,7 +1948,7 @@ Only intended P9A files are modified.
 docs/superpowers/demos/ remains untracked and untouched.
 ```
 
-- [ ] **Step 9: Record verification notes**
+- [x] **Step 9: Record verification notes**
 
 Update this plan with:
 ```text
@@ -1954,7 +1962,24 @@ Browser smoke observations.
 Generated-noise cleanup.
 ```
 
-- [ ] **Step 10: Commit final frontend verification notes**
+Execution note:
+
+- `npm audit --json`: rerun with network approval after the theme fix; reported 0 vulnerabilities across 629 dependencies.
+- `node --experimental-strip-types --test tests/*.test.mts`: 52 tests passed, 0 failed. This includes the new `frontend/tests/theme.test.mts` coverage for local theme preference validation, system resolution, and light/dark/system toggle order.
+- `./node_modules/.bin/tsc --noEmit --pretty false`: exited 0 after replacing the old theme provider.
+- `npm run lint`: exited 0 with 5 warnings and 0 errors. Remaining warnings are existing `exhaustive-deps` warnings in `app/insights/page.tsx`, `app/strategies/page.tsx`, `hooks/useDashboardData.ts`, plus existing `@next/next/no-img-element` warnings in `app/login/page.tsx` and `app/register/page.tsx`.
+- `npm run build`: exited 0 on Next 16.2.7; build output included `/timeline`. The existing Turbopack multiple-lockfile workspace-root warning remained non-blocking.
+- P9A touched-file strict React 19 lint exited 0 for Timeline, nav, UI primitive, and workbench helper files with `react-hooks/purity:error` and `react-hooks/set-state-in-effect:error`.
+- Additional strict React 19 lint for `components/ThemeProvider.tsx`, `components/ThemeToggle.tsx`, `components/Providers.tsx`, `lib/theme.ts`, `tests/theme.test.mts`, `app/login/page.tsx`, and `app/register/page.tsx` exited 0, with only the two existing login/register `<img>` performance warnings.
+- Browser smoke used a temporary SQLite backend database at `/private/tmp/tradingnoobs_dev_p9a_browser_smoke_20260609_codex.db`, upgraded to Alembic head, plus a temporary local smoke user. This avoided relying on any existing user account.
+- Desktop `/timeline` at `1280x720`: loaded as a balanced two-column decision workbench. Summary metrics appeared above the feed; main feed stayed primary on the left; Review Inbox, Timeline AI Sidecar, context rail, and quick filters stayed accessible on the right rail.
+- Browser smoke initially found a React runtime console error from the old `next-themes` script injection under React 19/Next 16 dev mode. Fixed in commit `08bd183 fix: remove theme runtime script warning` by replacing the provider with a local `useSyncExternalStore`-based theme provider and pure theme helpers. Retest showed no new `[browser] Encountered a script tag...` server log after the fix; browser dev logs still retained two old pre-fix timestamps.
+- Mobile `/timeline` at `390x844`: layout became one column, summary remained compact, timeline feed was visible and not hidden behind a secondary rail, empty Review Inbox followed the feed because the temporary user had no actionable items, and `getWorkbenchMobileSectionOrder` helper tests cover the actionable-inbox-before-feed case. Bottom navigation stayed usable with all seven user nav items present in a horizontal scroll container (`clientWidth` 382, `scrollWidth` 561, `overflow-x: auto`).
+- `/login` and `/register`: after logging out of the temporary smoke user, both pages rendered with 0 visible `nav` elements and no product-nav links; logo rendered normally from `/logo-black.png`.
+- Local smoke services on ports 3000 and 8000 were stopped, and follow-up `lsof` checks showed no listeners on those ports.
+- `git restore frontend/next-env.d.ts frontend/tsconfig.tsbuildinfo` restored generated files after build; `git diff --check` exited 0. `docs/superpowers/demos/` remained untracked and untouched.
+
+- [x] **Step 10: Commit final frontend verification notes**
 
 Run:
 ```bash
