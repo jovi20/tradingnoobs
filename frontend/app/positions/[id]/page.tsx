@@ -38,7 +38,7 @@ import {
     type LifecycleDetailViewModel,
     type LifecycleNarrativeDraft,
 } from '@/lib/adapters/lifecycle'
-import { TruthLifecycleDetail } from '@/components/positions/domain/TruthLifecycleDetail'
+import { LifecycleWorkbench } from '@/components/positions/lifecycle/LifecycleWorkbench'
 
 import {
     getCoreTypeLabel,
@@ -492,7 +492,14 @@ export default function PositionDetailPage() {
             </div>
 
             {truthLifecycle && (
-                <TruthLifecycleDetail lifecycle={truthLifecycle} />
+                <LifecycleWorkbench
+                    lifecycle={truthLifecycle}
+                    legacyPosition={position}
+                    isReversing={isReversingTruthEvent}
+                    onEditNarrative={openTruthNarrativeModal}
+                    onReverseLatest={handleReverseLatestTruthEvent}
+                    onManualAdjustment={openManualAdjustmentModal}
+                />
             )}
 
             {truthLifecycle && (

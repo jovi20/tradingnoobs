@@ -467,7 +467,7 @@ Expected: commit succeeds with helper and test changes.
 - Create: `frontend/components/positions/lifecycle/LifecycleAiSidecarPanel.tsx`
 - Modify: `frontend/app/positions/[id]/page.tsx`
 
-- [ ] **Step 1: Create the header component**
+- [x] **Step 1: Create the header component**
 
 Create `frontend/components/positions/lifecycle/LifecycleWorkbenchHeader.tsx` with:
 
@@ -514,7 +514,7 @@ export function LifecycleWorkbenchHeader({ lifecycle }: LifecycleWorkbenchHeader
 }
 ```
 
-- [ ] **Step 2: Create the hero component**
+- [x] **Step 2: Create the hero component**
 
 Create `frontend/components/positions/lifecycle/LifecycleHero.tsx` with:
 
@@ -583,7 +583,7 @@ function HeroMini({ label, value }: { label: string; value: string }) {
 }
 ```
 
-- [ ] **Step 3: Create action, event, evidence, and AI panels**
+- [x] **Step 3: Create action, event, evidence, and AI panels**
 
 Create `frontend/components/positions/lifecycle/LifecycleActionPanel.tsx` with:
 
@@ -757,7 +757,7 @@ export function LifecycleAiSidecarPanel({ lifecycle }: LifecycleAiSidecarPanelPr
 }
 ```
 
-- [ ] **Step 4: Create the workbench composition component**
+- [x] **Step 4: Create the workbench composition component**
 
 Create `frontend/components/positions/lifecycle/LifecycleWorkbench.tsx` with:
 
@@ -833,7 +833,7 @@ export function LifecycleWorkbench({
 }
 ```
 
-- [ ] **Step 5: Create temporary migration panel placeholder for typecheck**
+- [x] **Step 5: Create temporary migration panel placeholder for typecheck**
 
 Create `frontend/components/positions/lifecycle/LifecycleMigrationPanel.tsx` with:
 
@@ -869,7 +869,7 @@ export function LifecycleMigrationPanel({ position, panel }: LifecycleMigrationP
 }
 ```
 
-- [ ] **Step 6: Temporarily render workbench below existing truth detail to validate imports**
+- [x] **Step 6: Temporarily render workbench below existing truth detail to validate imports**
 
 In `frontend/app/positions/[id]/page.tsx`, add this import:
 
@@ -892,7 +892,7 @@ Temporarily replace the existing `<TruthLifecycleDetail lifecycle={truthLifecycl
 
 Remove the old `TruthLifecycleDetail` import if it becomes unused.
 
-- [ ] **Step 7: Run TypeScript check**
+- [x] **Step 7: Run TypeScript check**
 
 Run:
 
