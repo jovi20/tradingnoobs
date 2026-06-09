@@ -1700,7 +1700,7 @@ Commit succeeds and origin/dev advances.
 - Modify: `frontend/components/timeline/TimelineSummaryStrip.tsx` if still referenced
 - Modify: `frontend/components/timeline/FreshnessPill.tsx` if still referenced
 
-- [ ] **Step 1: Check references to old Timeline components**
+- [x] **Step 1: Check references to old Timeline components**
 
 Run:
 ```bash
@@ -1712,7 +1712,7 @@ Expected:
 Old components may still exist, but /timeline should no longer use TimelineSummaryStrip, TimelineEventCard, or ReviewInboxCard directly.
 ```
 
-- [ ] **Step 2: Decide whether old components are still referenced**
+- [x] **Step 2: Decide whether old components are still referenced**
 
 If `rg` shows no references outside old component files:
 ```bash
@@ -1721,7 +1721,7 @@ git rm frontend/components/timeline/TimelineSummaryStrip.tsx frontend/components
 
 If any are still referenced by non-P9A pages, keep them and do not remove compatibility components.
 
-- [ ] **Step 3: Add mobile-first Review Inbox placement**
+- [x] **Step 3: Add mobile-first Review Inbox placement**
 
 Modify `TimelineWorkbench.tsx` so mobile renders the Review Inbox before the feed when actionable, while desktop keeps it in the right rail. Use responsive classes rather than duplicating stateful logic:
 ```tsx
@@ -1768,7 +1768,7 @@ And guard Review Inbox rendering:
 {!hideReviewInbox && <ReviewInboxPanel reviewInbox={timelineHome.reviewInbox} />}
 ```
 
-- [ ] **Step 4: Verify TypeScript after mobile ordering**
+- [x] **Step 4: Verify TypeScript after mobile ordering**
 
 Run:
 ```bash
@@ -1781,7 +1781,7 @@ Expected:
 TypeScript exits 0.
 ```
 
-- [ ] **Step 5: Verify strict lint for touched workbench files**
+- [x] **Step 5: Verify strict lint for touched workbench files**
 
 Run:
 ```bash
@@ -1793,6 +1793,14 @@ Expected:
 ```text
 ESLint exits 0.
 ```
+
+Execution note:
+
+- Reference scan showed old `TimelineSummaryStrip`, `TimelineEventCard`, `ReviewInboxCard`, and `FreshnessPill` had no external references.
+- Removed all four unused legacy Timeline components. The remaining matches are `TimelineEventCardV2` and the `TimelineEventCard` read-model type.
+- Mobile-first Review Inbox placement was already implemented in Task 5: actionable Review Inbox renders before the feed on mobile, while desktop keeps it in the right rail.
+- `./node_modules/.bin/tsc --noEmit --pretty false` exited 0.
+- Targeted strict React 19 lint for `TimelineWorkbench.tsx` and `TimelineDecisionRail.tsx` exited 0.
 
 - [ ] **Step 6: Commit mobile ordering and cleanup**
 
