@@ -562,3 +562,59 @@ Known notes:
 - Next 16 build warns that Turbopack inferred `/Users/a1` as workspace root because multiple lockfiles exist; this warning did not block production build.
 - Backend tests emitted the known Yahoo/yfinance DNS warning under restricted network conditions and still passed.
 - `docs/superpowers/demos/` remains untracked user content and was not touched.
+
+## 2026-06-09 P9A Frontend Workbench
+
+Stage commits pushed to `origin/dev`:
+
+- `6d4ccd1 docs: add dev p9a frontend workbench plan`
+- `49af927 docs: record p9a frontend baseline`
+- `2aac64d feat: add timeline workbench view helpers`
+- `c0c24e2 feat: add frontend workbench UI primitives`
+- `0791728 feat: split product navigation shell`
+- `f33c5e5 feat: redesign timeline as decision workbench`
+- `c7d1dbc feat: tune timeline workbench mobile flow`
+- `08bd183 fix: remove theme runtime script warning`
+- `f26a525 docs: record p9a frontend verification`
+
+Scope completed:
+
+- Reworked `/timeline` from the old page composition into a timeline-first decision workbench while keeping backend/read-model contracts unchanged.
+- Added tested frontend helpers for summary metrics, event metadata, event tones, impact formatting, and actionable mobile section ordering.
+- Introduced reusable UI primitives under `frontend/components/ui/` and scoped workbench background tokens in `frontend/app/globals.css`.
+- Split product navigation into reusable desktop and mobile navigation components, with admin/Ops visually separated from normal user product nav.
+- Deleted unused legacy Timeline components after reference scans confirmed no remaining external references.
+- Replaced the old `next-themes` script-injecting provider with a local `useSyncExternalStore` theme provider after browser smoke found a React 19 runtime script warning. Theme behavior is covered by `frontend/tests/theme.test.mts`.
+
+Final frontend versions remain:
+
+```text
+next: ^16.2.7
+react: ^19.2.7
+react-dom: ^19.2.7
+```
+
+Final P9A verification:
+
+```text
+git diff --check: clean
+frontend npm audit --json: 0 vulnerabilities across 629 dependencies
+frontend node --experimental-strip-types --test tests/*.test.mts: 52 tests passed
+frontend ./node_modules/.bin/tsc --noEmit --pretty false: passed
+frontend npm run lint: passed with 5 warnings and 0 errors
+frontend npm run build: passed on Next 16.2.7; build output included /timeline
+P9A touched-file strict React 19 lint: passed with react-hooks/purity:error and react-hooks/set-state-in-effect:error
+Additional theme touched-file strict React 19 lint: passed; only existing login/register no-img warnings remained
+Browser smoke /timeline desktop: balanced two-column workbench; summary metrics above feed; feed primary; Review Inbox, AI sidecar, context rail, and quick filters accessible
+Browser smoke /timeline mobile 390x844: one-column layout; compact summary; feed visible; empty Review Inbox followed feed; bottom nav horizontal scroll exposed all seven user nav items
+Browser smoke /login and /register: 0 visible nav elements; no product-nav links; logo rendered normally
+backend unittest discovery: 146 tests passed
+alembic upgrade head on /private/tmp/tradingnoobs_dev_p9a_frontend_workbench_final.db: reached 5e6f7a8b9cad
+```
+
+Known notes:
+
+- Next 16 build still warns that Turbopack inferred `/Users/a1` as workspace root because multiple lockfiles exist; this warning did not block production build.
+- Backend tests emitted the known Yahoo/yfinance DNS warning under restricted network conditions and still passed.
+- Browser smoke used a temporary local SQLite backend database and a temporary smoke user; no repository data files were created or committed.
+- `docs/superpowers/demos/` remains untracked user content and was not touched.

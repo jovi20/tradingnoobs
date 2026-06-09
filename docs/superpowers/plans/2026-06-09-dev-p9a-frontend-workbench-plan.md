@@ -2001,7 +2001,7 @@ Commit succeeds and origin/dev advances.
 - Modify: `docs/superpowers/plans/2026-06-09-dev-p9a-frontend-workbench-plan.md`
 - Modify: `docs/superpowers/plans/2026-05-02-dev-branch-checkpoint.md`
 
-- [ ] **Step 1: Run backend unittest smoke**
+- [x] **Step 1: Run backend unittest smoke**
 
 Run:
 ```bash
@@ -2015,7 +2015,7 @@ Backend tests pass.
 Known Yahoo/yfinance DNS warnings may appear under restricted network conditions and are acceptable if tests still pass.
 ```
 
-- [ ] **Step 2: Run Alembic smoke**
+- [x] **Step 2: Run Alembic smoke**
 
 Run from repo root:
 ```bash
@@ -2027,7 +2027,7 @@ Expected:
 Alembic reaches 5e6f7a8b9cad.
 ```
 
-- [ ] **Step 3: Update dev checkpoint**
+- [x] **Step 3: Update dev checkpoint**
 
 Modify `docs/superpowers/plans/2026-05-02-dev-branch-checkpoint.md`:
 ```text
@@ -2040,7 +2040,7 @@ Record backend smoke and Alembic results.
 Record docs/superpowers/demos/ untouched status.
 ```
 
-- [ ] **Step 4: Update this plan with final status**
+- [x] **Step 4: Update this plan with final status**
 
 Add an `Execution note` under Task 8 with:
 ```text
@@ -2050,7 +2050,15 @@ Final HEAD commit before docs closeout.
 Any warnings accepted.
 ```
 
-- [ ] **Step 5: Commit and push final P9A docs**
+Execution note:
+
+- `cd backend && ../.venv313/bin/python -m unittest discover -s tests`: 146 tests passed in 31.657s. The known Yahoo/yfinance DNS warning for `guce.yahoo.com` appeared and was accepted because the test suite still exited 0.
+- `env DATABASE_URL=sqlite:////private/tmp/tradingnoobs_dev_p9a_frontend_workbench_final.db ./.venv313/bin/alembic -c backend/alembic.ini upgrade head`: exited 0 and upgraded through `5e6f7a8b9cad`.
+- Updated `docs/superpowers/plans/2026-05-02-dev-branch-checkpoint.md` with the `2026-06-09 P9A Frontend Workbench` section, stage commits, frontend versions, frontend/browser/backend/Alembic verification, and untouched `docs/superpowers/demos/` status.
+- Final HEAD before docs closeout: `f26a525 docs: record p9a frontend verification`.
+- Accepted warnings: existing Turbopack multiple-lockfile workspace-root warning, existing frontend lint warnings recorded in Task 7, and known Yahoo/yfinance DNS warning during backend smoke.
+
+- [x] **Step 5: Commit and push final P9A docs**
 
 Run:
 ```bash
