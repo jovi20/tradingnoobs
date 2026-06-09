@@ -1,25 +1,14 @@
 'use client'
 
-import { useTheme } from 'next-themes'
-import { useEffect, useState } from 'react'
 import { Sun, Moon, Monitor } from 'lucide-react'
+import { useTheme } from '@/components/ThemeProvider'
+import { getNextThemePreference } from '@/lib/theme'
 
 export function ThemeToggle() {
-    const [mounted, setMounted] = useState(false)
     const { theme, setTheme } = useTheme()
 
-    useEffect(() => {
-        setMounted(true)
-    }, [])
-
-    if (!mounted) {
-        return <div className="w-10 h-10" />
-    }
-
     const toggleTheme = () => {
-        if (theme === 'light') setTheme('dark')
-        else if (theme === 'dark') setTheme('system')
-        else setTheme('light')
+        setTheme(getNextThemePreference(theme))
     }
 
     return (

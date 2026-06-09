@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useTheme } from 'next-themes'
+import { useState } from 'react'
+import { useTheme } from '@/components/ThemeProvider'
 import Link from 'next/link'
 import {
     Plus,
@@ -20,11 +20,6 @@ export default function LoginPage() {
     const [error, setError] = useState('')
     const [isLoading, setIsLoading] = useState(false)
     const { theme, resolvedTheme } = useTheme()
-    const [mounted, setMounted] = useState(false)
-
-    useEffect(() => {
-        setMounted(true)
-    }, [])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -48,7 +43,7 @@ export default function LoginPage() {
                     <div className="flex flex-col items-center mb-8 group">
                         <div className="relative w-20 h-20 mb-4">
                             <img
-                                src={mounted && (theme === 'dark' || resolvedTheme === 'dark') ? '/logo-white.png' : '/logo-black.png'}
+                                src={theme === 'dark' || resolvedTheme === 'dark' ? '/logo-white.png' : '/logo-black.png'}
                                 alt="Trading Noobs Logo"
                                 className="w-full h-full object-contain rotate-6 group-hover:rotate-12 transition-transform duration-500"
                             />

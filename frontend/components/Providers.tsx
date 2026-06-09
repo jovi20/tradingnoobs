@@ -19,7 +19,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     return (
         <QueryClientProvider client={queryClient}>
             <AuthProvider>
-                <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+                <ThemeProvider>
                     {children}
                 </ThemeProvider>
             </AuthProvider>
