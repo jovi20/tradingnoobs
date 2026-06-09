@@ -18,8 +18,6 @@ import {
     Target,
     MessageSquare,
     Award,
-    Wrench,
-    RotateCcw
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { positionsAPI } from '@/lib/api'
@@ -38,6 +36,7 @@ import {
     type LifecycleDetailViewModel,
     type LifecycleNarrativeDraft,
 } from '@/lib/adapters/lifecycle'
+import { LifecycleModals } from '@/components/positions/lifecycle/LifecycleModals'
 import { LifecycleWorkbench } from '@/components/positions/lifecycle/LifecycleWorkbench'
 
 import {
@@ -437,7 +436,6 @@ export default function PositionDetailPage() {
     const legacyBatchMutationState = getLegacyBatchMutationState(Boolean(truthLifecycle))
     const legacyDeleteState = getLegacyPositionDeleteState(Boolean(truthLifecycle))
     const legacyReviewDisplayState = getLegacyReviewDisplayState(Boolean(truthLifecycle), Boolean(position?.trade_review))
-    const truthReversalAction = truthLifecycle ? getLifecycleReversalAction(truthLifecycle) : null
 
     return (
         <div className="space-y-6 pb-20 md:pb-6">
@@ -515,67 +513,6 @@ export default function PositionDetailPage() {
                 />
             )}
 
-            {truthLifecycle && (
-                <div className="card overflow-hidden border-cyan-200 bg-cyan-50/80 dark:border-cyan-900 dark:bg-cyan-950/20">
-                    <div className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
-                        <div>
-                            <div className="flex flex-wrap items-center gap-2">
-                                <span className="rounded-full bg-cyan-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-800 dark:bg-cyan-500/15 dark:text-cyan-200">
-                                    Truth write path
-                                </span>
-                                <span className="text-xs text-cyan-700/80 dark:text-cyan-200/80">
-                                    PositionEvent · {truthLifecycle.thesisSourceEventPublicId || truthLifecycle.nodes[0]?.node_public_id || 'no event'}
-                                </span>
-                            </div>
-                            <h2 className="mt-3 text-lg font-black text-slate-950 dark:text-white">
-                                叙事字段现在写入 TradingPosition / PositionEvent
-                            </h2>
-                            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300">
-                                这里只编辑 reason、emotion、confidence、thesis、invalidation、planned exit、sizing 和 note。
-                                价格、数量和 PnL 通过 truth trade event 写入；撤销只允许最新 active 的 ADD/REDUCE/CLOSE，并通过 REVERSAL 节点保留审计轨迹。
-                            </p>
-                            {truthReversalAction && (
-                                <p className="mt-2 text-xs text-cyan-700/80 dark:text-cyan-200/80">
-                                    {truthReversalAction.reason}
-                                </p>
-                            )}
-                        </div>
-                        <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
-                            <button
-                                type="button"
-                                onClick={openTruthNarrativeModal}
-                                className="btn btn-primary flex items-center justify-center gap-2"
-                            >
-                                <Edit3 className="h-4 w-4" />
-                                编辑 truth narrative
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handleReverseLatestTruthEvent}
-                                disabled={!truthReversalAction?.canReverse || isReversingTruthEvent}
-                                title={truthReversalAction?.reason}
-                                className="btn btn-secondary flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                {isReversingTruthEvent ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                    <RotateCcw className="h-4 w-4" />
-                                )}
-                                {truthReversalAction?.label || '暂无可撤销事件'}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={openManualAdjustmentModal}
-                                className="btn btn-secondary flex items-center justify-center gap-2"
-                            >
-                                <Wrench className="h-4 w-4" />
-                                记录 cash adjustment
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
             {!position && truthLifecycle && (
                 <div className="card border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">
                     当前详情由 TradingPosition truth read model 直接驱动。旧 Position 编辑控件未显示，避免把新真相路径重新绑回 legacy DTO。
@@ -584,23 +521,9 @@ export default function PositionDetailPage() {
 
             {position && !truthLifecycle && (
                 <>
-
-            {truthLifecycle && (
-                <div className="card border-amber-200 bg-amber-50 p-5 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
-                    <div className="flex items-start gap-3">
-                        <div className="rounded-2xl bg-amber-100 p-2 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200">
-                            <Wrench className="h-5 w-5" />
-                        </div>
-                        <div>
-                            <h2 className="text-sm font-bold uppercase tracking-[0.18em]">Legacy migration tools</h2>
-                            <p className="mt-2 text-sm leading-6">
-                                下方持仓摘要、资产属性、MAE/MFE、交易批次和复盘仍来自 legacy `Position / TradeBatch` DTO。
-                                当前新增/加仓/平仓已走 TradingPosition truth write path；旧批次编辑在 truth lifecycle 存在时降级为只读迁移视图。
-                            </p>
-                        </div>
+                    <div className="card border-amber-200 bg-amber-50 p-5 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+                        Truth lifecycle is unavailable, so this page is showing legacy Position / TradeBatch data.
                     </div>
-                </div>
-            )}
 
             {/* Summary Card */}
             <div className="card overflow-hidden">
@@ -1058,223 +981,20 @@ export default function PositionDetailPage() {
                     </div>
                 </div>
             )}
-            {editingTruthNarrative && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-                    <div className="card max-h-[90vh] w-full max-w-2xl overflow-y-auto shadow-2xl animate-in zoom-in duration-200">
-                        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-start justify-between gap-4">
-                            <div>
-                                <p className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-600 dark:text-cyan-300">
-                                    PositionEvent narrative
-                                </p>
-                                <h3 className="mt-1 text-lg font-bold">编辑 truth 叙事字段</h3>
-                                <p className="mt-1 text-xs text-slate-500">
-                                    Event public_id: {truthNarrativeForm.eventPublicId}
-                                </p>
-                            </div>
-                            <button
-                                onClick={() => setEditingTruthNarrative(false)}
-                                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-                            >
-                                <Plus className="w-5 h-5 rotate-45" />
-                            </button>
-                        </div>
-                        <div className="p-6 space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium mb-1">事件摘要 / Reason</label>
-                                <textarea
-                                    value={truthNarrativeForm.reason}
-                                    onChange={e => setTruthNarrativeForm({ ...truthNarrativeForm, reason: e.target.value })}
-                                    className="input min-h-[80px]"
-                                    placeholder="这一步为什么发生？"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Thesis</label>
-                                <textarea
-                                    value={truthNarrativeForm.thesis}
-                                    onChange={e => setTruthNarrativeForm({ ...truthNarrativeForm, thesis: e.target.value })}
-                                    className="input min-h-[90px]"
-                                    placeholder="这笔交易的核心假设是什么？"
-                                />
-                            </div>
-                            <div className="grid gap-4 md:grid-cols-2">
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">Invalidation Rule</label>
-                                    <textarea
-                                        value={truthNarrativeForm.invalidationRule}
-                                        onChange={e => setTruthNarrativeForm({ ...truthNarrativeForm, invalidationRule: e.target.value })}
-                                        className="input min-h-[80px]"
-                                        placeholder="什么情况说明交易假设失效？"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">Planned Exit</label>
-                                    <textarea
-                                        value={truthNarrativeForm.plannedExitRule}
-                                        onChange={e => setTruthNarrativeForm({ ...truthNarrativeForm, plannedExitRule: e.target.value })}
-                                        className="input min-h-[80px]"
-                                        placeholder="计划如何退出？"
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Sizing Rationale</label>
-                                <textarea
-                                    value={truthNarrativeForm.sizingRationale}
-                                    onChange={e => setTruthNarrativeForm({ ...truthNarrativeForm, sizingRationale: e.target.value })}
-                                    className="input min-h-[80px]"
-                                    placeholder="为什么是这个仓位？"
-                                />
-                            </div>
-                            <div className="grid gap-4 md:grid-cols-2">
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">Emotion</label>
-                                    <input
-                                        value={truthNarrativeForm.emotion}
-                                        onChange={e => setTruthNarrativeForm({ ...truthNarrativeForm, emotion: e.target.value })}
-                                        className="input"
-                                        placeholder="Focused, Calm..."
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">Confidence (1-5)</label>
-                                    <input
-                                        type="range"
-                                        min="1"
-                                        max="5"
-                                        value={truthNarrativeForm.confidence}
-                                        onChange={e => setTruthNarrativeForm({ ...truthNarrativeForm, confidence: parseInt(e.target.value) })}
-                                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-cyan-500"
-                                    />
-                                    <p className="mt-1 text-xs text-slate-500">当前：{truthNarrativeForm.confidence}/5</p>
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Note</label>
-                                <textarea
-                                    value={truthNarrativeForm.note}
-                                    onChange={e => setTruthNarrativeForm({ ...truthNarrativeForm, note: e.target.value })}
-                                    className="input min-h-[70px]"
-                                    placeholder="补充备注"
-                                />
-                            </div>
-                            <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-3 text-xs leading-5 text-cyan-900 dark:border-cyan-900 dark:bg-cyan-950/30 dark:text-cyan-200">
-                                保存会写入 `PositionEvent` 的叙事字段，并刷新上方 lifecycle read model。不会修改成交价、数量或 PnL。
-                            </div>
-                        </div>
-                        <div className="p-6 border-t border-slate-100 dark:border-slate-800 flex justify-end space-x-3">
-                            <button
-                                onClick={() => setEditingTruthNarrative(false)}
-                                className="btn btn-secondary"
-                            >
-                                取消
-                            </button>
-                            <button
-                                onClick={handleUpdateTruthNarrative}
-                                disabled={isSavingTruthNarrative}
-                                className="btn btn-primary flex items-center space-x-2"
-                            >
-                                {isSavingTruthNarrative && <Loader2 className="w-4 h-4 animate-spin" />}
-                                <span>保存到 truth event</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-            {editingManualAdjustment && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-                    <div className="card w-full max-w-lg shadow-2xl animate-in zoom-in duration-200">
-                        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-start justify-between gap-4">
-                            <div>
-                                <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-600 dark:text-amber-300">
-                                    PositionEvent adjustment
-                                </p>
-                                <h3 className="mt-1 text-lg font-bold">记录 cash adjustment</h3>
-                                <p className="mt-1 text-xs text-slate-500">
-                                    只写入 MANUAL_ADJUSTMENT event 和 CASH_ADJUSTMENT ledger，不修改 FIFO 数量或 realized PnL。
-                                </p>
-                            </div>
-                            <button
-                                onClick={() => setEditingManualAdjustment(false)}
-                                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-                            >
-                                <Plus className="w-5 h-5 rotate-45" />
-                            </button>
-                        </div>
-                        <div className="p-6 space-y-4">
-                            <div className="grid gap-4 md:grid-cols-[1fr_120px]">
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">调整金额</label>
-                                    <input
-                                        type="number"
-                                        step="any"
-                                        value={manualAdjustmentForm.amount}
-                                        onChange={e => setManualAdjustmentForm({
-                                            ...manualAdjustmentForm,
-                                            amount: Number(e.target.value),
-                                        })}
-                                        className="input"
-                                        placeholder="-7.25"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">币种</label>
-                                    <input
-                                        value={manualAdjustmentForm.currency}
-                                        onChange={e => setManualAdjustmentForm({
-                                            ...manualAdjustmentForm,
-                                            currency: e.target.value.toUpperCase(),
-                                        })}
-                                        className="input"
-                                        placeholder="USD"
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">发生时间</label>
-                                <DateTimePicker
-                                    value={manualAdjustmentForm.occurred_at}
-                                    onChange={(val) => setManualAdjustmentForm({
-                                        ...manualAdjustmentForm,
-                                        occurred_at: val,
-                                    })}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">说明 / Note</label>
-                                <textarea
-                                    value={manualAdjustmentForm.note}
-                                    onChange={e => setManualAdjustmentForm({
-                                        ...manualAdjustmentForm,
-                                        note: e.target.value,
-                                    })}
-                                    className="input min-h-[90px]"
-                                    placeholder="例如：Broker cash correction / fee rebate / reconciliation adjustment"
-                                />
-                            </div>
-                            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-                                正数会增加 ledger cash effect，负数会减少 cash effect；这不是交易成交修正，也不会改写任何历史事件。
-                            </div>
-                        </div>
-                        <div className="p-6 border-t border-slate-100 dark:border-slate-800 flex justify-end space-x-3">
-                            <button
-                                onClick={() => setEditingManualAdjustment(false)}
-                                className="btn btn-secondary"
-                            >
-                                取消
-                            </button>
-                            <button
-                                onClick={handleCreateManualAdjustment}
-                                disabled={isSavingManualAdjustment}
-                                className="btn btn-primary flex items-center space-x-2"
-                            >
-                                {isSavingManualAdjustment && <Loader2 className="w-4 h-4 animate-spin" />}
-                                <span>保存 adjustment</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <LifecycleModals
+                editingTruthNarrative={editingTruthNarrative}
+                isSavingTruthNarrative={isSavingTruthNarrative}
+                truthNarrativeForm={truthNarrativeForm}
+                onChangeTruthNarrativeForm={setTruthNarrativeForm}
+                onCloseTruthNarrative={() => setEditingTruthNarrative(false)}
+                onSaveTruthNarrative={handleUpdateTruthNarrative}
+                editingManualAdjustment={editingManualAdjustment}
+                isSavingManualAdjustment={isSavingManualAdjustment}
+                manualAdjustmentForm={manualAdjustmentForm}
+                onChangeManualAdjustmentForm={setManualAdjustmentForm}
+                onCloseManualAdjustment={() => setEditingManualAdjustment(false)}
+                onSaveManualAdjustment={handleCreateManualAdjustment}
+            />
             {/* Edit Metadata Modal */}
             {editingMetadata && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">

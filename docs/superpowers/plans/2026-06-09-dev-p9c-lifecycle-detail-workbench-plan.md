@@ -1139,7 +1139,7 @@ cd frontend
 
 Expected: PASS. If unused imports remain in `frontend/app/positions/[id]/page.tsx`, remove only the imports no longer referenced.
 
-- [ ] **Step 9: Commit migration panel extraction**
+- [x] **Step 9: Commit migration panel extraction**
 
 Run:
 
@@ -1159,7 +1159,7 @@ Expected: commit succeeds with legacy sections moved into `LifecycleMigrationPan
 - Modify: `frontend/app/positions/[id]/page.tsx`
 - Modify: `frontend/components/positions/lifecycle/LifecycleWorkbench.tsx`
 
-- [ ] **Step 1: Create modal props and component**
+- [x] **Step 1: Create modal props and component**
 
 Create `frontend/components/positions/lifecycle/LifecycleModals.tsx` with:
 
@@ -1262,7 +1262,7 @@ export function LifecycleModals(props: LifecycleModalsProps) {
 }
 ```
 
-- [ ] **Step 2: Render truth modals from page via component**
+- [x] **Step 2: Render truth modals from page via component**
 
 In `frontend/app/positions/[id]/page.tsx`, add:
 
@@ -1289,7 +1289,7 @@ Replace the existing `editingTruthNarrative` and `editingManualAdjustment` modal
 />
 ```
 
-- [ ] **Step 3: Remove old truth write banner from page**
+- [x] **Step 3: Remove old truth write banner from page**
 
 Delete the old inline block headed by:
 
@@ -1299,7 +1299,7 @@ Delete the old inline block headed by:
 
 The new `LifecycleActionPanel` now owns this message and the three truth actions.
 
-- [ ] **Step 4: Keep legacy-only fallback but label it**
+- [x] **Step 4: Keep legacy-only fallback but label it**
 
 When `!truthLifecycle && position`, keep a simple legacy fallback wrapper in `frontend/app/positions/[id]/page.tsx`:
 
@@ -1311,7 +1311,7 @@ When `!truthLifecycle && position`, keep a simple legacy fallback wrapper in `fr
 
 Then render the remaining legacy fallback sections below it. Do not make fallback prettier than the truth workbench.
 
-- [ ] **Step 5: Run TypeScript and lint**
+- [x] **Step 5: Run TypeScript and lint**
 
 Run:
 
@@ -1323,7 +1323,7 @@ npm run lint
 
 Expected: TypeScript PASS. Lint PASS with only existing repository warnings.
 
-- [ ] **Step 6: Commit page shell reduction**
+- [x] **Step 6: Commit page shell reduction**
 
 Run:
 
