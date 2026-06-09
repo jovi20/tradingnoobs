@@ -495,10 +495,23 @@ export default function PositionDetailPage() {
                 <LifecycleWorkbench
                     lifecycle={truthLifecycle}
                     legacyPosition={position}
+                    sortedBatches={sortedBatches}
+                    isAnalyzing={isAnalyzing}
                     isReversing={isReversingTruthEvent}
                     onEditNarrative={openTruthNarrativeModal}
                     onReverseLatest={handleReverseLatestTruthEvent}
                     onManualAdjustment={openManualAdjustmentModal}
+                    onEditMetadata={openMetadataModal}
+                    onEditExtremes={() => {
+                        if (!position) return
+                        setExtremesForm({
+                            max_price: Number(position.max_price_during_hold || 0),
+                            min_price: Number(position.min_price_during_hold || 0),
+                        })
+                        setEditingExtremes(true)
+                    }}
+                    onAnalyze={handleAnalyze}
+                    onEditBatch={openEditModal}
                 />
             )}
 
@@ -569,7 +582,7 @@ export default function PositionDetailPage() {
                 </div>
             )}
 
-            {position && (
+            {position && !truthLifecycle && (
                 <>
 
             {truthLifecycle && (

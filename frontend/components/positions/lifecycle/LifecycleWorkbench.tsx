@@ -5,7 +5,12 @@ import {
     getLifecycleReversalAction,
     type LifecycleDetailViewModel,
 } from '@/lib/adapters/lifecycle'
-import type { PositionViewModel } from '@/lib/adapters/trading'
+import {
+    getLegacyBatchMutationState,
+    getLegacyReviewDisplayState,
+    type PositionViewModel,
+    type TradeBatchViewModel,
+} from '@/lib/adapters/trading'
 import { LifecycleActionPanel } from './LifecycleActionPanel'
 import { LifecycleAiSidecarPanel } from './LifecycleAiSidecarPanel'
 import { LifecycleEventRail } from './LifecycleEventRail'
@@ -17,19 +22,31 @@ import { LifecycleWorkbenchHeader } from './LifecycleWorkbenchHeader'
 interface LifecycleWorkbenchProps {
     lifecycle: LifecycleDetailViewModel
     legacyPosition: PositionViewModel | null
+    sortedBatches: TradeBatchViewModel[]
+    isAnalyzing: boolean
     isReversing: boolean
     onEditNarrative: () => void
     onReverseLatest: () => void
     onManualAdjustment: () => void
+    onEditMetadata: () => void
+    onEditExtremes: () => void
+    onAnalyze: () => void
+    onEditBatch: (batch: TradeBatchViewModel) => void
 }
 
 export function LifecycleWorkbench({
     lifecycle,
     legacyPosition,
+    sortedBatches,
+    isAnalyzing,
     isReversing,
     onEditNarrative,
     onReverseLatest,
     onManualAdjustment,
+    onEditMetadata,
+    onEditExtremes,
+    onAnalyze,
+    onEditBatch,
 }: LifecycleWorkbenchProps) {
     const reversal = getLifecycleReversalAction(lifecycle)
     const actions = getLifecyclePrimaryActions({
@@ -40,6 +57,8 @@ export function LifecycleWorkbench({
         hasTruthLifecycle: true,
         hasLegacyPosition: Boolean(legacyPosition),
     })
+    const legacyBatchMutationState = getLegacyBatchMutationState(Boolean(lifecycle))
+    const legacyReviewDisplayState = getLegacyReviewDisplayState(Boolean(lifecycle), Boolean(legacyPosition?.trade_review))
 
     return (
         <PageFrame className="space-y-6 pb-20 md:pb-6">
@@ -62,7 +81,19 @@ export function LifecycleWorkbench({
                 </aside>
             </div>
             {legacyPanel.shouldRender && legacyPosition && (
-                <LifecycleMigrationPanel position={legacyPosition} hasTruthLifecycle panel={legacyPanel} />
+                <LifecycleMigrationPanel
+                    position={legacyPosition}
+                    hasTruthLifecycle
+                    panel={legacyPanel}
+                    sortedBatches={sortedBatches}
+                    isAnalyzing={isAnalyzing}
+                    legacyBatchMutationState={legacyBatchMutationState}
+                    legacyReviewDisplayState={legacyReviewDisplayState}
+                    onEditMetadata={onEditMetadata}
+                    onEditExtremes={onEditExtremes}
+                    onAnalyze={onAnalyze}
+                    onEditBatch={onEditBatch}
+                />
             )}
         </PageFrame>
     )

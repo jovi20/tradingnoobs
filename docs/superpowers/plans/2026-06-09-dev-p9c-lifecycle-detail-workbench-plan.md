@@ -442,7 +442,7 @@ node --experimental-strip-types --test tests/lifecycle-adapter.test.mts
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit adapter helpers**
+- [x] **Step 9: Commit adapter helpers**
 
 Run:
 
@@ -903,7 +903,7 @@ cd frontend
 
 Expected: PASS, or only type errors that point to props/import typos in the new workbench components. Fix those typos before continuing.
 
-- [ ] **Step 8: Commit truth workbench scaffold**
+- [x] **Step 8: Commit truth workbench scaffold**
 
 Run:
 
@@ -922,7 +922,7 @@ Expected: commit succeeds with scaffold components and page import/render wiring
 - Modify: `frontend/components/positions/lifecycle/LifecycleMigrationPanel.tsx`
 - Modify: `frontend/app/positions/[id]/page.tsx`
 
-- [ ] **Step 1: Expand migration panel props**
+- [x] **Step 1: Expand migration panel props**
 
 Replace `LifecycleMigrationPanelProps` in `frontend/components/positions/lifecycle/LifecycleMigrationPanel.tsx` with:
 
@@ -973,7 +973,7 @@ import {
 } from '@/lib/adapters/trading'
 ```
 
-- [ ] **Step 2: Move legacy summary and metadata cards**
+- [x] **Step 2: Move legacy summary and metadata cards**
 
 In `LifecycleMigrationPanel`, replace the placeholder body with the summary and metadata JSX currently in `frontend/app/positions/[id]/page.tsx` under:
 
@@ -993,7 +993,7 @@ Wrap them inside:
 
 When moving the metadata edit button, call `onEditMetadata` instead of `openMetadataModal`.
 
-- [ ] **Step 3: Move MAE/MFE, drift, and checklist sections**
+- [x] **Step 3: Move MAE/MFE, drift, and checklist sections**
 
 Move these existing sections from `frontend/app/positions/[id]/page.tsx` into `LifecycleMigrationPanel` after metadata:
 
@@ -1007,7 +1007,7 @@ Change the MAE/MFE edit button body to call `onEditExtremes`.
 
 Change the analysis button body to call `onAnalyze` and use the `isAnalyzing` prop.
 
-- [ ] **Step 4: Move batch records, legacy review, and lessons**
+- [x] **Step 4: Move batch records, legacy review, and lessons**
 
 Move these existing sections from `frontend/app/positions/[id]/page.tsx` into `LifecycleMigrationPanel` after checklist:
 
@@ -1031,7 +1031,7 @@ onClick={() => onEditBatch(batch)}
 
 Keep `legacyBatchMutationState` and `legacyReviewDisplayState` props as the source of migration-only labels.
 
-- [ ] **Step 5: Pass migration props from LifecycleWorkbench**
+- [x] **Step 5: Pass migration props from LifecycleWorkbench**
 
 Update `LifecycleWorkbenchProps` in `frontend/components/positions/lifecycle/LifecycleWorkbench.tsx` with:
 
@@ -1083,7 +1083,7 @@ Pass the new props to `LifecycleMigrationPanel`:
 />
 ```
 
-- [ ] **Step 6: Remove moved legacy JSX from page**
+- [x] **Step 6: Remove moved legacy JSX from page**
 
 Delete the moved sections from `frontend/app/positions/[id]/page.tsx`:
 
@@ -1100,7 +1100,7 @@ Delete the moved sections from `frontend/app/positions/[id]/page.tsx`:
 
 Keep the edit batch, metadata, extremes, truth narrative, and manual adjustment modals in the page for now.
 
-- [ ] **Step 7: Update workbench invocation in page**
+- [x] **Step 7: Update workbench invocation in page**
 
 In `frontend/app/positions/[id]/page.tsx`, pass the new props:
 
@@ -1128,7 +1128,7 @@ In `frontend/app/positions/[id]/page.tsx`, pass the new props:
 />
 ```
 
-- [ ] **Step 8: Run TypeScript check**
+- [x] **Step 8: Run TypeScript check**
 
 Run:
 
