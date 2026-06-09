@@ -214,7 +214,7 @@ Commit succeeds and origin/dev advances.
 - Create: `frontend/tests/timeline-workbench.test.mts`
 - Create: `frontend/lib/adapters/timeline-workbench.ts`
 
-- [ ] **Step 1: Add failing tests for summary metric formatting and tones**
+- [x] **Step 1: Add failing tests for summary metric formatting and tones**
 
 Create `frontend/tests/timeline-workbench.test.mts`:
 ```ts
@@ -310,7 +310,7 @@ test('getWorkbenchMobileSectionOrder puts actionable review inbox before feed', 
 })
 ```
 
-- [ ] **Step 2: Run the new test to verify RED**
+- [x] **Step 2: Run the new test to verify RED**
 
 Run:
 ```bash
@@ -323,7 +323,7 @@ Expected:
 FAIL because ../lib/adapters/timeline-workbench.ts does not exist.
 ```
 
-- [ ] **Step 3: Implement timeline workbench helpers**
+- [x] **Step 3: Implement timeline workbench helpers**
 
 Create `frontend/lib/adapters/timeline-workbench.ts`:
 ```ts
@@ -442,7 +442,7 @@ export function getWorkbenchMobileSectionOrder(timelineHome: Pick<TimelineHomeVi
 }
 ```
 
-- [ ] **Step 4: Run helper tests to verify GREEN**
+- [x] **Step 4: Run helper tests to verify GREEN**
 
 Run:
 ```bash
@@ -455,7 +455,7 @@ Expected:
 All tests in timeline-workbench.test.mts pass.
 ```
 
-- [ ] **Step 5: Run existing Timeline adapter tests**
+- [x] **Step 5: Run existing Timeline adapter tests**
 
 Run:
 ```bash
@@ -467,6 +467,12 @@ Expected:
 ```text
 Existing Timeline adapter tests and new workbench helper tests pass.
 ```
+
+Execution note:
+
+- RED verified: `node --experimental-strip-types --test tests/timeline-workbench.test.mts` failed with `ERR_MODULE_NOT_FOUND` for `frontend/lib/adapters/timeline-workbench.ts`.
+- GREEN verified: `tests/timeline-workbench.test.mts` passed 5 tests.
+- Focused regression verified: `tests/timeline-adapter.test.mts tests/timeline-workbench.test.mts` passed 11 tests.
 
 - [ ] **Step 6: Commit helper foundation**
 
