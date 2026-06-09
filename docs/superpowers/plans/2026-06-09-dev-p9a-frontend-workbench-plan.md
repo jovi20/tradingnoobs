@@ -2076,19 +2076,19 @@ Commit succeeds and origin/dev advances.
 
 ## Final Acceptance Checklist
 
-- [ ] `/` still redirects to `/timeline`.
-- [ ] `/timeline` uses the existing Timeline Home API/hook.
-- [ ] Desktop Timeline uses balanced workbench layout.
-- [ ] Mobile Timeline uses readable one-column layout.
-- [ ] Review Inbox is first-class on desktop and appears before feed on mobile when actionable.
-- [ ] AI sidecar and context rail remain accessible.
-- [ ] New UI primitives live under `frontend/components/ui/`.
-- [ ] New Timeline workbench components live under `frontend/components/timeline/workbench/`.
-- [ ] Navigation shell is split and admin/Ops is visually separated.
-- [ ] P9A-touched files pass targeted React 19 strict lint.
-- [ ] Full frontend verification passes.
-- [ ] Backend smoke and Alembic smoke pass.
-- [ ] `docs/superpowers/demos/` remains untouched.
+- [x] `/` still redirects to `/timeline`.
+- [x] `/timeline` uses the existing Timeline Home API/hook.
+- [x] Desktop Timeline uses balanced workbench layout.
+- [x] Mobile Timeline uses readable one-column layout.
+- [x] Review Inbox is first-class on desktop and appears before feed on mobile when actionable.
+- [x] AI sidecar and context rail remain accessible.
+- [x] New UI primitives live under `frontend/components/ui/`.
+- [x] New Timeline workbench components live under `frontend/components/timeline/workbench/`.
+- [x] Navigation shell is split and admin/Ops is visually separated.
+- [x] P9A-touched files pass targeted React 19 strict lint.
+- [x] Full frontend verification passes.
+- [x] Backend smoke and Alembic smoke pass.
+- [x] `docs/superpowers/demos/` remains untouched.
 
 ## Known Deferrals
 
