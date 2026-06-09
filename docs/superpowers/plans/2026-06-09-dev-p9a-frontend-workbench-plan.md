@@ -747,7 +747,7 @@ Commit succeeds and origin/dev advances.
 - Create: `frontend/components/navigation/MobileBottomNav.tsx`
 - Modify: `frontend/components/Navbar.tsx`
 
-- [ ] **Step 1: Add failing navigation helper tests**
+- [x] **Step 1: Add failing navigation helper tests**
 
 Create `frontend/tests/navigation.test.mts`:
 ```ts
@@ -786,7 +786,7 @@ test('navigation active state handles nested paths', () => {
 })
 ```
 
-- [ ] **Step 2: Run navigation tests to verify RED**
+- [x] **Step 2: Run navigation tests to verify RED**
 
 Run:
 ```bash
@@ -799,7 +799,7 @@ Expected:
 FAIL because ../lib/navigation.ts does not exist.
 ```
 
-- [ ] **Step 3: Implement navigation helpers**
+- [x] **Step 3: Implement navigation helpers**
 
 Create `frontend/lib/navigation.ts`:
 ```ts
@@ -841,7 +841,7 @@ export function isNavigationItemActive(href: string, pathname: string): boolean 
 }
 ```
 
-- [ ] **Step 4: Run navigation tests to verify GREEN**
+- [x] **Step 4: Run navigation tests to verify GREEN**
 
 Run:
 ```bash
@@ -854,7 +854,7 @@ Expected:
 All navigation tests pass.
 ```
 
-- [ ] **Step 5: Create `ProductTopNav`**
+- [x] **Step 5: Create `ProductTopNav`**
 
 Create `frontend/components/navigation/ProductTopNav.tsx`:
 ```tsx
@@ -919,7 +919,7 @@ export function ProductTopNav({ items, pathname }: ProductTopNavProps) {
 }
 ```
 
-- [ ] **Step 6: Create `MobileBottomNav`**
+- [x] **Step 6: Create `MobileBottomNav`**
 
 Create `frontend/components/navigation/MobileBottomNav.tsx`:
 ```tsx
@@ -983,7 +983,7 @@ export function MobileBottomNav({ items, pathname }: MobileBottomNavProps) {
 }
 ```
 
-- [ ] **Step 7: Refactor `Navbar` into wrapper**
+- [x] **Step 7: Refactor `Navbar` into wrapper**
 
 Modify `frontend/components/Navbar.tsx` so it keeps the public export but delegates nav rendering:
 ```tsx
@@ -1063,7 +1063,7 @@ export function Navbar() {
 }
 ```
 
-- [ ] **Step 8: Run navigation and TypeScript verification**
+- [x] **Step 8: Run navigation and TypeScript verification**
 
 Run:
 ```bash
@@ -1078,7 +1078,7 @@ Navigation tests pass.
 TypeScript exits 0.
 ```
 
-- [ ] **Step 9: Run targeted strict React 19 lint on navigation files**
+- [x] **Step 9: Run targeted strict React 19 lint on navigation files**
 
 Run:
 ```bash
@@ -1090,6 +1090,17 @@ Expected:
 ```text
 ESLint exits 0 for navigation files.
 ```
+
+Execution note:
+
+- RED verified: `tests/navigation.test.mts` failed with `ERR_MODULE_NOT_FOUND` for `frontend/lib/navigation.ts`.
+- GREEN verified: navigation helper tests passed 3 tests.
+- `Navbar` was split into wrapper + `ProductTopNav` + `MobileBottomNav`.
+- `MobileBottomNav` intentionally renders all visible items in a horizontal scroll row rather than using the original 5-item slice, so mobile does not lose Insights or Settings entry points.
+- `Navbar` now uses `next/image` for `/logo.png`, removing the previous `@next/next/no-img-element` warning from this touched file.
+- `UserRole` helper input was widened to `string | null | undefined` because the auth context exposes `user.role` as a generic string.
+- `./node_modules/.bin/tsc --noEmit --pretty false` exited 0.
+- Targeted strict React 19 lint for navigation files exited 0.
 
 - [ ] **Step 10: Commit navigation split**
 
