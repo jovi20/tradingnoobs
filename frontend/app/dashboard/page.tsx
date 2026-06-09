@@ -1,317 +1,73 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import Link from 'next/link'
-import {
-    TrendingUp,
-    BarChart3,
-    Wallet,
-    Activity,
-    Loader2,
-    Calendar,
-    FileText,
-    Target
-} from 'lucide-react'
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import { useState, useSyncExternalStore } from 'react'
+import { Loader2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { getCurrencySymbol } from '@/lib/symbolUtils'
-import MarketStatus from '@/components/MarketStatus'
-import PortfolioSankey from '@/components/PortfolioSankey'
-import { useTrendColor } from '@/hooks/useTrendColor'
 import { useDashboardData } from '@/hooks/useDashboardData'
-import { adaptDashboardPageData, getDashboardAllocationChart, getDashboardAllocationData } from '@/lib/adapters/dashboard'
-import { DashboardSummaryStrip } from '@/components/dashboard/domain/DashboardSummaryStrip'
-import { DashboardAllocationPanel } from '@/components/dashboard/domain/DashboardAllocationPanel'
-import { DashboardMoversPanel } from '@/components/dashboard/domain/DashboardMoversPanel'
+import { useTrendColor } from '@/hooks/useTrendColor'
+import { DashboardWorkbench } from '@/components/dashboard/workbench/DashboardWorkbench'
+import type { DashboardPeriodLabel } from '@/lib/adapters/dashboard'
 
-import PositionCard from '@/components/dashboard/PositionCard'
-import RiskMetricsCard from '@/components/dashboard/RiskMetricsCard'
-import { MaeMfeScatterPlot } from '@/components/dashboard/MaeMfeScatterPlot'
+function subscribeToViewport(callback: () => void) {
+    window.addEventListener('resize', callback)
+    return () => window.removeEventListener('resize', callback)
+}
+
+function getSankeyViewportSnapshot() {
+    return window.innerWidth < 640
+}
+
+function getSankeyServerSnapshot() {
+    return false
+}
+
+function useIsMobileSankey() {
+    return useSyncExternalStore(subscribeToViewport, getSankeyViewportSnapshot, getSankeyServerSnapshot)
+}
 
 export default function DashboardPage() {
     const { token, settings } = useAuth()
     const trendColor = useTrendColor()
-
-    const [selectedPeriod, setSelectedPeriod] = useState<string>('1周')
+    const [selectedPeriod, setSelectedPeriod] = useState<DashboardPeriodLabel>('1周')
     const [historyDays, setHistoryDays] = useState<number>(7)
-    const [allocationDimension, setAllocationDimension] = useState<'CORE_TYPE' | 'MARKET' | 'RISK'>('CORE_TYPE')
-    const [isMobile, setIsMobile] = useState(false)
-    const [periodPnl, setPeriodPnl] = useState<number>(0)
-    const [periodValue, setPeriodValue] = useState<number>(0)
-
+    const isMobileSankey = useIsMobileSankey()
     const { stats, pnlHistory, openPositions, allPositions, isLoading, error } = useDashboardData(token, historyDays)
-
-    useEffect(() => {
-        const handleResize = () => {
-            setIsMobile(window.innerWidth < 640)
-        }
-        handleResize()
-        window.addEventListener('resize', handleResize)
-        return () => window.removeEventListener('resize', handleResize)
-    }, [])
-
-    useEffect(() => {
-        if (!pnlHistory || pnlHistory.length === 0) {
-            setPeriodPnl(0)
-            setPeriodValue(0)
-            return
-        }
-
-        if (pnlHistory.length > 1) {
-            const latest = pnlHistory[pnlHistory.length - 1]
-            const start = pnlHistory[0]
-            setPeriodPnl(latest.pnl_percent - start.pnl_percent)
-            setPeriodValue(latest.pnl - start.pnl)
-        } else if (pnlHistory.length === 1) {
-            setPeriodPnl(pnlHistory[0].pnl_percent)
-            setPeriodValue(pnlHistory[0].pnl)
-        }
-    }, [pnlHistory])
 
     if (isLoading) {
         return (
             <div className="flex items-center justify-center py-20">
-                <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
+                <Loader2 className="h-8 w-8 animate-spin text-primary-500" />
             </div>
         )
     }
 
     if (!stats) return null
 
-    const dashboard = adaptDashboardPageData({
-        stats,
-        openPositions,
-        allPositions,
-        pnlHistory,
-        displayCurrency: settings?.display_currency,
-    })
-    const totalPnl = dashboard.totalPnl
-    const isPositive = dashboard.isPositive
-    const cs = dashboard.currencySymbol
-
     return (
-        <div className="space-y-6 pb-20 md:pb-6">
+        <div className="pb-20 md:pb-6">
             {error && (
-                <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-xl text-sm mb-4">
+                <div className="mb-4 rounded-xl bg-red-50 p-4 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">
                     Error loading dashboard data: {error}
                 </div>
             )}
-            <div className="flex flex-col md:flex-row items-center justify-between gap-4 pb-2">
-                <div className="grid grid-cols-2 md:flex gap-3 md:gap-4 w-full md:w-auto">
-                    <Link href="/positions/new" className="flex items-center gap-2 px-3 md:px-4 py-2.5 md:py-3 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-colors group">
-                        <div className="p-1.5 md:p-2 bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg group-hover:bg-slate-200 dark:group-hover:bg-slate-600 transition-colors shrink-0">
-                            <TrendingUp className="w-4 h-4 md:w-5 md:h-5" />
-                        </div>
-                        <span className="font-medium text-xs md:text-sm whitespace-nowrap">新增交易</span>
-                    </Link>
-                    <Link href="/strategies" className="flex items-center gap-2 px-3 md:px-4 py-2.5 md:py-3 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-colors group">
-                        <div className="p-1.5 md:p-2 bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg group-hover:bg-slate-200 dark:group-hover:bg-slate-600 transition-colors shrink-0">
-                            <BarChart3 className="w-4 h-4 md:w-5 md:h-5" />
-                        </div>
-                        <span className="font-medium text-xs md:text-sm whitespace-nowrap">新增策略</span>
-                    </Link>
-                    <Link href="/settings" className="flex items-center gap-2 px-3 md:px-4 py-2.5 md:py-3 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-colors group">
-                        <div className="p-1.5 md:p-2 bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg group-hover:bg-slate-200 dark:group-hover:bg-slate-600 transition-colors shrink-0">
-                            <Wallet className="w-4 h-4 md:w-5 md:h-5" />
-                        </div>
-                        <span className="font-medium text-xs md:text-sm whitespace-nowrap">新增账户</span>
-                    </Link>
-                    <Link href="/daily" className="flex items-center gap-2 px-3 md:px-4 py-2.5 md:py-3 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-colors group">
-                        <div className="p-1.5 md:p-2 bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg group-hover:bg-slate-200 dark:group-hover:bg-slate-600 transition-colors shrink-0">
-                            <Calendar className="w-4 h-4 md:w-5 md:h-5" />
-                        </div>
-                        <span className="font-medium text-xs md:text-sm whitespace-nowrap">交易日历</span>
-                    </Link>
-                    <Link href="/insights" className="flex items-center gap-2 px-3 md:px-4 py-2.5 md:py-3 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-colors group">
-                        <div className="p-1.5 md:p-2 bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg group-hover:bg-slate-200 dark:group-hover:bg-slate-600 transition-colors shrink-0">
-                            <FileText className="w-4 h-4 md:w-5 md:h-5" />
-                        </div>
-                        <span className="font-medium text-xs md:text-sm whitespace-nowrap">AI 洞察</span>
-                    </Link>
-                </div>
-
-                <div className="w-full md:w-auto flex justify-start md:justify-end overflow-hidden">
-                    <MarketStatus />
-                </div>
-            </div>
-
-            <DashboardSummaryStrip
-                totalPnl={totalPnl}
-                isPositive={isPositive}
-                currencySymbol={cs}
-                winRate={stats.win_rate}
-                avgPnlRatio={stats.avg_pnl_ratio}
-                openPositions={stats.open_positions}
-                upColor={trendColor.upColor}
-                downColor={trendColor.downColor}
+            <DashboardWorkbench
+                stats={stats}
+                pnlHistory={pnlHistory}
+                openPositions={openPositions}
+                allPositions={allPositions}
+                displayCurrency={settings?.display_currency}
+                selectedPeriod={selectedPeriod}
+                onChangePeriod={(label, days) => {
+                    setSelectedPeriod(label)
+                    setHistoryDays(days)
+                }}
+                isMobileSankey={isMobileSankey}
+                trend={{
+                    upClassName: trendColor.upColor,
+                    downClassName: trendColor.downColor,
+                    lineColor: trendColor.upHex,
+                }}
             />
-
-            <div className="flex flex-col lg:grid lg:grid-cols-3 gap-6 lg:items-start">
-                <div className="contents lg:block lg:col-span-2 space-y-6">
-                    {stats.portfolio_flow && stats.portfolio_flow.nodes.length > 0 && (
-                        <PortfolioSankey
-                            data={stats.portfolio_flow}
-                            totalAssets={stats.total_assets}
-                            isMobile={isMobile}
-                        />
-                    )}
-
-                    <div className="card p-4 md:p-6 order-1">
-                        <div className="flex items-start justify-between mb-4 relative z-10">
-                            <div>
-                                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">盈亏曲线</h2>
-                                <div className="flex items-baseline gap-2 mt-1">
-                                    <p className={`text-2xl font-bold ${periodPnl >= 0 ? trendColor.upColor : trendColor.downColor}`}>
-                                        {periodPnl >= 0 ? '+' : ''}{periodPnl.toFixed(2)}%
-                                    </p>
-                                    <p className={`text-sm font-medium ${periodValue >= 0 ? trendColor.upColor : trendColor.downColor} opacity-80`}>
-                                        ({periodValue >= 0 ? '+' : ''}{cs}{Math.abs(periodValue).toLocaleString()})
-                                    </p>
-                                </div>
-                                <p className="text-xs text-slate-500 mt-0.5">{selectedPeriod}阶段盈亏 (Relative Change)</p>
-                            </div>
-                            <div className="flex flex-wrap gap-1">
-                                {[
-                                    { label: '1周', days: 7 },
-                                    { label: '本月', days: -1 },
-                                    { label: '1月', days: 30 },
-                                    { label: '3月', days: 90 },
-                                    { label: '本年', days: -2 },
-                                    { label: '1年', days: 365 },
-                                    { label: '全部', days: 9999 },
-                                ].map((option) => (
-                                    <button
-                                        key={option.label}
-                                        onClick={() => {
-                                            setSelectedPeriod(option.label)
-                                            let days = option.days
-                                            if (days === -1) {
-                                                const now = new Date()
-                                                days = now.getDate()
-                                            } else if (days === -2) {
-                                                const now = new Date()
-                                                const startOfYear = new Date(now.getFullYear(), 0, 1)
-                                                days = Math.ceil((now.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24))
-                                            }
-                                            if (days < 1) days = 1
-                                            setHistoryDays(days)
-                                        }}
-                                        className={`px-2 py-1 text-xs rounded-md transition-colors ${selectedPeriod === option.label
-                                            ? 'bg-primary-600 text-white shadow-sm'
-                                            : 'text-slate-500 hover:bg-primary-100 dark:hover:bg-primary-900/30 hover:text-primary-600'
-                                            }`}
-                                    >
-                                        {option.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="h-[250px] md:h-[300px]">
-                            {pnlHistory.length > 0 ? (
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={pnlHistory}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                                        <XAxis
-                                            dataKey="date"
-                                            tick={{ fontSize: 12 }}
-                                            tickFormatter={(value) => value.slice(5)}
-                                        />
-                                        <YAxis
-                                            tick={{ fontSize: 12 }}
-                                            tickFormatter={(value) => `${value}%`}
-                                        />
-                                        <Tooltip
-                                            formatter={(value: number) => [`${value.toFixed(2)}%`, '盈亏率']}
-                                            labelFormatter={(label) => `日期: ${label}`}
-                                        />
-                                        <Line
-                                            type="monotone"
-                                            dataKey="pnl_percent"
-                                            stroke={trendColor.upHex}
-                                            strokeWidth={2}
-                                            dot={false}
-                                        />
-                                    </LineChart>
-                                </ResponsiveContainer>
-                            ) : (
-                                <div className="h-full flex items-center justify-center text-slate-500">
-                                    暂无数据
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {allPositions && allPositions.length > 0 && (
-                        <div className="card">
-                            <MaeMfeScatterPlot positions={allPositions} />
-                        </div>
-                    )}
-
-                    <div className="space-y-4 order-4">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-lg font-semibold flex items-center gap-2">
-                                持仓中
-                                <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs px-2 py-0.5 rounded-full">{openPositions.length}</span>
-                            </h2>
-                            {openPositions.length > 6 && (
-                                <Link href="/positions" className="text-xs text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1">
-                                    查看更多 <span className="text-[10px] bg-primary-50 dark:bg-primary-900/20 px-1.5 py-0.5 rounded-full">+{openPositions.length - 6}</span>
-                                </Link>
-                            )}
-                        </div>
-                        {openPositions.length === 0 ? (
-                            <div className="card p-6 text-center text-slate-500">
-                                暂无持仓
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-                                {openPositions.slice(0, 6).map((position) => (
-                                    <PositionCard key={position.id} position={position} />
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                <div className="contents lg:block lg:col-span-1 space-y-6">
-                    <DashboardAllocationPanel
-                        allocationDimension={allocationDimension}
-                        onChangeDimension={setAllocationDimension}
-                        data={getDashboardAllocationData(stats, allocationDimension)}
-                        chart={getDashboardAllocationChart(stats, allocationDimension)}
-                    />
-
-                    <div className="card p-4">
-                        <h3 className="text-sm font-semibold mb-4 text-slate-900 dark:text-white">账户分布</h3>
-                        <div className="space-y-4">
-                            {dashboard.accountAllocation.map((acc, idx) => (
-                                <div key={idx} className="flex items-center justify-between text-sm">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-2 h-2 rounded-full bg-slate-200 dark:bg-slate-700 shrink-0"></div>
-                                        <div className="truncate">
-                                            <span className="font-medium block truncate max-w-[120px]">{acc.name}</span>
-                                            <span className="text-xs text-slate-400 block">{acc.broker}</span>
-                                        </div>
-                                    </div>
-                                    <div className="text-right shrink-0">
-                                        <span className="block font-medium">{cs}{acc.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-                                        <span className="text-xs text-slate-400">{acc.percent}%</span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    <RiskMetricsCard
-                        sharpe={stats.sharpe_ratio}
-                        sortino={stats.sortino_ratio}
-                        calmar={stats.calmar_ratio}
-                        maxDrawdown={stats.max_drawdown}
-                    />
-
-                    <DashboardMoversPanel top={dashboard.movers.top} bottom={dashboard.movers.bottom} />
-                </div>
-            </div>
-        </div >
+        </div>
     )
 }

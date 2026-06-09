@@ -34,6 +34,12 @@ export interface DashboardPeriodMetrics {
     periodValue: number
 }
 
+export interface DashboardPnlHistoryPoint {
+    date: string
+    pnl: number
+    pnl_percent: number
+}
+
 const fixedDashboardPeriodOptions: Array<DashboardPeriodOption> = [
     { label: '1周', days: 7 },
     { label: '1月', days: 30 },
@@ -164,7 +170,7 @@ export function getDashboardMobileSectionOrder(hasPositions: boolean, hasEvidenc
 }
 
 export function calculateDashboardPeriodMetrics(
-    pnlHistory: Array<{ pnl: number; pnl_percent: number }>
+    pnlHistory: Array<Pick<DashboardPnlHistoryPoint, 'pnl' | 'pnl_percent'>>
 ): DashboardPeriodMetrics {
     if (!pnlHistory || pnlHistory.length === 0) {
         return { periodPnl: 0, periodValue: 0 }
@@ -187,9 +193,9 @@ export function calculateDashboardPeriodMetrics(
 
 interface AdaptDashboardPageDataInput {
     stats: DashboardStats
-    openPositions: Array<Pick<PositionViewModel, 'id' | 'routeId'>>
+    openPositions: PositionViewModel[]
     allPositions: PositionViewModel[]
-    pnlHistory: Array<{ pnl: number; pnl_percent: number }>
+    pnlHistory: DashboardPnlHistoryPoint[]
     displayCurrency?: string
 }
 

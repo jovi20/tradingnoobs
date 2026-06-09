@@ -370,7 +370,7 @@ git commit -m "feat: add dashboard workbench helpers"
 - Create: `frontend/components/dashboard/workbench/DashboardStructureGrid.tsx`
 - Create: `frontend/components/dashboard/workbench/DashboardEvidenceStack.tsx`
 
-- [ ] **Step 1: Create the workbench component directory**
+- [x] **Step 1: Create the workbench component directory**
 
 Run:
 
@@ -380,7 +380,7 @@ mkdir -p frontend/components/dashboard/workbench
 
 Expected: directory exists at `frontend/components/dashboard/workbench`.
 
-- [ ] **Step 2: Create `DashboardStatusRail.tsx`**
+- [x] **Step 2: Create `DashboardStatusRail.tsx`**
 
 Create `frontend/components/dashboard/workbench/DashboardStatusRail.tsx`:
 
@@ -417,7 +417,7 @@ export function DashboardStatusRail({ metrics }: DashboardStatusRailProps) {
 }
 ```
 
-- [ ] **Step 3: Create `DashboardWorkbenchHeader.tsx`**
+- [x] **Step 3: Create `DashboardWorkbenchHeader.tsx`**
 
 Create `frontend/components/dashboard/workbench/DashboardWorkbenchHeader.tsx`:
 
@@ -472,7 +472,7 @@ export function DashboardWorkbenchHeader({ riskPosture }: DashboardWorkbenchHead
 }
 ```
 
-- [ ] **Step 4: Create `DashboardEquityHero.tsx`**
+- [x] **Step 4: Create `DashboardEquityHero.tsx`**
 
 Create `frontend/components/dashboard/workbench/DashboardEquityHero.tsx`:
 
@@ -565,7 +565,7 @@ export function DashboardEquityHero({
 }
 ```
 
-- [ ] **Step 5: Create `DashboardRiskRail.tsx`**
+- [x] **Step 5: Create `DashboardRiskRail.tsx`**
 
 Create `frontend/components/dashboard/workbench/DashboardRiskRail.tsx`:
 
@@ -634,7 +634,7 @@ export function DashboardRiskRail({ riskPosture, openPositionsCount, hasPnlHisto
 }
 ```
 
-- [ ] **Step 6: Create `DashboardStructureGrid.tsx`**
+- [x] **Step 6: Create `DashboardStructureGrid.tsx`**
 
 Create `frontend/components/dashboard/workbench/DashboardStructureGrid.tsx`:
 
@@ -724,7 +724,7 @@ export function DashboardStructureGrid({
 }
 ```
 
-- [ ] **Step 7: Create `DashboardEvidenceStack.tsx`**
+- [x] **Step 7: Create `DashboardEvidenceStack.tsx`**
 
 Create `frontend/components/dashboard/workbench/DashboardEvidenceStack.tsx`:
 
@@ -785,7 +785,7 @@ export function DashboardEvidenceStack({ stats, openPositions, allPositions, isM
 }
 ```
 
-- [ ] **Step 8: Create `DashboardWorkbench.tsx`**
+- [x] **Step 8: Create `DashboardWorkbench.tsx`**
 
 Create `frontend/components/dashboard/workbench/DashboardWorkbench.tsx`:
 
@@ -891,7 +891,7 @@ export function DashboardWorkbench({
 }
 ```
 
-- [ ] **Step 9: Run TypeScript to expose component typing gaps**
+- [x] **Step 9: Run TypeScript to expose component typing gaps**
 
 Run:
 
@@ -902,7 +902,7 @@ cd frontend
 
 Expected: TypeScript may fail on prop shapes, especially `PositionViewModel` narrowing. Fix exact compiler errors without changing backend contracts.
 
-- [ ] **Step 10: Commit component scaffold once TypeScript passes after page wiring**
+- [x] **Step 10: Commit component scaffold once TypeScript passes after page wiring**
 
 Do not commit yet if the page still imports old inline Dashboard composition. Commit after Task 3 wires the page and TypeScript passes.
 
@@ -913,7 +913,7 @@ Do not commit yet if the page still imports old inline Dashboard composition. Co
 **Files:**
 - Modify: `frontend/app/dashboard/page.tsx`
 
-- [ ] **Step 1: Replace inline page composition with workbench orchestration**
+- [x] **Step 1: Replace inline page composition with workbench orchestration**
 
 Rewrite `frontend/app/dashboard/page.tsx` so it keeps only client state, data loading, and loaded workbench rendering:
 
@@ -993,7 +993,7 @@ export default function DashboardPage() {
 }
 ```
 
-- [ ] **Step 2: Run adapter tests**
+- [x] **Step 2: Run adapter tests**
 
 Run:
 
@@ -1004,7 +1004,7 @@ node --experimental-strip-types --test tests/dashboard-adapter.test.mts
 
 Expected: PASS.
 
-- [ ] **Step 3: Run TypeScript**
+- [x] **Step 3: Run TypeScript**
 
 Run:
 
@@ -1015,7 +1015,7 @@ cd frontend
 
 Expected: PASS.
 
-- [ ] **Step 4: Run targeted Dashboard strict lint**
+- [x] **Step 4: Run targeted Dashboard strict lint**
 
 Run:
 
@@ -1026,7 +1026,7 @@ cd frontend
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit Dashboard workbench implementation**
+- [x] **Step 5: Commit Dashboard workbench implementation**
 
 Run:
 
