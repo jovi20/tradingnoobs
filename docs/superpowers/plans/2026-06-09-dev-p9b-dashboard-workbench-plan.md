@@ -1042,7 +1042,7 @@ git commit -m "feat: redesign dashboard as macro workbench"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-06-09-dev-p9b-dashboard-workbench-plan.md`
 
-- [ ] **Step 1: Run frontend audit**
+- [x] **Step 1: Run frontend audit**
 
 Run:
 
@@ -1053,7 +1053,7 @@ npm audit --audit-level=high
 
 Expected: 0 high or critical vulnerabilities.
 
-- [ ] **Step 2: Run all frontend adapter tests**
+- [x] **Step 2: Run all frontend adapter tests**
 
 Run:
 
@@ -1064,7 +1064,7 @@ node --experimental-strip-types --test tests/*.test.mts
 
 Expected: all `.mts` tests pass.
 
-- [ ] **Step 3: Run TypeScript**
+- [x] **Step 3: Run TypeScript**
 
 Run:
 
@@ -1075,7 +1075,7 @@ cd frontend
 
 Expected: PASS.
 
-- [ ] **Step 4: Run lint**
+- [x] **Step 4: Run lint**
 
 Run:
 
@@ -1086,7 +1086,7 @@ npm run lint
 
 Expected: exit 0. Existing warnings outside P9B can remain if they match the known P9A baseline.
 
-- [ ] **Step 5: Run production build**
+- [x] **Step 5: Run production build**
 
 Run:
 
@@ -1097,7 +1097,7 @@ npm run build
 
 Expected: build exits 0 and includes `/dashboard` and `/timeline`.
 
-- [ ] **Step 6: Restore generated frontend files before commit**
+- [x] **Step 6: Restore generated frontend files before commit**
 
 Run:
 
@@ -1107,7 +1107,7 @@ git checkout -- frontend/next-env.d.ts frontend/tsconfig.tsbuildinfo
 
 Expected: generated files are restored if the build changed them. Do not revert user-authored files.
 
-- [ ] **Step 7: Record verification evidence**
+- [x] **Step 7: Record verification evidence**
 
 Add a `## Verification Evidence` section to this plan with exact command results:
 
@@ -1121,7 +1121,7 @@ Add a `## Verification Evidence` section to this plan with exact command results
 - `npm run build`: exited 0 and included `/dashboard`.
 ```
 
-- [ ] **Step 8: Commit verification notes**
+- [x] **Step 8: Commit verification notes**
 
 Run:
 
@@ -1232,3 +1232,12 @@ Expected: `origin/dev` receives P9B design, implementation, and verification com
 - [ ] Frontend audit, adapter tests, TypeScript, lint, and build pass.
 - [ ] Browser smoke covers desktop Dashboard, mobile Dashboard, and `/` redirect.
 - [ ] P9B commits are pushed to `origin/dev`.
+
+## Verification Evidence
+
+- `npm audit --audit-level=high`: initial sandbox run could not resolve `registry.npmjs.org`; escalated rerun exited 0 with `found 0 vulnerabilities`.
+- `node --experimental-strip-types --test tests/*.test.mts`: exited 0; 58 tests passed, 0 failed. Node emitted existing `MODULE_TYPELESS_PACKAGE_JSON` warnings.
+- `./node_modules/.bin/tsc --noEmit --pretty false`: exited 0.
+- `npm run lint`: exited 0 with 0 errors and 5 existing warnings in `app/insights/page.tsx`, `app/login/page.tsx`, `app/register/page.tsx`, `app/strategies/page.tsx`, and `hooks/useDashboardData.ts`.
+- `npm run build`: sandbox run failed because Turbopack could not create a local process/bind a port under sandbox restrictions; escalated rerun exited 0 on Next 16.2.7 and included `/dashboard`, `/timeline`, and `/`.
+- Restored generated files after build: `frontend/next-env.d.ts` and `frontend/tsconfig.tsbuildinfo`.
