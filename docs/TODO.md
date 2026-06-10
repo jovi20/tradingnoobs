@@ -45,7 +45,7 @@
 
 ### P10B Truth hard cutover 设计与执行
 
-- [ ] 盘点所有 legacy `Position / TradeBatch / Transaction / AssetMetadata / DailySnapshot` 引用，按 `primary path`、`migration-only`、`delete candidate` 分类。
+- [x] 盘点所有 legacy `Position / TradeBatch / Transaction / AssetMetadata / DailySnapshot` 引用，按 `primary path`、`migration-only`、`delete candidate` 分类。
 - [ ] 把普通用户新增、加仓、减仓、平仓、复盘、叙事编辑统一到 `TradingPosition / PositionEvent` 路径。
 - [ ] 明确 historical reversal、`OPEN` reversal、whole-position delete、legacy batch edit 的最终产品语义。
 - [ ] 让 Timeline / Review Inbox 最终读 `TradingPosition / PositionEvent / InsightArtifact / DerivedTimelineSnapshot`，不再依赖 legacy bridge 作为主路径。
@@ -53,9 +53,10 @@
 
 ### P10C 平台可观测性与运维安全
 
-- [ ] 增加请求级 `X-Request-ID`。
-- [ ] 增加请求耗时 `latency_ms`。
-- [ ] 冻结 error code 命名规则，并在路由异常处理中实际使用。
+- [x] 增加请求级 `X-Request-ID`。
+- [x] 增加请求耗时 `X-Response-Time-Ms`。
+- [x] 冻结 error code 命名规则，新增 `make_error_code(namespace, error)` helper。
+- [ ] 在路由异常处理中实际使用统一 error code。
 - [ ] 建立结构化日志策略，逐步替换后端业务路径中的 `print()`。
 - [ ] 补 release / rollback playbook，特别是 truth hard cutover 和 derived snapshot 切换。
 

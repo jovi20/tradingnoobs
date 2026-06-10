@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from app_bootstrap import bootstrap_schema_if_enabled, resolve_auto_create_schema_enabled
 from config import get_settings
 from database import engine, Base
+from observability import add_observability_middleware
 from routers import auth, strategies, dashboard, daily, settings as settings_router, insights, accounts, admin, positions, market, journal, transactions, timeline, trading_positions, insight_artifacts
 
 app_settings = get_settings()
@@ -46,6 +47,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+add_observability_middleware(app)
 
 # Include Routers
 app.include_router(auth.router)

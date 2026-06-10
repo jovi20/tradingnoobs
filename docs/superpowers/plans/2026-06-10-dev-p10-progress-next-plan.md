@@ -57,7 +57,7 @@ This section is the single forward-plan inventory for all currently planned task
 | Timeline final read model | Snapshot-first with bridge/rollback support. | Pure truth/snapshot-backed default without legacy primary dependency. | P11 Timeline read-model cutover plan. |
 | Lifecycle final mutation semantics | Truth-first for ordinary actions; some legacy migration controls remain. | Clear semantics for historical reversal, `OPEN` reversal, delete/archive, and migration-only controls. | P11 Lifecycle mutation semantics plan. |
 | Account ledger completion | Ledger-preferred with legacy fallback. | Account cash and read models fully ledger-derived where history is complete. | P11/P12 ledger cutover plan. |
-| Observability | No unified middleware yet. | `X-Request-ID`, latency, error-code convention, structured logs. | P10C observability plan slice. |
+| Observability | Minimal middleware landed in P10C. | `X-Request-ID`, `X-Response-Time-Ms`, and error-code helper exist; structured logging and route-level error-code adoption remain follow-up work. | P12 platform contract hardening plan. |
 | OpenAPI frontend types | `frontend/lib/read-models.ts` is handwritten. | Generated OpenAPI types with stable import boundaries. | P12 API contract generation plan. |
 | Backend model modularization | `backend/models.py` is still monolithic. | `backend/models/` package with compatibility exports. | P10E/P12 model modularization plan. |
 | Risk alerts | Planned, not implemented. | Risk service, daily loss checks, alert surfaces. | P13 risk alert implementation plan. |
@@ -179,7 +179,7 @@ Expected:
 - No claim that legacy models are already removed.
 - No claim that P10 implementation is complete before verification.
 
-- [ ] **Step 7: Commit docs sync**
+- [x] **Step 7: Commit docs sync**
 
 Run:
 
@@ -202,7 +202,7 @@ Expected: commit succeeds on `dev`. Do not stage `docs/superpowers/demos/`.
 - Read-only scan: `frontend/lib/`
 - Read-only scan: `frontend/app/`
 
-- [ ] **Step 1: Generate legacy reference scan**
+- [x] **Step 1: Generate legacy reference scan**
 
 Run:
 
@@ -212,7 +212,7 @@ rg -n "\b(Position|TradeBatch|Transaction|AssetMetadata|DailySnapshot)\b" backen
 
 Expected: output includes known legacy paths such as `backend/routers/positions.py`, `backend/routers/dashboard.py`, `backend/routers/timeline.py`, `backend/services/import_service.py`, and `frontend/lib/api.ts`.
 
-- [ ] **Step 2: Generate truth reference scan**
+- [x] **Step 2: Generate truth reference scan**
 
 Run:
 
@@ -222,7 +222,7 @@ rg -n "\b(TradingPosition|PositionEvent|AccountLedgerEntry|AssetMaster|TradeInst
 
 Expected: output shows current truth routes, lifecycle adapters, timeline snapshots, and insight artifacts.
 
-- [ ] **Step 3: Write inventory document**
+- [x] **Step 3: Write inventory document**
 
 Create `docs/superpowers/plans/2026-06-10-dev-p10-legacy-cutover-inventory.md` with these sections:
 
@@ -252,7 +252,7 @@ Create `docs/superpowers/plans/2026-06-10-dev-p10-legacy-cutover-inventory.md` w
 - Legacy import behavior after truth write path is default.
 ```
 
-- [ ] **Step 4: Verify no code changed**
+- [x] **Step 4: Verify no code changed**
 
 Run:
 
@@ -263,7 +263,7 @@ git diff -- backend frontend
 
 Expected: only the inventory document changes; backend and frontend diffs are empty.
 
-- [ ] **Step 5: Commit inventory**
+- [x] **Step 5: Commit inventory**
 
 Run:
 
@@ -283,7 +283,7 @@ git commit -m "docs: inventory legacy truth cutover paths"
 - Modify: `docs/TODO.md`
 - Modify: `docs/superpowers/plans/2026-06-10-dev-p10-progress-next-plan.md`
 
-- [ ] **Step 1: Write middleware tests first**
+- [x] **Step 1: Write middleware tests first**
 
 Create `backend/tests/test_observability.py` with tests for:
 - Incoming `X-Request-ID` is reused.
@@ -292,7 +292,7 @@ Create `backend/tests/test_observability.py` with tests for:
 - Response includes `X-Response-Time-Ms`.
 - `make_error_code("timeline", "missing_position")` returns `TIMELINE_MISSING_POSITION`.
 
-- [ ] **Step 2: Run tests and confirm they fail**
+- [x] **Step 2: Run tests and confirm they fail**
 
 Run:
 
@@ -303,7 +303,7 @@ cd backend
 
 Expected: fails because `backend/observability.py` and middleware wiring do not exist yet.
 
-- [ ] **Step 3: Implement `backend/observability.py`**
+- [x] **Step 3: Implement `backend/observability.py`**
 
 Implementation requirements:
 - `make_error_code(namespace: str, error: str) -> str`.
@@ -312,7 +312,7 @@ Implementation requirements:
 - Middleware must set `X-Request-ID` and `X-Response-Time-Ms`.
 - Middleware must not change response body.
 
-- [ ] **Step 4: Register middleware in `backend/main.py`**
+- [x] **Step 4: Register middleware in `backend/main.py`**
 
 Import the helper and register it after CORS setup or immediately before router registration:
 
@@ -322,7 +322,7 @@ from observability import add_observability_middleware
 add_observability_middleware(app)
 ```
 
-- [ ] **Step 5: Run targeted tests**
+- [x] **Step 5: Run targeted tests**
 
 Run:
 
@@ -333,7 +333,7 @@ cd backend
 
 Expected: tests pass.
 
-- [ ] **Step 6: Run backend full tests**
+- [x] **Step 6: Run backend full tests**
 
 Run:
 
@@ -500,8 +500,8 @@ Before implementation, confirm the active lane in `TODO.md`. Leave later lanes i
 - [ ] `DEVELOPER_GUIDE.md` describes current `dev`, not the old main baseline.
 - [ ] `docs/README.md` links current plans and specs.
 - [ ] Top-level sequencing plan no longer understates P8-P9F progress.
-- [ ] Legacy cutover has an inventory before deletion starts.
-- [ ] Observability has request id and latency middleware before more risky cutover work.
+- [x] Legacy cutover has an inventory before deletion starts.
+- [x] Observability has request id and latency middleware before more risky cutover work.
 - [ ] Handwritten frontend read-model types are marked as temporary.
 - [ ] Model modularization is planned before `backend/models.py` is split.
 - [ ] `docs/superpowers/demos/` remains untouched and uncommitted.
@@ -511,3 +511,8 @@ Before implementation, confirm the active lane in `TODO.md`. Leave later lanes i
 - 2026-06-10 P10A docs sync: `git diff --check` exited 0 for tracked documentation changes.
 - 2026-06-10 P10A docs sync: trailing-whitespace scan across updated docs and the new P10 plan exited 0 after cleanup.
 - 2026-06-10 P10A docs sync: old-version scan found no stale frontend-version or Alembic-not-stable wording; `Dashboard-first` appears only as a contrast in the current-state guide.
+- 2026-06-10 P10B inventory: legacy/truth reference scans completed; `docs/superpowers/plans/2026-06-10-dev-p10-legacy-cutover-inventory.md` created and committed in `c4a9b4e`.
+- 2026-06-10 P10B inventory: `git diff -- backend frontend` exited 0 before the inventory commit.
+- 2026-06-10 P10C observability RED: `../.venv313/bin/python -m unittest discover -s tests -p test_observability.py` failed with `ModuleNotFoundError: No module named 'observability'`.
+- 2026-06-10 P10C observability GREEN: targeted observability tests ran 4 tests and passed.
+- 2026-06-10 P10C observability regression: full backend unittest discovery ran 150 tests and passed; output included a Yahoo DNS warning from market-data-related code.
