@@ -2,9 +2,10 @@ import type { DashboardStats } from '../api.ts'
 import type { PositionViewModel } from './trading.ts'
 import {
     adaptDashboardAllocationChartPayload,
+    buildDashboardAllocationFallbackChart,
     getDashboardChartPayloadKey,
     type DashboardAllocationDimension,
-} from '../chartSchemas.ts'
+} from '../charts.ts'
 import { getCurrencySymbol } from '../symbolUtils.ts'
 
 export type DashboardPeriodLabel = '1周' | '本月' | '1月' | '3月' | '本年' | '1年' | '全部'
@@ -203,18 +204,19 @@ export function getDashboardAllocationData(
     stats: Pick<DashboardStats, 'core_type_allocation' | 'market_allocation' | 'risk_level_allocation' | 'chart_payloads'>,
     dimension: DashboardAllocationDimension
 ) {
-    const chartView = getDashboardAllocationChart(stats, dimension)
-    if (!chartView.isEmpty || stats.chart_payloads?.[getDashboardChartPayloadKey(dimension)]) return chartView.data
-    if (dimension === 'MARKET') return stats.market_allocation
-    if (dimension === 'RISK') return stats.risk_level_allocation
-    return stats.core_type_allocation
+    return getDashboardAllocationChart(stats, dimension).data
 }
 
 export function getDashboardAllocationChart(
     stats: Pick<DashboardStats, 'core_type_allocation' | 'market_allocation' | 'risk_level_allocation' | 'chart_payloads'>,
     dimension: DashboardAllocationDimension
 ) {
-    return adaptDashboardAllocationChartPayload(stats.chart_payloads?.[getDashboardChartPayloadKey(dimension)])
+    const schemaPayload = stats.chart_payloads?.[getDashboardChartPayloadKey(dimension)]
+    if (schemaPayload) return adaptDashboardAllocationChartPayload(schemaPayload)
+
+    if (dimension === 'MARKET') return buildDashboardAllocationFallbackChart(stats.market_allocation ?? [], dimension)
+    if (dimension === 'RISK') return buildDashboardAllocationFallbackChart(stats.risk_level_allocation ?? [], dimension)
+    return buildDashboardAllocationFallbackChart(stats.core_type_allocation ?? [], dimension)
 }
 
 export function getDashboardMovers(stats: Pick<DashboardStats, 'top_movers' | 'bottom_movers'>) {

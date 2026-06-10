@@ -132,6 +132,20 @@ test('dashboard allocation chart exposes trust and empty state from schema paylo
   assert.equal(chart.trustMeta.source, 'DASHBOARD_DERIVED_READ_MODEL')
 })
 
+test('dashboard allocation chart synthesizes local trust for legacy fallback data', () => {
+  const stats = {
+    core_type_allocation: [{ name: 'STOCK', value: 700, percent: 70 }],
+    market_allocation: [],
+    risk_level_allocation: [],
+  }
+
+  const chart = getDashboardAllocationChart(stats, 'CORE_TYPE')
+  assert.equal(chart.isEmpty, false)
+  assert.equal(chart.schema?.chart_type, 'pie')
+  assert.equal(chart.trustMeta.source, 'LOCAL_FALLBACK_VIEW')
+  assert.deepEqual(chart.data, [{ name: 'STOCK', value: 700, percent: 70 }])
+})
+
 test('dashboard movers helper preserves top and bottom movers', () => {
   const stats = {
     top_movers: [{ id: 1, symbol: 'NVDA', change_percent: 3.2, current_price: 910, currency: 'USD' }],

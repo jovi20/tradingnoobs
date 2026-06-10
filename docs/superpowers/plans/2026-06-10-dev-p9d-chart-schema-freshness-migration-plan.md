@@ -272,7 +272,7 @@ node --experimental-strip-types --test tests/charts.test.mts tests/chart-schemas
 
 Expected: all selected tests pass.
 
-- [ ] **Step 7: Commit shared contract layer**
+- [x] **Step 7: Commit shared contract layer**
 
 Run:
 
@@ -287,7 +287,7 @@ git commit -m "feat: unify frontend chart contracts"
 - Modify: `frontend/lib/adapters/dashboard.ts`
 - Modify: `frontend/tests/dashboard-adapter.test.mts`
 
-- [ ] **Step 1: Write failing Dashboard fallback chart test**
+- [x] **Step 1: Write failing Dashboard fallback chart test**
 
 Add to `frontend/tests/dashboard-adapter.test.mts`:
 
@@ -307,7 +307,7 @@ test('dashboard allocation chart synthesizes local trust for legacy fallback dat
 })
 ```
 
-- [ ] **Step 2: Run Dashboard adapter test and verify RED**
+- [x] **Step 2: Run Dashboard adapter test and verify RED**
 
 Run:
 
@@ -318,7 +318,7 @@ node --experimental-strip-types --test tests/dashboard-adapter.test.mts
 
 Expected: the new fallback test fails because missing schema payload currently returns `MISSING_CHART_PAYLOAD`.
 
-- [ ] **Step 3: Implement fallback chart view**
+- [x] **Step 3: Implement fallback chart view**
 
 Modify `frontend/lib/adapters/dashboard.ts`:
 
@@ -358,7 +358,7 @@ export function getDashboardAllocationChart(
 }
 ```
 
-- [ ] **Step 4: Run Dashboard adapter tests**
+- [x] **Step 4: Run Dashboard adapter tests**
 
 Run:
 
