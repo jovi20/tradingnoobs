@@ -13,15 +13,17 @@
    当前代码库与运行方式说明，回答“现在实际实现到了哪里”。
 2. [TODO.md](./TODO.md)
    当前唯一执行清单，记录 P10 之后的优先级和仍未开发的 backlog。
-3. [superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md](./superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md)
+3. [release-rollback-playbook.md](./release-rollback-playbook.md)
+   P11/P12 后 truth writes、Timeline snapshot、legacy mutation guard 的发布与回滚手册。
+4. [superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md](./superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md)
    平台底座与前端重设计的总 sequencing plan。
-4. [superpowers/plans/2026-05-02-dev-branch-checkpoint.md](./superpowers/plans/2026-05-02-dev-branch-checkpoint.md)
+5. [superpowers/plans/2026-05-02-dev-branch-checkpoint.md](./superpowers/plans/2026-05-02-dev-branch-checkpoint.md)
    `dev` 分支阶段 checkpoint 与验收记录。
-5. [superpowers/specs/2026-04-06-platform-foundation-design.md](./superpowers/specs/2026-04-06-platform-foundation-design.md)
+6. [superpowers/specs/2026-04-06-platform-foundation-design.md](./superpowers/specs/2026-04-06-platform-foundation-design.md)
    平台底座目标架构基线。
-6. [superpowers/specs/2026-04-07-frontend-experience-redesign-design.md](./superpowers/specs/2026-04-07-frontend-experience-redesign-design.md)
+7. [superpowers/specs/2026-04-07-frontend-experience-redesign-design.md](./superpowers/specs/2026-04-07-frontend-experience-redesign-design.md)
    前端体验重设计基线。
-7. 专题附录：
+8. 专题附录：
    [market_data_sources.md](./market_data_sources.md),
    [trading-metrics.md](./trading-metrics.md),
    [trading-fields-design.md](./trading-fields-design.md)

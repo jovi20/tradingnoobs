@@ -21,6 +21,7 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 - [superpowers/plans/2026-06-10-dev-p10-model-modularization-plan.md](./superpowers/plans/2026-06-10-dev-p10-model-modularization-plan.md)
 - [superpowers/plans/2026-06-10-dev-p11-truth-hard-cutover-plan.md](./superpowers/plans/2026-06-10-dev-p11-truth-hard-cutover-plan.md)
 - [superpowers/plans/2026-06-10-dev-p12-platform-contract-hardening-plan.md](./superpowers/plans/2026-06-10-dev-p12-platform-contract-hardening-plan.md)
+- [release-rollback-playbook.md](./release-rollback-playbook.md)
 
 ---
 
@@ -60,7 +61,7 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 - [x] P12 Task 1：冻结 frontend raw legacy DTO import 边界，并用测试锁住 migration/support、create-sync bridge、legacy analytics、adapter boundary。
 - [x] P12 Task 2：增加 OpenAPI contract snapshot tests，覆盖 truth lifecycle、Timeline、legacy fallback headers。
 - [x] P12 Task 3：建立 `frontend/lib/generated/` 输出边界，为后续 OpenAPI type generation 做好落点。
-- [ ] P12 Task 4：补 release / rollback playbook，覆盖 truth writes、snapshot Timeline、legacy mutation guards。
+- [x] P12 Task 4：补 release / rollback playbook，覆盖 truth writes、snapshot Timeline、legacy mutation guards。
 - [ ] P12 Task 5：完成 P12 全量验证门。
 
 ---
@@ -98,7 +99,7 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 - [x] 冻结 error code 命名规则，新增 `make_error_code(namespace, error)` helper。
 - [ ] 在路由异常处理中实际使用统一 error code。
 - [ ] 建立结构化日志策略，逐步替换后端业务路径中的 `print()`。
-- [ ] 补 release / rollback playbook，特别是 truth hard cutover 和 derived snapshot 切换；该项已进入 P12 Task 4。
+- [x] 补 release / rollback playbook，特别是 truth hard cutover 和 derived snapshot 切换；详见 [release-rollback-playbook.md](./release-rollback-playbook.md)。
 
 ### P10D 前端 API 契约收敛
 

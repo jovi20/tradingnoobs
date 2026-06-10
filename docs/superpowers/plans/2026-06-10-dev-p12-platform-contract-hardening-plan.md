@@ -131,7 +131,7 @@ export {}
 - [x] Add `frontend/tests/generated-contracts.test.mts` that imports `../lib/generated/contracts.ts` and verifies the module can be loaded.
 - [x] Update `frontend/lib/read-models.ts` header to point to `frontend/lib/generated/contracts.ts` as the future replacement boundary.
 - [x] Run `cd frontend && node --experimental-strip-types --test tests/generated-contracts.test.mts`.
-- [ ] Commit with `chore: add generated contract boundary`.
+- [x] Commit with `chore: add generated contract boundary`.
 
 P12 Task 3 result:
 - Added `frontend/lib/generated/` as the stable future OpenAPI output boundary without replacing handwritten read models yet.
@@ -142,6 +142,7 @@ Verification log:
 - RED frontend: `node --experimental-strip-types --test tests/generated-contracts.test.mts` failed with `ERR_MODULE_NOT_FOUND` before the generated boundary existed.
 - GREEN targeted frontend: `node --experimental-strip-types --test tests/generated-contracts.test.mts` ran 1 test OK; Node emitted the existing `MODULE_TYPELESS_PACKAGE_JSON` warning.
 - P12 Task 3 verification: `./node_modules/.bin/tsc --noEmit --pretty false` exited 0.
+- Commit: `1c06a7a chore: add generated contract boundary`.
 
 Verification:
 
@@ -157,21 +158,29 @@ node --experimental-strip-types --test tests/generated-contracts.test.mts
 
 **Goal:** make P11 truth/snapshot switches operable, not just coded.
 
-- [ ] Add a `docs/release-rollback-playbook.md` section for truth writes:
+- [x] Add a `docs/release-rollback-playbook.md` section for truth writes:
   - normal path: truth routes
   - migration fallback headers
   - safe rollback order by P11 commit
-- [ ] Add a Timeline snapshot rollback section:
+- [x] Add a Timeline snapshot rollback section:
   - normal mode: `SNAPSHOT_ONLY`
   - rollback flag: `timeline_legacy_mixed_feed_enabled`
   - expected UI label: `Legacy mixed fallback enabled`
-- [ ] Add a legacy mutation guard section:
+- [x] Add a legacy mutation guard section:
   - `legacy-batch-write`
   - `legacy-review-write`
   - `legacy-position-delete`
   - `legacy-batch-edit`
-- [ ] Link the playbook from `docs/DEVELOPER_GUIDE.md` and `docs/TODO.md`.
+- [x] Link the playbook from `docs/DEVELOPER_GUIDE.md` and `docs/TODO.md`.
 - [ ] Commit with `docs: add p11 rollback playbook`.
+
+P12 Task 4 result:
+- Added `docs/release-rollback-playbook.md` with truth write, Timeline snapshot, and legacy mutation guard release/rollback procedures.
+- Linked the playbook from `docs/DEVELOPER_GUIDE.md`, `docs/TODO.md`, and `docs/README.md`.
+- Captured P11 behavior rollback order using the actual commit sequence for truth-first writes, create-and-sync, narrative guards, destructive mutation guards, and snapshot Timeline.
+
+Verification log:
+- P12 Task 4 verification: `rg -n "timeline_legacy_mixed_feed_enabled|legacy-batch-write|legacy-review-write|legacy-position-delete|legacy-batch-edit" docs` found the rollback flag and all four fallback tokens in docs, including the new playbook.
 
 Verification:
 
