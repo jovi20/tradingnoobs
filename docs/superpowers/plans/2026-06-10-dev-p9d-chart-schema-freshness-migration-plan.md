@@ -777,7 +777,7 @@ node --experimental-strip-types --test tests/chart-views.test.mts tests/charts.t
 
 Expected: all commands exit 0.
 
-- [ ] **Step 8: Commit scatter and sankey migration**
+- [x] **Step 8: Commit scatter and sankey migration**
 
 Run:
 
@@ -795,7 +795,7 @@ git commit -m "feat: wrap legacy analytics charts with chart frame"
 - Modify: `frontend/app/insights/page.tsx`
 - Modify: `frontend/components/insights/AnalysisAssistant.tsx`
 
-- [ ] **Step 1: Write failing Insights chart adapter tests**
+- [x] **Step 1: Write failing Insights chart adapter tests**
 
 Create `frontend/tests/insight-charts.test.mts`:
 
@@ -853,7 +853,7 @@ test('adaptLegacyAnalysisChart returns explicit empty state for unsupported raw 
 })
 ```
 
-- [ ] **Step 2: Run Insights chart adapter tests and verify RED**
+- [x] **Step 2: Run Insights chart adapter tests and verify RED**
 
 Run:
 
@@ -864,7 +864,7 @@ node --experimental-strip-types --test tests/insight-charts.test.mts
 
 Expected: fails because `lib/adapters/insight-charts.ts` does not exist.
 
-- [ ] **Step 3: Implement Insights chart adapter**
+- [x] **Step 3: Implement Insights chart adapter**
 
 Create `frontend/lib/adapters/insight-charts.ts`:
 
@@ -929,7 +929,7 @@ export function adaptLegacyAnalysisChart(result: Pick<AnalysisResponse, 'analysi
 }
 ```
 
-- [ ] **Step 4: Run Insights chart adapter tests**
+- [x] **Step 4: Run Insights chart adapter tests**
 
 Run:
 
@@ -940,7 +940,7 @@ node --experimental-strip-types --test tests/insight-charts.test.mts
 
 Expected: tests pass.
 
-- [ ] **Step 5: Create shared LegacyAnalysisChart component**
+- [x] **Step 5: Create shared LegacyAnalysisChart component**
 
 Create `frontend/components/insights/LegacyAnalysisChart.tsx`:
 
@@ -992,7 +992,7 @@ export function LegacyAnalysisChart({ result, compact = false }: LegacyAnalysisC
 }
 ```
 
-- [ ] **Step 6: Replace duplicate chart rendering in `/insights`**
+- [x] **Step 6: Replace duplicate chart rendering in `/insights`**
 
 Modify `frontend/app/insights/page.tsx`:
 
@@ -1005,7 +1005,7 @@ Modify `frontend/app/insights/page.tsx`:
 <LegacyAnalysisChart result={cachedResult} compact />
 ```
 
-- [ ] **Step 7: Replace duplicate chart rendering in `AnalysisAssistant`**
+- [x] **Step 7: Replace duplicate chart rendering in `AnalysisAssistant`**
 
 Modify `frontend/components/insights/AnalysisAssistant.tsx`:
 
@@ -1018,7 +1018,7 @@ Modify `frontend/components/insights/AnalysisAssistant.tsx`:
 <LegacyAnalysisChart result={result} />
 ```
 
-- [ ] **Step 8: Run Insights tests, TypeScript, and targeted strict lint**
+- [x] **Step 8: Run Insights tests, TypeScript, and targeted strict lint**
 
 Run:
 

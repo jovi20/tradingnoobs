@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useEffectEvent, useState } from 'react'
 import {
     FileText,
     TrendingUp,
@@ -19,21 +19,12 @@ import {
     Clock
 } from 'lucide-react'
 import { EvidenceLinkedInsightSidecar } from '@/components/insights/EvidenceLinkedInsightSidecar'
+import { LegacyAnalysisChart } from '@/components/insights/LegacyAnalysisChart'
 import { useAuth } from '@/contexts/AuthContext'
 import ReactMarkdown from 'react-markdown'
 import { useInsightRuns } from '@/hooks/useInsightRuns'
 import { insightsAPI, WeeklyReport, AISummary, AnalysisType, AnalysisResponse } from '@/lib/api'
 import { useTrendColor } from '@/hooks/useTrendColor'
-import {
-    BarChart,
-    Bar,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip,
-    ResponsiveContainer,
-    Cell
-} from 'recharts'
 
 // ============== 分析维度定义 ==============
 const ANALYSIS_OPTIONS: { type: AnalysisType; label: string; icon: any; desc: string }[] = [
@@ -105,10 +96,18 @@ export default function InsightsPage() {
         await Promise.all(promises)
     }
 
-    useEffect(() => {
+    const loadInitialInsightData = useEffectEvent(() => {
         fetchReports()
         fetchDailySummary()
         fetchPersistedAnalyses()
+    })
+
+    useEffect(() => {
+        if (!token) return
+        const loadTimer = window.setTimeout(() => {
+            loadInitialInsightData()
+        }, 0)
+        return () => window.clearTimeout(loadTimer)
     }, [token])
 
     // ============== 操作处理 ==============
@@ -165,65 +164,6 @@ export default function InsightsPage() {
         const today = new Date()
         return reportDate.toDateString() === today.toDateString()
     })
-
-    // ============== 图表渲染 ==============
-    const renderChart = () => {
-        const currentResult = selectedAnalysis ? analysisResultsMap[selectedAnalysis] : null
-        if (!currentResult || !currentResult.raw_data) return null
-
-        if (currentResult.raw_data.stats) {
-            const chartData = Object.entries(currentResult.raw_data.stats).map(([key, val]: any) => ({
-                name: key,
-                pnl: val.avg_pnl,
-                win_rate: (val.win_rate * 100).toFixed(1),
-                count: val.count
-            }))
-            return (
-                <div className="h-56 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={chartData}>
-                            <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-                            <XAxis dataKey="name" fontSize={11} />
-                            <YAxis fontSize={11} />
-                            <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '12px' }} />
-                            <Bar dataKey="pnl" name="平均盈亏" radius={[4, 4, 0, 0]}>
-                                {chartData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.pnl >= 0 ? '#34d399' : '#f87171'} />
-                                ))}
-                            </Bar>
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
-            )
-        }
-
-        if (currentResult.analysis_type === 'checklist_effect') {
-            const d1 = currentResult.raw_data.checklist_completed
-            const d2 = currentResult.raw_data.checklist_ignored
-            const chartData = [
-                { name: '已执行清单', pnl: d1?.avg_pnl || 0, count: d1?.count || 0 },
-                { name: '未执行/未完成', pnl: d2?.avg_pnl || 0, count: d2?.count || 0 }
-            ]
-            return (
-                <div className="h-56 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={chartData}>
-                            <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-                            <XAxis dataKey="name" fontSize={11} />
-                            <YAxis fontSize={11} />
-                            <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '12px' }} />
-                            <Bar dataKey="pnl" name="平均盈亏" radius={[4, 4, 0, 0]}>
-                                {chartData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.pnl >= 0 ? '#34d399' : '#f87171'} />
-                                ))}
-                            </Bar>
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
-            )
-        }
-        return null
-    }
 
     // ============== Loading Screen ==============
     if (isLoading) {
@@ -438,7 +378,7 @@ export default function InsightsPage() {
                                         <div>
                                             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">数据可视化</h3>
                                             <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
-                                                {renderChart()}
+                                                <LegacyAnalysisChart result={cachedResult} compact />
                                             </div>
                                         </div>
                                         {/* AI 诊断文字 */}

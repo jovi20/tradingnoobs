@@ -10,22 +10,12 @@ import {
     Smile,
     CheckSquare,
     Target,
-    Calendar,
     ArrowRight
 } from 'lucide-react'
+import { LegacyAnalysisChart } from '@/components/insights/LegacyAnalysisChart'
 import { insightsAPI, AnalysisType, AnalysisResponse } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import ReactMarkdown from 'react-markdown'
-import {
-    BarChart,
-    Bar,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip,
-    ResponsiveContainer,
-    Cell
-} from 'recharts'
 
 const ANALYSIS_OPTIONS: { type: AnalysisType; label: string; icon: any; desc: string }[] = [
     {
@@ -82,74 +72,6 @@ export default function AnalysisAssistant() {
         } finally {
             setIsLoading(false)
         }
-    }
-
-    const renderChart = () => {
-        if (!result || !result.raw_data) return null
-
-        // Safe check for stats
-        const stats = result.raw_data.stats || result.raw_data.checklist_completed || result.raw_data.checklist_ignored ? result.raw_data : null
-
-        // 1. Holding Period / Emotion / Strategy (Grouped Stats)
-        if (result.raw_data.stats) {
-            const chartData = Object.entries(result.raw_data.stats).map(([key, val]: any) => ({
-                name: key,
-                pnl: val.avg_pnl,
-                win_rate: (val.win_rate * 100).toFixed(1),
-                count: val.count
-            }))
-
-            return (
-                <div className="h-64 w-full mt-4">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={chartData}>
-                            <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-                            <XAxis dataKey="name" fontSize={12} />
-                            <YAxis fontSize={12} />
-                            <Tooltip
-                                contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', color: '#fff' }}
-                            />
-                            <Bar dataKey="pnl" name="平均盈亏">
-                                {chartData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.pnl >= 0 ? '#34d399' : '#f87171'} />
-                                ))}
-                            </Bar>
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
-            )
-        }
-
-        // 2. Checklist Effect (Comparison)
-        if (result.analysis_type === 'checklist_effect') {
-            const d1 = result.raw_data.checklist_completed
-            const d2 = result.raw_data.checklist_ignored
-
-            const chartData = [
-                { name: '已执行清单', pnl: d1?.avg_pnl || 0, count: d1?.count || 0 },
-                { name: '未执行/未完成', pnl: d2?.avg_pnl || 0, count: d2?.count || 0 }
-            ]
-
-            return (
-                <div className="h-64 w-full mt-4">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={chartData}>
-                            <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-                            <XAxis dataKey="name" />
-                            <YAxis />
-                            <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none' }} />
-                            <Bar dataKey="pnl" name="平均盈亏">
-                                {chartData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.pnl >= 0 ? '#34d399' : '#f87171'} />
-                                ))}
-                            </Bar>
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
-            )
-        }
-
-        return null
     }
 
     return (
@@ -230,7 +152,7 @@ export default function AnalysisAssistant() {
                             <div>
                                 <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">数据可视化</h3>
                                 <div className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-100 dark:border-slate-700">
-                                    {renderChart()}
+                                    <LegacyAnalysisChart result={result} />
                                 </div>
                             </div>
 
