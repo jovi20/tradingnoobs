@@ -44,11 +44,22 @@ Docs:
 
 **Goal:** document and test which frontend modules may import raw API DTOs after P11.
 
-- [ ] Write a failing frontend boundary test that rejects new imports of legacy `Position`, `TradeBatch`, `BatchCreate`, and `Transaction` outside the current allowlist.
-- [ ] Extend `frontend/tests/legacy-ui-boundaries.test.mts` with a named allowlist object grouped by `migration_ui`, `create_sync_bridge`, `legacy_analytics`, and `adapter_boundary`.
-- [ ] Update `docs/DEVELOPER_GUIDE.md` with the same group names and the exact files in each group.
-- [ ] Run `cd frontend && node --experimental-strip-types --test tests/legacy-ui-boundaries.test.mts`.
+- [x] Write a failing frontend boundary test that rejects new imports of legacy `Position`, `TradeBatch`, `BatchCreate`, and `Transaction` outside the current allowlist.
+- [x] Extend `frontend/tests/legacy-ui-boundaries.test.mts` with a named allowlist object grouped by `migration_ui`, `create_sync_bridge`, `legacy_analytics`, and `adapter_boundary`.
+- [x] Update `docs/DEVELOPER_GUIDE.md` with the same group names and the exact files in each group.
+- [x] Run `cd frontend && node --experimental-strip-types --test tests/legacy-ui-boundaries.test.mts`.
 - [ ] Commit with `test: freeze frontend legacy dto boundaries`.
+
+P12 Task 1 result:
+- Raw legacy DTO imports from `frontend/lib/api.ts` are now tested against a named allowlist grouped by `migration_ui`, `create_sync_bridge`, `legacy_analytics`, and `adapter_boundary`.
+- The allowlist now includes legacy `Transaction` imports, closing the account-transaction DTO gap.
+- `docs/DEVELOPER_GUIDE.md` documents the same group names and exact files, so the code boundary and developer guide cannot drift silently.
+
+Verification log:
+- RED frontend: `node --experimental-strip-types --test tests/legacy-ui-boundaries.test.mts` failed because `docs/DEVELOPER_GUIDE.md` did not document `migration_ui`.
+- GREEN targeted frontend: `node --experimental-strip-types --test tests/legacy-ui-boundaries.test.mts` ran 4 tests OK.
+- P12 Task 1 verification: `./node_modules/.bin/tsc --noEmit --pretty false` exited 0.
+- P12 Task 1 verification: `npm run lint` exited 0.
 
 Verification:
 
