@@ -1,7 +1,9 @@
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { ChartFrame } from '@/components/charts/ChartFrame'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { Surface } from '@/components/ui/Surface'
 import type { DashboardPeriodLabel, DashboardPeriodMetrics, DashboardPeriodOption } from '@/lib/adapters/dashboard'
+import type { ChartSchema, ChartTrustMeta } from '@/lib/charts'
 
 interface DashboardEquityHeroProps {
     periodOptions: DashboardPeriodOption[]
@@ -28,6 +30,18 @@ export function DashboardEquityHero({
 }: DashboardEquityHeroProps) {
     const trendClassName = periodMetrics.periodPnl >= 0 ? upClassName : downClassName
     const periodValueClassName = periodMetrics.periodValue >= 0 ? upClassName : downClassName
+    const equityChartSchema = {
+        schema_version: 'chart.v1',
+        chart_type: 'line',
+        data_path: 'pnlHistory',
+        dimensions: [{ field: 'date', label: 'Date' }],
+        series: [{ field: 'pnl_percent', label: 'PnL %', color: lineColor }],
+    } satisfies ChartSchema
+    const equityTrustMeta = {
+        freshness: 'DELAYED',
+        source: 'LOCAL_DASHBOARD_HISTORY',
+        source_refs: ['dashboard:pnlHistory'],
+    } satisfies ChartTrustMeta
 
     return (
         <Surface className="overflow-hidden p-4 md:p-6">
@@ -63,8 +77,22 @@ export function DashboardEquityHero({
                 </p>
                 <p className="pb-1 text-xs text-slate-400">{selectedPeriod}阶段盈亏</p>
             </div>
-            <div className="mt-5 h-[280px] md:h-[340px]">
-                {pnlHistory.length > 0 ? (
+            <ChartFrame
+                eyebrow="Equity"
+                title="资金曲线数据"
+                description="本阶段仍使用前端本地曲线数据，等待后端 schema-first equity payload。"
+                schema={equityChartSchema}
+                trustMeta={equityTrustMeta}
+                emptyState={{
+                    is_empty: pnlHistory.length === 0,
+                    reason: pnlHistory.length === 0 ? 'NO_EQUITY_HISTORY' : null,
+                    message: pnlHistory.length === 0 ? '暂无资金曲线数据' : undefined,
+                }}
+                dataCount={pnlHistory.length}
+                compact
+                className="mt-5"
+            >
+                <div className="h-[280px] md:h-[340px]">
                     <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={pnlHistory}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -74,12 +102,8 @@ export function DashboardEquityHero({
                             <Line type="monotone" dataKey="pnl_percent" stroke={lineColor} strokeWidth={2.5} dot={false} />
                         </LineChart>
                     </ResponsiveContainer>
-                ) : (
-                    <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-slate-200 text-sm text-slate-500 dark:border-slate-800">
-                        暂无资金曲线数据
-                    </div>
-                )}
-            </div>
+                </div>
+            </ChartFrame>
         </Surface>
     )
 }

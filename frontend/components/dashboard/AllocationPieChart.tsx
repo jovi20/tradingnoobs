@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer } from 'recharts'
-import { AssetAllocation } from '@/lib/api'
+import type { AssetAllocation } from '@/lib/api'
 import { getCoreTypeLabel, getMarketLabel, getRiskLevelInfo, getAssetTypeHexColor, AssetMarket, AssetRiskLevel } from '@/lib/symbolUtils'
 
 interface AllocationPieChartProps {

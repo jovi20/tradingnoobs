@@ -79,6 +79,7 @@ export function assertSupportedChartSchema(schema: ChartSchema | null | undefine
 }
 
 export function getChartSchemaBadge(schema: ChartSchema | null | undefined): string | null {
+  if (!schema) return null
   if (!assertSupportedChartSchema(schema)) return null
   return `${schema.schema_version} · ${schema.chart_type}`
 }

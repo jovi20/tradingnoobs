@@ -369,7 +369,7 @@ node --experimental-strip-types --test tests/dashboard-adapter.test.mts tests/ch
 
 Expected: all selected tests pass.
 
-- [ ] **Step 5: Commit Dashboard adapter fallback**
+- [x] **Step 5: Commit Dashboard adapter fallback**
 
 Run:
 
@@ -386,7 +386,7 @@ git commit -m "feat: synthesize dashboard chart fallback trust"
 - Modify: `frontend/components/dashboard/AllocationPieChart.tsx`
 - Modify: `frontend/components/dashboard/workbench/DashboardEquityHero.tsx`
 
-- [ ] **Step 1: Create ChartFrame component**
+- [x] **Step 1: Create ChartFrame component**
 
 Create `frontend/components/charts/ChartFrame.tsx`:
 
@@ -469,7 +469,7 @@ export function ChartFrame({
 }
 ```
 
-- [ ] **Step 2: Migrate Dashboard allocation panel**
+- [x] **Step 2: Migrate Dashboard allocation panel**
 
 Modify `DashboardAllocationPanel` to import `ChartFrame` and wrap `AllocationPieChart`:
 
@@ -490,7 +490,7 @@ Modify `DashboardAllocationPanel` to import `ChartFrame` and wrap `AllocationPie
 
 Keep the dimension tabs in the same panel header area or inside the `ChartFrame` footer.
 
-- [ ] **Step 3: Simplify AllocationPieChart empty state**
+- [x] **Step 3: Simplify AllocationPieChart empty state**
 
 Modify `AllocationPieChart` so empty rendering returns a neutral renderer area only when used outside `ChartFrame`:
 
@@ -502,7 +502,7 @@ if (!data || data.length === 0) {
 
 Preserve router click behavior.
 
-- [ ] **Step 4: Migrate Dashboard equity hero chart**
+- [x] **Step 4: Migrate Dashboard equity hero chart**
 
 Wrap only the chart area in `ChartFrame` with local schema/trust:
 
@@ -541,7 +541,7 @@ Then render:
 </ChartFrame>
 ```
 
-- [ ] **Step 5: Run TypeScript on migrated components**
+- [x] **Step 5: Run TypeScript on migrated components**
 
 Run:
 
@@ -552,7 +552,7 @@ cd frontend
 
 Expected: TypeScript exits 0.
 
-- [ ] **Step 6: Run targeted strict lint for Dashboard chart files**
+- [x] **Step 6: Run targeted strict lint for Dashboard chart files**
 
 Run:
 
