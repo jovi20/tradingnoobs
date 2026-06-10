@@ -130,7 +130,7 @@ export function LifecycleModals(props: LifecycleModalsProps) {
                                 />
                             </div>
                             <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-3 text-xs leading-5 text-cyan-900 dark:border-cyan-900 dark:bg-cyan-950/30 dark:text-cyan-200">
-                                保存会写入 `PositionEvent` 的叙事字段，并刷新上方 lifecycle read model。不会修改成交价、数量或 PnL。
+                                保存会写入 `PositionEvent` 的叙事字段，作为 canonical review and narrative record，并刷新上方 lifecycle read model。不会修改成交价、数量或 PnL。
                             </div>
                         </div>
                         <div className="flex justify-end space-x-3 border-t border-slate-100 p-6 dark:border-slate-800">

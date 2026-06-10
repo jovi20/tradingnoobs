@@ -127,11 +127,33 @@ Verification log:
 
 **Goal:** review and narrative edits write to `PositionEvent`/truth lifecycle, while legacy review fields become migration-only.
 
-- [ ] Write failing tests for truth event narrative update behavior.
-- [ ] Write failing tests or adapter checks for lifecycle page copy when truth narrative is available.
-- [ ] Decide and document which historical review fields remain read-only legacy support.
-- [ ] Update detail-page copy so users understand where the canonical review lives.
-- [ ] Stop ordinary review UI from patching legacy `Position.trade_review` when truth lifecycle exists.
+- [x] Write failing tests for truth event narrative update behavior.
+- [x] Write failing tests or adapter checks for lifecycle page copy when truth narrative is available.
+- [x] Decide and document which historical review fields remain read-only legacy support.
+- [x] Update detail-page copy so users understand where the canonical review lives.
+- [x] Stop ordinary review UI from patching legacy `Position.trade_review` when truth lifecycle exists.
+
+P11 Task 2 result:
+- Canonical review and narrative edits live on `PositionEvent` narrative fields through `/api/trading-positions/{position_public_id}/events/{event_public_id}/narrative`.
+- Legacy historical review fields `Position.trade_review`, `Position.lessons`, and `Position.rating` are migration/support context once a matching `TradingPosition` exists.
+- `PATCH /api/positions/{position_id}` rejects ordinary writes to those legacy review fields with `409` when truth lifecycle exists.
+- Explicit migration correction remains possible with `X-Migration-Fallback: legacy-review-write`.
+- Lifecycle detail copy now states that canonical review lives in `PositionEvent` narrative, and legacy review display is read-only migration context.
+
+Rollback:
+- Emergency migration correction can use `X-Migration-Fallback: legacy-review-write`.
+- If the hard guard itself must be rolled back, revert the review-field gate in `backend/routers/positions.py::update_position`; keep the frontend truth narrative route as the preferred path.
+
+Verification log:
+- RED backend: `../.venv313/bin/python -m unittest discover -s tests -p test_position_truth_bridge_router.py` failed because legacy review PATCH returned `200` instead of expected `409`.
+- RED frontend copy: `node --experimental-strip-types --test tests/truth-narrative-writes.test.mts` failed because lifecycle UI did not state the canonical review location.
+- GREEN targeted backend: `../.venv313/bin/python -m unittest discover -s tests -p test_position_truth_bridge_router.py` ran 6 tests OK.
+- GREEN targeted frontend: `node --experimental-strip-types --test tests/truth-narrative-writes.test.mts` ran 2 tests OK.
+- P11 Task 2 verification: `../.venv313/bin/python -m unittest discover -s tests -p test_trading_position_lifecycle_router.py` ran 25 tests OK.
+- P11 Task 2 verification: `./node_modules/.bin/tsc --noEmit --pretty false` exited 0.
+- P11 Task 2 verification: `npm run lint` exited 0.
+- Extended frontend regression after Task 2: `node --experimental-strip-types --test tests/*.test.mts` ran 85 tests OK; Node emitted existing `MODULE_TYPELESS_PACKAGE_JSON` warnings.
+- Full backend regression after Task 2: `../.venv313/bin/python -m unittest discover -s tests` ran 155 tests OK; output included a Yahoo DNS warning from market-data-related code.
 
 Verification:
 

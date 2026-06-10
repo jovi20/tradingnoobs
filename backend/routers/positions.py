@@ -521,6 +521,7 @@ async def create_position(
 async def update_position(
     position_id: str,
     position_data: PositionUpdate,
+    migration_fallback: str | None = Header(default=None, alias="X-Migration-Fallback"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -531,6 +532,22 @@ async def update_position(
         raise HTTPException(status_code=404, detail="Position not found")
     
     update_data = position_data.model_dump(exclude_unset=True)
+
+    legacy_review_fields = {"trade_review", "lessons", "rating"}
+    if legacy_review_fields.intersection(update_data):
+        truth_public_id = legacy_position_truth_public_id(position)
+        truth_exists = db.query(TradingPosition.id).filter(
+            TradingPosition.public_id == truth_public_id,
+            TradingPosition.user_id == current_user.id,
+        ).first()
+        if truth_exists and migration_fallback != "legacy-review-write":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Legacy review writes are migration-only once a TradingPosition truth lifecycle exists. "
+                    "Use the TradingPosition event narrative route for ordinary review and narrative edits."
+                ),
+            )
     
     # Handle Asset Metadata Update
     metadata_update = update_data.pop('asset_metadata', None)

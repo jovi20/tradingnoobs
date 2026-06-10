@@ -215,6 +215,9 @@ export function LifecycleMigrationPanel({
             {legacyReviewDisplayState.shouldDisplay && position.trade_review && (
                 <div className="mt-5 rounded-3xl border border-amber-200 bg-white/70 p-5 dark:border-amber-900/60 dark:bg-slate-950/30">
                     <h3 className="text-sm font-black uppercase tracking-[0.18em] text-amber-900 dark:text-amber-100">{legacyReviewDisplayState.label}</h3>
+                    <p className="mt-2 text-xs font-semibold text-amber-800 dark:text-amber-200">
+                        Legacy review is read-only migration context; canonical review lives in PositionEvent narrative.
+                    </p>
                     <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
                         {legacyReviewDisplayState.reason}
                     </p>

@@ -19,7 +19,7 @@ export function LifecycleActionPanel({ actions, isReversing, onEditNarrative, on
                     <p className="text-[11px] font-black uppercase tracking-[0.2em] text-cyan-800 dark:text-cyan-200">Truth write path</p>
                     <h2 className="mt-2 text-lg font-black text-slate-950 dark:text-white">Write back to TradingPosition / PositionEvent</h2>
                     <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300">
-                        Narrative fields, latest event reversal, and cash adjustment stay on the truth path. Legacy batch edits remain migration tools.
+                        Canonical review lives in PositionEvent narrative. Narrative fields, latest event reversal, and cash adjustment stay on the truth path. Legacy batch edits remain migration tools.
                     </p>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">

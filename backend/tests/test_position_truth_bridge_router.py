@@ -292,6 +292,38 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         node_types = [node["node_type"] for node in lifecycle_payload["data"]["lifecycle_thread"]["nodes"]]
         self.assertEqual(node_types, ["OPEN"])
 
+    def test_legacy_review_write_is_rejected_when_truth_lifecycle_exists_without_migration_header(self):
+        legacy_position = self._seed_legacy_position()
+        sync_response = self.client.get(f"/api/positions/{legacy_position.public_id}/truth-lifecycle")
+        self.assertEqual(sync_response.status_code, 200)
+
+        response = self.client.patch(
+            f"/api/positions/{legacy_position.public_id}",
+            json={"trade_review": "Ordinary review should use truth narrative."},
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("Legacy review writes are migration-only", response.json()["detail"])
+        self.db.expire_all()
+        updated_position = self.db.query(Position).filter(Position.id == legacy_position.id).one()
+        self.assertEqual(updated_position.trade_review, "Held plan well.")
+
+    def test_legacy_review_write_allows_explicit_migration_fallback_header(self):
+        legacy_position = self._seed_legacy_position()
+        sync_response = self.client.get(f"/api/positions/{legacy_position.public_id}/truth-lifecycle")
+        self.assertEqual(sync_response.status_code, 200)
+
+        response = self.client.patch(
+            f"/api/positions/{legacy_position.public_id}",
+            headers={"X-Migration-Fallback": "legacy-review-write"},
+            json={"trade_review": "Migration-only legacy review correction."},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.db.expire_all()
+        updated_position = self.db.query(Position).filter(Position.id == legacy_position.id).one()
+        self.assertEqual(updated_position.trade_review, "Migration-only legacy review correction.")
+
 
 if __name__ == "__main__":
     unittest.main()
