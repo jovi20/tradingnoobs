@@ -510,6 +510,9 @@ async def create_position(
     db.add(first_batch)
     db.commit()
     db.refresh(position)
+
+    truth_position = sync_legacy_position_to_truth(db, position.id)
+    position.truth_position_public_id = truth_position.public_id
     
     return position
 

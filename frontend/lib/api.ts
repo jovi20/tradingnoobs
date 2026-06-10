@@ -774,6 +774,7 @@ export interface TradeBatch {
 export interface Position {
     id: number
     public_id: string
+    truth_position_public_id?: string
     user_id: number
     account_id?: number
     strategy_id?: number

@@ -971,6 +971,7 @@ class PositionUpdate(BaseModel):
 class PositionResponse(BaseModel):
     id: int
     public_id: str
+    truth_position_public_id: Optional[str] = None
     user_id: int
     account_id: Optional[int]
     strategy_id: Optional[int]

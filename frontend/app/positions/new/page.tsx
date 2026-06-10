@@ -220,8 +220,12 @@ export default function NewPositionPage() {
                 }
             }
 
-            await positionsAPI.create(token, data)
-            router.push('/positions')
+            const createdPosition = await positionsAPI.create(token, data)
+            if (createdPosition.truth_position_public_id) {
+                router.push(`/positions/${createdPosition.truth_position_public_id}`)
+            } else {
+                router.push('/positions')
+            }
         } catch (err: any) {
             setError(err.message || '创建失败')
             setIsSubmitting(false)

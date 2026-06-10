@@ -55,3 +55,17 @@ test('new-position add-to-existing flow does not silently fall back to legacy ba
     'new-position page should gate addBatch behind fallback permission',
   )
 })
+
+test('new-position create flow follows the create-and-sync truth lifecycle id', () => {
+  const source = readFrontendFile('app/positions/new/page.tsx')
+
+  assert.match(source, /truth_position_public_id/)
+  assert.ok(
+    source.indexOf('positionsAPI.create') < source.indexOf('truth_position_public_id'),
+    'new-position page should read the truth id from the create response',
+  )
+  assert.ok(
+    source.indexOf('truth_position_public_id') < source.indexOf('router.push(`/positions/${createdPosition.truth_position_public_id}`)'),
+    'new-position page should route to the synced truth lifecycle when available',
+  )
+})

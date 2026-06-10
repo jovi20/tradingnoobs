@@ -28,7 +28,7 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 | 领域 | 当前状态 | 说明 |
 |------|----------|------|
 | 平台底座 | `已大幅落地` | Alembic、public_id、auth/session、platform config、feature flags、job/outbox/idempotency/business lock、derived timeline snapshot 已进入 `dev`。 |
-| Truth 交易模型 | `桥接完成 / 硬切推进中` | `TradingPosition / PositionEvent / AccountLedgerEntry` 已落地；已有仓位加仓/减仓/平仓已 truth-first，legacy batch 写入在 truth lifecycle 存在时默认被保护为 migration fallback。 |
+| Truth 交易模型 | `桥接完成 / 硬切推进中` | `TradingPosition / PositionEvent / AccountLedgerEntry` 已落地；新建仓位已 create-and-sync 到 truth lifecycle，已有仓位加仓/减仓/平仓已 truth-first，legacy batch 写入在 truth lifecycle 存在时默认被保护为 migration fallback。 |
 | Timeline 首页 | `已默认 timeline-first` | `/` 和 `/timeline` 已转向时间流/复盘工作台；最终仍需从 bridge/snapshot 过渡到纯 truth/snapshot-backed read model。 |
 | Lifecycle Detail | `truth-first 体验已落地` | 单笔详情已优先展示 truth lifecycle、evidence、AI sidecar；部分历史编辑/删除/非最新 reversal 仍需明确迁移语义。 |
 | Dashboard / Insights | `已重构为工作台形态` | Dashboard 保持宏观视图；Insights 已接入 auditable artifact 与 artifact detail；图表已有 schema/freshness 包装。 |
@@ -46,7 +46,7 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 ### P11 当前进度
 
 - [x] P11 Task 1A：已有仓位加仓/减仓/平仓不再静默 fallback 到 legacy batch；legacy batch 写入需要显式 `X-Migration-Fallback: legacy-batch-write`。
-- [ ] P11 Task 1B：全新开仓 create path 仍需从 legacy `POST /api/positions` 迁到 truth-native create 或显式 create-and-sync 过渡合同。
+- [x] P11 Task 1B：全新开仓 create path 已采用 create-and-sync 过渡合同，`POST /api/positions` 返回 `truth_position_public_id`，前端优先跳转 truth detail。
 - [ ] P11 Task 2：复盘与叙事最终写入 `PositionEvent` / truth lifecycle。
 - [ ] P11 Task 3：historical reversal、`OPEN` reversal、archive/void/delete、legacy batch edit 最终语义。
 - [ ] P11 Task 4：Timeline / Review Inbox 默认 truth/snapshot-backed。
@@ -67,7 +67,7 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 ### P10B Truth hard cutover 设计与执行
 
 - [x] 盘点所有 legacy `Position / TradeBatch / Transaction / AssetMetadata / DailySnapshot` 引用，按 `primary path`、`migration-only`、`delete candidate` 分类。
-- [ ] 把普通用户新增、加仓、减仓、平仓、复盘、叙事编辑统一到 `TradingPosition / PositionEvent` 路径；已有仓位加仓/减仓/平仓已完成默认 truth-first，新增开仓与复盘/叙事仍待完成。
+- [ ] 把普通用户新增、加仓、减仓、平仓、复盘、叙事编辑统一到 `TradingPosition / PositionEvent` 路径；新增开仓已 create-and-sync，已有仓位加仓/减仓/平仓已完成默认 truth-first，复盘/叙事仍待完成。
 - [ ] 明确 historical reversal、`OPEN` reversal、whole-position delete、legacy batch edit 的最终产品语义。
 - [ ] 让 Timeline / Review Inbox 最终读 `TradingPosition / PositionEvent / InsightArtifact / DerivedTimelineSnapshot`，不再依赖 legacy bridge 作为主路径。
 - [ ] 完成 hard cutover 后，再删除或隔离旧模型、旧路由、旧 DTO、旧前端 fallback。

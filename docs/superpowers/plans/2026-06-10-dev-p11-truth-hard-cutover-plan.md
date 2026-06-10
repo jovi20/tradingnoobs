@@ -83,7 +83,7 @@ P11 Task 1A result:
 - Legacy `POST /api/positions/{position_id}/batches` is rejected with `409` once a truth lifecycle exists unless the caller sends `X-Migration-Fallback: legacy-batch-write`.
 - `/positions/[id]/add-batch?migrationFallback=1` is the explicit migration fallback route for legacy batch backfill.
 - `/positions/new` no longer silently falls back to legacy batch writes when adding to an existing position without a truth lifecycle.
-- Brand-new position creation still uses the legacy create route and remains P11 Task 1B.
+- Brand-new position creation now uses a create-and-sync transition contract: `POST /api/positions` still creates the legacy row, immediately syncs a `TradingPosition` lifecycle, returns `truth_position_public_id`, and the frontend routes to the truth detail when available.
 
 Verification:
 
@@ -111,6 +111,15 @@ Verification log:
 - P11 Task 1 verification: `./node_modules/.bin/tsc --noEmit --pretty false` exited 0.
 - P11 Task 1 verification: `npm run lint` exited 0.
 - Extended frontend regression: `node --experimental-strip-types --test tests/*.test.mts` ran 82 tests OK; Node emitted existing `MODULE_TYPELESS_PACKAGE_JSON` warnings.
+- RED create-and-sync backend: `../.venv313/bin/python -m unittest discover -s tests -p test_position_truth_bridge_router.py` failed because `POST /api/positions` did not return `truth_position_public_id`.
+- RED create-and-sync frontend: `node --experimental-strip-types --test tests/truth-first-writes.test.mts` failed because `/positions/new` did not read `truth_position_public_id`.
+- GREEN create-and-sync targeted backend: `../.venv313/bin/python -m unittest discover -s tests -p test_position_truth_bridge_router.py` ran 4 tests OK.
+- GREEN create-and-sync targeted frontend: `node --experimental-strip-types --test tests/truth-first-writes.test.mts` ran 4 tests OK.
+- P11 Task 1B verification: `../.venv313/bin/python -m unittest discover -s tests -p test_trading_position_lifecycle_router.py` ran 25 tests OK.
+- P11 Task 1B verification: `./node_modules/.bin/tsc --noEmit --pretty false` exited 0.
+- P11 Task 1B verification: `npm run lint` exited 0.
+- Extended frontend regression after Task 1B: `node --experimental-strip-types --test tests/*.test.mts` ran 83 tests OK; Node emitted existing `MODULE_TYPELESS_PACKAGE_JSON` warnings.
+- Full backend regression after Task 1B: `../.venv313/bin/python -m unittest discover -s tests` ran 153 tests OK; output included a Yahoo DNS warning from market-data-related code.
 
 ---
 

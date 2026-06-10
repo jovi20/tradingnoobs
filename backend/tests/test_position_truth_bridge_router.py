@@ -251,6 +251,47 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
             2,
         )
 
+    def test_position_create_syncs_truth_lifecycle_and_returns_truth_public_id(self):
+        account = TradingAccount(
+            user_id=self.user.id,
+            public_id="acct-create-public-id",
+            name="IBKR Create",
+            broker="IBKR",
+            currency="USD",
+            is_active=True,
+        )
+        self.db.add(account)
+        self.db.commit()
+        self.db.refresh(account)
+
+        response = self.client.post(
+            "/api/positions",
+            json={
+                "account_id": account.id,
+                "symbol": "NVDA",
+                "asset_type": "EQUITY",
+                "direction": "LONG",
+                "entry_price": "900",
+                "quantity": "2",
+                "entry_time": "2026-04-03T15:30:00+00:00",
+                "entry_reason": "New position should create truth lifecycle",
+                "entry_emotion": "Focused",
+                "entry_confidence": 4,
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        payload = response.json()
+        truth_public_id = payload.get("truth_position_public_id")
+        self.assertIsNotNone(truth_public_id)
+
+        lifecycle_response = self.client.get(f"/api/trading-positions/{truth_public_id}/lifecycle")
+        self.assertEqual(lifecycle_response.status_code, 200)
+        lifecycle_payload = lifecycle_response.json()
+        self.assertEqual(lifecycle_payload["data"]["position_summary"]["public_id"], truth_public_id)
+        node_types = [node["node_type"] for node in lifecycle_payload["data"]["lifecycle_thread"]["nodes"]]
+        self.assertEqual(node_types, ["OPEN"])
+
 
 if __name__ == "__main__":
     unittest.main()
