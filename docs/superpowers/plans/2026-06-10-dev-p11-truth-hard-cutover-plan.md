@@ -72,11 +72,18 @@ Docs:
 
 **Goal:** ordinary create/add/reduce/close flows prefer truth routes, with legacy writes allowed only as explicit migration fallback.
 
-- [ ] Write failing backend tests proving truth event writes cover ADD / REDUCE / CLOSE and reject closed-position writes.
-- [ ] Write failing frontend tests or static checks proving new ordinary action code paths call truth APIs first.
-- [ ] Audit `frontend/app/positions/new/page.tsx` and `frontend/app/positions/[id]/add-batch/page.tsx` for legacy fallback conditions.
-- [ ] Convert ambiguous legacy fallback copy into explicit migration fallback copy.
-- [ ] Add a rollback flag or documented rollback path for truth-first write routing.
+- [x] Write failing backend tests proving truth event writes cover ADD / REDUCE / CLOSE and reject closed-position writes.
+- [x] Write failing frontend tests or static checks proving new ordinary action code paths call truth APIs first.
+- [x] Audit `frontend/app/positions/new/page.tsx` and `frontend/app/positions/[id]/add-batch/page.tsx` for legacy fallback conditions.
+- [x] Convert ambiguous legacy fallback copy into explicit migration fallback copy.
+- [x] Add a rollback flag or documented rollback path for truth-first write routing.
+
+P11 Task 1A result:
+- Existing-position add/reduce/close paths now prefer `TradingPosition / PositionEvent`.
+- Legacy `POST /api/positions/{position_id}/batches` is rejected with `409` once a truth lifecycle exists unless the caller sends `X-Migration-Fallback: legacy-batch-write`.
+- `/positions/[id]/add-batch?migrationFallback=1` is the explicit migration fallback route for legacy batch backfill.
+- `/positions/new` no longer silently falls back to legacy batch writes when adding to an existing position without a truth lifecycle.
+- Brand-new position creation still uses the legacy create route and remains P11 Task 1B.
 
 Verification:
 
@@ -94,6 +101,16 @@ Commit:
 ```bash
 git commit -m "feat: harden truth-first trading writes"
 ```
+
+Verification log:
+- RED backend: `../.venv313/bin/python -m unittest discover -s tests -p test_position_truth_bridge_router.py` failed because legacy batch write returned `201` instead of expected `409`.
+- RED frontend: `node --experimental-strip-types --test tests/trading-adapter.test.mts tests/truth-first-writes.test.mts` failed because `getTruthFirstWriteFallbackState` was not exported and pages did not use explicit migration fallback guards.
+- GREEN targeted backend: `../.venv313/bin/python -m unittest discover -s tests -p test_position_truth_bridge_router.py` ran 3 tests OK.
+- GREEN targeted frontend: `node --experimental-strip-types --test tests/trading-adapter.test.mts tests/truth-first-writes.test.mts` ran 9 tests OK; Node emitted existing `MODULE_TYPELESS_PACKAGE_JSON` warnings.
+- P11 Task 1 verification: `../.venv313/bin/python -m unittest discover -s tests -p test_trading_position_lifecycle_router.py` ran 25 tests OK.
+- P11 Task 1 verification: `./node_modules/.bin/tsc --noEmit --pretty false` exited 0.
+- P11 Task 1 verification: `npm run lint` exited 0.
+- Extended frontend regression: `node --experimental-strip-types --test tests/*.test.mts` ran 82 tests OK; Node emitted existing `MODULE_TYPELESS_PACKAGE_JSON` warnings.
 
 ---
 

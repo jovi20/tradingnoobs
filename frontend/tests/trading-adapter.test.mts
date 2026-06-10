@@ -6,6 +6,7 @@ import {
   getLegacyBatchMutationState,
   getLegacyPositionDeleteState,
   getLegacyReviewDisplayState,
+  getTruthFirstWriteFallbackState,
 } from '../lib/adapters/trading.ts'
 
 test('buildTruthTradeEventFromBatchForm maps entry batches to ADD truth events', () => {
@@ -101,5 +102,25 @@ test('getLegacyReviewDisplayState labels legacy reviews as migration-only beside
     isMigrationOnly: false,
     label: '交易复盘',
     reason: '尚未解析到 truth lifecycle，继续展示 legacy Position.trade_review。',
+  })
+})
+
+test('getTruthFirstWriteFallbackState blocks silent legacy writes unless migration fallback is explicit', () => {
+  assert.deepEqual(getTruthFirstWriteFallbackState(true, false), {
+    canWriteLegacyFallback: false,
+    label: 'Truth write path ready',
+    reason: 'TradingPosition / PositionEvent truth path is available; ordinary writes must use the truth event route.',
+  })
+
+  assert.deepEqual(getTruthFirstWriteFallbackState(false, false), {
+    canWriteLegacyFallback: false,
+    label: 'Truth lifecycle unavailable',
+    reason: '普通加仓/平仓需要 TradingPosition truth lifecycle；legacy batch 写入已降级为 migration fallback，不能静默作为普通路径执行。',
+  })
+
+  assert.deepEqual(getTruthFirstWriteFallbackState(false, true), {
+    canWriteLegacyFallback: true,
+    label: 'Migration fallback enabled',
+    reason: 'Truth lifecycle 暂不可用，本次将显式使用 legacy batch migration fallback；完成后需要重新同步 truth lifecycle。',
   })
 })

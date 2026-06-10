@@ -19,6 +19,7 @@ import {
     adaptPosition,
     adaptTradingAccounts,
     buildTruthTradeEventFromBatchForm,
+    getTruthFirstWriteFallbackState,
     PositionViewModel,
     TradingAccountViewModel
 } from '@/lib/adapters/trading'
@@ -292,7 +293,13 @@ export default function NewPositionPage() {
                 )
                 router.push(`/positions/${truthPositionPublicId}`)
             } else {
-                await positionsAPI.addBatch(token, existingPosition.routeId, batchData)
+                const fallbackState = getTruthFirstWriteFallbackState(false, false)
+                if (!fallbackState.canWriteLegacyFallback) {
+                    setError(fallbackState.reason)
+                    return
+                }
+
+                await positionsAPI.addBatch(token, existingPosition.routeId, batchData, { migrationFallback: true })
                 router.push(`/positions/${existingPosition.routeId}`)
             }
         } catch (err: any) {

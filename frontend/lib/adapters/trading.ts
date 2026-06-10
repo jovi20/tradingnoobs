@@ -160,6 +160,37 @@ export function getLegacyReviewDisplayState(
     }
 }
 
+export function getTruthFirstWriteFallbackState(
+    hasTruthLifecycle: boolean,
+    migrationFallbackRequested: boolean
+): {
+    canWriteLegacyFallback: boolean
+    label: string
+    reason: string
+} {
+    if (hasTruthLifecycle) {
+        return {
+            canWriteLegacyFallback: false,
+            label: 'Truth write path ready',
+            reason: 'TradingPosition / PositionEvent truth path is available; ordinary writes must use the truth event route.',
+        }
+    }
+
+    if (migrationFallbackRequested) {
+        return {
+            canWriteLegacyFallback: true,
+            label: 'Migration fallback enabled',
+            reason: 'Truth lifecycle 暂不可用，本次将显式使用 legacy batch migration fallback；完成后需要重新同步 truth lifecycle。',
+        }
+    }
+
+    return {
+        canWriteLegacyFallback: false,
+        label: 'Truth lifecycle unavailable',
+        reason: '普通加仓/平仓需要 TradingPosition truth lifecycle；legacy batch 写入已降级为 migration fallback，不能静默作为普通路径执行。',
+    }
+}
+
 export function adaptTransactions(transactions: Transaction[]): TransactionViewModel[] {
     return transactions.map(adaptTransaction)
 }

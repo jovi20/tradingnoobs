@@ -34,6 +34,10 @@ def _deterministic_public_id(kind: str, source: str) -> str:
     return str(uuid.uuid5(LEGACY_TRUTH_NAMESPACE, f"{kind}:{source}"))
 
 
+def legacy_position_truth_public_id(legacy_position: Position) -> str:
+    return _deterministic_public_id("trading_position", legacy_position.public_id or str(legacy_position.id))
+
+
 def _coerce_decimal(value) -> Decimal:
     if value is None:
         return Decimal("0")
@@ -281,7 +285,7 @@ def sync_legacy_position_to_truth(db: Session, legacy_position_id: int) -> Tradi
     asset = _ensure_asset_master(db, legacy_position)
     instrument = _ensure_trade_instrument(db, asset, legacy_position)
 
-    truth_public_id = _deterministic_public_id("trading_position", legacy_position.public_id or str(legacy_position.id))
+    truth_public_id = legacy_position_truth_public_id(legacy_position)
     truth_position = db.query(TradingPosition).filter(TradingPosition.public_id == truth_public_id).first()
     if not truth_position:
         truth_position = TradingPosition(public_id=truth_public_id)
@@ -340,7 +344,7 @@ def sync_all_legacy_positions_to_truth(db: Session, legacy_position_ids: list[in
     for legacy_position_id in ids:
         summary["processed"] += 1
         legacy_position = db.query(Position).filter(Position.id == legacy_position_id).first()
-        truth_public_id = _deterministic_public_id("trading_position", legacy_position.public_id or str(legacy_position.id))
+        truth_public_id = legacy_position_truth_public_id(legacy_position)
         existed = db.query(TradingPosition.id).filter(TradingPosition.public_id == truth_public_id).first() is not None
         try:
             sync_legacy_position_to_truth(db, legacy_position_id)

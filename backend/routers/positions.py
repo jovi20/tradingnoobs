@@ -2,7 +2,7 @@
 Trading Noobs Backend - Positions Router
 Handles Position CRUD and Batch operations
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Header
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
@@ -29,7 +29,7 @@ from models import AssetCoreType, AssetMarket, AssetRiskLevel, AssetCurrency
 from models import TradingPosition
 from services.market_data_service import MarketDataService
 from services.public_id_service import resolve_position, resolve_trade_batch, resolve_trading_account
-from services.legacy_truth_sync_service import sync_legacy_position_to_truth
+from services.legacy_truth_sync_service import legacy_position_truth_public_id, sync_legacy_position_to_truth
 from services.trading_position_read_service import build_trading_position_lifecycle_payload
 from services.trading_accounting_service import (
     AccountingEvent,
@@ -606,6 +606,7 @@ async def list_batches(
 async def add_batch(
     position_id: str,
     batch_data: TradeBatchCreate,
+    migration_fallback: str | None = Header(default=None, alias="X-Migration-Fallback"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -614,6 +615,20 @@ async def add_batch(
     
     if not position:
         raise HTTPException(status_code=404, detail="Position not found")
+
+    truth_public_id = legacy_position_truth_public_id(position)
+    truth_exists = db.query(TradingPosition.id).filter(
+        TradingPosition.public_id == truth_public_id,
+        TradingPosition.user_id == current_user.id,
+    ).first()
+    if truth_exists and migration_fallback != "legacy-batch-write":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Legacy batch writes are migration-only once a TradingPosition truth lifecycle exists. "
+                "Use the TradingPosition event route for ordinary add/reduce/close actions."
+            ),
+        )
     
     if position.status == PositionStatus.CLOSED:
         raise HTTPException(status_code=400, detail="Cannot add batch to closed position")

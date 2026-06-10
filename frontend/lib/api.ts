@@ -1013,9 +1013,15 @@ export const positionsAPI = {
     },
 
     // Batch operations
-    addBatch: (token: string, positionId: number | string, data: BatchCreate): Promise<TradeBatch> =>
+    addBatch: (
+        token: string,
+        positionId: number | string,
+        data: BatchCreate,
+        options?: { migrationFallback?: boolean }
+    ): Promise<TradeBatch> =>
         fetchAPI(`/api/positions/${positionId}/batches`, {
             method: 'POST',
+            headers: options?.migrationFallback ? { 'X-Migration-Fallback': 'legacy-batch-write' } : undefined,
             body: JSON.stringify(data)
         }, token),
 

@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { positionsAPI, Position, BatchCreate, marketAPI } from '@/lib/api'
-import { buildTruthTradeEventFromBatchForm } from '@/lib/adapters/trading'
+import { buildTruthTradeEventFromBatchForm, getTruthFirstWriteFallbackState } from '@/lib/adapters/trading'
 import DateTimePicker from '@/components/DateTimePicker'
 import CustomSelect from '@/components/CustomSelect'
 
@@ -30,6 +30,7 @@ export default function AddBatchPage() {
 
     // Initialize type from query param
     const initType = (searchParams.get('type') === 'EXIT') ? 'EXIT' : 'ENTRY'
+    const migrationFallbackRequested = searchParams.get('migrationFallback') === '1'
 
     // Form state
     const [form, setForm] = useState({
@@ -113,7 +114,13 @@ export default function AddBatchPage() {
                 )
                 router.push(`/positions/${truthPositionPublicId}`)
             } else {
-                await positionsAPI.addBatch(token, positionId, batchData)
+                const fallbackState = getTruthFirstWriteFallbackState(false, migrationFallbackRequested)
+                if (!fallbackState.canWriteLegacyFallback) {
+                    setError(fallbackState.reason)
+                    return
+                }
+
+                await positionsAPI.addBatch(token, positionId, batchData, { migrationFallback: true })
                 router.push(`/positions`)
             }
         } catch (err: any) {
@@ -161,6 +168,17 @@ export default function AddBatchPage() {
             {error && (
                 <div className="mb-6 p-4 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600">
                     {error}
+                </div>
+            )}
+
+            {!truthPositionPublicId && (
+                <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+                    <p className="font-semibold">
+                        {getTruthFirstWriteFallbackState(false, migrationFallbackRequested).label}
+                    </p>
+                    <p className="mt-1">
+                        {getTruthFirstWriteFallbackState(false, migrationFallbackRequested).reason}
+                    </p>
                 </div>
             )}
 

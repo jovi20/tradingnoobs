@@ -133,6 +133,64 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         self.db.commit()
         return legacy_position
 
+    def _seed_open_legacy_position(self):
+        account = TradingAccount(
+            user_id=self.user.id,
+            public_id="acct-open-public-id",
+            name="IBKR Open",
+            broker="IBKR",
+            currency="USD",
+            is_active=True,
+        )
+        self.db.add(account)
+
+        metadata = AssetMetadata(
+            symbol="MSFT",
+            name="Microsoft",
+            core_type="STOCK",
+            market="US",
+            currency="USD",
+            instrument="Spot",
+        )
+        self.db.add(metadata)
+        self.db.commit()
+        self.db.refresh(account)
+
+        legacy_position = Position(
+            user_id=self.user.id,
+            account_id=account.id,
+            public_id="legacy-open-position",
+            symbol="MSFT",
+            exchange="NASDAQ",
+            asset_type="EQUITY",
+            direction=PositionDirection.LONG,
+            status=PositionStatus.OPEN,
+            total_quantity=Decimal("5"),
+            average_entry_price=Decimal("180"),
+            realized_pnl=Decimal("0"),
+            opened_at=datetime(2026, 4, 1, 9, 30, tzinfo=timezone.utc),
+            asset_metadata_symbol="MSFT",
+        )
+        self.db.add(legacy_position)
+        self.db.commit()
+        self.db.refresh(legacy_position)
+
+        self.db.add(
+            TradeBatch(
+                public_id="batch-open-msft",
+                position_id=legacy_position.id,
+                type=BatchType.ENTRY,
+                price=Decimal("180"),
+                quantity=Decimal("5"),
+                time=datetime(2026, 4, 1, 9, 30, tzinfo=timezone.utc),
+                reason="Initial trend entry",
+                emotion="Prepared",
+                confidence=4,
+            )
+        )
+        self.db.commit()
+        return legacy_position
+
     def test_position_truth_bridge_endpoint_syncs_and_returns_truth_lifecycle(self):
         legacy_position = self._seed_legacy_position()
 
@@ -144,6 +202,54 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         self.assertEqual(payload["data"]["thesis_block"]["thesis"], "Initial breakout entry")
         node_types = [node["node_type"] for node in payload["data"]["lifecycle_thread"]["nodes"]]
         self.assertEqual(node_types, ["OPEN", "CLOSE"])
+
+    def test_legacy_batch_write_is_rejected_when_truth_lifecycle_exists_without_migration_header(self):
+        legacy_position = self._seed_open_legacy_position()
+        sync_response = self.client.get(f"/api/positions/{legacy_position.public_id}/truth-lifecycle")
+        self.assertEqual(sync_response.status_code, 200)
+
+        response = self.client.post(
+            f"/api/positions/{legacy_position.public_id}/batches",
+            json={
+                "type": "ENTRY",
+                "price": "190",
+                "quantity": "1",
+                "time": "2026-04-03T15:30:00+00:00",
+                "reason": "Ordinary add should use truth event route",
+            },
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("Legacy batch writes are migration-only", response.json()["detail"])
+        self.db.expire_all()
+        self.assertEqual(
+            self.db.query(TradeBatch).filter(TradeBatch.position_id == legacy_position.id).count(),
+            1,
+        )
+
+    def test_legacy_batch_write_allows_explicit_migration_fallback_header(self):
+        legacy_position = self._seed_open_legacy_position()
+        sync_response = self.client.get(f"/api/positions/{legacy_position.public_id}/truth-lifecycle")
+        self.assertEqual(sync_response.status_code, 200)
+
+        response = self.client.post(
+            f"/api/positions/{legacy_position.public_id}/batches",
+            headers={"X-Migration-Fallback": "legacy-batch-write"},
+            json={
+                "type": "ENTRY",
+                "price": "190",
+                "quantity": "1",
+                "time": "2026-04-03T15:30:00+00:00",
+                "reason": "Explicit migration backfill",
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.db.expire_all()
+        self.assertEqual(
+            self.db.query(TradeBatch).filter(TradeBatch.position_id == legacy_position.id).count(),
+            2,
+        )
 
 
 if __name__ == "__main__":
