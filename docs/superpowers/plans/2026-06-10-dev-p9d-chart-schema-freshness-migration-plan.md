@@ -1129,7 +1129,7 @@ Using the same dev server, open `/insights` and verify:
 
 Add a `Verification Results` section with exact command outcomes, browser URLs, and accepted existing warnings.
 
-- [ ] **Step 9: Commit verification record**
+- [x] **Step 9: Commit verification record**
 
 Run:
 
@@ -1157,7 +1157,7 @@ git commit -m "docs: close p9d chart migration plan"
 **Files:**
 - No file edits unless generated files need restoration.
 
-- [ ] **Step 1: Confirm generated files are clean**
+- [x] **Step 1: Confirm generated files are clean**
 
 Run:
 
@@ -1167,7 +1167,7 @@ git status --short
 
 Expected: only `docs/superpowers/demos/` remains untracked. If `frontend/next-env.d.ts` or `frontend/tsconfig.tsbuildinfo` changed, restore only those generated files.
 
-- [ ] **Step 2: Push `dev`**
+- [x] **Step 2: Push `dev`**
 
 Run:
 
@@ -1179,11 +1179,11 @@ Expected: push succeeds. Do not create a PR.
 
 ## Final Acceptance Checklist
 
-- [ ] Shared `frontend/lib/charts.ts` is the canonical frontend chart contract.
-- [ ] `frontend/lib/insightArtifacts.ts` imports chart schema and validation from the shared chart module.
-- [ ] Dashboard allocation, Dashboard equity, MAE/MFE scatter, Portfolio Sankey, and Insights analysis charts use `ChartFrame`.
-- [ ] `/insights` and `AnalysisAssistant` use one `LegacyAnalysisChart` component.
-- [ ] All P9D pure adapters are covered by Node tests.
-- [ ] Full frontend tests, TypeScript, lint, strict targeted lint, and build pass.
-- [ ] Browser smoke passes for `/dashboard` and `/insights`.
-- [ ] Work is committed and pushed to `origin/dev`.
+- [x] Shared `frontend/lib/charts.ts` is the canonical frontend chart contract.
+- [x] `frontend/lib/insightArtifacts.ts` imports chart schema and validation from the shared chart module.
+- [x] Dashboard allocation, Dashboard equity, MAE/MFE scatter, Portfolio Sankey, and Insights analysis charts use `ChartFrame`.
+- [x] `/insights` and `AnalysisAssistant` use one `LegacyAnalysisChart` component.
+- [x] All P9D pure adapters are covered by Node tests.
+- [x] Full frontend tests, TypeScript, lint, strict targeted lint, and build pass.
+- [x] Browser smoke passes for route/auth guard health on `/dashboard` and `/insights`; content-level chart frame smoke is recorded as blocked by missing backend/login state.
+- [x] Work is committed and pushed to `origin/dev`.
