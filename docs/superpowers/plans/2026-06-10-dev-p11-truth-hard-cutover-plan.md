@@ -177,11 +177,11 @@ git commit -m "feat: finalize truth narrative write path"
 
 **Goal:** prevent irreversible legacy deletion semantics from leaking into the truth lifecycle.
 
-- [ ] Document final behavior for historical/non-latest reversal.
-- [ ] Document final behavior for `OPEN` reversal.
-- [ ] Document final behavior for whole-position delete versus archive/void.
-- [ ] Document final behavior for legacy batch edit.
-- [ ] Add backend tests for any chosen hard rejections before implementing new write paths.
+- [x] Document final behavior for historical/non-latest reversal.
+- [x] Document final behavior for `OPEN` reversal.
+- [x] Document final behavior for whole-position delete versus archive/void.
+- [x] Document final behavior for legacy batch edit.
+- [x] Add backend tests for any chosen hard rejections before implementing new write paths.
 
 Recommended default unless product decides otherwise:
 - Latest active event reversal remains ordinary-user supported.
@@ -189,6 +189,24 @@ Recommended default unless product decides otherwise:
 - `OPEN` reversal becomes audited void/archive, not hard delete.
 - Whole-position hard delete remains migration/admin-only.
 - Legacy batch edit is read-only migration support when truth lifecycle exists.
+
+P11 Task 3 result:
+- Latest active `ADD` / `REDUCE` / `CLOSE` reversal remains ordinary-user supported through `/api/trading-positions/{position_public_id}/events/{event_public_id}/reverse`; it appends a `REVERSAL` event and preserves the audit trail.
+- Non-latest active trade-event reversal stays rejected with `422` until a compensating-event UX exists.
+- `OPEN` event reversal stays rejected with `422`; future product work should introduce audited void/archive semantics rather than deleting the opening event or legacy row.
+- Whole-position hard delete through `DELETE /api/positions/{position_id}` is rejected with `409` once a truth lifecycle exists. Explicit migration-only fallback requires `X-Migration-Fallback: legacy-position-delete`.
+- Legacy `PATCH /api/positions/batches/{batch_id}` and `DELETE /api/positions/batches/{batch_id}` are rejected with `409` once a truth lifecycle exists. Explicit migration-only fallback requires `X-Migration-Fallback: legacy-batch-edit`.
+- Legacy batch create remains separately migration-gated by `X-Migration-Fallback: legacy-batch-write`.
+
+Rollback:
+- For migration cleanup only, use `legacy-position-delete` or `legacy-batch-edit` fallback headers.
+- To roll back the hard guard, revert the destructive legacy mutation gates in `backend/routers/positions.py`; keep truth reversal behavior unchanged.
+
+Verification log:
+- RED backend: `../.venv313/bin/python -m unittest discover -s tests -p test_position_truth_bridge_router.py` failed because legacy position delete returned `204`, legacy batch edit returned `200`, and legacy batch delete returned `204` instead of expected `409`.
+- GREEN targeted backend: `../.venv313/bin/python -m unittest discover -s tests -p test_position_truth_bridge_router.py` ran 9 tests OK.
+- P11 Task 3 verification: `../.venv313/bin/python -m unittest discover -s tests -p test_trading_position_lifecycle_router.py` ran 25 tests OK.
+- Full backend regression after Task 3: `../.venv313/bin/python -m unittest discover -s tests` ran 158 tests OK; output included a Yahoo DNS warning from market-data-related code.
 
 Verification:
 

@@ -251,6 +251,54 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
             2,
         )
 
+    def test_legacy_position_delete_is_rejected_when_truth_lifecycle_exists_without_migration_header(self):
+        legacy_position = self._seed_legacy_position()
+        sync_response = self.client.get(f"/api/positions/{legacy_position.public_id}/truth-lifecycle")
+        self.assertEqual(sync_response.status_code, 200)
+
+        response = self.client.delete(f"/api/positions/{legacy_position.public_id}")
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("Legacy position hard deletes are migration-only", response.json()["detail"])
+        self.db.expire_all()
+        self.assertIsNotNone(self.db.query(Position).filter(Position.id == legacy_position.id).first())
+        self.assertEqual(
+            self.db.query(TradeBatch).filter(TradeBatch.position_id == legacy_position.id).count(),
+            2,
+        )
+
+    def test_legacy_batch_edit_is_rejected_when_truth_lifecycle_exists_without_migration_header(self):
+        legacy_position = self._seed_legacy_position()
+        sync_response = self.client.get(f"/api/positions/{legacy_position.public_id}/truth-lifecycle")
+        self.assertEqual(sync_response.status_code, 200)
+
+        response = self.client.patch(
+            "/api/positions/batches/batch-open",
+            json={"price": "181"},
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("Legacy batch edits are migration-only", response.json()["detail"])
+        self.db.expire_all()
+        batch = self.db.query(TradeBatch).filter(TradeBatch.public_id == "batch-open").one()
+        self.assertEqual(batch.price, Decimal("180.00000000"))
+
+    def test_legacy_batch_delete_is_rejected_when_truth_lifecycle_exists_without_migration_header(self):
+        legacy_position = self._seed_legacy_position()
+        sync_response = self.client.get(f"/api/positions/{legacy_position.public_id}/truth-lifecycle")
+        self.assertEqual(sync_response.status_code, 200)
+
+        response = self.client.delete("/api/positions/batches/batch-close")
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("Legacy batch edits are migration-only", response.json()["detail"])
+        self.db.expire_all()
+        self.assertIsNotNone(self.db.query(TradeBatch).filter(TradeBatch.public_id == "batch-close").first())
+        self.assertEqual(
+            self.db.query(TradeBatch).filter(TradeBatch.position_id == legacy_position.id).count(),
+            2,
+        )
+
     def test_position_create_syncs_truth_lifecycle_and_returns_truth_public_id(self):
         account = TradingAccount(
             user_id=self.user.id,
