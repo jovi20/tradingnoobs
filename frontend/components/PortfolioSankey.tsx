@@ -1,5 +1,7 @@
-import { Activity } from 'lucide-react'
-import { ResponsiveContainer, Sankey, Tooltip } from 'recharts'
+import { useState } from 'react'
+import { ResponsiveContainer, Sankey } from 'recharts'
+import { ChartFrame } from '@/components/charts/ChartFrame'
+import { buildPortfolioSankeyChartView } from '@/lib/adapters/chart-views'
 
 interface PortfolioSankeyProps {
     data: {
@@ -10,23 +12,25 @@ interface PortfolioSankeyProps {
     isMobile: boolean;
 }
 
-import { useState } from 'react'
-
 export default function PortfolioSankey({ data, totalAssets, isMobile }: PortfolioSankeyProps) {
     const [activeIndex, setActiveIndex] = useState<number | null>(null)
-
-    if (!data || data.nodes.length === 0) return null
+    const sankeyData = data ?? { nodes: [], links: [] }
+    const chartView = buildPortfolioSankeyChartView(sankeyData)
 
     return (
-        <div className="card p-6">
-            <h3 className="text-sm font-semibold mb-6 flex items-center gap-2">
-                <Activity className="w-4 h-4 text-purple-500" />
-                资金流向 (Funds Flow)
-            </h3>
+        <ChartFrame
+            eyebrow="Funds Flow"
+            title="资金流向"
+            description="本地组合资金流向视图，等待后端 schema-first sankey payload。"
+            schema={chartView.schema}
+            trustMeta={chartView.trustMeta}
+            emptyState={chartView.emptyState}
+            dataCount={sankeyData.nodes.length}
+        >
             <div className="w-full h-[400px]">
                 <ResponsiveContainer width="100%" height="100%">
                     <Sankey
-                        data={data}
+                        data={sankeyData}
                         nodePadding={10}
                         margin={{ left: 20, right: isMobile ? 20 : 120, top: 40, bottom: 20 }}
                         link={{ stroke: '#cbd5e1', strokeOpacity: 0.3 }}
@@ -127,6 +131,6 @@ export default function PortfolioSankey({ data, totalAssets, isMobile }: Portfol
                     </Sankey>
                 </ResponsiveContainer>
             </div>
-        </div>
+        </ChartFrame>
     )
 }

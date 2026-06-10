@@ -1,52 +1,34 @@
-
-import React, { useMemo } from 'react';
 import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ZAxis, Cell } from 'recharts';
-import { Position } from '@/lib/api';
+import { ChartFrame } from '@/components/charts/ChartFrame';
+import {
+    buildMaeMfeScatterPoints,
+    localLegacyAnalyticsTrust,
+    maeMfeScatterSchema,
+} from '@/lib/adapters/chart-views';
+import type { Position } from '@/lib/api';
 
 interface MaeMfeScatterPlotProps {
     positions: Position[];
 }
 
 export function MaeMfeScatterPlot({ positions }: MaeMfeScatterPlotProps) {
-    const data = useMemo(() => {
-        return positions.map(p => {
-            if (!p.average_entry_price || !p.max_price_during_hold || !p.min_price_during_hold) {
-                return null;
-            }
-
-            const entry = Number(p.average_entry_price);
-            const max = Number(p.max_price_during_hold);
-            const min = Number(p.min_price_during_hold);
-
-            let mae = 0;
-            let mfe = 0;
-
-            if (p.direction === 'LONG') {
-                mfe = ((max - entry) / entry) * 100;
-                mae = ((min - entry) / entry) * 100;
-            } else {
-                // Short
-                mfe = ((entry - min) / entry) * 100;
-                mae = ((entry - max) / entry) * 100;
-            }
-
-            return {
-                id: p.id,
-                symbol: p.symbol,
-                mae: parseFloat(mae.toFixed(2)),
-                mfe: parseFloat(mfe.toFixed(2)),
-                pnl: p.realized_pnl,
-                pnlPercent: p.realized_pnl / (entry * p.total_quantity || 1) * 100 // Approx if closed
-            };
-        }).filter(item => item !== null);
-    }, [positions]);
+    const data = buildMaeMfeScatterPoints(positions);
 
     return (
-        <div className="card">
-            <div className="p-6 border-b border-slate-100 dark:border-slate-700">
-                <h3 className="text-lg font-bold">MAE vs MFE 分析</h3>
-            </div>
-            <div className="p-6">
+        <ChartFrame
+            eyebrow="Legacy analytics"
+            title="MAE vs MFE 分析"
+            description="从旧 Position 数据本地计算最大不利/有利波动，用于迁移期复盘。"
+            schema={maeMfeScatterSchema}
+            trustMeta={localLegacyAnalyticsTrust}
+            emptyState={{
+                is_empty: data.length === 0,
+                reason: data.length === 0 ? 'NO_MAE_MFE_POINTS' : null,
+                message: data.length === 0 ? '暂无可计算 MAE/MFE 的历史持仓。' : undefined,
+            }}
+            dataCount={data.length}
+        >
+            <>
                 <div className="h-[300px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
                         <ScatterChart
@@ -73,8 +55,8 @@ export function MaeMfeScatterPlot({ positions }: MaeMfeScatterPlotProps) {
                             <ReferenceLine x={0} stroke="#666" strokeDasharray="3 3" />
 
                             <Scatter name="Positions" data={data} fill="#8884d8">
-                                {data.map((entry: any, index: number) => (
-                                    <Cell key={`cell-${index}`} fill={entry.pnl >= 0 ? '#10B981' : '#EF4444'} />
+                                {data.map((entry) => (
+                                    <Cell key={entry.id} fill={entry.pnl >= 0 ? '#10B981' : '#EF4444'} />
                                 ))}
                             </Scatter>
                         </ScatterChart>
@@ -90,7 +72,7 @@ export function MaeMfeScatterPlot({ positions }: MaeMfeScatterPlotProps) {
                         Indicates potential profit that was available.
                     </p>
                 </div>
-            </div>
-        </div>
+            </>
+        </ChartFrame>
     );
 }

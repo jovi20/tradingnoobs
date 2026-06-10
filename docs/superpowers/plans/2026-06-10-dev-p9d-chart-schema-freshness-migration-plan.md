@@ -563,7 +563,7 @@ cd frontend
 
 Expected: ESLint exits 0.
 
-- [ ] **Step 7: Commit ChartFrame and Dashboard renderer migration**
+- [x] **Step 7: Commit ChartFrame and Dashboard renderer migration**
 
 Run:
 
@@ -580,7 +580,7 @@ git commit -m "feat: wrap dashboard charts with trust frame"
 - Modify: `frontend/components/dashboard/MaeMfeScatterPlot.tsx`
 - Modify: `frontend/components/PortfolioSankey.tsx`
 
-- [ ] **Step 1: Write failing chart view adapter tests**
+- [x] **Step 1: Write failing chart view adapter tests**
 
 Create `frontend/tests/chart-views.test.mts`:
 
@@ -646,7 +646,7 @@ test('buildPortfolioSankeyChartView exposes empty state instead of null renderin
 })
 ```
 
-- [ ] **Step 2: Run chart view tests and verify RED**
+- [x] **Step 2: Run chart view tests and verify RED**
 
 Run:
 
@@ -657,7 +657,7 @@ node --experimental-strip-types --test tests/chart-views.test.mts
 
 Expected: fails because `lib/adapters/chart-views.ts` does not exist.
 
-- [ ] **Step 3: Implement chart view helpers**
+- [x] **Step 3: Implement chart view helpers**
 
 Create `frontend/lib/adapters/chart-views.ts`:
 
@@ -734,7 +734,7 @@ export function buildPortfolioSankeyChartView(data: { nodes: unknown[]; links: u
 }
 ```
 
-- [ ] **Step 4: Run chart view tests**
+- [x] **Step 4: Run chart view tests**
 
 Run:
 
@@ -745,7 +745,7 @@ node --experimental-strip-types --test tests/chart-views.test.mts
 
 Expected: chart view tests pass.
 
-- [ ] **Step 5: Wrap MAE/MFE scatter with ChartFrame**
+- [x] **Step 5: Wrap MAE/MFE scatter with ChartFrame**
 
 Modify `MaeMfeScatterPlot.tsx`:
 
@@ -755,7 +755,7 @@ Modify `MaeMfeScatterPlot.tsx`:
 - Render `ChartFrame` with empty reason `NO_MAE_MFE_POINTS`.
 - Keep the existing scatter chart internals and explanatory footer copy.
 
-- [ ] **Step 6: Wrap PortfolioSankey with ChartFrame**
+- [x] **Step 6: Wrap PortfolioSankey with ChartFrame**
 
 Modify `PortfolioSankey.tsx`:
 
@@ -764,7 +764,7 @@ Modify `PortfolioSankey.tsx`:
 - Render visible `ChartFrame` even when nodes are empty.
 - Keep active node hover behavior and existing Sankey node renderer.
 
-- [ ] **Step 7: Run tests, TypeScript, and targeted strict lint**
+- [x] **Step 7: Run tests, TypeScript, and targeted strict lint**
 
 Run:
 
