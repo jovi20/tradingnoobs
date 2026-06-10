@@ -32,7 +32,8 @@
 
 | 文档 | 用途 |
 |------|------|
-| [2026-06-10-dev-p11-truth-hard-cutover-plan.md](./superpowers/plans/2026-06-10-dev-p11-truth-hard-cutover-plan.md) | P11 truth hard cutover 专项计划，下一条 active implementation lane。 |
+| [2026-06-10-dev-p12-platform-contract-hardening-plan.md](./superpowers/plans/2026-06-10-dev-p12-platform-contract-hardening-plan.md) | P12 platform contract hardening 专项计划，当前 active implementation lane。 |
+| [2026-06-10-dev-p11-truth-hard-cutover-plan.md](./superpowers/plans/2026-06-10-dev-p11-truth-hard-cutover-plan.md) | P11 truth hard cutover 专项计划，记录 truth-first writes、snapshot Timeline、legacy migration guard 的完成门。 |
 | [2026-06-10-dev-p10-progress-next-plan.md](./superpowers/plans/2026-06-10-dev-p10-progress-next-plan.md) | 下一阶段 P10 文档同步、truth hard cutover、observability、API 契约和模型拆分计划。 |
 | [2026-06-10-dev-p10-legacy-cutover-inventory.md](./superpowers/plans/2026-06-10-dev-p10-legacy-cutover-inventory.md) | P10 legacy/truth cutover inventory，标记 primary truth、migration-only、delete candidate 和开放产品决策。 |
 | [2026-06-10-dev-p10-model-modularization-plan.md](./superpowers/plans/2026-06-10-dev-p10-model-modularization-plan.md) | P10 backend model modularization 计划，定义 `backend/models/` 拆分边界和兼容 re-export 策略。 |

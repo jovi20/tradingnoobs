@@ -2,7 +2,7 @@
 
 更新时间：2026-06-10
 当前执行分支：`dev`
-当前 HEAD：`3418a27 docs: mark p9f pushed`
+当前 HEAD：以当前 `dev` 最新提交为准；阶段状态见 [TODO.md](./TODO.md)。
 
 本文档描述当前代码库的真实实现、运行入口、模块边界与开发注意事项。目标架构和未来设计仍以 `docs/superpowers/specs/` 为准；当前任务状态以 [TODO.md](./TODO.md) 为准。
 
@@ -14,6 +14,7 @@
 - [superpowers/specs/2026-04-07-frontend-experience-redesign-design.md](./superpowers/specs/2026-04-07-frontend-experience-redesign-design.md) 是前端体验重设计基线。
 - [superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md](./superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md) 是平台 + 前端迁移顺序基线。
 - [TODO.md](./TODO.md) 是当前执行清单。
+- [superpowers/plans/2026-06-10-dev-p12-platform-contract-hardening-plan.md](./superpowers/plans/2026-06-10-dev-p12-platform-contract-hardening-plan.md) 是 P11 后当前 active lane，负责 OpenAPI/frontend contract 边界硬化。
 - [current-state-baseline.md](./current-state-baseline.md) 是 2026-04-05 历史审计快照，不再作为当前实现依据。
 - [顶层设计.md](./顶层设计.md) 已降级为历史草案。
 
@@ -263,12 +264,11 @@ npm run build
 
 优先级以 [TODO.md](./TODO.md) 为准。当前建议顺序：
 
-1. P10A：文档与进度同步。
-2. P10B：Truth hard cutover 设计与执行。
-3. P10C：可观测性与 rollback/release playbook。
-4. P10D：前端 API 契约与 OpenAPI type generation 边界。
-5. P10E：`backend/models.py` 模块化。
-6. 中期 backlog：风控预警、PDF 导出、AI 日期范围、市场数据验证、管理员运维。
+1. P12：Platform contract hardening，锁住 raw legacy DTO import 边界、OpenAPI contract snapshot、generated type 输出边界、release/rollback playbook。
+2. P10C 剩余项：统一 error code 接入、结构化日志策略。
+3. P10D 剩余项：停止扩张 `frontend/lib/api.ts`，让新页面优先走 read-model adapter 或 generated contract。
+4. P10E 后续执行：在 truth/legacy 边界稳定后拆分 `backend/models.py`。
+5. 中期 backlog：风控预警、PDF 导出、AI 日期范围、市场数据验证、管理员运维、图表 renderer 迁移。
 
 ---
 

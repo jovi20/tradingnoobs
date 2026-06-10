@@ -20,6 +20,7 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 - [superpowers/plans/2026-06-10-dev-p10-legacy-cutover-inventory.md](./superpowers/plans/2026-06-10-dev-p10-legacy-cutover-inventory.md)
 - [superpowers/plans/2026-06-10-dev-p10-model-modularization-plan.md](./superpowers/plans/2026-06-10-dev-p10-model-modularization-plan.md)
 - [superpowers/plans/2026-06-10-dev-p11-truth-hard-cutover-plan.md](./superpowers/plans/2026-06-10-dev-p11-truth-hard-cutover-plan.md)
+- [superpowers/plans/2026-06-10-dev-p12-platform-contract-hardening-plan.md](./superpowers/plans/2026-06-10-dev-p12-platform-contract-hardening-plan.md)
 
 ---
 
@@ -28,22 +29,22 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 | 领域 | 当前状态 | 说明 |
 |------|----------|------|
 | 平台底座 | `已大幅落地` | Alembic、public_id、auth/session、platform config、feature flags、job/outbox/idempotency/business lock、derived timeline snapshot 已进入 `dev`。 |
-| Truth 交易模型 | `桥接完成 / 硬切推进中` | `TradingPosition / PositionEvent / AccountLedgerEntry` 已落地；新建仓位已 create-and-sync 到 truth lifecycle，已有仓位加仓/减仓/平仓/复盘/叙事已 truth-first；legacy batch/review/delete 写入在 truth lifecycle 存在时默认被保护为 migration fallback。 |
+| Truth 交易模型 | `P11 硬切代码完成` | `TradingPosition / PositionEvent / AccountLedgerEntry` 已落地；新建仓位已 create-and-sync 到 truth lifecycle，已有仓位加仓/减仓/平仓/复盘/叙事已 truth-first；legacy batch/review/delete 写入在 truth lifecycle 存在时默认被保护为 migration fallback。 |
 | Timeline 首页 | `truth/snapshot 默认` | `/` 和 `/timeline` 已转向时间流/复盘工作台；Timeline events 与 Review Inbox 默认使用 `DerivedTimelineSnapshot` / auditable artifacts，`timeline_legacy_mixed_feed_enabled` 是 legacy mixed rollback。 |
 | Lifecycle Detail | `truth-first 体验已落地` | 单笔详情已优先展示 truth lifecycle、evidence、AI sidecar；latest active event reversal 走审计 `REVERSAL`，非最新 reversal、`OPEN` reversal、legacy hard delete/batch edit 已被保护为非普通路径。 |
 | Dashboard / Insights | `已重构为工作台形态` | Dashboard 保持宏观视图；Insights 已接入 auditable artifact 与 artifact detail；图表已有 schema/freshness 包装。 |
 | 前端依赖与质量 | `已完成 P8-P9F` | Next 16 / React 19 已升级；React 19 strict hooks lint 全局启用；前端 lint 已到 0 warning。 |
-| 文档状态 | `P10 已收敛 / P11 已成计划` | P10 文档、legacy inventory、observability、read-model marker、model modularization plan 已落地；下一条 active lane 是 P11 truth hard cutover。 |
+| 文档状态 | `P11 收口 / P12 选定` | P10 文档、legacy inventory、observability、read-model marker、model modularization plan 已落地；P11 hard cutover 代码任务完成，下一条 active lane 是 P12 platform contract hardening。 |
 
 ---
 
 ## 当前 Active Lane
 
-- 当前 active lane：P11 Truth hard cutover。
-- 执行计划：[2026-06-10-dev-p11-truth-hard-cutover-plan.md](./superpowers/plans/2026-06-10-dev-p11-truth-hard-cutover-plan.md)。
-- 执行原则：一次只推进 P11，P12-P19 留在 backlog；P11 通过或明确暂停前，不并行开发风控、PDF、AI 日期范围、市场数据平台、admin ops 或 chart renderer 迁移。
+- 当前 active lane：P12 Platform contract hardening。
+- 执行计划：[2026-06-10-dev-p12-platform-contract-hardening-plan.md](./superpowers/plans/2026-06-10-dev-p12-platform-contract-hardening-plan.md)。
+- 执行原则：P12 先补契约边界、OpenAPI 快照、generated type 输出边界、release/rollback playbook；P12 通过或明确暂停前，不并行开发风控、PDF、AI 日期范围、市场数据平台、admin ops 或 chart renderer 迁移。
 
-### P11 当前进度
+### P11 完成状态
 
 - [x] P11 Task 1A：已有仓位加仓/减仓/平仓不再静默 fallback 到 legacy batch；legacy batch 写入需要显式 `X-Migration-Fallback: legacy-batch-write`。
 - [x] P11 Task 1B：全新开仓 create path 已采用 create-and-sync 过渡合同，`POST /api/positions` 返回 `truth_position_public_id`，前端优先跳转 truth detail。
@@ -51,6 +52,16 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 - [x] P11 Task 3：historical reversal、`OPEN` reversal、archive/void/delete、legacy batch edit 最终语义。
 - [x] P11 Task 4：Timeline / Review Inbox 默认 truth/snapshot-backed。
 - [x] P11 Task 5：剩余 legacy UI 统一标为 migration tools。
+- [x] P11 自动化完成门：后端全量测试、前端 typecheck、lint、Node 测试、`git diff --check` 已通过。
+- [ ] P11 受限项：authenticated browser smoke 未完成；本轮只验证了 `/`、`/timeline`、`/login` 可服务，因浏览器未登录被重定向到 `/login`，还需带登录态覆盖 `/positions`、`/positions/[id]`、`/positions/[id]/add-batch`。
+
+### P12 当前计划
+
+- [ ] P12 Task 1：冻结 frontend raw legacy DTO import 边界，并用测试锁住 migration/support、create-sync bridge、legacy analytics、adapter boundary。
+- [ ] P12 Task 2：增加 OpenAPI contract snapshot tests，覆盖 truth lifecycle、Timeline、legacy fallback headers。
+- [ ] P12 Task 3：建立 `frontend/lib/generated/` 输出边界，为后续 OpenAPI type generation 做好落点。
+- [ ] P12 Task 4：补 release / rollback playbook，覆盖 truth writes、snapshot Timeline、legacy mutation guards。
+- [ ] P12 Task 5：完成 P12 全量验证门。
 
 ---
 
@@ -87,13 +98,13 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 - [x] 冻结 error code 命名规则，新增 `make_error_code(namespace, error)` helper。
 - [ ] 在路由异常处理中实际使用统一 error code。
 - [ ] 建立结构化日志策略，逐步替换后端业务路径中的 `print()`。
-- [ ] 补 release / rollback playbook，特别是 truth hard cutover 和 derived snapshot 切换。
+- [ ] 补 release / rollback playbook，特别是 truth hard cutover 和 derived snapshot 切换；该项已进入 P12 Task 4。
 
 ### P10D 前端 API 契约收敛
 
 - [x] 给 `frontend/lib/read-models.ts` 标记“手写类型，后续由 OpenAPI 生成替换”。
 - [ ] 停止继续扩张 `frontend/lib/api.ts` 作为永久 DTO 层。
-- [ ] 规划 OpenAPI type generation 输出路径和导入边界。
+- [ ] 规划 OpenAPI type generation 输出路径和导入边界；该项已进入 P12 Task 1-3。
 - [ ] 将新页面尽量绑定 read-model adapter，而不是直接绑定 raw API DTO。
 
 ### P10E 模型与服务模块化

@@ -339,13 +339,26 @@ git commit -m "feat: isolate legacy trading controls"
 
 ## Task 6: P11 Completion Gate
 
-- [ ] Full backend tests pass.
-- [ ] Frontend typecheck passes.
-- [ ] Frontend lint passes.
-- [ ] Browser smoke covers `/`, `/timeline`, `/positions`, `/positions/[id]`, and `/positions/[id]/add-batch`.
-- [ ] Legacy inventory is updated with actual post-P11 classifications.
-- [ ] `TODO.md` marks P11 completed or lists precise remaining blockers.
-- [ ] P12 platform contract hardening plan is created or selected as next active lane.
+- [x] Full backend tests pass.
+- [x] Frontend typecheck passes.
+- [x] Frontend lint passes.
+- [ ] Authenticated browser smoke covers `/`, `/timeline`, `/positions`, `/positions/[id]`, and `/positions/[id]/add-batch`.
+- [x] Legacy inventory is updated with actual post-P11 classifications.
+- [x] `TODO.md` marks P11 completed or lists precise remaining blockers.
+- [x] P12 platform contract hardening plan is created or selected as next active lane.
+
+P11 Task 6 result:
+- P11 code tasks are complete and committed through Task 5.
+- Legacy inventory now reflects the post-P11 state: ordinary writes are truth-first, legacy writes are migration/support only behind explicit fallback headers, and Timeline/Review Inbox default to truth/snapshot read models.
+- P12 Platform Contract Hardening is selected as the next active lane.
+- Authenticated browser smoke remains the only completion-gate blocker: the app served `/`, `/timeline`, and `/login`, but the in-app browser was unauthenticated and redirected to `/login`, so `/positions`, `/positions/[id]`, and `/positions/[id]/add-batch` visual coverage was not completed in this session.
+
+Verification log:
+- Full backend regression: `../.venv313/bin/python -m unittest discover -s tests` ran 160 tests OK; output included an existing Yahoo/MSFT DNS warning from market-data-related code.
+- Frontend typecheck: `./node_modules/.bin/tsc --noEmit --pretty false` exited 0.
+- Frontend lint: `npm run lint` exited 0.
+- Extended frontend regression: `node --experimental-strip-types --test tests/*.test.mts` ran 89 tests OK; Node emitted existing `MODULE_TYPELESS_PACKAGE_JSON` warnings.
+- Diff hygiene: `git diff --check` exited 0.
 
 Final verification:
 
