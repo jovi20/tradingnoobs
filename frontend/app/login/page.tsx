@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useTheme } from '@/components/ThemeProvider'
 import Link from 'next/link'
+import Image from 'next/image'
 import {
     Plus,
     PlusCircle,
@@ -42,9 +43,12 @@ export default function LoginPage() {
                     {/* Logo */}
                     <div className="flex flex-col items-center mb-8 group">
                         <div className="relative w-20 h-20 mb-4">
-                            <img
+                            <Image
                                 src={theme === 'dark' || resolvedTheme === 'dark' ? '/logo-white.png' : '/logo-black.png'}
                                 alt="Trading Noobs Logo"
+                                width={80}
+                                height={80}
+                                priority
                                 className="w-full h-full object-contain rotate-6 group-hover:rotate-12 transition-transform duration-500"
                             />
                         </div>
