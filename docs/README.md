@@ -32,7 +32,10 @@
 
 | 文档 | 用途 |
 |------|------|
+| [2026-06-10-dev-p11-truth-hard-cutover-plan.md](./superpowers/plans/2026-06-10-dev-p11-truth-hard-cutover-plan.md) | P11 truth hard cutover 专项计划，下一条 active implementation lane。 |
 | [2026-06-10-dev-p10-progress-next-plan.md](./superpowers/plans/2026-06-10-dev-p10-progress-next-plan.md) | 下一阶段 P10 文档同步、truth hard cutover、observability、API 契约和模型拆分计划。 |
+| [2026-06-10-dev-p10-legacy-cutover-inventory.md](./superpowers/plans/2026-06-10-dev-p10-legacy-cutover-inventory.md) | P10 legacy/truth cutover inventory，标记 primary truth、migration-only、delete candidate 和开放产品决策。 |
+| [2026-06-10-dev-p10-model-modularization-plan.md](./superpowers/plans/2026-06-10-dev-p10-model-modularization-plan.md) | P10 backend model modularization 计划，定义 `backend/models/` 拆分边界和兼容 re-export 策略。 |
 | [2026-06-10-dev-p9f-zero-lint-warning-cleanup-plan.md](./superpowers/plans/2026-06-10-dev-p9f-zero-lint-warning-cleanup-plan.md) | P9F 前端 lint 0 warning 收尾记录。 |
 | [2026-06-10-dev-p9e-react19-strict-lint-cleanup-plan.md](./superpowers/plans/2026-06-10-dev-p9e-react19-strict-lint-cleanup-plan.md) | P9E React 19 strict hooks lint 全局启用记录。 |
 | [2026-06-10-dev-p9d-chart-schema-freshness-migration-plan.md](./superpowers/plans/2026-06-10-dev-p9d-chart-schema-freshness-migration-plan.md) | P9D chart schema/freshness/ChartFrame 迁移记录。 |

@@ -344,7 +344,7 @@ cd backend
 
 Expected: full backend tests pass. If known network warnings appear, record them without hiding failures.
 
-- [ ] **Step 7: Commit observability slice**
+- [x] **Step 7: Commit observability slice**
 
 Run:
 
@@ -382,7 +382,7 @@ npm run lint
 
 Expected: both commands exit 0.
 
-- [ ] **Step 3: Commit read-model marker**
+- [x] **Step 3: Commit read-model marker**
 
 Run:
 
@@ -436,7 +436,7 @@ backend/models/
   legacy.py
 ```
 
-- [ ] **Step 3: Commit modularization plan only**
+- [x] **Step 3: Commit modularization plan only**
 
 Run:
 
@@ -455,7 +455,7 @@ Do not split `backend/models.py` in the same slice as the plan.
 - Modify: `docs/TODO.md`
 - Create one dedicated plan per selected lane under `docs/superpowers/plans/`
 
-- [ ] **Step 1: Review P10 completion**
+- [x] **Step 1: Review P10 completion**
 
 Run:
 
@@ -465,7 +465,7 @@ rg -n "\[ \]" docs/TODO.md docs/superpowers/plans/2026-06-10-dev-p10-progress-ne
 
 Expected: P10A-P10E status is clear, with no ambiguous half-complete items.
 
-- [ ] **Step 2: Confirm all planned feature lanes are listed**
+- [x] **Step 2: Confirm all planned feature lanes are listed**
 
 The forward roadmap must include these lanes:
 - P11 Truth hard cutover.
@@ -478,7 +478,7 @@ The forward roadmap must include these lanes:
 - P18 Chart renderer migration.
 - P19 Release readiness.
 
-- [ ] **Step 3: Write the next dedicated plan in sequence**
+- [x] **Step 3: Write the next dedicated plan in sequence**
 
 Start with the earliest incomplete lane that is not blocked by product decisions. The dedicated lane plan must include:
 - User-facing goal.
@@ -488,7 +488,7 @@ Start with the earliest incomplete lane that is not blocked by product decisions
 - Commit strategy.
 - Rollback or stop condition.
 
-- [ ] **Step 4: Keep execution single-lane**
+- [x] **Step 4: Keep execution single-lane**
 
 Before implementation, confirm the active lane in `TODO.md`. Leave later lanes in backlog until the active lane is verified and committed.
 
@@ -496,15 +496,15 @@ Before implementation, confirm the active lane in `TODO.md`. Leave later lanes i
 
 ## Acceptance Checklist
 
-- [ ] `TODO.md` accurately shows P10 priorities and medium-term backlog.
-- [ ] `DEVELOPER_GUIDE.md` describes current `dev`, not the old main baseline.
-- [ ] `docs/README.md` links current plans and specs.
-- [ ] Top-level sequencing plan no longer understates P8-P9F progress.
+- [x] `TODO.md` accurately shows P10 priorities and medium-term backlog.
+- [x] `DEVELOPER_GUIDE.md` describes current `dev`, not the old main baseline.
+- [x] `docs/README.md` links current plans and specs.
+- [x] Top-level sequencing plan no longer understates P8-P9F progress.
 - [x] Legacy cutover has an inventory before deletion starts.
 - [x] Observability has request id and latency middleware before more risky cutover work.
 - [x] Handwritten frontend read-model types are marked as temporary.
 - [x] Model modularization is planned before `backend/models.py` is split.
-- [ ] `docs/superpowers/demos/` remains untouched and uncommitted.
+- [x] `docs/superpowers/demos/` remains untouched and uncommitted.
 
 ## Verification Log
 
@@ -516,7 +516,12 @@ Before implementation, confirm the active lane in `TODO.md`. Leave later lanes i
 - 2026-06-10 P10C observability RED: `../.venv313/bin/python -m unittest discover -s tests -p test_observability.py` failed with `ModuleNotFoundError: No module named 'observability'`.
 - 2026-06-10 P10C observability GREEN: targeted observability tests ran 4 tests and passed.
 - 2026-06-10 P10C observability regression: full backend unittest discovery ran 150 tests and passed; output included a Yahoo DNS warning from market-data-related code.
+- 2026-06-10 P10C observability: committed in `a205e77`.
 - 2026-06-10 P10D read-model marker: `./node_modules/.bin/tsc --noEmit --pretty false` exited 0.
 - 2026-06-10 P10D read-model marker: `npm run lint` exited 0.
+- 2026-06-10 P10D read-model marker: committed in `824d101`.
 - 2026-06-10 P10E model modularization: `rg -n "from models import|import models" backend` confirmed broad import surface across routers, services, tests, ops, and Alembic.
 - 2026-06-10 P10E model modularization: `wc -l backend/models.py` reported 996 lines before any split.
+- 2026-06-10 P10E model modularization: committed in `f4c5abe`.
+- 2026-06-10 P10 Task 6: `rg -n "\| P1[1-9] \|" docs/superpowers/plans/2026-06-10-dev-p10-progress-next-plan.md` confirmed P11-P19 are listed.
+- 2026-06-10 P10 Task 6: created `docs/superpowers/plans/2026-06-10-dev-p11-truth-hard-cutover-plan.md` and marked P11 as the next active lane in `docs/TODO.md`.

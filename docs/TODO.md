@@ -2,7 +2,7 @@
 
 更新时间：2026-06-10
 当前执行分支：`dev`
-当前 HEAD：`3418a27 docs: mark p9f pushed`
+P10 起始基线：`3418a27 docs: mark p9f pushed`
 
 本文档是当前唯一执行清单。目标是回答三个问题：
 - 现在已经推进到哪里
@@ -16,6 +16,10 @@
 - [market_data_sources.md](./market_data_sources.md)
 - [trading-metrics.md](./trading-metrics.md)
 - [trading-fields-design.md](./trading-fields-design.md)
+- [superpowers/plans/2026-06-10-dev-p10-progress-next-plan.md](./superpowers/plans/2026-06-10-dev-p10-progress-next-plan.md)
+- [superpowers/plans/2026-06-10-dev-p10-legacy-cutover-inventory.md](./superpowers/plans/2026-06-10-dev-p10-legacy-cutover-inventory.md)
+- [superpowers/plans/2026-06-10-dev-p10-model-modularization-plan.md](./superpowers/plans/2026-06-10-dev-p10-model-modularization-plan.md)
+- [superpowers/plans/2026-06-10-dev-p11-truth-hard-cutover-plan.md](./superpowers/plans/2026-06-10-dev-p11-truth-hard-cutover-plan.md)
 
 ---
 
@@ -29,7 +33,15 @@
 | Lifecycle Detail | `truth-first 体验已落地` | 单笔详情已优先展示 truth lifecycle、evidence、AI sidecar；部分历史编辑/删除/非最新 reversal 仍需明确迁移语义。 |
 | Dashboard / Insights | `已重构为工作台形态` | Dashboard 保持宏观视图；Insights 已接入 auditable artifact 与 artifact detail；图表已有 schema/freshness 包装。 |
 | 前端依赖与质量 | `已完成 P8-P9F` | Next 16 / React 19 已升级；React 19 strict hooks lint 全局启用；前端 lint 已到 0 warning。 |
-| 文档状态 | `正在同步` | 早期 `DEVELOPER_GUIDE.md`、`README.md`、旧 TODO 与当前 `dev` 进度存在偏差，本轮整理负责收敛。 |
+| 文档状态 | `P10 已收敛 / P11 已成计划` | P10 文档、legacy inventory、observability、read-model marker、model modularization plan 已落地；下一条 active lane 是 P11 truth hard cutover。 |
+
+---
+
+## 当前 Active Lane
+
+- 当前 active lane：P11 Truth hard cutover。
+- 执行计划：[2026-06-10-dev-p11-truth-hard-cutover-plan.md](./superpowers/plans/2026-06-10-dev-p11-truth-hard-cutover-plan.md)。
+- 执行原则：一次只推进 P11，P12-P19 留在 backlog；P11 通过或明确暂停前，不并行开发风控、PDF、AI 日期范围、市场数据平台、admin ops 或 chart renderer 迁移。
 
 ---
 
