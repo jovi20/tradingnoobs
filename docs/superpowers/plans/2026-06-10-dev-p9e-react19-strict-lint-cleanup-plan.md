@@ -35,7 +35,7 @@ Create `docs/superpowers/specs/2026-06-10-p9e-react19-strict-lint-cleanup-design
 
 Create `docs/superpowers/plans/2026-06-10-dev-p9e-react19-strict-lint-cleanup-plan.md` with task-by-task execution steps.
 
-- [ ] **Step 4: Commit P9E planning docs**
+- [x] **Step 4: Commit P9E planning docs**
 
 Run:
 
@@ -52,7 +52,7 @@ Expected: planning docs are committed on `dev`. Do not stage `docs/superpowers/d
 - Modify: `frontend/app/admin/jobs/page.tsx`
 - Modify: `frontend/app/strategies/page.tsx`
 
-- [ ] **Step 1: Update admin jobs effect fetch**
+- [x] **Step 1: Update admin jobs effect fetch**
 
 In `frontend/app/admin/jobs/page.tsx`:
 
@@ -61,7 +61,7 @@ In `frontend/app/admin/jobs/page.tsx`:
 - In the token/filter effect, schedule that event with `window.setTimeout(..., 0)`.
 - Remove the `react-hooks/exhaustive-deps` disable.
 
-- [ ] **Step 2: Update strategies effect fetch**
+- [x] **Step 2: Update strategies effect fetch**
 
 In `frontend/app/strategies/page.tsx`:
 
@@ -70,7 +70,7 @@ In `frontend/app/strategies/page.tsx`:
 - In the token effect, schedule that event with `window.setTimeout(..., 0)`.
 - Keep direct refresh calls after create/update/delete.
 
-- [ ] **Step 3: Run targeted strict lint for fetch pages**
+- [x] **Step 3: Run targeted strict lint for fetch pages**
 
 Run:
 
@@ -81,7 +81,7 @@ cd frontend
 
 Expected: exits 0 errors. Existing warnings should not include these two effect fetch errors.
 
-- [ ] **Step 4: Commit fetch cleanup**
+- [x] **Step 4: Commit fetch cleanup**
 
 Run:
 
@@ -96,7 +96,7 @@ git commit -m "fix: defer effect triggered fetch state"
 - Modify: `frontend/app/positions/new/page.tsx`
 - Modify: `frontend/app/positions/page.tsx`
 
-- [ ] **Step 1: Replace stored symbol detection with derived detection**
+- [x] **Step 1: Replace stored symbol detection with derived detection**
 
 In `frontend/app/positions/new/page.tsx`:
 
@@ -105,7 +105,7 @@ In `frontend/app/positions/new/page.tsx`:
 - Keep validation-specific detection local inside the debounced callback.
 - Schedule `setSymbolValidation(null)` asynchronously when `form.symbol` is empty.
 
-- [ ] **Step 2: Fix positions URL filter sync**
+- [x] **Step 2: Fix positions URL filter sync**
 
 In `frontend/app/positions/page.tsx`:
 
@@ -115,7 +115,7 @@ In `frontend/app/positions/page.tsx`:
 - Update the existing URL sync effect to schedule state changes with `window.setTimeout(..., 0)`.
 - Remove the unused `asset_type` local and debug `console.log`.
 
-- [ ] **Step 3: Fix holding time render purity**
+- [x] **Step 3: Fix holding time render purity**
 
 In `frontend/app/positions/page.tsx`:
 
@@ -123,7 +123,7 @@ In `frontend/app/positions/page.tsx`:
 - Populate it from a deferred effect and refresh it every minute.
 - Change `formatHoldingTime(position)` to `formatHoldingTime(position, currentTime)` and avoid `Date.now()` during render.
 
-- [ ] **Step 4: Run targeted strict lint for positions**
+- [x] **Step 4: Run targeted strict lint for positions**
 
 Run:
 
@@ -134,7 +134,7 @@ cd frontend
 
 Expected: exits 0 errors.
 
-- [ ] **Step 5: Commit positions cleanup**
+- [x] **Step 5: Commit positions cleanup**
 
 Run:
 
@@ -150,7 +150,7 @@ git commit -m "fix: make positions filters and timing react strict safe"
 - Modify: `frontend/components/DateTimePicker.tsx`
 - Modify: `frontend/app/positions/new/page.tsx`
 
-- [ ] **Step 1: Remove checklist modal reset effect**
+- [x] **Step 1: Remove checklist modal reset effect**
 
 In `frontend/components/ChecklistModal.tsx`:
 
@@ -163,7 +163,7 @@ In `frontend/app/positions/new/page.tsx`:
 - Render `ChecklistModal` only when `showChecklistModal` is true.
 - Keep `isOpen={showChecklistModal}` as a defensive prop.
 
-- [ ] **Step 2: Defer date picker controlled sync**
+- [x] **Step 2: Defer date picker controlled sync**
 
 In `frontend/components/DateTimePicker.tsx`:
 
@@ -171,7 +171,7 @@ In `frontend/components/DateTimePicker.tsx`:
 - Move `setSelectedDate` and `setTimeValue` into a `window.setTimeout(..., 0)` callback.
 - Clear the timeout on cleanup.
 
-- [ ] **Step 3: Run targeted strict lint for modal and date picker**
+- [x] **Step 3: Run targeted strict lint for modal and date picker**
 
 Run:
 
@@ -182,7 +182,7 @@ cd frontend
 
 Expected: exits 0 errors.
 
-- [ ] **Step 4: Commit modal/date cleanup**
+- [x] **Step 4: Commit modal/date cleanup**
 
 Run:
 
@@ -196,7 +196,7 @@ git commit -m "fix: remove modal and picker sync state effects"
 **Files:**
 - Modify: `frontend/eslint.config.mjs`
 
-- [ ] **Step 1: Remove deferred React 19 rule overrides**
+- [x] **Step 1: Remove deferred React 19 rule overrides**
 
 In `frontend/eslint.config.mjs`, remove the config object that disables:
 
@@ -207,7 +207,7 @@ In `frontend/eslint.config.mjs`, remove the config object that disables:
 
 The exported config should rely on `eslint-config-next/core-web-vitals` defaults.
 
-- [ ] **Step 2: Run global strict lint**
+- [x] **Step 2: Run global strict lint**
 
 Run:
 
@@ -218,7 +218,7 @@ cd frontend
 
 Expected: exits 0 errors. Existing warnings may remain.
 
-- [ ] **Step 3: Run normal lint**
+- [x] **Step 3: Run normal lint**
 
 Run:
 
@@ -229,7 +229,7 @@ npm run lint
 
 Expected: exits 0. Existing warnings may remain but no strict errors should be hidden by config.
 
-- [ ] **Step 4: Commit lint config enablement**
+- [x] **Step 4: Commit lint config enablement**
 
 Run:
 
@@ -243,7 +243,7 @@ git commit -m "chore: enable react strict hook lint globally"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-06-10-dev-p9e-react19-strict-lint-cleanup-plan.md`
 
-- [ ] **Step 1: Run frontend tests**
+- [x] **Step 1: Run frontend tests**
 
 Run:
 
@@ -254,7 +254,7 @@ node --experimental-strip-types --test tests/*.test.mts
 
 Expected: exits 0.
 
-- [ ] **Step 2: Run TypeScript**
+- [x] **Step 2: Run TypeScript**
 
 Run:
 
@@ -265,7 +265,7 @@ cd frontend
 
 Expected: exits 0.
 
-- [ ] **Step 3: Run production build**
+- [x] **Step 3: Run production build**
 
 Run:
 
@@ -276,7 +276,7 @@ npm run build
 
 Expected: exits 0. If sandbox restrictions block Turbopack, rerun with approval and record the reason.
 
-- [ ] **Step 4: Restore generated files if needed**
+- [x] **Step 4: Restore generated files if needed**
 
 Run:
 
@@ -286,11 +286,11 @@ git status --short
 
 Expected: no generated file changes. If `frontend/next-env.d.ts` or `frontend/tsconfig.tsbuildinfo` changed, restore only those generated files.
 
-- [ ] **Step 5: Record verification results in this plan**
+- [x] **Step 5: Record verification results in this plan**
 
 Add exact command results, remaining warnings, and any build escalation note under `Verification Results`.
 
-- [ ] **Step 6: Commit verification record**
+- [x] **Step 6: Commit verification record**
 
 Run:
 
@@ -299,7 +299,7 @@ git add docs/superpowers/plans/2026-06-10-dev-p9e-react19-strict-lint-cleanup-pl
 git commit -m "docs: close p9e react strict lint cleanup"
 ```
 
-- [ ] **Step 7: Push `dev`**
+- [x] **Step 7: Push `dev`**
 
 Run:
 
@@ -311,15 +311,26 @@ Expected: push succeeds. Do not create a PR.
 
 ## Verification Results
 
-Pending implementation.
+- RED baseline strict lint: `./node_modules/.bin/eslint . --rule react-hooks/purity:error --rule react-hooks/set-state-in-effect:error` exited 1 with 7 strict errors and 4 warnings before implementation.
+- Fetch-page targeted strict lint: `./node_modules/.bin/eslint app/admin/jobs/page.tsx app/strategies/page.tsx --rule react-hooks/purity:error --rule react-hooks/set-state-in-effect:error` exited 0.
+- Positions targeted strict lint: `./node_modules/.bin/eslint app/positions/new/page.tsx app/positions/page.tsx --rule react-hooks/purity:error --rule react-hooks/set-state-in-effect:error` exited 0.
+- Modal/date targeted strict lint: `./node_modules/.bin/eslint components/ChecklistModal.tsx components/DateTimePicker.tsx app/positions/new/page.tsx --rule react-hooks/purity:error --rule react-hooks/set-state-in-effect:error` exited 0.
+- Global strict lint after enabling rules: `./node_modules/.bin/eslint . --rule react-hooks/purity:error --rule react-hooks/set-state-in-effect:error` exited 0 with 0 errors and 3 warnings.
+- Normal lint: `npm run lint` exited 0 with 0 errors and 3 warnings.
+- Remaining warnings: `app/login/page.tsx` and `app/register/page.tsx` still use `<img>`; `hooks/useDashboardData.ts` still has an existing `allPositionsQuery.error` exhaustive-deps warning.
+- Frontend tests: `node --experimental-strip-types --test tests/*.test.mts` exited 0; 78 tests passed.
+- TypeScript: `./node_modules/.bin/tsc --noEmit --pretty false` exited 0.
+- Sandboxed build: `npm run build` exited 1 because Turbopack could not create a process / bind a port while processing `app/globals.css`.
+- Escalated build: `npm run build` exited 0 on Next 16.2.7; routes included `/admin/jobs`, `/positions`, `/positions/new`, `/strategies`, `/timeline`, `/dashboard`, and `/`.
+- Generated files `frontend/next-env.d.ts` and `frontend/tsconfig.tsbuildinfo` were restored after build.
 
 ## Final Acceptance Checklist
 
-- [ ] Planning docs committed.
-- [ ] Admin jobs and strategies effect fetches are strict-lint safe.
-- [ ] Positions symbol detection, URL filters, and holding time are strict-lint safe.
-- [ ] Checklist modal and date picker sync paths are strict-lint safe.
-- [ ] `frontend/eslint.config.mjs` no longer disables React 19 strict hooks rules.
-- [ ] Global strict React 19 lint exits 0 errors.
-- [ ] Normal lint, tests, TypeScript, and build pass.
-- [ ] Work is committed and pushed to `origin/dev`.
+- [x] Planning docs committed.
+- [x] Admin jobs and strategies effect fetches are strict-lint safe.
+- [x] Positions symbol detection, URL filters, and holding time are strict-lint safe.
+- [x] Checklist modal and date picker sync paths are strict-lint safe.
+- [x] `frontend/eslint.config.mjs` no longer disables React 19 strict hooks rules.
+- [x] Global strict React 19 lint exits 0 errors.
+- [x] Normal lint, tests, TypeScript, and build pass.
+- [x] Work is committed and pushed to `origin/dev`.
