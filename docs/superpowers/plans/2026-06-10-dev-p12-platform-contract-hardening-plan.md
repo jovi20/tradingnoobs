@@ -90,7 +90,7 @@ npm run lint
   - `X-Migration-Fallback` on legacy review update
   - `X-Migration-Fallback` on legacy position delete
 - [x] Run `cd backend && ../.venv313/bin/python -m unittest discover -s tests -p test_openapi_contracts.py`.
-- [ ] Commit with `test: snapshot core api contracts`.
+- [x] Commit with `test: snapshot core api contracts`.
 
 P12 Task 2 result:
 - Added OpenAPI snapshot coverage for truth lifecycle, truth events, canonical event narrative, Timeline Home, and legacy positions.
@@ -104,6 +104,7 @@ Verification log:
 - P12 Task 2 lifecycle regression: `../.venv313/bin/python -m unittest discover -s tests -p test_trading_position_lifecycle_router.py` ran 25 tests OK.
 - P12 Task 2 legacy bridge regression: `../.venv313/bin/python -m unittest discover -s tests -p test_position_truth_bridge_router.py` ran 9 tests OK.
 - P12 Task 2 timeline regression: `../.venv313/bin/python -m unittest discover -s tests -p test_timeline_home_router.py` ran 19 tests OK; output included the existing Yahoo/MSFT DNS warning.
+- Commit: `ac37043 test: snapshot core api contracts`.
 
 Verification:
 
@@ -118,8 +119,8 @@ cd backend
 
 **Goal:** introduce a generated-types location without replacing hand-written read models yet.
 
-- [ ] Create `frontend/lib/generated/README.md` explaining that generated files are build artifacts and should not be edited by hand.
-- [ ] Create `frontend/lib/generated/contracts.ts` as a temporary checked-in stub exporting no product types yet:
+- [x] Create `frontend/lib/generated/README.md` explaining that generated files are build artifacts and should not be edited by hand.
+- [x] Create `frontend/lib/generated/contracts.ts` as a temporary checked-in stub exporting no product types yet:
 
 ```ts
 // Placeholder module for future generated OpenAPI types.
@@ -127,10 +128,20 @@ cd backend
 export {}
 ```
 
-- [ ] Add `frontend/tests/generated-contracts.test.mts` that imports `../lib/generated/contracts.ts` and verifies the module can be loaded.
-- [ ] Update `frontend/lib/read-models.ts` header to point to `frontend/lib/generated/contracts.ts` as the future replacement boundary.
-- [ ] Run `cd frontend && node --experimental-strip-types --test tests/generated-contracts.test.mts`.
+- [x] Add `frontend/tests/generated-contracts.test.mts` that imports `../lib/generated/contracts.ts` and verifies the module can be loaded.
+- [x] Update `frontend/lib/read-models.ts` header to point to `frontend/lib/generated/contracts.ts` as the future replacement boundary.
+- [x] Run `cd frontend && node --experimental-strip-types --test tests/generated-contracts.test.mts`.
 - [ ] Commit with `chore: add generated contract boundary`.
+
+P12 Task 3 result:
+- Added `frontend/lib/generated/` as the stable future OpenAPI output boundary without replacing handwritten read models yet.
+- Added a checked-in placeholder `contracts.ts` module and a load test so future generator wiring has a contract-safe import location.
+- Updated `frontend/lib/read-models.ts` header to point to `frontend/lib/generated/contracts.ts` as the eventual replacement boundary.
+
+Verification log:
+- RED frontend: `node --experimental-strip-types --test tests/generated-contracts.test.mts` failed with `ERR_MODULE_NOT_FOUND` before the generated boundary existed.
+- GREEN targeted frontend: `node --experimental-strip-types --test tests/generated-contracts.test.mts` ran 1 test OK; Node emitted the existing `MODULE_TYPELESS_PACKAGE_JSON` warning.
+- P12 Task 3 verification: `./node_modules/.bin/tsc --noEmit --pretty false` exited 0.
 
 Verification:
 

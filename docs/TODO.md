@@ -59,7 +59,7 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 
 - [x] P12 Task 1：冻结 frontend raw legacy DTO import 边界，并用测试锁住 migration/support、create-sync bridge、legacy analytics、adapter boundary。
 - [x] P12 Task 2：增加 OpenAPI contract snapshot tests，覆盖 truth lifecycle、Timeline、legacy fallback headers。
-- [ ] P12 Task 3：建立 `frontend/lib/generated/` 输出边界，为后续 OpenAPI type generation 做好落点。
+- [x] P12 Task 3：建立 `frontend/lib/generated/` 输出边界，为后续 OpenAPI type generation 做好落点。
 - [ ] P12 Task 4：补 release / rollback playbook，覆盖 truth writes、snapshot Timeline、legacy mutation guards。
 - [ ] P12 Task 5：完成 P12 全量验证门。
 

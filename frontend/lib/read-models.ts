@@ -1,4 +1,4 @@
-// Handwritten read-model types. Replace with generated OpenAPI types once backend contracts stabilize.
+// Handwritten read-model types. Replace with frontend/lib/generated/contracts.ts once OpenAPI generation is wired.
 
 export type FreshnessStatus = 'FRESH' | 'DELAYED' | 'STALE' | 'DEGRADED'
 export type DataSource = 'MANUAL' | 'IMPORTED' | 'SYNCED' | 'DERIVED' | 'AI_GENERATED'
