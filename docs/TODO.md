@@ -29,7 +29,7 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 |------|----------|------|
 | 平台底座 | `已大幅落地` | Alembic、public_id、auth/session、platform config、feature flags、job/outbox/idempotency/business lock、derived timeline snapshot 已进入 `dev`。 |
 | Truth 交易模型 | `桥接完成 / 硬切推进中` | `TradingPosition / PositionEvent / AccountLedgerEntry` 已落地；新建仓位已 create-and-sync 到 truth lifecycle，已有仓位加仓/减仓/平仓/复盘/叙事已 truth-first；legacy batch/review/delete 写入在 truth lifecycle 存在时默认被保护为 migration fallback。 |
-| Timeline 首页 | `已默认 timeline-first` | `/` 和 `/timeline` 已转向时间流/复盘工作台；最终仍需从 bridge/snapshot 过渡到纯 truth/snapshot-backed read model。 |
+| Timeline 首页 | `truth/snapshot 默认` | `/` 和 `/timeline` 已转向时间流/复盘工作台；Timeline events 与 Review Inbox 默认使用 `DerivedTimelineSnapshot` / auditable artifacts，`timeline_legacy_mixed_feed_enabled` 是 legacy mixed rollback。 |
 | Lifecycle Detail | `truth-first 体验已落地` | 单笔详情已优先展示 truth lifecycle、evidence、AI sidecar；latest active event reversal 走审计 `REVERSAL`，非最新 reversal、`OPEN` reversal、legacy hard delete/batch edit 已被保护为非普通路径。 |
 | Dashboard / Insights | `已重构为工作台形态` | Dashboard 保持宏观视图；Insights 已接入 auditable artifact 与 artifact detail；图表已有 schema/freshness 包装。 |
 | 前端依赖与质量 | `已完成 P8-P9F` | Next 16 / React 19 已升级；React 19 strict hooks lint 全局启用；前端 lint 已到 0 warning。 |
@@ -49,7 +49,7 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 - [x] P11 Task 1B：全新开仓 create path 已采用 create-and-sync 过渡合同，`POST /api/positions` 返回 `truth_position_public_id`，前端优先跳转 truth detail。
 - [x] P11 Task 2：复盘与叙事最终写入 `PositionEvent` / truth lifecycle；legacy review fields 已变成 migration-only。
 - [x] P11 Task 3：historical reversal、`OPEN` reversal、archive/void/delete、legacy batch edit 最终语义。
-- [ ] P11 Task 4：Timeline / Review Inbox 默认 truth/snapshot-backed。
+- [x] P11 Task 4：Timeline / Review Inbox 默认 truth/snapshot-backed。
 - [ ] P11 Task 5：剩余 legacy UI 统一标为 migration tools。
 
 ---
@@ -69,7 +69,7 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 - [x] 盘点所有 legacy `Position / TradeBatch / Transaction / AssetMetadata / DailySnapshot` 引用，按 `primary path`、`migration-only`、`delete candidate` 分类。
 - [x] 把普通用户新增、加仓、减仓、平仓、复盘、叙事编辑统一到 `TradingPosition / PositionEvent` 路径；新增开仓已 create-and-sync，已有仓位加仓/减仓/平仓已默认 truth-first，复盘/叙事已写入 `PositionEvent` narrative。
 - [x] 明确 historical reversal、`OPEN` reversal、whole-position delete、legacy batch edit 的最终产品语义。
-- [ ] 让 Timeline / Review Inbox 最终读 `TradingPosition / PositionEvent / InsightArtifact / DerivedTimelineSnapshot`，不再依赖 legacy bridge 作为主路径。
+- [x] 让 Timeline / Review Inbox 最终读 `TradingPosition / PositionEvent / InsightArtifact / DerivedTimelineSnapshot`，不再依赖 legacy bridge 作为主路径。
 - [ ] 完成 hard cutover 后，再删除或隔离旧模型、旧路由、旧 DTO、旧前端 fallback。
 
 ### P10C 平台可观测性与运维安全

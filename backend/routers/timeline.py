@@ -83,6 +83,7 @@ def _trust_meta(
     source: DataSourceEnum = DataSourceEnum.DERIVED,
     maturity: MaturityEnum | None = None,
     value_status: ValueStatusEnum | None = None,
+    note: str | None = None,
 ) -> TrustMeta:
     return TrustMeta(
         as_of=as_of,
@@ -91,6 +92,7 @@ def _trust_meta(
         source=source,
         maturity=maturity,
         value_status=value_status,
+        note=note,
     )
 
 
@@ -204,6 +206,65 @@ def _build_review_inbox(positions: list[Position], as_of: str) -> ReviewInbox:
             as_of=as_of,
             source=DataSourceEnum.DERIVED,
             maturity=MaturityEnum.INSUFFICIENT_SAMPLE if items else None,
+            value_status=ValueStatusEnum.FINAL,
+        ),
+    )
+
+
+def _build_snapshot_review_inbox(snapshots: list[DerivedTimelineSnapshot], as_of: str) -> ReviewInbox:
+    items: list[ReviewInboxItem] = []
+    for snapshot in snapshots:
+        snapshot_json = snapshot.snapshot_json or {}
+        if snapshot_json.get("review_status") != "CLOSED_PENDING_REVIEW":
+            continue
+
+        position_title = snapshot_json.get("position_title") or snapshot.trading_position_public_id
+        occurred_at_value = snapshot_json.get("position_event_occurred_at")
+        if occurred_at_value:
+            occurred_at_iso = str(occurred_at_value).replace("+00:00", "Z")
+        else:
+            occurred_at = snapshot.refreshed_at or snapshot.updated_at or snapshot.created_at or datetime.now(timezone.utc)
+            if occurred_at.tzinfo is None:
+                occurred_at = occurred_at.replace(tzinfo=timezone.utc)
+            occurred_at_iso = occurred_at.isoformat().replace("+00:00", "Z")
+
+        href = f"/positions/{snapshot.trading_position_public_id}"
+        items.append(
+            ReviewInboxItem(
+                public_id=f"inbox:{snapshot.trading_position_public_id}:missing_review",
+                kind=ReviewInboxKindEnum.MISSING_REVIEW,
+                severity=InboxSeverityEnum.WARNING,
+                summary=f"{position_title} 已平仓，但 truth review 仍待完成",
+                reason="Truth lifecycle snapshot is closed and pending review artifact",
+                recommended_action=ReviewInboxAction(
+                    kind=RecommendedActionKindEnum.START_REVIEW,
+                    label="开始 truth 复盘",
+                    href=href,
+                ),
+                linked_object=LinkedObjectRef(
+                    object_type=LinkedObjectTypeEnum.TRADING_POSITION,
+                    public_id=snapshot.trading_position_public_id,
+                    label=position_title,
+                    href=href,
+                ),
+                occurred_at=occurred_at_iso,
+                trust=_trust_meta(
+                    as_of=as_of,
+                    source=DataSourceEnum.DERIVED,
+                    maturity=MaturityEnum.EARLY_SIGNAL,
+                    value_status=ValueStatusEnum.FINAL,
+                ),
+            )
+        )
+
+    high_priority = sum(1 for item in items if item.severity in {InboxSeverityEnum.WARNING, InboxSeverityEnum.CRITICAL})
+    return ReviewInbox(
+        counts=ReviewInboxCounts(total=len(items), high_priority=high_priority),
+        items=sorted(items, key=lambda item: item.occurred_at, reverse=True),
+        trust=_trust_meta(
+            as_of=as_of,
+            source=DataSourceEnum.DERIVED,
+            maturity=MaturityEnum.EARLY_SIGNAL if items else None,
             value_status=ValueStatusEnum.FINAL,
         ),
     )
@@ -804,17 +865,29 @@ def get_timeline_home(
     )
     source_mode = get_timeline_source_mode(legacy_mixed_feed_enabled=legacy_mixed_feed_enabled)
     snapshot_only_enabled = source_mode == "SNAPSHOT_ONLY"
+    source_mode_note = (
+        "Snapshot-first truth/snapshot read model"
+        if snapshot_only_enabled
+        else "Legacy mixed fallback enabled"
+    )
     meta = _trust_meta(
         as_of=as_of,
         source=DataSourceEnum.DERIVED,
         maturity=_determine_maturity(page_state),
         value_status=ValueStatusEnum.ESTIMATED,
+        note=source_mode_note,
     )
-    review_inbox = _build_review_inbox(positions, as_of)
-    inbox_items = list(review_inbox.items)
-    _append_losing_streak_inbox_item(inbox_items, positions, as_of)
-    if not snapshot_only_enabled:
+    timeline_snapshots = list_recent_timeline_snapshots(db, user_id=current_user.id, limit=50)
+
+    if snapshot_only_enabled:
+        review_inbox = _build_snapshot_review_inbox(timeline_snapshots, as_of)
+        inbox_items = list(review_inbox.items)
+    else:
+        review_inbox = _build_review_inbox(positions, as_of)
+        inbox_items = list(review_inbox.items)
+        _append_losing_streak_inbox_item(inbox_items, positions, as_of)
         inbox_items.extend(_build_data_stale_items(positions, db, as_of))
+
     review_inbox = ReviewInbox(
         counts=ReviewInboxCounts(
             total=len(inbox_items),
@@ -827,7 +900,7 @@ def get_timeline_home(
     )
 
     materialized_timeline_events = _build_materialized_timeline_events(
-        list_recent_timeline_snapshots(db, user_id=current_user.id, limit=50),
+        timeline_snapshots,
         as_of=as_of,
     )
     insight_runs = InsightArtifactService(db).list_runs(user_id=current_user.id, limit=5)
@@ -884,6 +957,7 @@ def get_timeline_home(
                     source=DataSourceEnum.DERIVED,
                     maturity=_determine_maturity(page_state),
                     value_status=ValueStatusEnum.FINAL,
+                    note=source_mode_note,
                 ),
             ),
             context_rail=context_rail,

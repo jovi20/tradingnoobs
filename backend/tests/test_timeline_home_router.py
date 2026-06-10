@@ -85,6 +85,7 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.assertEqual(payload["data"]["timeline"]["active_view"], "ALL")
         self.assertEqual(payload["meta"]["freshness"], "FRESH")
         self.assertEqual(payload["meta"]["source"], "DERIVED")
+        self.assertEqual(payload["meta"]["note"], "Snapshot-first truth/snapshot read model")
 
     def test_timeline_home_returns_small_data_when_user_has_account_and_position(self):
         account = TradingAccount(
@@ -551,8 +552,9 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.assertEqual(len(items), 2)
         self.assertTrue(any(item["event_public_id"].startswith("derived-timeline:") for item in items))
         self.assertTrue(any(item["event_public_id"].startswith("pos-targeted-visible:") for item in items))
+        self.assertEqual(response.json()["meta"]["note"], "Legacy mixed fallback enabled")
 
-    def test_timeline_home_builds_review_inbox_for_closed_position_without_review(self):
+    def test_timeline_home_defaults_review_inbox_to_truth_snapshots_not_legacy_positions(self):
         account = TradingAccount(
             user_id=self.user.id,
             public_id="acct-review",
@@ -585,12 +587,77 @@ class TimelineHomeRouterTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
+        self.assertEqual(payload["data"]["review_inbox"]["counts"]["total"], 0)
+        self.assertEqual(payload["data"]["review_inbox"]["counts"]["high_priority"], 0)
+
+    def test_timeline_home_builds_review_inbox_from_pending_review_snapshot(self):
+        self.session.add(
+            DerivedTimelineSnapshot(
+                user_id=self.user.id,
+                trading_position_public_id="tp-missing-review",
+                source="truth.lifecycle.bridge",
+                snapshot_json={
+                    "position_title": "TSLA",
+                    "review_status": "CLOSED_PENDING_REVIEW",
+                    "position_event_type": "CLOSE",
+                    "position_event_occurred_at": "2026-04-12T20:30:00Z",
+                },
+                refreshed_at=datetime(2026, 4, 12, 20, 31, tzinfo=timezone.utc),
+            )
+        )
+        self.session.commit()
+
+        response = self.client.get("/api/timeline/home")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
         self.assertEqual(payload["data"]["review_inbox"]["counts"]["total"], 1)
         self.assertEqual(payload["data"]["review_inbox"]["counts"]["high_priority"], 1)
         item = payload["data"]["review_inbox"]["items"][0]
         self.assertEqual(item["kind"], "MISSING_REVIEW")
-        self.assertEqual(item["linked_object"]["public_id"], "pos-missing-review")
+        self.assertEqual(item["linked_object"]["public_id"], "tp-missing-review")
+        self.assertEqual(item["linked_object"]["href"], "/positions/tp-missing-review")
+        self.assertEqual(item["trust"]["source"], "DERIVED")
         self.assertEqual(payload["data"]["summary_bar"]["priority_alert_count"], 1)
+
+    def test_timeline_home_legacy_mixed_feed_restores_legacy_review_inbox_items(self):
+        self.enable_legacy_mixed_feed()
+        account = TradingAccount(
+            user_id=self.user.id,
+            public_id="acct-review-legacy",
+            name="Review Account Legacy",
+            broker="IBKR",
+            currency="USD",
+            is_active=True,
+        )
+        self.session.add(account)
+        self.session.commit()
+        self.session.refresh(account)
+
+        closed_position = Position(
+            user_id=self.user.id,
+            account_id=account.id,
+            public_id="pos-missing-review-legacy",
+            symbol="TSLA",
+            exchange="NASDAQ",
+            direction=PositionDirection.LONG,
+            status=PositionStatus.CLOSED,
+            total_quantity=0,
+            realized_pnl=50,
+            opened_at=datetime(2026, 4, 10, 9, 30, tzinfo=timezone.utc),
+            closed_at=datetime(2026, 4, 12, 20, 30, tzinfo=timezone.utc),
+        )
+        self.session.add(closed_position)
+        self.session.commit()
+
+        response = self.client.get("/api/timeline/home")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["data"]["review_inbox"]["counts"]["total"], 1)
+        item = payload["data"]["review_inbox"]["items"][0]
+        self.assertEqual(item["kind"], "MISSING_REVIEW")
+        self.assertEqual(item["linked_object"]["public_id"], "pos-missing-review-legacy")
 
     def test_timeline_home_groups_open_close_and_review_events(self):
         self.enable_legacy_mixed_feed()

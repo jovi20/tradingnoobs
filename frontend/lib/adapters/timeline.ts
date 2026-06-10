@@ -54,6 +54,7 @@ export function formatTrustLabel(trust?: TrustMeta): string | null {
     const pieces = [trust.freshness.toLowerCase()]
     if (trust.value_status) pieces.push(trust.value_status.toLowerCase())
     if (trust.maturity) pieces.push(trust.maturity.toLowerCase())
+    if (trust.note) pieces.push(trust.note)
     return pieces.join(' · ')
 }
 

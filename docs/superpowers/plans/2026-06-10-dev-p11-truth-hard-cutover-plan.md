@@ -227,11 +227,33 @@ git commit -m "docs: define truth lifecycle mutation semantics"
 
 **Goal:** Timeline Home and Review Inbox stop relying on legacy `Position` as the default primary read path.
 
-- [ ] Write failing tests for snapshot/truth default behavior in `/api/timeline/home`.
-- [ ] Keep a rollback feature flag for legacy mixed feed.
-- [ ] Promote `DerivedTimelineSnapshot` and truth lifecycle data to default feed source.
-- [ ] Ensure empty, zero, small-data, AI insight, missing review, losing streak, stale data, and sync exception states still render.
-- [ ] Update trust/freshness metadata so UI can explain snapshot age and fallback state.
+- [x] Write failing tests for snapshot/truth default behavior in `/api/timeline/home`.
+- [x] Keep a rollback feature flag for legacy mixed feed.
+- [x] Promote `DerivedTimelineSnapshot` and truth lifecycle data to default feed source.
+- [x] Ensure empty, zero, small-data, AI insight, missing review, losing streak, stale data, and sync exception states still render.
+- [x] Update trust/freshness metadata so UI can explain snapshot age and fallback state.
+
+P11 Task 4 result:
+- `/api/timeline/home` defaults to `SNAPSHOT_ONLY` through `timeline_source_policy`; `timeline_legacy_mixed_feed_enabled` remains the rollback feature flag.
+- Timeline events default to `DerivedTimelineSnapshot` plus auditable insight artifacts.
+- Review Inbox missing-review items now default to `DerivedTimelineSnapshot.snapshot_json.review_status == CLOSED_PENDING_REVIEW`, linking users to the truth lifecycle detail route.
+- Legacy `Position` missing-review, losing streak, data stale, legacy AI, and sync-exception builders remain available only when the legacy mixed-feed rollback flag is enabled.
+- Timeline top-level meta and timeline feed trust now include `note` values of `Snapshot-first truth/snapshot read model` or `Legacy mixed fallback enabled`; the frontend trust label surfaces that note.
+
+Rollback:
+- Enable `timeline_legacy_mixed_feed_enabled` for targeted users or globally to restore the mixed legacy feed and legacy Review Inbox builders.
+- If the snapshot default must be reverted, change `services.timeline_source_policy.get_timeline_source_mode` back to legacy mixed default and remove the default snapshot Review Inbox branch in `backend/routers/timeline.py`.
+
+Verification log:
+- RED backend: `../.venv313/bin/python -m unittest discover -s tests -p test_timeline_home_router.py` failed because default Review Inbox still emitted legacy missing-review and snapshot `CLOSED_PENDING_REVIEW` produced no inbox item.
+- RED frontend: `node --experimental-strip-types --test tests/timeline-adapter.test.mts` failed because trust labels did not surface fallback/source-mode notes.
+- GREEN targeted backend: `../.venv313/bin/python -m unittest discover -s tests -p test_timeline_home_router.py` ran 19 tests OK; output included a Yahoo DNS warning from market-data-related code.
+- P11 Task 4 verification: `../.venv313/bin/python -m unittest discover -s tests -p test_timeline_source_policy.py` ran 2 tests OK.
+- P11 Task 4 verification: `./node_modules/.bin/tsc --noEmit --pretty false` exited 0.
+- P11 Task 4 verification: `npm run lint` exited 0.
+- Extended backend regression after Task 4: `../.venv313/bin/python -m unittest discover -s tests` ran 160 tests OK; output included a Yahoo DNS warning from market-data-related code.
+- Extended frontend regression after Task 4: `node --experimental-strip-types --test tests/*.test.mts` ran 86 tests OK; Node emitted existing `MODULE_TYPELESS_PACKAGE_JSON` warnings.
+- Browser smoke: `npm run dev -- --port 51559` served `/`, `/timeline`, and `/login`; unauthenticated browser state redirected to `/login`, so authenticated Timeline visual smoke was not completed in this session.
 
 Verification:
 

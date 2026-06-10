@@ -62,7 +62,7 @@
 - `/api/accounts/{account_id}/transactions`
 - `/api/positions`：legacy 持仓/批次路径，当前保留为迁移与 fallback 路径；新建仓位会立即同步 `TradingPosition` 并返回 `truth_position_public_id`，当 legacy position 已有 truth lifecycle 时，普通 legacy batch create 默认拒绝，只有显式 `X-Migration-Fallback: legacy-batch-write` 才允许迁移回退写入；legacy review 字段写入默认拒绝，只有显式 `X-Migration-Fallback: legacy-review-write` 才允许迁移修正；legacy position hard delete 默认拒绝，只有显式 `X-Migration-Fallback: legacy-position-delete` 才允许迁移清理；legacy batch edit/delete 默认拒绝，只有显式 `X-Migration-Fallback: legacy-batch-edit` 才允许迁移修正。
 - `/api/trading-positions`：truth lifecycle、truth event write、dividend、manual adjustment、latest-event reversal。
-- `/api/timeline/home`：Timeline 首页 read model，当前支持 snapshot-first / mixed bridge 策略。
+- `/api/timeline/home`：Timeline 首页 read model，默认 `SNAPSHOT_ONLY`，由 `DerivedTimelineSnapshot` 与 auditable insight artifacts 驱动；`timeline_legacy_mixed_feed_enabled` 可作为 rollback flag 恢复 legacy mixed feed。
 - `/api/dashboard`
 - `/api/insights`
 - `/api/v1/insights/runs`
@@ -105,7 +105,7 @@
 | 交易账户与资金记录 | `桥接完成 / 继续收敛` | `AccountLedgerEntry` 已落地，账户现金读模型已优先使用 ledger；legacy transaction 路径仍存在。 |
 | Trading truth model | `桥接完成 / 硬切推进中` | `TradingPosition / PositionEvent / AccountLedgerEntry`、FIFO、truth lifecycle、truth-first add/reduce/close、truth narrative、latest active event reversal 已落地；新建仓位会 create-and-sync 到 truth lifecycle，已有仓位的普通加仓/减仓/平仓/复盘/叙事不再静默写 legacy 字段。 |
 | Legacy 持仓路径 | `迁移期保留 / 写入受保护` | `Position / TradeBatch / Transaction / AssetMetadata / DailySnapshot` 仍被部分路由、导入、Dashboard、Timeline fallback 使用；truth lifecycle 存在时 legacy batch create、review write、position hard delete、batch edit/delete 都需要显式 migration fallback header。 |
-| Timeline 首页 | `已默认 timeline-first` | Timeline / Review Inbox 已是产品中心；最终还需 pure truth/snapshot read model hard cut。 |
+| Timeline 首页 | `truth/snapshot 默认` | Timeline / Review Inbox 已是产品中心；Timeline events 与 Review Inbox 默认使用 `DerivedTimelineSnapshot` / auditable insight artifacts，legacy mixed feed 只作为 rollback。 |
 | Lifecycle Detail | `truth-first 已落地` | 单笔详情已展示 truth lifecycle、evidence、ledger cash effects、AI sidecar；canonical review lives in `PositionEvent` narrative，legacy review 只作为 migration context 展示；latest active event reversal 会追加 `REVERSAL`，非最新 reversal 和 `OPEN` reversal 暂拒绝，直到补偿事件或 void/archive UX 明确。 |
 | Dashboard | `宏观视图已重构` | 已从默认首页退到宏观视图；chart schema/freshness/trust 包装已接入。 |
 | Insights / AI | `artifact-first 已启动` | `InsightRun / InsightArtifact`、artifact detail、证据链接展示已落地；日期范围选择器仍待补。 |
