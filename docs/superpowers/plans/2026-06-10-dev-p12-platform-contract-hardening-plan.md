@@ -48,7 +48,7 @@ Docs:
 - [x] Extend `frontend/tests/legacy-ui-boundaries.test.mts` with a named allowlist object grouped by `migration_ui`, `create_sync_bridge`, `legacy_analytics`, and `adapter_boundary`.
 - [x] Update `docs/DEVELOPER_GUIDE.md` with the same group names and the exact files in each group.
 - [x] Run `cd frontend && node --experimental-strip-types --test tests/legacy-ui-boundaries.test.mts`.
-- [ ] Commit with `test: freeze frontend legacy dto boundaries`.
+- [x] Commit with `test: freeze frontend legacy dto boundaries`.
 
 P12 Task 1 result:
 - Raw legacy DTO imports from `frontend/lib/api.ts` are now tested against a named allowlist grouped by `migration_ui`, `create_sync_bridge`, `legacy_analytics`, and `adapter_boundary`.
@@ -60,6 +60,7 @@ Verification log:
 - GREEN targeted frontend: `node --experimental-strip-types --test tests/legacy-ui-boundaries.test.mts` ran 4 tests OK.
 - P12 Task 1 verification: `./node_modules/.bin/tsc --noEmit --pretty false` exited 0.
 - P12 Task 1 verification: `npm run lint` exited 0.
+- Commit: `9af3762 test: freeze frontend legacy dto boundaries`.
 
 Verification:
 
@@ -76,20 +77,33 @@ npm run lint
 
 **Goal:** make accidental API contract drift visible before generated frontend types are introduced.
 
-- [ ] Create `backend/tests/test_openapi_contracts.py`.
-- [ ] Add a test that calls `app.openapi()` and asserts required paths exist:
+- [x] Create `backend/tests/test_openapi_contracts.py`.
+- [x] Add a test that calls `app.openapi()` and asserts required paths exist:
   - `/api/trading-positions/{position_public_id}/lifecycle`
   - `/api/trading-positions/{position_public_id}/events`
   - `/api/trading-positions/{position_public_id}/events/{event_public_id}/narrative`
   - `/api/timeline/home`
   - `/api/positions`
-- [ ] Add a test that asserts `TimelineHomeResponse` and `TradingPositionLifecycleResponse` schemas are present in the OpenAPI components.
-- [ ] Add a test that asserts legacy fallback headers are documented on protected legacy routes:
+- [x] Add a test that asserts `TimelineHomeResponse` and `TradingPositionLifecycleResponse` schemas are present in the OpenAPI components.
+- [x] Add a test that asserts legacy fallback headers are documented on protected legacy routes:
   - `X-Migration-Fallback` on legacy batch create
   - `X-Migration-Fallback` on legacy review update
   - `X-Migration-Fallback` on legacy position delete
-- [ ] Run `cd backend && ../.venv313/bin/python -m unittest discover -s tests -p test_openapi_contracts.py`.
+- [x] Run `cd backend && ../.venv313/bin/python -m unittest discover -s tests -p test_openapi_contracts.py`.
 - [ ] Commit with `test: snapshot core api contracts`.
+
+P12 Task 2 result:
+- Added OpenAPI snapshot coverage for truth lifecycle, truth events, canonical event narrative, Timeline Home, and legacy positions.
+- Added explicit `TradingPositionLifecycleResponse` schema so lifecycle routes have a stable named OpenAPI component.
+- Added `/api/trading-positions/{position_public_id}/events/{event_public_id}/narrative` as the public narrative contract while keeping the previous patch path available but hidden from schema.
+- Documented protected legacy `X-Migration-Fallback` header values in OpenAPI descriptions.
+
+Verification log:
+- RED backend: `../.venv313/bin/python -m unittest discover -s tests -p test_openapi_contracts.py` failed because the canonical narrative path, lifecycle response schema, and fallback header descriptions were missing.
+- GREEN targeted backend: `../.venv313/bin/python -m unittest discover -s tests -p test_openapi_contracts.py` ran 3 tests OK.
+- P12 Task 2 lifecycle regression: `../.venv313/bin/python -m unittest discover -s tests -p test_trading_position_lifecycle_router.py` ran 25 tests OK.
+- P12 Task 2 legacy bridge regression: `../.venv313/bin/python -m unittest discover -s tests -p test_position_truth_bridge_router.py` ran 9 tests OK.
+- P12 Task 2 timeline regression: `../.venv313/bin/python -m unittest discover -s tests -p test_timeline_home_router.py` ran 19 tests OK; output included the existing Yahoo/MSFT DNS warning.
 
 Verification:
 

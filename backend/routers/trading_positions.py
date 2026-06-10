@@ -13,6 +13,7 @@ from models import PositionEvent, PositionEventType, User
 from schemas import (
     TradingPositionDividendCreate,
     TradingPositionEventNarrativeUpdate,
+    TradingPositionLifecycleResponse,
     TradingPositionManualAdjustmentCreate,
     TradingPositionTradeEventCreate,
     TradingPositionTradeEventReverseCreate,
@@ -100,7 +101,7 @@ def _complete_idempotent_lifecycle_write(db: Session, *, record, response_conten
     )
 
 
-@router.get("/{position_public_id}/lifecycle")
+@router.get("/{position_public_id}/lifecycle", response_model=TradingPositionLifecycleResponse)
 def get_trading_position_lifecycle(
     position_public_id: str,
     current_user: User = Depends(get_current_user),
@@ -113,7 +114,15 @@ def get_trading_position_lifecycle(
     return _lifecycle_response(db, truth_position)
 
 
-@router.patch("/{position_public_id}/events/{event_public_id}")
+@router.patch(
+    "/{position_public_id}/events/{event_public_id}",
+    response_model=TradingPositionLifecycleResponse,
+    include_in_schema=False,
+)
+@router.patch(
+    "/{position_public_id}/events/{event_public_id}/narrative",
+    response_model=TradingPositionLifecycleResponse,
+)
 def update_trading_position_event_narrative(
     position_public_id: str,
     event_public_id: str,
@@ -143,7 +152,11 @@ def update_trading_position_event_narrative(
     return _lifecycle_response(db, updated_position, source="MANUAL")
 
 
-@router.post("/{position_public_id}/events", status_code=201)
+@router.post(
+    "/{position_public_id}/events",
+    status_code=201,
+    response_model=TradingPositionLifecycleResponse,
+)
 def create_trading_position_trade_event(
     position_public_id: str,
     payload: TradingPositionTradeEventCreate,

@@ -336,6 +336,10 @@ class TimelineHomeResponse(ReadModelEnvelope[TimelineHomeData]):
     pass
 
 
+class TradingPositionLifecycleResponse(ReadModelEnvelope[Dict[str, Any]]):
+    pass
+
+
 # ============== Auth Schemas ==============
 
 class UserCreate(BaseModel):

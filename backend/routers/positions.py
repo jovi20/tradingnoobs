@@ -40,6 +40,23 @@ import asyncio
 
 router = APIRouter(prefix="/api/positions", tags=["positions"])
 
+LEGACY_BATCH_WRITE_FALLBACK_DESCRIPTION = (
+    "Migration fallback only. Use X-Migration-Fallback: legacy-batch-write to allow a legacy "
+    "batch create after a TradingPosition truth lifecycle exists."
+)
+LEGACY_REVIEW_WRITE_FALLBACK_DESCRIPTION = (
+    "Migration fallback only. Use X-Migration-Fallback: legacy-review-write to allow legacy "
+    "Position review field correction after a TradingPosition truth lifecycle exists."
+)
+LEGACY_POSITION_DELETE_FALLBACK_DESCRIPTION = (
+    "Migration fallback only. Use X-Migration-Fallback: legacy-position-delete to allow legacy "
+    "position hard delete after a TradingPosition truth lifecycle exists."
+)
+LEGACY_BATCH_EDIT_FALLBACK_DESCRIPTION = (
+    "Migration fallback only. Use X-Migration-Fallback: legacy-batch-edit to allow legacy batch "
+    "edit/delete after a TradingPosition truth lifecycle exists."
+)
+
 
 def _enum_value(value):
     return value.value if hasattr(value, "value") else str(value)
@@ -529,7 +546,11 @@ async def create_position(
 async def update_position(
     position_id: str,
     position_data: PositionUpdate,
-    migration_fallback: str | None = Header(default=None, alias="X-Migration-Fallback"),
+    migration_fallback: str | None = Header(
+        default=None,
+        alias="X-Migration-Fallback",
+        description=LEGACY_REVIEW_WRITE_FALLBACK_DESCRIPTION,
+    ),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -593,7 +614,11 @@ async def update_position(
 @router.delete("/{position_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_position(
     position_id: str,
-    migration_fallback: str | None = Header(default=None, alias="X-Migration-Fallback"),
+    migration_fallback: str | None = Header(
+        default=None,
+        alias="X-Migration-Fallback",
+        description=LEGACY_POSITION_DELETE_FALLBACK_DESCRIPTION,
+    ),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -639,7 +664,11 @@ async def list_batches(
 async def add_batch(
     position_id: str,
     batch_data: TradeBatchCreate,
-    migration_fallback: str | None = Header(default=None, alias="X-Migration-Fallback"),
+    migration_fallback: str | None = Header(
+        default=None,
+        alias="X-Migration-Fallback",
+        description=LEGACY_BATCH_WRITE_FALLBACK_DESCRIPTION,
+    ),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -691,7 +720,11 @@ async def add_batch(
 @router.delete("/batches/{batch_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_batch(
     batch_id: str,
-    migration_fallback: str | None = Header(default=None, alias="X-Migration-Fallback"),
+    migration_fallback: str | None = Header(
+        default=None,
+        alias="X-Migration-Fallback",
+        description=LEGACY_BATCH_EDIT_FALLBACK_DESCRIPTION,
+    ),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -730,7 +763,11 @@ async def delete_batch(
 async def update_batch(
     batch_id: str,
     batch_data: TradeBatchUpdate,
-    migration_fallback: str | None = Header(default=None, alias="X-Migration-Fallback"),
+    migration_fallback: str | None = Header(
+        default=None,
+        alias="X-Migration-Fallback",
+        description=LEGACY_BATCH_EDIT_FALLBACK_DESCRIPTION,
+    ),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
