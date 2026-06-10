@@ -1,3 +1,5 @@
+// Handwritten read-model types. Replace with generated OpenAPI types once backend contracts stabilize.
+
 export type FreshnessStatus = 'FRESH' | 'DELAYED' | 'STALE' | 'DEGRADED'
 export type DataSource = 'MANUAL' | 'IMPORTED' | 'SYNCED' | 'DERIVED' | 'AI_GENERATED'
 export type DataMaturity = 'INSUFFICIENT_SAMPLE' | 'EARLY_SIGNAL' | 'STABLE'

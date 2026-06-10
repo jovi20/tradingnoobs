@@ -62,7 +62,7 @@
 
 ### P10D 前端 API 契约收敛
 
-- [ ] 给 `frontend/lib/read-models.ts` 标记“手写类型，后续由 OpenAPI 生成替换”。
+- [x] 给 `frontend/lib/read-models.ts` 标记“手写类型，后续由 OpenAPI 生成替换”。
 - [ ] 停止继续扩张 `frontend/lib/api.ts` 作为永久 DTO 层。
 - [ ] 规划 OpenAPI type generation 输出路径和导入边界。
 - [ ] 将新页面尽量绑定 read-model adapter，而不是直接绑定 raw API DTO。
