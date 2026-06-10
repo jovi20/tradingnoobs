@@ -69,9 +69,9 @@
 
 ### P10E 模型与服务模块化
 
-- [ ] 在 truth hard cutover 边界清楚后，规划 `backend/models.py` 拆分。
-- [ ] 保留 `models/__init__.py` re-export 兼容层，避免一次性打断大量 `from models import ...`。
-- [ ] 优先拆出 core/auth、trading truth、platform/job/outbox、analytics/read-model、legacy migration 五类边界。
+- [x] 在 truth hard cutover 边界清楚后，规划 `backend/models.py` 拆分。
+- [x] 保留 `models/__init__.py` re-export 兼容层，避免一次性打断大量 `from models import ...`。
+- [x] 优先拆出 core/auth、trading truth、platform/job/outbox、analytics/read-model、legacy migration 五类边界。
 
 ---
 

@@ -59,7 +59,7 @@ This section is the single forward-plan inventory for all currently planned task
 | Account ledger completion | Ledger-preferred with legacy fallback. | Account cash and read models fully ledger-derived where history is complete. | P11/P12 ledger cutover plan. |
 | Observability | Minimal middleware landed in P10C. | `X-Request-ID`, `X-Response-Time-Ms`, and error-code helper exist; structured logging and route-level error-code adoption remain follow-up work. | P12 platform contract hardening plan. |
 | OpenAPI frontend types | `frontend/lib/read-models.ts` is marked as handwritten temporary read-model types. | Generated OpenAPI types with stable import boundaries. | P12 API contract generation plan. |
-| Backend model modularization | `backend/models.py` is still monolithic. | `backend/models/` package with compatibility exports. | P10E/P12 model modularization plan. |
+| Backend model modularization | P10E split plan exists; code is intentionally still monolithic. | `backend/models/` package with compatibility exports. | P12 model modularization implementation plan. |
 | Risk alerts | Planned, not implemented. | Risk service, daily loss checks, alert surfaces. | P13 risk alert implementation plan. |
 | PDF report export | Planned, not implemented. | Weekly PDF generation and export button. | P14 PDF report implementation plan. |
 | AI date range selector | Analysis flow exists; date range UX missing. | Explicit date-range analysis and regression tests. | P15 AI analysis workflow plan. |
@@ -400,7 +400,7 @@ git commit -m "docs: mark handwritten read model types"
 - Read-only scan: `backend/models.py`
 - Read-only scan: `backend/**/*.py`
 
-- [ ] **Step 1: Count current import surface**
+- [x] **Step 1: Count current import surface**
 
 Run:
 
@@ -413,7 +413,7 @@ Expected:
 - Many `from models import ...` references remain.
 - `backend/models.py` is close to 1000 lines.
 
-- [ ] **Step 2: Write modularization plan**
+- [x] **Step 2: Write modularization plan**
 
 Create `docs/superpowers/plans/2026-06-10-dev-p10-model-modularization-plan.md` with:
 - Target module layout.
@@ -503,7 +503,7 @@ Before implementation, confirm the active lane in `TODO.md`. Leave later lanes i
 - [x] Legacy cutover has an inventory before deletion starts.
 - [x] Observability has request id and latency middleware before more risky cutover work.
 - [x] Handwritten frontend read-model types are marked as temporary.
-- [ ] Model modularization is planned before `backend/models.py` is split.
+- [x] Model modularization is planned before `backend/models.py` is split.
 - [ ] `docs/superpowers/demos/` remains untouched and uncommitted.
 
 ## Verification Log
@@ -518,3 +518,5 @@ Before implementation, confirm the active lane in `TODO.md`. Leave later lanes i
 - 2026-06-10 P10C observability regression: full backend unittest discovery ran 150 tests and passed; output included a Yahoo DNS warning from market-data-related code.
 - 2026-06-10 P10D read-model marker: `./node_modules/.bin/tsc --noEmit --pretty false` exited 0.
 - 2026-06-10 P10D read-model marker: `npm run lint` exited 0.
+- 2026-06-10 P10E model modularization: `rg -n "from models import|import models" backend` confirmed broad import surface across routers, services, tests, ops, and Alembic.
+- 2026-06-10 P10E model modularization: `wc -l backend/models.py` reported 996 lines before any split.
