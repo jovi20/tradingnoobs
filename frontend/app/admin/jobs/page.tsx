@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useEffectEvent, useState } from 'react'
 import Link from 'next/link'
 import { Loader2, LockKeyhole } from 'lucide-react'
 
@@ -71,9 +71,16 @@ export default function AdminJobsPage() {
         }
     }
 
+    const loadJobsFromEffect = useEffectEvent(() => {
+        void loadJobs()
+    })
+
     useEffect(() => {
-        loadJobs()
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        if (!token || !isAdmin) return
+        const loadTimer = window.setTimeout(() => {
+            loadJobsFromEffect()
+        }, 0)
+        return () => window.clearTimeout(loadTimer)
     }, [token, isAdmin, statusFilter, queueFilter])
 
     const runAction = async (action: 'requeue' | 'cancel' | 'force-cancel', jobPublicId: string) => {

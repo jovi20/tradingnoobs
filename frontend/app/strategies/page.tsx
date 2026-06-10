@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useEffectEvent } from 'react'
 import Link from 'next/link'
 import {
     Plus,
@@ -149,8 +149,16 @@ export default function StrategiesPage() {
         }
     }
 
+    const fetchStrategiesFromEffect = useEffectEvent(() => {
+        void fetchStrategies()
+    })
+
     useEffect(() => {
-        fetchStrategies()
+        if (!token) return
+        const fetchTimer = window.setTimeout(() => {
+            fetchStrategiesFromEffect()
+        }, 0)
+        return () => window.clearTimeout(fetchTimer)
     }, [token])
 
     const openCreateModal = () => {
