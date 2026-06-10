@@ -1,25 +1,12 @@
-export type SupportedChartType = 'bar' | 'line' | 'scatter' | 'sankey'
+import {
+    assertSupportedChartSchema,
+    getChartSchemaBadge,
+    type ChartSchema,
+    type ChartTrustMeta,
+} from './charts.ts'
 
-export interface ChartSeriesRef {
-    field: string
-    label: string
-    color?: string
-}
-
-export interface ChartSchema {
-    schema_version: 'chart.v1'
-    chart_type: SupportedChartType
-    series: ChartSeriesRef[]
-    dimensions?: Array<{ field: string; label: string }>
-    data_path?: string
-    options?: Record<string, string | number | boolean | null>
-}
-
-export interface InsightArtifactTrustMeta {
-    freshness?: string
-    source?: string
-    source_refs?: string[]
-}
+export type { ChartSchema }
+export type InsightArtifactTrustMeta = ChartTrustMeta
 
 export interface InsightArtifact {
     public_id: string
@@ -77,16 +64,7 @@ export interface InsightArtifactDetailView {
     createdAt?: string | null
 }
 
-const supportedChartTypes: ReadonlySet<string> = new Set(['bar', 'line', 'scatter', 'sankey'])
-
-export function assertSupportedChartSchema(schema: ChartSchema | null | undefined): boolean {
-    if (!schema) return false
-    if (schema.schema_version !== 'chart.v1') return false
-    if (!supportedChartTypes.has(schema.chart_type)) return false
-    if (!Array.isArray(schema.series) || schema.series.length === 0) return false
-    if (schema.dimensions && !schema.dimensions.every((dimension) => Boolean(dimension.field && dimension.label))) return false
-    return schema.series.every((series) => Boolean(series.field && series.label))
-}
+export { assertSupportedChartSchema }
 
 export function buildAuditableInsightCards(runs: InsightRun[] = [], limit = Number.POSITIVE_INFINITY): AuditableInsightCard[] {
     return runs
@@ -117,9 +95,7 @@ export function buildInsightArtifactDetailView(artifact: InsightArtifactDetail):
         legacyReadOnlyContent: artifact.content_markdown,
         evidenceRefs: artifact.evidence_refs ?? [],
         sourceRefs: artifact.trust_meta.source_refs ?? [],
-        chartBadge: assertSupportedChartSchema(artifact.chart_schema)
-            ? `${artifact.chart_schema?.schema_version} · ${artifact.chart_schema?.chart_type}`
-            : null,
+        chartBadge: getChartSchemaBadge(artifact.chart_schema),
         trustMeta: artifact.trust_meta,
         createdAt: artifact.created_at,
     }

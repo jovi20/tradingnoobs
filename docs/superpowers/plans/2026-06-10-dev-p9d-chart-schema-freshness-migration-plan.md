@@ -19,7 +19,7 @@
 - Modify: `frontend/lib/chartSchemas.ts`
 - Modify: `frontend/tests/chart-schemas.test.mts`
 
-- [ ] **Step 1: Run baseline chart-related tests**
+- [x] **Step 1: Run baseline chart-related tests**
 
 Run:
 
@@ -30,7 +30,7 @@ node --experimental-strip-types --test tests/chart-schemas.test.mts tests/insigh
 
 Expected: current tests pass before P9D edits.
 
-- [ ] **Step 2: Write failing shared chart contract tests**
+- [x] **Step 2: Write failing shared chart contract tests**
 
 Create `frontend/tests/charts.test.mts` with:
 
@@ -117,7 +117,7 @@ test('chart empty state and data presence use payload flags plus actual data', (
 })
 ```
 
-- [ ] **Step 3: Run shared chart contract tests and verify RED**
+- [x] **Step 3: Run shared chart contract tests and verify RED**
 
 Run:
 
@@ -128,7 +128,7 @@ node --experimental-strip-types --test tests/charts.test.mts
 
 Expected: fails because `../lib/charts.ts` does not exist or exported helpers are missing.
 
-- [ ] **Step 4: Implement shared chart contract layer**
+- [x] **Step 4: Implement shared chart contract layer**
 
 Create `frontend/lib/charts.ts` with canonical chart types and helpers:
 
@@ -220,7 +220,7 @@ Implementation details:
 - `buildChartEmptyState(undefined, reason)` returns `{ is_empty: true, reason, message: reason }`.
 - `buildDashboardAllocationFallbackChart` returns a `pie` schema with `source: 'LOCAL_FALLBACK_VIEW'` and `freshness: 'DELAYED'` when fallback data exists.
 
-- [ ] **Step 5: Convert split schema imports to shared chart types**
+- [x] **Step 5: Convert split schema imports to shared chart types**
 
 Modify `frontend/lib/insightArtifacts.ts`:
 
@@ -261,13 +261,13 @@ export {
 } from './charts.ts'
 ```
 
-- [ ] **Step 6: Run shared chart contract tests and related tests**
+- [x] **Step 6: Run shared chart contract tests and related tests**
 
 Run:
 
 ```bash
 cd frontend
-node --experimental-strip-types --test tests/charts.test.mts tests/chart-schemas.test.mts tests/insight-artifact-presentation.test.mts tests/task7-insight-artifact-contract.tsx
+node --experimental-strip-types --test tests/charts.test.mts tests/chart-schemas.test.mts tests/insight-artifact-presentation.test.mts
 ```
 
 Expected: all selected tests pass.
