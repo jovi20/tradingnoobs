@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { X, CheckCircle, AlertTriangle, ShieldCheck } from 'lucide-react'
 import { ChecklistItem } from '@/lib/api'
 
@@ -20,13 +20,6 @@ export default function ChecklistModal({
     isSubmitting
 }: ChecklistModalProps) {
     const [responses, setResponses] = useState<Record<string, boolean>>({})
-
-    // Reset responses when modal opens
-    useEffect(() => {
-        if (isOpen) {
-            setResponses({})
-        }
-    }, [isOpen])
 
     if (!isOpen) return null
 

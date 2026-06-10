@@ -21,11 +21,15 @@ export default function DateTimePicker({ value, onChange, label, required }: Dat
 
     // Sync internal state when prop value changes
     useEffect(() => {
-        if (value) {
+        if (!value) return
+
+        const syncTimer = window.setTimeout(() => {
             const date = new Date(value)
             setSelectedDate(date)
             setTimeValue(format(date, 'HH:mm'))
-        }
+        }, 0)
+
+        return () => window.clearTimeout(syncTimer)
     }, [value])
 
     // Close on click outside

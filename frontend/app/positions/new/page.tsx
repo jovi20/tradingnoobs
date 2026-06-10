@@ -713,6 +713,7 @@ export default function NewPositionPage() {
                 form.strategy_id && (() => {
                     const selectedStrategy = strategies.find(s => s.id === form.strategy_id)
                     if (!selectedStrategy || !selectedStrategy.checklist_items || selectedStrategy.checklist_items.length === 0) return null
+                    if (!showChecklistModal) return null
 
                     return (
                         <ChecklistModal
