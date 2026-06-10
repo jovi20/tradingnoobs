@@ -94,6 +94,11 @@
 - `/login`
 - `/register`
 
+前端 legacy DTO 边界：
+- 新功能不应直接从 `frontend/lib/api.ts` 引入 legacy `Position` / `TradeBatch` / `BatchCreate`。
+- 当前允许的 raw legacy DTO 使用范围仅限 migration/support UI、create-and-sync bridge、legacy chart adapter，以及 `frontend/lib/adapters/trading.ts`。
+- `frontend/tests/legacy-ui-boundaries.test.mts` 会阻止 raw legacy trading DTO import 继续扩散。
+
 ---
 
 ## 5. 核心业务模块现状

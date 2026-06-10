@@ -171,6 +171,15 @@ export default function AddBatchPage() {
                 </div>
             )}
 
+            {truthPositionPublicId && (
+                <div className="mb-6 rounded-xl border border-cyan-200 bg-cyan-50 p-4 text-sm text-cyan-900 dark:border-cyan-900 dark:bg-cyan-950/30 dark:text-cyan-200">
+                    <p className="font-semibold">Truth write path</p>
+                    <p className="mt-1">
+                        本次操作会写入 TradingPosition / PositionEvent。legacy batch migration fallback 只在 truth lifecycle 缺失并显式请求时使用。
+                    </p>
+                </div>
+            )}
+
             {!truthPositionPublicId && (
                 <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
                     <p className="font-semibold">

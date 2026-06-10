@@ -424,22 +424,27 @@ export default function PositionsPage() {
 
                             {expandedId === position.id && position.batches && (
                                 <div className="border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 p-4">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">交易批次</h3>
+                                    <div className="flex items-start justify-between gap-4 mb-3">
+                                        <div>
+                                            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Legacy batch timeline</h3>
+                                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                                Migration/support context · ordinary add/reduce/close writes route through truth events.
+                                            </p>
+                                        </div>
                                         <div className="flex items-center gap-2">
                                             <Link
                                                 href={`/positions/${position.routeId}/add-batch?type=ENTRY`}
                                                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-all shadow-sm active:scale-95"
                                             >
                                                 <ArrowUpCircle className="w-3.5 h-3.5" />
-                                                <span>加仓</span>
+                                                <span>Truth add event</span>
                                             </Link>
                                             <Link
                                                 href={`/positions/${position.routeId}/add-batch?type=EXIT`}
                                                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 text-xs font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-all shadow-sm active:scale-95"
                                             >
                                                 <ArrowDownCircle className="w-3.5 h-3.5" />
-                                                <span>平仓</span>
+                                                <span>Truth reduce/close event</span>
                                             </Link>
                                         </div>
                                     </div>

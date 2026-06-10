@@ -50,7 +50,7 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 - [x] P11 Task 2：复盘与叙事最终写入 `PositionEvent` / truth lifecycle；legacy review fields 已变成 migration-only。
 - [x] P11 Task 3：historical reversal、`OPEN` reversal、archive/void/delete、legacy batch edit 最终语义。
 - [x] P11 Task 4：Timeline / Review Inbox 默认 truth/snapshot-backed。
-- [ ] P11 Task 5：剩余 legacy UI 统一标为 migration tools。
+- [x] P11 Task 5：剩余 legacy UI 统一标为 migration tools。
 
 ---
 
@@ -71,6 +71,14 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 - [x] 明确 historical reversal、`OPEN` reversal、whole-position delete、legacy batch edit 的最终产品语义。
 - [x] 让 Timeline / Review Inbox 最终读 `TradingPosition / PositionEvent / InsightArtifact / DerivedTimelineSnapshot`，不再依赖 legacy bridge 作为主路径。
 - [ ] 完成 hard cutover 后，再删除或隔离旧模型、旧路由、旧 DTO、旧前端 fallback。
+
+### P11 后剩余 delete / isolation candidates
+
+- [ ] `frontend/app/positions/page.tsx` 的 legacy batch expansion：等 truth position list/read model 完成后删除或迁移。
+- [ ] `frontend/app/positions/new/page.tsx` 的 raw legacy create DTO：等 truth-native create endpoint 完成后替换。
+- [ ] `frontend/app/positions/[id]/add-batch/page.tsx` 的 raw `Position` 依赖：等 truth lifecycle response 提供表单所需数量、币种、账户上下文后替换。
+- [ ] `frontend/components/dashboard/MaeMfeScatterPlot.tsx` 与 `frontend/lib/adapters/chart-views.ts` 的 legacy position chart adapter：等 dashboard charts 全部 schema/read-model backed 后删除。
+- [ ] `frontend/lib/adapters/trading.ts` 的 legacy DTO adapter：等剩余 migration tools 拆出独立边界后收口。
 
 ### P10C 平台可观测性与运维安全
 

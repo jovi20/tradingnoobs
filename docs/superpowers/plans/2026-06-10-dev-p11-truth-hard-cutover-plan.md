@@ -285,11 +285,33 @@ git commit -m "feat: default timeline to truth snapshots"
 
 **Goal:** legacy controls are visually and semantically migration-only, not normal product affordances.
 
-- [ ] Audit `/positions`, `/positions/[id]`, and any batch edit controls.
-- [ ] Rename or label legacy-only sections as migration/support.
-- [ ] Prevent new frontend work from importing raw legacy DTOs except in migration tools.
-- [ ] Add adapter-level tests where feasible.
-- [ ] Update `docs/TODO.md` with remaining delete candidates.
+- [x] Audit `/positions`, `/positions/[id]`, and any batch edit controls.
+- [x] Rename or label legacy-only sections as migration/support.
+- [x] Prevent new frontend work from importing raw legacy DTOs except in migration tools.
+- [x] Add adapter-level tests where feasible.
+- [x] Update `docs/TODO.md` with remaining delete candidates.
+
+P11 Task 5 result:
+- `/positions` expanded batch rows are labeled `Legacy batch timeline` with `Migration/support context`.
+- `/positions` add/reduce/close links are labeled as truth event entry points and still route through the truth-first add-batch page.
+- `/positions/[id]/add-batch` now visibly distinguishes the `Truth write path` from `legacy batch migration fallback`.
+- Existing lifecycle detail legacy panels remain secondary migration panels through `LifecycleMigrationPanel`.
+- `frontend/tests/legacy-ui-boundaries.test.mts` prevents raw legacy trading DTO imports from spreading beyond the current migration/adapter boundary list.
+
+Remaining delete/isolation candidates:
+- `frontend/app/positions/page.tsx` legacy batch expansion after a dedicated truth position list/read model exists.
+- `frontend/app/positions/new/page.tsx` raw legacy create DTO once `POST /api/trading-positions` can create truth positions directly.
+- `frontend/app/positions/[id]/add-batch/page.tsx` raw `Position` dependency once the truth lifecycle response carries enough quantity/currency context for event forms.
+- `frontend/components/dashboard/MaeMfeScatterPlot.tsx` and `frontend/lib/adapters/chart-views.ts` legacy position chart adapter after dashboard charts are fully schema/read-model backed.
+- `frontend/lib/adapters/trading.ts` legacy DTO adapter after remaining migration tools are split out.
+
+Verification log:
+- RED frontend: `node --experimental-strip-types --test tests/legacy-ui-boundaries.test.mts` failed because `/positions` and `add-batch` did not expose migration/truth boundary copy, and the raw DTO boundary list was not documented in tests.
+- GREEN targeted frontend: `node --experimental-strip-types --test tests/legacy-ui-boundaries.test.mts` ran 3 tests OK.
+- P11 Task 5 verification: `./node_modules/.bin/tsc --noEmit --pretty false` exited 0.
+- P11 Task 5 verification: `npm run lint` exited 0.
+- Extended frontend regression after Task 5: `node --experimental-strip-types --test tests/*.test.mts` ran 89 tests OK; Node emitted existing `MODULE_TYPELESS_PACKAGE_JSON` warnings.
+- Full backend regression after Task 5: `../.venv313/bin/python -m unittest discover -s tests` ran 160 tests OK; output included a Yahoo DNS warning from market-data-related code.
 
 Verification:
 
