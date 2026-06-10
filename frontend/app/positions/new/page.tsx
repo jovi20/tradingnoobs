@@ -23,7 +23,7 @@ import {
     TradingAccountViewModel
 } from '@/lib/adapters/trading'
 import {
-    detectSymbolType, getAssetTypeColor, getAssetTypeLabel, SymbolDetection,
+    detectSymbolType, getAssetTypeColor, getAssetTypeLabel,
     getCoreTypeLabel, getMarketLabel, getRiskLevelInfo,
     AssetCoreType, AssetMarket, AssetCurrency, AssetRiskLevel
 } from '@/lib/symbolUtils'
@@ -50,7 +50,6 @@ export default function NewPositionPage() {
     // Symbol validation
     const [symbolValidation, setSymbolValidation] = useState<SymbolValidation | null>(null)
     const [isValidating, setIsValidating] = useState(false)
-    const [symbolDetection, setSymbolDetection] = useState<SymbolDetection | null>(null)
 
     // Form state
     const [form, setForm] = useState({
@@ -80,6 +79,7 @@ export default function NewPositionPage() {
             instrument: ''
         }
     })
+    const symbolDetection = detectSymbolType(form.symbol)
 
     useEffect(() => {
         const fetchData = async () => {
@@ -133,21 +133,19 @@ export default function NewPositionPage() {
         return () => clearTimeout(debounce)
     }, [token, form.symbol, form.account_id])
 
-    // Validate symbol when it changes
-    // Validate symbol when it changes
     // Simplified symbol behavior: No auto-validation on typing
     useEffect(() => {
-        const detection = detectSymbolType(form.symbol)
-        setSymbolDetection(detection)
-
         if (!form.symbol) {
-            setSymbolValidation(null)
-            return
+            const clearTimer = window.setTimeout(() => {
+                setSymbolValidation(null)
+            }, 0)
+            return () => window.clearTimeout(clearTimer)
         }
 
         // Debounce validation
-        const timeoutId = setTimeout(async () => {
+        const timeoutId = window.setTimeout(async () => {
             if (!token) return
+            const detection = detectSymbolType(form.symbol)
             setIsValidating(true)
             try {
                 // Determine exchange hint based on detection
@@ -184,7 +182,7 @@ export default function NewPositionPage() {
             }
         }, 800)
 
-        return () => clearTimeout(timeoutId)
+        return () => window.clearTimeout(timeoutId)
     }, [form.symbol, token])
 
     const submitPosition = async (finalForm: typeof form) => {

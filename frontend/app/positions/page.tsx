@@ -29,43 +29,77 @@ import {
 } from '@/lib/symbolUtils'
 import { usePositionsData } from '@/hooks/usePositionsData'
 
+type PositionDimension = 'CORE_TYPE' | 'MARKET' | 'RISK'
+
+interface SearchParamReader {
+    get(name: string): string | null
+}
+
+interface PositionUrlFilters {
+    dimension: PositionDimension
+    categoryFilter: string
+}
+
+const DEFAULT_POSITION_URL_FILTERS: PositionUrlFilters = {
+    dimension: 'CORE_TYPE',
+    categoryFilter: 'ALL',
+}
+
+function isPositionDimension(value: string | null): value is PositionDimension {
+    return value === 'CORE_TYPE' || value === 'MARKET' || value === 'RISK'
+}
+
+function readPositionUrlFilters(searchParams: SearchParamReader): PositionUrlFilters | null {
+    const core = searchParams.get('core_type')
+    const market = searchParams.get('market')
+    const risk = searchParams.get('risk_level')
+    const dimension = searchParams.get('dimension')
+
+    if (core) return { dimension: 'CORE_TYPE', categoryFilter: core }
+    if (market) return { dimension: 'MARKET', categoryFilter: market }
+    if (risk) return { dimension: 'RISK', categoryFilter: risk }
+    if (isPositionDimension(dimension)) return { dimension, categoryFilter: 'ALL' }
+    return null
+}
+
 export default function PositionsPage() {
     const { token } = useAuth()
-    console.log('PositionsPage Rendered', { token: !!token })
     const trendColor = useTrendColor()
+    const searchParams = useSearchParams()
+    const router = useRouter()
+    const initialUrlFilters = readPositionUrlFilters(searchParams) ?? DEFAULT_POSITION_URL_FILTERS
 
     // Filters
     const [statusFilter, setStatusFilter] = useState<'ALL' | 'OPEN' | 'CLOSED'>('ALL')
     const [accountFilter, setAccountFilter] = useState<number | 'ALL'>('ALL')
 
     // Multi-dimensional filters
-    const [dimension, setDimension] = useState<'CORE_TYPE' | 'MARKET' | 'RISK'>('CORE_TYPE')
-    const [categoryFilter, setCategoryFilter] = useState<string>('ALL')
+    const [dimension, setDimension] = useState<PositionDimension>(initialUrlFilters.dimension)
+    const [categoryFilter, setCategoryFilter] = useState<string>(initialUrlFilters.categoryFilter)
+    const [currentTime, setCurrentTime] = useState<number | null>(null)
 
     // URL params for linking from dashboard
-    const searchParams = useSearchParams()
-    const router = useRouter()
+    useEffect(() => {
+        const nextFilters = readPositionUrlFilters(searchParams)
+        if (!nextFilters) return
+
+        const syncTimer = window.setTimeout(() => {
+            setDimension(nextFilters.dimension)
+            setCategoryFilter(nextFilters.categoryFilter)
+        }, 0)
+        return () => window.clearTimeout(syncTimer)
+    }, [searchParams])
 
     useEffect(() => {
-        const type = searchParams.get('asset_type')
-        const core = searchParams.get('core_type')
-        const mkt = searchParams.get('market')
-        const risk = searchParams.get('risk_level')
-        const dim = searchParams.get('dimension')
+        const updateCurrentTime = () => setCurrentTime(Date.now())
+        const startTimer = window.setTimeout(updateCurrentTime, 0)
+        const intervalTimer = window.setInterval(updateCurrentTime, 60000)
 
-        if (dim) setDimension(dim as any)
-
-        if (core) {
-            setDimension('CORE_TYPE')
-            setCategoryFilter(core)
-        } else if (mkt) {
-            setDimension('MARKET')
-            setCategoryFilter(mkt)
-        } else if (risk) {
-            setDimension('RISK')
-            setCategoryFilter(risk)
+        return () => {
+            window.clearTimeout(startTimer)
+            window.clearInterval(intervalTimer)
         }
-    }, [searchParams])
+    }, [])
 
     // Use custom hook for data fetching
     const { positions, accounts, isLoading, error } = usePositionsData({
@@ -100,11 +134,13 @@ export default function PositionsPage() {
         return account?.name || '-'
     }
 
-    const formatHoldingTime = (position: PositionViewModel) => {
+    const formatHoldingTime = (position: PositionViewModel, now: number | null) => {
         const start = new Date(position.opened_at).getTime()
         const end = position.status === 'CLOSED' && position.closed_at
             ? new Date(position.closed_at).getTime()
-            : Date.now()
+            : now
+        if (end === null) return '-'
+
         const diffMs = end - start
         if (diffMs < 0) return '-'
 
@@ -335,7 +371,7 @@ export default function PositionsPage() {
                                     <div className="text-center md:text-right flex-1 md:flex-none">
                                         <p className="text-xs text-slate-500">持仓时间</p>
                                         <p className="font-medium text-sm md:text-base text-slate-700 dark:text-slate-300">
-                                            {formatHoldingTime(position)}
+                                            {formatHoldingTime(position, currentTime)}
                                         </p>
                                     </div>
                                     <div className="text-center md:text-right flex-1 md:flex-none">
