@@ -1,12 +1,17 @@
 # Trading Noobs 开发任务清单
 
-本文档是当前唯一执行清单，只记录：
-- 阶段划分
-- 任务项
-- 完成状态
+更新时间：2026-06-10
+当前执行分支：`dev`
+当前 HEAD：`3418a27 docs: mark p9f pushed`
+
+本文档是当前唯一执行清单。目标是回答三个问题：
+- 现在已经推进到哪里
+- 接下来优先做什么
+- 哪些早期规划仍未开发
 
 设计说明、架构说明和专题细节请查看：
 - [superpowers/specs/2026-04-06-platform-foundation-design.md](./superpowers/specs/2026-04-06-platform-foundation-design.md)
+- [superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md](./superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md)
 - [DEVELOPER_GUIDE.md](./DEVELOPER_GUIDE.md)
 - [market_data_sources.md](./market_data_sources.md)
 - [trading-metrics.md](./trading-metrics.md)
@@ -14,110 +19,123 @@
 
 ---
 
-## Phase 1: 交易规划模块
+## 当前进度快照
 
-### 1.1 交易前检查清单
-- [x] **后端** 扩展 `Strategy` 模型，添加 `checklist_items`
-- [x] **后端** 扩展 `Position` 模型，添加 `checklist_responses` 和 `checklist_completed_at`
-- [x] **后端** 更新 `schemas.py` 支持新字段
-- [x] **后端** 增加数据库迁移脚本
-- [x] **前端** 策略编辑页添加检查清单编辑能力
-- [x] **前端** 开仓流程集成检查清单确认
-- [ ] **前端** `positions` 列表页显示检查清单完成情况
-- [ ] **前端** 看板页显示检查清单完成情况
-
-### 1.2 计划偏移检测
-- [x] **后端** `Position` 模型添加 `planned_entry_price`、`planned_stop_loss`、`planned_take_profit`
-- [x] **后端** 实现 `calculate_drift()` 或等效偏移分析逻辑
-- [x] **后端** 在 `Position` 响应中返回偏移分析
-- [x] **前端** 开仓表单添加计划价格输入
-- [x] **前端** 持仓详情页显示计划 vs 实际对比
+| 领域 | 当前状态 | 说明 |
+|------|----------|------|
+| 平台底座 | `已大幅落地` | Alembic、public_id、auth/session、platform config、feature flags、job/outbox/idempotency/business lock、derived timeline snapshot 已进入 `dev`。 |
+| Truth 交易模型 | `桥接完成 / 硬切未完成` | `TradingPosition / PositionEvent / AccountLedgerEntry` 已落地；普通详情与新增事件已 truth-first，但 legacy `Position / TradeBatch` 仍保留为迁移与 fallback 路径。 |
+| Timeline 首页 | `已默认 timeline-first` | `/` 和 `/timeline` 已转向时间流/复盘工作台；最终仍需从 bridge/snapshot 过渡到纯 truth/snapshot-backed read model。 |
+| Lifecycle Detail | `truth-first 体验已落地` | 单笔详情已优先展示 truth lifecycle、evidence、AI sidecar；部分历史编辑/删除/非最新 reversal 仍需明确迁移语义。 |
+| Dashboard / Insights | `已重构为工作台形态` | Dashboard 保持宏观视图；Insights 已接入 auditable artifact 与 artifact detail；图表已有 schema/freshness 包装。 |
+| 前端依赖与质量 | `已完成 P8-P9F` | Next 16 / React 19 已升级；React 19 strict hooks lint 全局启用；前端 lint 已到 0 warning。 |
+| 文档状态 | `正在同步` | 早期 `DEVELOPER_GUIDE.md`、`README.md`、旧 TODO 与当前 `dev` 进度存在偏差，本轮整理负责收敛。 |
 
 ---
 
-## Phase 2: 绩效分析增强
+## P10：下一阶段优先开发任务
 
-### 2.1 风险调整收益指标
-- [x] **后端** 创建 `services/metrics_service.py`
-- [x] **后端** 实现 Sharpe Ratio
-- [x] **后端** 实现 Sortino Ratio
-- [x] **后端** 实现 Calmar Ratio
-- [x] **后端** Dashboard API 返回上述指标
-- [x] **前端** Dashboard 显示风险调整指标卡片
+### P10A 文档与进度同步
 
-### 2.2 MAE/MFE 分析
-- [x] **后端** `Position` 模型添加 `max_price_during_hold`、`min_price_during_hold`
-- [x] **后端** 计算 MAE/MFE 百分比
-- [x] **前端** 持仓详情支持录入持仓期间最高/最低价
-- [x] **前端** 新增 MAE/MFE 散点图组件
+- [x] 复核 Opus 评审与当前 `dev` 状态，区分有效问题、过期问题和策略冲突。
+- [x] 更新 `DEVELOPER_GUIDE.md`，让技术栈、首页形态、数据模型、schema 初始化、已落地能力与 `dev` 一致。
+- [x] 更新 `docs/README.md`，补上当前计划、checkpoint、P9/P10 文档入口。
+- [x] 更新 sequencing plan，把 P9A-P9F 已完成事项从“待做”转为真实状态。
+- [x] 新增 P10 开发计划文档，明确 hard cutover、observability、legacy 清理、后续功能 backlog 的执行顺序。
 
----
+### P10B Truth hard cutover 设计与执行
 
-## Phase 3: 风控预警系统
+- [ ] 盘点所有 legacy `Position / TradeBatch / Transaction / AssetMetadata / DailySnapshot` 引用，按 `primary path`、`migration-only`、`delete candidate` 分类。
+- [ ] 把普通用户新增、加仓、减仓、平仓、复盘、叙事编辑统一到 `TradingPosition / PositionEvent` 路径。
+- [ ] 明确 historical reversal、`OPEN` reversal、whole-position delete、legacy batch edit 的最终产品语义。
+- [ ] 让 Timeline / Review Inbox 最终读 `TradingPosition / PositionEvent / InsightArtifact / DerivedTimelineSnapshot`，不再依赖 legacy bridge 作为主路径。
+- [ ] 完成 hard cutover 后，再删除或隔离旧模型、旧路由、旧 DTO、旧前端 fallback。
 
-### 3.1 组合风险监控
-- [ ] **后端** 创建 `services/risk_alert_service.py`
-- [ ] **后端** 实现组合风险检查逻辑
-- [ ] **后端** 实现单日亏损上限检查
-- [ ] **前端** Dashboard 显示当前组合风险
+### P10C 平台可观测性与运维安全
 
-### 3.2 实时预警
-- [ ] **后端** 创建 WebSocket 端点
-- [ ] **前端** 集成 Toast 预警通知
+- [ ] 增加请求级 `X-Request-ID`。
+- [ ] 增加请求耗时 `latency_ms`。
+- [ ] 冻结 error code 命名规则，并在路由异常处理中实际使用。
+- [ ] 建立结构化日志策略，逐步替换后端业务路径中的 `print()`。
+- [ ] 补 release / rollback playbook，特别是 truth hard cutover 和 derived snapshot 切换。
 
----
+### P10D 前端 API 契约收敛
 
-## Phase 4: 数据导入导出
+- [ ] 给 `frontend/lib/read-models.ts` 标记“手写类型，后续由 OpenAPI 生成替换”。
+- [ ] 停止继续扩张 `frontend/lib/api.ts` 作为永久 DTO 层。
+- [ ] 规划 OpenAPI type generation 输出路径和导入边界。
+- [ ] 将新页面尽量绑定 read-model adapter，而不是直接绑定 raw API DTO。
 
-### 4.1 CSV/Excel 批量导入
-- [x] **后端** 创建导入端点 `/api/positions/import`
-- [x] **后端** 解析 CSV/Excel 文件
-- [x] **后端** 实现字段映射和数据验证
-- [x] **前端** 实现导入向导 UI
-- [ ] **文档** 补充导入模板说明
+### P10E 模型与服务模块化
 
-### 4.2 PDF 报告导出
-- [ ] **后端** 集成 PDF 生成库
-- [ ] **后端** 创建周报 PDF 模板
-- [ ] **前端** 报告页添加导出 PDF 按钮
+- [ ] 在 truth hard cutover 边界清楚后，规划 `backend/models.py` 拆分。
+- [ ] 保留 `models/__init__.py` re-export 兼容层，避免一次性打断大量 `from models import ...`。
+- [ ] 优先拆出 core/auth、trading truth、platform/job/outbox、analytics/read-model、legacy migration 五类边界。
 
 ---
 
-## Phase 5: AI 高级分析中心
+## 中期功能 backlog
 
-### 5.1 AI 分析助手
-- [x] **后端** 创建 `services/analytics_service.py`
-- [x] **后端** 扩展 `routers/insights.py`，新增 `/api/insights/analyze`
-- [x] **后端** 扩展 `llm_service.py`，新增分析型 Prompt
-- [x] **前端** 在 Insights 页面新增 AI 分析助手卡片
-- [x] **前端** 实现分析类型选择器
-- [ ] **前端** 实现日期范围选择器
-- [x] **前端** 实现分析结果展示（数据 + AI 结论）
+这些是早期已规划但尚未完整开发的产品能力。建议在 P10 hard cutover 稳定后再排期。
+
+### 风控预警系统
+
+- [ ] 后端创建 `services/risk_alert_service.py`。
+- [ ] 后端实现组合风险检查逻辑。
+- [ ] 后端实现单日亏损上限检查。
+- [ ] 前端 Dashboard 显示当前组合风险。
+- [ ] 后端提供实时通知通道；V1 可优先评估 SSE，只有需要双向交互时再上 WebSocket。
+- [ ] 前端集成 Toast 或工作台内预警通知。
+
+### 数据导入导出
+
+- [x] 后端创建导入端点 `/api/positions/import`。
+- [x] 后端解析 CSV/Excel 文件。
+- [x] 后端实现字段映射和数据验证。
+- [x] 前端实现导入向导 UI。
+- [ ] 文档补充导入模板说明。
+- [ ] 后端集成 PDF 生成库。
+- [ ] 后端创建周报 PDF 模板。
+- [ ] 前端报告页添加导出 PDF 按钮。
+
+### AI 分析助手
+
+- [x] 后端创建 `services/analytics_service.py`。
+- [x] 后端扩展 `routers/insights.py`，新增 `/api/insights/analyze`。
+- [x] 后端扩展 `llm_service.py`，新增分析型 Prompt。
+- [x] 前端在 Insights 页面新增 AI 分析助手卡片。
+- [x] 前端实现分析类型选择器。
+- [x] 前端实现分析结果展示。
+- [ ] 前端实现日期范围选择器。
+- [ ] 前后端补 AI 分析助手回归测试或最小验收用例。
+
+### 市场数据与验证
+
+- [ ] 拆分 market orchestration 与 provider adapter。
+- [ ] 稳定 provider mapping，明确 A 股 / 港股 / 美股 / Crypto / 外汇 / 基金路由规则。
+- [ ] 为市场数据 provider 补充可重复执行的验证方案。
+- [ ] 明确行情降级、缓存、错误显示和 freshness 元数据规则。
+
+### 管理员运维能力
+
+- [ ] 后端提供数据库备份触发入口。
+- [ ] 后端提供账户升级为管理员的安全入口。
+- [ ] 后端提供管理员重置账户密码能力。
+- [ ] Admin Jobs 页面继续扩展 stale / failed / force-cancel 的解释和操作保护。
+
+### 图表渲染迁移
+
+- [x] 建立 `chart.v1` schema 与 freshness/trust 包装。
+- [x] Dashboard / Insights 主要图表接入共享 `ChartFrame`。
+- [ ] 如果确认“彻底去 Recharts”，再把剩余 Recharts renderer 迁移到目标图表引擎。
+- [ ] 迁移前先确认 ECharts、Canvas、自研 SVG 或其他 renderer 的产品目标，避免为迁移而迁移。
 
 ---
 
-## Phase 6: 运维及测试
+## 暂不扩张原则
 
-### 6.1 管理员运维能力
-- [ ] **后端** 提供数据库备份触发入口
-- [ ] **后端** 提供账户升级为管理员的安全入口
-- [ ] **后端** 提供管理员重置账户密码能力
-
-### 6.2 测试与校验
-- [ ] **后端** 为市场数据 provider 补充可重复执行的验证方案
-- [ ] **后端** 为导入流程补充核心测试
-- [ ] **前后端** 为 AI 分析助手补充回归测试或最小验收用例
-
----
-
-## 完成状态统计
-
-| Phase | 任务数 | 已完成 |
-|-------|--------|--------|
-| Phase 1 | 13 | 11 |
-| Phase 2 | 10 | 10 |
-| Phase 3 | 6 | 0 |
-| Phase 4 | 8 | 4 |
-| Phase 5 | 7 | 6 |
-| Phase 6 | 6 | 0 |
-| **总计** | **50** | **31** |
+- 不继续把新页面绑定到 legacy `Position / TradeBatch` 主路径。
+- 不把 `frontend/lib/api.ts` 继续扩成长期契约层。
+- 不在 truth hard cutover 前删除 legacy 模型；先标记迁移边界，再安全清理。
+- 不把 Dashboard 重新做回默认首页；默认入口继续围绕 Timeline / Review Inbox。
+- 不在 observability 和 rollback 边界不清楚时进行不可逆数据迁移。

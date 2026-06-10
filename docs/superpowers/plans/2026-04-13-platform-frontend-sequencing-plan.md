@@ -6,21 +6,21 @@
 
 **Architecture:** Backend owns truth models, user-facing read contracts, and trust metadata. Frontend starts in parallel on shell, design system, and adapters, then migrates Timeline, Lifecycle Detail, Dashboard, and Insights only after the matching backend gates are complete.
 
-**Tech Stack:** FastAPI, SQLAlchemy, PostgreSQL, Alembic, Redis, Next.js App Router, TypeScript, Tailwind CSS, ECharts
+**Tech Stack:** FastAPI, SQLAlchemy, PostgreSQL, Alembic, local DB worker/outbox, Next.js 16, React 19, TypeScript, Tailwind CSS, Recharts with `chart.v1` schema/freshness wrappers
 
 ---
 
 ### Dev Branch Checkpoint
 
-**Status:** Required before the next implementation slice.
+**Status:** Active checkpoint exists on `dev`; P10 is refreshing documentation and next-task sequencing before the next feature slice.
 
 **Purpose:** Keep `main` as the original baseline and make `dev` reviewable in stages instead of as one large unbounded diff.
 
-- [ ] Record the current `dev` diff summary before more feature work.
-- [ ] Run the available backend and frontend adapter tests, or record why a suite is blocked.
-- [ ] Create a stage boundary commit for the current platform/frontend contract work.
-- [ ] Use `git diff main...dev --stat` for high-level comparison before user evaluation.
-- [ ] Use focused diffs by area for review: backend schema/auth/config, truth model, timeline/lifecycle APIs, frontend adapters/pages.
+- [x] Record the current `dev` diff summary before more feature work.
+- [x] Run the available backend and frontend adapter tests, or record why a suite is blocked.
+- [x] Create stage boundary commits for P0-P9F slices on `dev`.
+- [x] Use `git diff main...dev --stat` for high-level comparison before user evaluation.
+- [x] Use focused diffs by area for review: backend schema/auth/config, truth model, timeline/lifecycle APIs, frontend adapters/pages.
 
 **Review Commands:**
 
@@ -82,7 +82,7 @@ git diff main...dev -- frontend
 
 ### Task 3: Move the trading truth model before page migrations
 
-**Status:** Bridge landed. Initial truth schema/read models and legacy sync exist, but hard cutover is not complete.
+**Status:** Bridge and truth foundation landed. Truth schema, lifecycle write paths, ledger cash bridge, FIFO service, outbox/job/idempotency, and derived timeline snapshot foundation exist; hard cutover away from legacy `Position / TradeBatch` is not complete.
 
 **Scope:**
 - `C1`, `C2`, `C3`, `C4`, `C5`
@@ -90,10 +90,10 @@ git diff main...dev -- frontend
 
 - [ ] Replace `Position / TradeBatch` as the primary write/read semantics with `TradingPosition / PositionEvent`.
 - [x] Introduce `AccountLedgerEntry` with migration, legacy realized PnL bridge, transaction cash bridge, and lifecycle `cash_effects` consumption.
-- [ ] Make account cash balance/read models derive from `AccountLedgerEntry` instead of direct balance mutation.
-- [ ] Centralize FIFO, fee, FX, and realized/unrealized rules after ledger cash truth exists.
+- [x] Make account cash balance/read models derive from `AccountLedgerEntry` with legacy fallback while ledger history is incomplete.
+- [x] Centralize FIFO, fee, FX, and realized/unrealized rules for current truth and bridge paths.
 - [x] Promote decision-quality fields into first-class event data.
-- [ ] Put outbox, job model, and idempotency in place before derived refresh depends on them.
+- [x] Put outbox, job model, business lock, and idempotency in place before derived refresh depends on them.
 
 **Exit Criteria:**
 - Frontend no longer depends on old DTO names or moving-average cost math.
@@ -101,7 +101,7 @@ git diff main...dev -- frontend
 
 ### Task 4: Let frontend start in parallel, but only on stable surfaces
 
-**Status:** In progress. Timeline-first shell and adapter layer have landed, but some pages still lean on legacy API shapes.
+**Status:** Mostly landed. Timeline-first shell, navigation split, trust primitives, workbench UI primitives, adapters, React 19 strict lint, and 0-warning lint baseline have landed; some legacy API shapes remain during cutover.
 
 **Frontend may start now:**
 - user/admin shell split
@@ -126,7 +126,7 @@ git diff main...dev -- frontend
 
 ### Task 5: Deliver user-facing read models before the new homepage
 
-**Status:** Bridge landed / partial. Timeline and lifecycle contracts are live; `InsightRun / InsightArtifact` now provide the auditable AI artifact foundation, but Timeline still needs the final truth/snapshot hard cut and Lifecycle still needs the final edit/review/batch cutover.
+**Status:** Mostly landed / hard-cut pending. Timeline and lifecycle contracts are live; `InsightRun / InsightArtifact` provide the auditable AI artifact foundation; Timeline is snapshot-first by default with rollback support, while pure truth/snapshot hard cut and legacy cleanup remain pending.
 
 **Scope:**
 - `I1`, `I2`, `I3`
@@ -137,7 +137,7 @@ git diff main...dev -- frontend
 - [x] Land a legacy-derived `timeline + review inbox` bridge for the new homepage.
 - [ ] Build the final truth/snapshot-backed `timeline + review inbox` read model from `TradingPosition / PositionEvent / InsightArtifact`.
 - [x] Land a truth lifecycle bridge preview for single-position detail.
-- [ ] Build the final `lifecycle detail + evidence` read model with ledger cash effects and the artifact-backed AI sidecar as the primary AI surface.
+- [x] Build the truth-first `lifecycle detail + evidence` read model with ledger cash effects and the artifact-backed AI sidecar as the primary AI surface.
 - [x] Tighten `/api/trading-positions/{position_public_id}/lifecycle` to public_id-only for ordinary user paths.
 - [x] Implement bridge-level `cursor` / `limit` support for `/api/timeline/home`.
 - [ ] Split market orchestration and stabilize provider mapping.
@@ -150,7 +150,7 @@ git diff main...dev -- frontend
 
 ### Task 6: Ship pages in product order, not current code order
 
-**Status:** In progress. Timeline is the default home through bridge data, and AI sidecar artifacts are available; lifecycle detail is still only partially migrated because legacy edit/review/batch operations remain as migration paths.
+**Status:** Mostly landed / migration boundaries remain. Timeline is the default home and snapshot-first; AI sidecar artifacts are available; lifecycle detail is truth-first for ordinary behavior, but legacy edit/review/batch operations still need final migration-only labeling or removal.
 
 **Page order:**
 1. Timeline + Review Inbox
@@ -159,7 +159,7 @@ git diff main...dev -- frontend
 4. Settings and admin polish
 
 - [x] Make the Timeline route the default landing surface using bridge data.
-- [ ] Ship the truth/snapshot-backed homepage as the final default landing surface.
+- [x] Ship the snapshot-backed homepage as the default landing surface with rollback support.
 - [x] Let single-trade detail load `TradingPosition.public_id` lifecycle directly and render truth lifecycle as the primary narrative when available.
 - [ ] Finish single-trade hard cutover by moving edit/review/batch operations from legacy `Position / TradeBatch` to truth events or labeling them as migration tools.
 - [x] Keep Dashboard as macro view, not the default home.
@@ -171,7 +171,7 @@ git diff main...dev -- frontend
 
 ### Task 7: Hold chart migrations and AI presentation hardening until their contracts are real
 
-**Status:** Partially started. `insight_runs / insight_artifacts` now exist with V1 read APIs and frontend sidecar consumption; chart schema, job freshness exposure, release/rollback playbooks, and full artifact-first presentation hardening remain pending.
+**Status:** Partially landed. `insight_runs / insight_artifacts` now exist with V1 read APIs and frontend sidecar consumption; `chart.v1` schema/freshness wrappers and admin job visibility exist; full renderer migration plus release/rollback playbooks remain pending.
 
 **Scope:**
 - `F3`
@@ -179,9 +179,9 @@ git diff main...dev -- frontend
 - `D4`
 - `H3`, `H5`
 
-- [ ] Switch chart rendering only after chart schema is stable.
+- [x] Establish chart schema/freshness wrappers before deeper renderer migration.
 - [x] Switch AI cards only after `insight_runs / insight_artifacts` are auditable.
-- [ ] Expose job status and data freshness before relying on async UX.
+- [x] Expose job status and core freshness surfaces before relying on async UX.
 - [ ] Finish release and rollback playbooks before hard cutover.
 
 **Exit Criteria:**
@@ -194,10 +194,10 @@ git diff main...dev -- frontend
 | Frontend phase | Backend gate | Current state |
 | --- | --- | --- |
 | Phase 1: shell / nav / design system / trust layer | Task 1 contract freeze complete | Landed |
-| Phase 2: timeline + review inbox | Task 3 core truth complete + Task 5 final timeline read model complete | Bridge route landed; final truth/snapshot-backed hard cut pending |
-| Phase 3: lifecycle detail + rules | Task 3 complete + Task 5 final lifecycle read model complete | Truth preview and AI sidecar landed; final edit/review/batch cutover pending |
-| Phase 4: dashboard + insights | Task 5 complete + AI/chart contracts from Task 7 ready | AI artifact foundation landed; chart schema and artifact-first presentation hardening pending |
-| Phase 5: polish / secondary surfaces | Prior phases stable + ops visibility in place | Pending |
+| Phase 2: timeline + review inbox | Task 3 core truth complete + Task 5 final timeline read model complete | Timeline is default and snapshot-first; pure truth/snapshot hard cut and legacy cleanup pending |
+| Phase 3: lifecycle detail + rules | Task 3 complete + Task 5 final lifecycle read model complete | Truth-first lifecycle workbench landed; final migration-only labeling/removal pending |
+| Phase 4: dashboard + insights | Task 5 complete + AI/chart contracts from Task 7 ready | Dashboard/Insights workbenches, artifact-first AI, and chart schema wrappers landed |
+| Phase 5: polish / secondary surfaces | Prior phases stable + ops visibility in place | Started through admin jobs and settings workbench; remaining polish tracked in P10/backlog |
 
 ### Do Not Start Early
 
