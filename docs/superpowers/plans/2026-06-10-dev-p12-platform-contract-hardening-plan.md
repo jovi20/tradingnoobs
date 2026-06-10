@@ -172,7 +172,7 @@ node --experimental-strip-types --test tests/generated-contracts.test.mts
   - `legacy-position-delete`
   - `legacy-batch-edit`
 - [x] Link the playbook from `docs/DEVELOPER_GUIDE.md` and `docs/TODO.md`.
-- [ ] Commit with `docs: add p11 rollback playbook`.
+- [x] Commit with `docs: add p11 rollback playbook`.
 
 P12 Task 4 result:
 - Added `docs/release-rollback-playbook.md` with truth write, Timeline snapshot, and legacy mutation guard release/rollback procedures.
@@ -181,6 +181,7 @@ P12 Task 4 result:
 
 Verification log:
 - P12 Task 4 verification: `rg -n "timeline_legacy_mixed_feed_enabled|legacy-batch-write|legacy-review-write|legacy-position-delete|legacy-batch-edit" docs` found the rollback flag and all four fallback tokens in docs, including the new playbook.
+- Commit: `31ab8ef docs: add p11 rollback playbook`.
 
 Verification:
 
@@ -192,13 +193,27 @@ rg -n "timeline_legacy_mixed_feed_enabled|legacy-batch-write|legacy-review-write
 
 ## Task 5: P12 Completion Gate
 
-- [ ] Backend OpenAPI contract tests pass.
-- [ ] Backend full tests pass.
-- [ ] Frontend typecheck passes.
-- [ ] Frontend lint passes.
-- [ ] Frontend Node tests pass.
-- [ ] `git diff --check` passes.
-- [ ] `docs/TODO.md` marks P12 completed or lists precise remaining blockers.
+- [x] Backend OpenAPI contract tests pass.
+- [x] Backend full tests pass.
+- [x] Frontend typecheck passes.
+- [x] Frontend lint passes.
+- [x] Frontend Node tests pass.
+- [x] `git diff --check` passes.
+- [x] `docs/TODO.md` marks P12 completed or lists precise remaining blockers.
+
+P12 Task 5 result:
+- P12 Platform Contract Hardening is complete: legacy DTO boundaries are frozen, core OpenAPI contracts are snapshotted, generated type output has a stable landing zone, and P11 release/rollback playbook is linked from the core docs.
+- No P12 code blockers remain.
+- P11 authenticated browser smoke remains a pre-release validation item outside P12's contract-hardening completion gate.
+
+Verification log:
+- Backend OpenAPI targeted regression: covered by full backend test run through `backend/tests/test_openapi_contracts.py`.
+- Full backend regression: `../.venv313/bin/python -m unittest discover -s tests` ran 163 tests OK; output included the existing Yahoo/MSFT DNS warning from market-data-related code.
+- Frontend typecheck: `./node_modules/.bin/tsc --noEmit --pretty false` exited 0.
+- Frontend lint: `npm run lint` exited 0.
+- Extended frontend regression: `node --experimental-strip-types --test tests/*.test.mts` ran 91 tests OK; Node emitted existing `MODULE_TYPELESS_PACKAGE_JSON` warnings.
+- Diff hygiene: `git diff --check` exited 0.
+- Status check after automated verification initially showed only the P12 plan modified; final completion documentation also updates `docs/TODO.md`, `docs/DEVELOPER_GUIDE.md`, and `docs/README.md`. The untracked `docs/superpowers/demos/` directory remains intentionally untouched.
 
 Final verification:
 
