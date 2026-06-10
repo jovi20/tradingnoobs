@@ -78,7 +78,7 @@ export function useDashboardData(token: string | null, historyDays: number = 7) 
             },
             isLoading
         })
-    }, [statsQuery.data, historyQuery.data, positionsQuery.data, statsQuery.error, historyQuery.error, positionsQuery.error, isLoading, token])
+    }, [statsQuery.data, historyQuery.data, positionsQuery.data, statsQuery.error, historyQuery.error, positionsQuery.error, allPositionsQuery.error, isLoading, token])
 
     return {
         stats: statsQuery.data,
