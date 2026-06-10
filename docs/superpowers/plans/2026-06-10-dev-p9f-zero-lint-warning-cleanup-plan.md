@@ -31,7 +31,7 @@ Expected: exits 0 with 3 warnings from login image, register image, and `useDash
 
 Create the P9F design and plan documents.
 
-- [ ] **Step 3: Commit planning docs**
+- [x] **Step 3: Commit planning docs**
 
 Run:
 
@@ -46,7 +46,7 @@ git commit -m "docs: plan p9f zero lint warning cleanup"
 - Modify: `frontend/app/login/page.tsx`
 - Modify: `frontend/app/register/page.tsx`
 
-- [ ] **Step 1: Replace login logo `<img>` with `Image`**
+- [x] **Step 1: Replace login logo `<img>` with `Image`**
 
 Add `import Image from 'next/image'` and replace the logo with:
 
@@ -61,11 +61,11 @@ Add `import Image from 'next/image'` and replace the logo with:
 />
 ```
 
-- [ ] **Step 2: Replace register logo `<img>` with `Image`**
+- [x] **Step 2: Replace register logo `<img>` with `Image`**
 
 Use the same `Image` import and logo component shape in `frontend/app/register/page.tsx`.
 
-- [ ] **Step 3: Run targeted lint for auth pages**
+- [x] **Step 3: Run targeted lint for auth pages**
 
 Run:
 
@@ -76,7 +76,7 @@ cd frontend
 
 Expected: exits 0 with no warnings.
 
-- [ ] **Step 4: Commit auth image cleanup**
+- [x] **Step 4: Commit auth image cleanup**
 
 Run:
 
@@ -90,11 +90,11 @@ git commit -m "fix: use optimized auth logos"
 **Files:**
 - Modify: `frontend/hooks/useDashboardData.ts`
 
-- [ ] **Step 1: Add the missing dependency**
+- [x] **Step 1: Add the missing dependency**
 
 Add `allPositionsQuery.error` to the debug effect dependency array.
 
-- [ ] **Step 2: Run targeted lint for Dashboard hook**
+- [x] **Step 2: Run targeted lint for Dashboard hook**
 
 Run:
 
@@ -105,7 +105,7 @@ cd frontend
 
 Expected: exits 0 with no warnings.
 
-- [ ] **Step 3: Commit Dashboard hook cleanup**
+- [x] **Step 3: Commit Dashboard hook cleanup**
 
 Run:
 
@@ -119,7 +119,7 @@ git commit -m "fix: complete dashboard debug effect deps"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-06-10-dev-p9f-zero-lint-warning-cleanup-plan.md`
 
-- [ ] **Step 1: Run full lint**
+- [x] **Step 1: Run full lint**
 
 Run:
 
@@ -130,7 +130,7 @@ npm run lint
 
 Expected: exits 0 with 0 warnings.
 
-- [ ] **Step 2: Run global strict lint**
+- [x] **Step 2: Run global strict lint**
 
 Run:
 
@@ -141,7 +141,7 @@ cd frontend
 
 Expected: exits 0 with 0 warnings.
 
-- [ ] **Step 3: Run tests and TypeScript**
+- [x] **Step 3: Run tests and TypeScript**
 
 Run:
 
@@ -153,7 +153,7 @@ node --experimental-strip-types --test tests/*.test.mts
 
 Expected: both commands exit 0.
 
-- [ ] **Step 4: Run build**
+- [x] **Step 4: Run build**
 
 Run:
 
@@ -164,7 +164,7 @@ npm run build
 
 Expected: exits 0. If sandbox restrictions block Turbopack, rerun with approval and record the reason.
 
-- [ ] **Step 5: Restore generated files if needed**
+- [x] **Step 5: Restore generated files if needed**
 
 Run:
 
@@ -174,7 +174,7 @@ git status --short
 
 Expected: only `docs/superpowers/demos/` remains untracked. If `frontend/next-env.d.ts` or `frontend/tsconfig.tsbuildinfo` changed, restore only those generated files.
 
-- [ ] **Step 6: Record verification results and commit plan closeout**
+- [x] **Step 6: Record verification results and commit plan closeout**
 
 Update this plan's `Verification Results`, then run:
 
@@ -195,14 +195,23 @@ Expected: push succeeds. Do not create a PR.
 
 ## Verification Results
 
-Task 4 records command results here before closeout commit.
+- RED baseline `npm run lint`: exited 0 with 3 warnings from `app/login/page.tsx`, `app/register/page.tsx`, and `hooks/useDashboardData.ts`.
+- Auth targeted lint: `./node_modules/.bin/eslint app/login/page.tsx app/register/page.tsx` exited 0 with no output.
+- Dashboard hook targeted lint: `./node_modules/.bin/eslint hooks/useDashboardData.ts` exited 0 with no output.
+- Full lint: `npm run lint` exited 0 with no output, confirming 0 warnings.
+- Global strict lint: `./node_modules/.bin/eslint . --rule react-hooks/purity:error --rule react-hooks/set-state-in-effect:error` exited 0 with no output.
+- Frontend tests: `node --experimental-strip-types --test tests/*.test.mts` exited 0; 78 tests passed.
+- TypeScript: `./node_modules/.bin/tsc --noEmit --pretty false` exited 0.
+- Sandboxed build: `npm run build` exited 1 because Turbopack could not create a process / bind a port while processing `app/globals.css`.
+- Escalated build: `npm run build` exited 0 on Next 16.2.7; routes included `/login`, `/register`, `/dashboard`, `/timeline`, and `/`.
+- Generated files `frontend/next-env.d.ts` and `frontend/tsconfig.tsbuildinfo` were restored after build.
 
 ## Final Acceptance Checklist
 
-- [ ] Planning docs committed.
-- [ ] Auth logo warnings removed.
-- [ ] Dashboard hook dependency warning removed.
-- [ ] Full lint exits 0 with 0 warnings.
-- [ ] Strict lint exits 0 with 0 warnings.
-- [ ] Tests, TypeScript, and build pass.
+- [x] Planning docs committed.
+- [x] Auth logo warnings removed.
+- [x] Dashboard hook dependency warning removed.
+- [x] Full lint exits 0 with 0 warnings.
+- [x] Strict lint exits 0 with 0 warnings.
+- [x] Tests, TypeScript, and build pass.
 - [ ] Work is committed and pushed to `origin/dev`.
