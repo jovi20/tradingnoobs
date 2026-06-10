@@ -1031,7 +1031,7 @@ node --experimental-strip-types --test tests/insight-charts.test.mts tests/insig
 
 Expected: all commands exit 0. Existing unrelated warnings are not introduced by P9D.
 
-- [ ] **Step 9: Commit Insights chart deduplication**
+- [x] **Step 9: Commit Insights chart deduplication**
 
 Run:
 
@@ -1045,7 +1045,7 @@ git commit -m "feat: unify legacy insight analysis charts"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-06-10-dev-p9d-chart-schema-freshness-migration-plan.md`
 
-- [ ] **Step 1: Run all frontend adapter tests**
+- [x] **Step 1: Run all frontend adapter tests**
 
 Run:
 
@@ -1056,7 +1056,7 @@ node --experimental-strip-types --test tests/*.test.mts
 
 Expected: all tests pass.
 
-- [ ] **Step 2: Run TypeScript**
+- [x] **Step 2: Run TypeScript**
 
 Run:
 
@@ -1067,7 +1067,7 @@ cd frontend
 
 Expected: exits 0.
 
-- [ ] **Step 3: Run lint**
+- [x] **Step 3: Run lint**
 
 Run:
 
@@ -1078,7 +1078,7 @@ npm run lint
 
 Expected: exits 0. Existing warnings may remain if they are unchanged and documented.
 
-- [ ] **Step 4: Run targeted strict React 19 lint for all P9D files**
+- [x] **Step 4: Run targeted strict React 19 lint for all P9D files**
 
 Run:
 
@@ -1089,7 +1089,7 @@ cd frontend
 
 Expected: exits 0.
 
-- [ ] **Step 5: Run production build**
+- [x] **Step 5: Run production build**
 
 Run:
 
@@ -1100,7 +1100,7 @@ npm run build
 
 Expected: exits 0. If Turbopack sandbox restrictions block the build, rerun with approval and record the reason.
 
-- [ ] **Step 6: Browser smoke `/dashboard`**
+- [x] **Step 6: Browser smoke `/dashboard`**
 
 Run dev server:
 
@@ -1116,7 +1116,7 @@ Open the local URL in the in-app browser and verify:
 - Schema/trust/freshness cues are visible.
 - Mobile width keeps charts in one-column flow.
 
-- [ ] **Step 7: Browser smoke `/insights`**
+- [x] **Step 7: Browser smoke `/insights`**
 
 Using the same dev server, open `/insights` and verify:
 
@@ -1125,7 +1125,7 @@ Using the same dev server, open `/insights` and verify:
 - Empty chart states are visible when no analysis result exists.
 - No duplicate local Recharts renderer remains in the page.
 
-- [ ] **Step 8: Record verification results in this plan**
+- [x] **Step 8: Record verification results in this plan**
 
 Add a `Verification Results` section with exact command outcomes, browser URLs, and accepted existing warnings.
 
@@ -1137,6 +1137,20 @@ Run:
 git add docs/superpowers/plans/2026-06-10-dev-p9d-chart-schema-freshness-migration-plan.md
 git commit -m "docs: close p9d chart migration plan"
 ```
+
+## Verification Results
+
+- `node --experimental-strip-types --test tests/*.test.mts`: exited 0; 78 tests passed.
+- `./node_modules/.bin/tsc --noEmit --pretty false`: exited 0.
+- `npm run lint`: exited 0 with 0 errors and 4 existing warnings: `app/login/page.tsx` and `app/register/page.tsx` `<img>` warnings, `app/strategies/page.tsx` exhaustive-deps warning, and `hooks/useDashboardData.ts` exhaustive-deps warning. The previous `app/insights/page.tsx` strict/effect warning was removed in P9D.
+- Targeted strict React 19 lint for all P9D files exited 0 with `react-hooks/purity:error` and `react-hooks/set-state-in-effect:error`.
+- First sandboxed `npm run build` failed with the known Turbopack sandbox restriction: creating a process / binding to a port while processing `app/globals.css`.
+- Escalated `npm run build` exited 0 on Next 16.2.7; output included `/dashboard`, `/insights`, `/insights/[artifactId]`, `/timeline`, and `/`.
+- Recharts usage scan now shows only renderer components: `PortfolioSankey.tsx`, `AllocationPieChart.tsx`, `DashboardEquityHero.tsx`, `MaeMfeScatterPlot.tsx`, and `LegacyAnalysisChart.tsx`. Direct page-level Recharts usage in `/insights` was removed.
+- Browser smoke used `npm run dev` at `http://localhost:3000`.
+- `/dashboard` browser smoke: unauthenticated session rendered the login page instead of dashboard content; no console errors were recorded. Content-level chart frame verification was blocked because no backend dev server, test account, or token was available in this environment.
+- `/insights` browser smoke: unauthenticated session redirected to `http://localhost:3000/login`; no console errors were recorded. Content-level chart frame verification was blocked for the same authentication/backend reason.
+- Generated files `frontend/next-env.d.ts` and `frontend/tsconfig.tsbuildinfo` were restored before commit.
 
 ### Task 7: Push Dev Branch
 
