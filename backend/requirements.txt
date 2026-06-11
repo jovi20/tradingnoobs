@@ -38,3 +38,6 @@ yfinance>=0.2.36                 # Yahoo Finance (backup for A-shares)
 
 # ============== LLM Integration ==============
 openai>=1.10.0                   # OpenAI API for weekly reports
+
+# ============== Reporting / Export ==============
+reportlab>=4.2.0                 # Server-side PDF rendering for weekly reports
