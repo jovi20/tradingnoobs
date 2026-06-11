@@ -212,7 +212,7 @@ cd frontend
 node --experimental-strip-types --test tests/dashboard-adapter.test.mts tests/risk-alerts.test.mts
 ```
 
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add backend/routers/dashboard.py backend/schemas.py backend/tests/test_risk_router.py frontend/lib/api.ts frontend/lib/read-models.ts frontend/lib/adapters/dashboard.ts frontend/components/risk/RiskAlertStack.tsx frontend/components/dashboard/workbench/DashboardRiskRail.tsx frontend/tests/dashboard-adapter.test.mts frontend/tests/risk-alerts.test.mts
@@ -281,17 +281,18 @@ Verification log:
 - RED frontend: `node --experimental-strip-types --test tests/timeline-workbench.test.mts` failed because `getReviewInboxKindLabel` was not exported.
 - GREEN frontend: `node --experimental-strip-types --test tests/timeline-workbench.test.mts` ran 6 tests OK; Node emitted the existing `MODULE_TYPELESS_PACKAGE_JSON` warning.
 - Typecheck: `./node_modules/.bin/tsc --noEmit --pretty false` exited 0.
+- Commit: `d01749f feat: add risk action cards to timeline`.
 
 ## Task 5: P13 Completion Gate
 
-- [ ] Backend risk tests pass.
-- [ ] Timeline and dashboard targeted tests pass.
-- [ ] Full backend tests pass.
-- [ ] Frontend typecheck passes.
-- [ ] Frontend lint passes.
-- [ ] Frontend Node tests pass.
-- [ ] Browser smoke covers authenticated `/dashboard` and `/timeline`.
-- [ ] `docs/TODO.md` marks P13 completed and P14 as the next planned lane.
+- [x] Backend risk tests pass.
+- [x] Timeline and dashboard targeted tests pass.
+- [x] Full backend tests pass.
+- [x] Frontend typecheck passes.
+- [x] Frontend lint passes.
+- [x] Frontend Node tests pass.
+- [x] Browser smoke covers authenticated `/dashboard` and `/timeline`.
+- [x] `docs/TODO.md` marks P13 completed and P14 as the next planned lane.
 
 Final verification:
 
@@ -306,6 +307,21 @@ cd ..
 git diff --check
 git status --short --branch
 ```
+
+P13 Task 5 result:
+- Full backend and frontend gates passed after the Timeline/Dashboard risk work.
+- Authenticated browser smoke used a local temporary user on `http://localhost:3000`.
+- `/timeline` loaded the Timeline-first home with logged-in navigation, Review Inbox, AI sidecar, and context rail.
+- `/dashboard` loaded the macro dashboard with risk posture and risk alerts rail.
+- During smoke, empty dashboard chart data exposed Recharts `NaN` SVG warnings; fixed by treating all-zero equity bootstrap history and unlinked Sankey data as empty chart states before Recharts receives them.
+
+Verification log:
+- Backend full: `../.venv313/bin/python -m unittest discover -s tests` ran 179 tests OK; the existing market-data test emitted a DNS warning while still passing.
+- Frontend typecheck: `./node_modules/.bin/tsc --noEmit --pretty false` exited 0.
+- Frontend lint: `npm run lint` exited 0.
+- Frontend Node: `node --experimental-strip-types --test tests/*.test.mts` ran 99 tests OK; Node emitted the existing `MODULE_TYPELESS_PACKAGE_JSON` warnings.
+- Browser smoke: started backend on `127.0.0.1:8000` and frontend on `localhost:3000`; logged in as `p13-smoke-20260611@example.com`; verified `/timeline` and `/dashboard` authenticated pages loaded.
+- Browser smoke regression fix: reloaded `/dashboard` after chart empty-state guard; latest browser logs contained no new `NaN` SVG attribute errors.
 
 ## Stop Conditions
 

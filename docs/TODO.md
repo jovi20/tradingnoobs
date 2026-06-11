@@ -43,23 +43,23 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 | Lifecycle Detail | `truth-first 体验已落地` | 单笔详情已优先展示 truth lifecycle、evidence、AI sidecar；latest active event reversal 走审计 `REVERSAL`，非最新 reversal、`OPEN` reversal、legacy hard delete/batch edit 已被保护为非普通路径。 |
 | Dashboard / Insights | `已重构为工作台形态` | Dashboard 保持宏观视图；Insights 已接入 auditable artifact 与 artifact detail；图表已有 schema/freshness 包装。 |
 | 前端依赖与质量 | `已完成 P8-P9F` | Next 16 / React 19 已升级；React 19 strict hooks lint 全局启用；前端 lint 已到 0 warning。 |
-| 文档状态 | `P13-P19 已计划 / P13 待开发` | P10 文档、legacy inventory、observability、read-model marker、model modularization plan 已落地；P11 hard cutover、P12 platform contract hardening、P12B observability/error contract hardening 已完成；P13-P19 专项计划已补齐。 |
+| 文档状态 | `P13 已完成 / P14 待开发` | P10 文档、legacy inventory、observability、read-model marker、model modularization plan 已落地；P11 hard cutover、P12 platform contract hardening、P12B observability/error contract hardening、P13 Risk / review product features 已完成；P14-P19 专项计划已补齐。 |
 
 ---
 
 ## 当前 Active Lane
 
-- 当前 active lane：P13 Risk / review product features，计划已创建，代码尚未开始。
-- 当前计划：[2026-06-11-dev-p13-risk-review-product-plan.md](./superpowers/plans/2026-06-11-dev-p13-risk-review-product-plan.md)。
-- P13 第一执行任务：新增 `backend/services/risk_alert_service.py` 与风险 read model 测试，再接 `/api/risk/summary`、Dashboard、Timeline/Review Inbox。
-- 前一完成 lane：[2026-06-11-dev-p12b-observability-error-contract-plan.md](./superpowers/plans/2026-06-11-dev-p12b-observability-error-contract-plan.md)。
+- 当前 active lane：P14 Reporting / export。
+- 当前计划：[2026-06-11-dev-p14-reporting-export-plan.md](./superpowers/plans/2026-06-11-dev-p14-reporting-export-plan.md)。
+- P14 第一执行任务：补齐导入模板说明，再实现周报 PDF 渲染服务、导出端点和前端下载入口。
+- 前一完成 lane：[2026-06-11-dev-p13-risk-review-product-plan.md](./superpowers/plans/2026-06-11-dev-p13-risk-review-product-plan.md)。
 
 ### 后续阶段执行顺序
 
 | 阶段 | 当前状态 | 专项计划 |
 |------|----------|----------|
-| P13 | `待开发` | [Risk / review product features](./superpowers/plans/2026-06-11-dev-p13-risk-review-product-plan.md) |
-| P14 | `已计划` | [Reporting and export](./superpowers/plans/2026-06-11-dev-p14-reporting-export-plan.md) |
+| P13 | `已完成` | [Risk / review product features](./superpowers/plans/2026-06-11-dev-p13-risk-review-product-plan.md) |
+| P14 | `待开发` | [Reporting and export](./superpowers/plans/2026-06-11-dev-p14-reporting-export-plan.md) |
 | P15 | `已计划` | [AI analysis workflow](./superpowers/plans/2026-06-11-dev-p15-ai-analysis-workflow-plan.md) |
 | P16 | `已计划` | [Market data platform](./superpowers/plans/2026-06-11-dev-p16-market-data-platform-plan.md) |
 | P17 | `已计划` | [Admin operations](./superpowers/plans/2026-06-11-dev-p17-admin-operations-plan.md) |
@@ -98,7 +98,7 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 - [x] P17：创建 Admin operations implementation plan。
 - [x] P18：创建 Chart renderer migration implementation plan。
 - [x] P19：创建 Release readiness implementation plan。
-- [ ] P13：实现组合风险监控、单日亏损上限、风险提醒和 Timeline/Review Inbox 风险行动卡。
+- [x] P13：实现组合风险监控、单日亏损上限、风险提醒和 Timeline/Review Inbox 风险行动卡。
 
 ---
 
@@ -160,12 +160,12 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 
 专项计划：[P13 Risk / review product features](./superpowers/plans/2026-06-11-dev-p13-risk-review-product-plan.md)
 
-- [ ] 后端创建 `services/risk_alert_service.py`。
-- [ ] 后端实现组合风险检查逻辑。
-- [ ] 后端实现单日亏损上限检查。
-- [ ] 前端 Dashboard 显示当前组合风险。
-- [ ] 后端提供实时通知通道；V1 可优先评估 SSE，只有需要双向交互时再上 WebSocket。
-- [ ] 前端集成 Toast 或工作台内预警通知。
+- [x] 后端创建 `services/risk_alert_service.py`。
+- [x] 后端实现组合风险检查逻辑。
+- [x] 后端实现单日亏损上限检查。
+- [x] 前端 Dashboard 显示当前组合风险。
+- [x] 后端提供 API/read-model 风险提醒通道；P13 V1 不引入 SSE/WebSocket。
+- [x] 前端集成 Dashboard 风险栏与 Timeline / Review Inbox 工作台内预警通知。
 
 ### 数据导入导出
 

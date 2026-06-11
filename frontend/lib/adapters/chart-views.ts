@@ -54,6 +54,14 @@ export const localLegacyAnalyticsTrust: ChartTrustMeta = {
 }
 
 export function buildPortfolioSankeyChartView(data: { nodes: unknown[]; links: unknown[] }) {
+  const hasNodes = Array.isArray(data.nodes) && data.nodes.length >= 2
+  const hasLinks = Array.isArray(data.links) && data.links.some((link) => {
+    if (!link || typeof link !== 'object' || !('value' in link)) return false
+    return Number((link as { value?: unknown }).value || 0) > 0
+  })
+  const isEmpty = !hasNodes || !hasLinks
+  const emptyReason = !hasNodes ? 'NO_SANKEY_NODES' : 'NO_SANKEY_LINKS'
+
   return {
     schema: {
       schema_version: 'chart.v1',
@@ -68,9 +76,23 @@ export function buildPortfolioSankeyChartView(data: { nodes: unknown[]; links: u
       source_refs: ['dashboard:portfolio-sankey'],
     } satisfies ChartTrustMeta,
     emptyState: {
-      is_empty: !data.nodes || data.nodes.length === 0,
-      reason: !data.nodes || data.nodes.length === 0 ? 'NO_SANKEY_NODES' : null,
-      message: !data.nodes || data.nodes.length === 0 ? '暂无资金流向数据' : undefined,
+      is_empty: isEmpty,
+      reason: isEmpty ? emptyReason : null,
+      message: isEmpty ? '暂无资金流向数据' : undefined,
     } satisfies ChartEmptyState,
   }
+}
+
+export function shouldRenderPortfolioSankey(view: ReturnType<typeof buildPortfolioSankeyChartView>) {
+  return !view.emptyState.is_empty
+}
+
+export function shouldRenderEquityLineChart(
+  history: Array<{ pnl?: number | null; pnl_percent?: number | null; total_equity?: number | null }>
+) {
+  return history.some((point) => (
+    Number(point.pnl || 0) !== 0
+    || Number(point.pnl_percent || 0) !== 0
+    || Number(point.total_equity || 0) !== 0
+  ))
 }

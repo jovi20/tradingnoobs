@@ -2,6 +2,7 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import { ChartFrame } from '@/components/charts/ChartFrame'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { Surface } from '@/components/ui/Surface'
+import { shouldRenderEquityLineChart } from '@/lib/adapters/chart-views'
 import type { DashboardPeriodLabel, DashboardPeriodMetrics, DashboardPeriodOption } from '@/lib/adapters/dashboard'
 import type { ChartSchema, ChartTrustMeta } from '@/lib/charts'
 
@@ -10,7 +11,7 @@ interface DashboardEquityHeroProps {
     selectedPeriod: DashboardPeriodLabel
     onSelectPeriod: (label: DashboardPeriodLabel) => void
     periodMetrics: DashboardPeriodMetrics
-    pnlHistory: Array<{ date: string; pnl: number; pnl_percent: number }>
+    pnlHistory: Array<{ date: string; pnl: number; pnl_percent: number; total_equity?: number }>
     currencySymbol: string
     upClassName: string
     downClassName: string
@@ -42,6 +43,7 @@ export function DashboardEquityHero({
         source: 'LOCAL_DASHBOARD_HISTORY',
         source_refs: ['dashboard:pnlHistory'],
     } satisfies ChartTrustMeta
+    const canRenderEquityChart = shouldRenderEquityLineChart(pnlHistory)
 
     return (
         <Surface className="overflow-hidden p-4 md:p-6">
@@ -84,25 +86,27 @@ export function DashboardEquityHero({
                 schema={equityChartSchema}
                 trustMeta={equityTrustMeta}
                 emptyState={{
-                    is_empty: pnlHistory.length === 0,
-                    reason: pnlHistory.length === 0 ? 'NO_EQUITY_HISTORY' : null,
-                    message: pnlHistory.length === 0 ? '暂无资金曲线数据' : undefined,
+                    is_empty: !canRenderEquityChart,
+                    reason: !canRenderEquityChart ? 'NO_EQUITY_HISTORY' : null,
+                    message: !canRenderEquityChart ? '暂无资金曲线数据' : undefined,
                 }}
-                dataCount={pnlHistory.length}
+                dataCount={canRenderEquityChart ? pnlHistory.length : 0}
                 compact
                 className="mt-5"
             >
-                <div className="h-[280px] md:h-[340px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={pnlHistory}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                            <XAxis dataKey="date" tick={{ fontSize: 12 }} tickFormatter={(value) => String(value).slice(5)} />
-                            <YAxis tick={{ fontSize: 12 }} tickFormatter={(value) => `${value}%`} />
-                            <Tooltip formatter={(value: number) => [`${value.toFixed(2)}%`, '盈亏率']} labelFormatter={(label) => `日期: ${label}`} />
-                            <Line type="monotone" dataKey="pnl_percent" stroke={lineColor} strokeWidth={2.5} dot={false} />
-                        </LineChart>
-                    </ResponsiveContainer>
-                </div>
+                {canRenderEquityChart && (
+                    <div className="h-[280px] md:h-[340px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={pnlHistory}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                                <XAxis dataKey="date" tick={{ fontSize: 12 }} tickFormatter={(value) => String(value).slice(5)} />
+                                <YAxis tick={{ fontSize: 12 }} tickFormatter={(value) => `${value}%`} />
+                                <Tooltip formatter={(value: number) => [`${value.toFixed(2)}%`, '盈亏率']} labelFormatter={(label) => `日期: ${label}`} />
+                                <Line type="monotone" dataKey="pnl_percent" stroke={lineColor} strokeWidth={2.5} dot={false} />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </div>
+                )}
             </ChartFrame>
         </Surface>
     )
