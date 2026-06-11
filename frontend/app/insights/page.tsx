@@ -24,7 +24,8 @@ import { LegacyAnalysisChart } from '@/components/insights/LegacyAnalysisChart'
 import { useAuth } from '@/contexts/AuthContext'
 import ReactMarkdown from 'react-markdown'
 import { useInsightRuns } from '@/hooks/useInsightRuns'
-import { insightsAPI, WeeklyReport, AISummary, AnalysisType, AnalysisResponse } from '@/lib/api'
+import { insightsAPI, WeeklyReport, AISummary, AnalysisType, AnalysisResponse, AnalysisHistoryItem } from '@/lib/api'
+import { formatAnalysisDateRangeLabel, getDefaultAnalysisDateRange, validateAnalysisDateRange } from '@/lib/adapters/analysis'
 import { downloadBlob } from '@/lib/download'
 import { useTrendColor } from '@/hooks/useTrendColor'
 
@@ -59,8 +60,13 @@ export default function InsightsPage() {
 
     // AI 分析助手状态
     const [selectedAnalysis, setSelectedAnalysis] = useState<AnalysisType | null>(null)
+    const [analysisDateRange, setAnalysisDateRange] = useState(() => getDefaultAnalysisDateRange())
     const [isAnalyzing, setIsAnalyzing] = useState(false)
     const [analysisResultsMap, setAnalysisResultsMap] = useState<Partial<Record<AnalysisType, AnalysisResponse>>>({})
+    const [analysisResultRangeLabelsMap, setAnalysisResultRangeLabelsMap] = useState<Partial<Record<AnalysisType, string>>>({})
+    const [analysisHistory, setAnalysisHistory] = useState<AnalysisHistoryItem[]>([])
+    const [isLoadingAnalysisHistory, setIsLoadingAnalysisHistory] = useState(true)
+    const [analysisHistoryError, setAnalysisHistoryError] = useState('')
     const [analysisError, setAnalysisError] = useState('')
 
     // ============== 数据获取 ==============
@@ -100,10 +106,25 @@ export default function InsightsPage() {
         await Promise.all(promises)
     }
 
+    const fetchAnalysisHistory = async () => {
+        if (!token) return
+        setAnalysisHistoryError('')
+        try {
+            setIsLoadingAnalysisHistory(true)
+            const history = await insightsAPI.listAnalysisHistory(token, { limit: 5 })
+            setAnalysisHistory(history)
+        } catch (err: any) {
+            setAnalysisHistoryError(err.message || '加载分析历史失败')
+        } finally {
+            setIsLoadingAnalysisHistory(false)
+        }
+    }
+
     const loadInitialInsightData = useEffectEvent(() => {
         fetchReports()
         fetchDailySummary()
         fetchPersistedAnalyses()
+        fetchAnalysisHistory()
     })
 
     useEffect(() => {
@@ -162,11 +183,24 @@ export default function InsightsPage() {
 
     const handleRunAnalysis = async () => {
         if (!token || !selectedAnalysis) return
+        const rangeError = validateAnalysisDateRange(analysisDateRange.startDate, analysisDateRange.endDate)
+        if (rangeError) {
+            setAnalysisError(rangeError)
+            return
+        }
+
+        const rangeLabel = formatAnalysisDateRangeLabel(analysisDateRange.startDate, analysisDateRange.endDate)
         setIsAnalyzing(true)
         setAnalysisError('')
         try {
-            const data = await insightsAPI.analyze(token, { analysis_type: selectedAnalysis })
+            const data = await insightsAPI.analyze(token, {
+                analysis_type: selectedAnalysis,
+                start_date: analysisDateRange.startDate,
+                end_date: analysisDateRange.endDate,
+            })
             setAnalysisResultsMap(prev => ({ ...prev, [selectedAnalysis]: data }))
+            setAnalysisResultRangeLabelsMap(prev => ({ ...prev, [selectedAnalysis]: rangeLabel }))
+            fetchAnalysisHistory()
         } catch (err: any) {
             setAnalysisError(err.message || '分析失败')
         } finally { setIsAnalyzing(false) }
@@ -177,6 +211,12 @@ export default function InsightsPage() {
         const date = new Date(dateStr)
         return `${date.getMonth() + 1}月${date.getDate()}日`
     }
+
+    const getAnalysisOptionLabel = (type: string) =>
+        ANALYSIS_OPTIONS.find(option => option.type === type)?.label || type
+
+    const formatHistoryDateRange = (item: AnalysisHistoryItem) =>
+        item.date_range ? item.date_range.label.replace(' to ', ' 至 ') : '未记录范围'
 
     const hasGeneratedInsightToday = reports.some(report => {
         const reportDate = new Date(report.created_at)
@@ -344,6 +384,36 @@ export default function InsightsPage() {
                             </div>
                         </div>
 
+                        {/* 日期范围 */}
+                        <div className="px-5 pb-4">
+                            <div className="rounded-2xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900/60">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <label className="space-y-1 text-xs font-medium text-slate-500">
+                                        <span>开始日期</span>
+                                        <input
+                                            type="date"
+                                            value={analysisDateRange.startDate}
+                                            onChange={(event) => setAnalysisDateRange(prev => ({ ...prev, startDate: event.target.value }))}
+                                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition-colors focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:focus:ring-indigo-900/40"
+                                        />
+                                    </label>
+                                    <label className="space-y-1 text-xs font-medium text-slate-500">
+                                        <span>结束日期</span>
+                                        <input
+                                            type="date"
+                                            value={analysisDateRange.endDate}
+                                            onChange={(event) => setAnalysisDateRange(prev => ({ ...prev, endDate: event.target.value }))}
+                                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition-colors focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:focus:ring-indigo-900/40"
+                                        />
+                                    </label>
+                                </div>
+                                <p className="mt-2 flex items-center gap-1 text-[11px] text-slate-400">
+                                    <Calendar className="w-3 h-3" />
+                                    当前分析范围：{formatAnalysisDateRangeLabel(analysisDateRange.startDate, analysisDateRange.endDate)}
+                                </p>
+                            </div>
+                        </div>
+
                         {/* 分析结果区 */}
                         <div className="p-5 min-h-[300px]">
                             {(() => {
@@ -384,6 +454,8 @@ export default function InsightsPage() {
                                             <p className="text-[11px] text-slate-400 flex items-center gap-1">
                                                 <Clock className="w-3 h-3" />
                                                 生成于 {new Date(cachedResult.created_at).toLocaleString('zh-CN')}
+                                                <span className="hidden sm:inline">·</span>
+                                                <span>{analysisResultRangeLabelsMap[selectedAnalysis] || '最近一次分析'}</span>
                                             </p>
                                             <button
                                                 onClick={handleRunAnalysis}
@@ -417,6 +489,9 @@ export default function InsightsPage() {
                                         <p className="text-sm text-slate-400 mb-1">
                                             {ANALYSIS_OPTIONS.find(o => o.type === selectedAnalysis)?.desc}
                                         </p>
+                                        <p className="text-xs text-slate-400">
+                                            范围：{formatAnalysisDateRangeLabel(analysisDateRange.startDate, analysisDateRange.endDate)}
+                                        </p>
                                         <button
                                             onClick={handleRunAnalysis}
                                             disabled={isAnalyzing}
@@ -427,6 +502,62 @@ export default function InsightsPage() {
                                     </div>
                                 )
                             })()}
+                        </div>
+                    </div>
+
+                    {/* --- AI 分析历史 --- */}
+                    <div className="card overflow-hidden">
+                        <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                            <div>
+                                <h2 className="font-bold text-sm flex items-center gap-2">
+                                    <Clock className="w-4 h-4 text-indigo-500" />
+                                    近期分析记录
+                                </h2>
+                                <p className="text-xs text-slate-400 mt-1">可复访的 auditable artifact</p>
+                            </div>
+                            <button
+                                onClick={fetchAnalysisHistory}
+                                disabled={isLoadingAnalysisHistory}
+                                className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-500 transition-colors hover:border-indigo-200 hover:text-indigo-600 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:border-indigo-500/50"
+                            >
+                                刷新
+                            </button>
+                        </div>
+                        <div className="p-5 space-y-3">
+                            {analysisHistoryError && (
+                                <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-600 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300">
+                                    {analysisHistoryError}
+                                </div>
+                            )}
+                            {isLoadingAnalysisHistory ? (
+                                <div className="flex items-center justify-center py-8">
+                                    <Loader2 className="w-5 h-5 animate-spin text-indigo-500" />
+                                </div>
+                            ) : analysisHistory.length > 0 ? (
+                                analysisHistory.map(item => (
+                                    <a
+                                        key={item.artifact_public_id}
+                                        href={item.href}
+                                        className="group block rounded-2xl border border-slate-200 bg-slate-50/70 p-4 transition-all hover:-translate-y-0.5 hover:border-indigo-200 hover:bg-white hover:shadow-md dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-indigo-500/40 dark:hover:bg-slate-900"
+                                    >
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <p className="text-xs font-bold text-indigo-500">{getAnalysisOptionLabel(item.analysis_type)}</p>
+                                                <h3 className="mt-1 truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{item.title}</h3>
+                                                <p className="mt-1 line-clamp-2 text-xs text-slate-500 dark:text-slate-400">{item.summary}</p>
+                                                <p className="mt-2 text-[11px] text-slate-400">
+                                                    {formatHistoryDateRange(item)} · {new Date(item.created_at).toLocaleDateString('zh-CN')}
+                                                </p>
+                                            </div>
+                                            <ArrowRight className="mt-1 w-4 h-4 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-indigo-500" />
+                                        </div>
+                                    </a>
+                                ))
+                            ) : (
+                                <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-400 dark:border-slate-800">
+                                    暂无历史分析，生成一次后会出现在这里。
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

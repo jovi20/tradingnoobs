@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { LegacyAnalysisChart } from '@/components/insights/LegacyAnalysisChart'
 import { insightsAPI, AnalysisType, AnalysisResponse } from '@/lib/api'
+import { formatAnalysisDateRangeLabel, getDefaultAnalysisDateRange, validateAnalysisDateRange } from '@/lib/adapters/analysis'
 import { useAuth } from '@/contexts/AuthContext'
 import ReactMarkdown from 'react-markdown'
 
@@ -53,19 +54,30 @@ const ANALYSIS_OPTIONS: { type: AnalysisType; label: string; icon: any; desc: st
 export default function AnalysisAssistant() {
     const { token } = useAuth()
     const [selectedType, setSelectedType] = useState<AnalysisType | null>(null)
+    const [dateRange, setDateRange] = useState(() => getDefaultAnalysisDateRange())
     const [isLoading, setIsLoading] = useState(false)
     const [result, setResult] = useState<AnalysisResponse | null>(null)
     const [error, setError] = useState('')
 
     const handleAnalyze = async (type: AnalysisType) => {
         if (!token) return
+        const rangeError = validateAnalysisDateRange(dateRange.startDate, dateRange.endDate)
+        if (rangeError) {
+            setError(rangeError)
+            return
+        }
+
         setSelectedType(type)
         setIsLoading(true)
         setError('')
         setResult(null)
 
         try {
-            const data = await insightsAPI.analyze(token, { analysis_type: type })
+            const data = await insightsAPI.analyze(token, {
+                analysis_type: type,
+                start_date: dateRange.startDate,
+                end_date: dateRange.endDate,
+            })
             setResult(data)
         } catch (err: any) {
             setError(err.message || '分析失败')
@@ -95,6 +107,31 @@ export default function AnalysisAssistant() {
             <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Left: Options */}
                 <div className="space-y-3">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-3 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900">
+                        <div className="grid grid-cols-1 gap-2">
+                            <label className="space-y-1">
+                                <span>开始日期</span>
+                                <input
+                                    type="date"
+                                    value={dateRange.startDate}
+                                    onChange={(event) => setDateRange(prev => ({ ...prev, startDate: event.target.value }))}
+                                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
+                                />
+                            </label>
+                            <label className="space-y-1">
+                                <span>结束日期</span>
+                                <input
+                                    type="date"
+                                    value={dateRange.endDate}
+                                    onChange={(event) => setDateRange(prev => ({ ...prev, endDate: event.target.value }))}
+                                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
+                                />
+                            </label>
+                        </div>
+                        <p className="mt-2 text-[11px] text-slate-400">
+                            {formatAnalysisDateRangeLabel(dateRange.startDate, dateRange.endDate)}
+                        </p>
+                    </div>
                     {ANALYSIS_OPTIONS.map((opt) => {
                         const Icon = opt.icon
                         const isSelected = selectedType === opt.type

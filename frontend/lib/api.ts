@@ -87,6 +87,23 @@ export interface AnalysisResponse {
     created_at: string
 }
 
+export interface AnalysisHistoryDateRange {
+    start_date: string
+    end_date: string
+    label: string
+}
+
+export interface AnalysisHistoryItem {
+    run_public_id: string
+    artifact_public_id: string
+    analysis_type: AnalysisType | string
+    title: string
+    summary: string
+    created_at: string
+    date_range?: AnalysisHistoryDateRange | null
+    href: string
+}
+
 export interface AssetAllocation {
     name: string
     value: number
@@ -457,6 +474,21 @@ export const insightsAPI = {
             method: 'POST',
             body: JSON.stringify(data)
         }, token)
+    },
+
+    listAnalysisHistory: async (
+        token: string,
+        params?: {
+            analysis_type?: AnalysisType
+            limit?: number
+        }
+    ): Promise<AnalysisHistoryItem[]> => {
+        const searchParams = new URLSearchParams()
+        if (params?.analysis_type) searchParams.set('analysis_type', params.analysis_type)
+        if (params?.limit) searchParams.set('limit', String(params.limit))
+        const query = searchParams.toString()
+
+        return fetchAPI(`/api/insights/analyze/history${query ? `?${query}` : ''}`, {}, token)
     },
 
     getLatestAnalysis: async (token: string, type: string): Promise<AnalysisResponse | null> => {
