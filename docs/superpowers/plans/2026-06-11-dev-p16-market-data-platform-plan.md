@@ -75,20 +75,20 @@ Public API can preserve the legacy `quote.c` fields during migration, but must a
 
 **Goal:** fix the missing `await` and prevent regression.
 
-- [ ] Add `backend/tests/test_market_router.py` with:
+- [x] Add `backend/tests/test_market_router.py` with:
   - `test_quote_endpoint_awaits_market_data_service`
   - `test_quote_endpoint_returns_error_payload_on_provider_failure`
   - `test_validate_endpoint_preserves_existing_shape`
-- [ ] Mock `MarketDataService.get_quote` with an async fake returning `{"c": 100, "pc": 95}`.
-- [ ] Run targeted test and confirm RED because the quote endpoint does not await `get_quote`.
+- [x] Mock `MarketDataService.get_quote` with an async fake returning `{"c": 100, "pc": 95}`.
+- [x] Run targeted test and confirm RED because the quote endpoint does not await `get_quote`.
 
 ```bash
 cd backend
 ../.venv313/bin/python -m unittest discover -s tests -p test_market_router.py
 ```
 
-- [ ] Fix `backend/routers/market.py` to call `quote = await service.get_quote(symbol, exchange)`.
-- [ ] Keep response compatibility:
+- [x] Fix `backend/routers/market.py` to call `quote = await service.get_quote(symbol, exchange)`.
+- [x] Keep response compatibility:
 
 ```json
 {
@@ -98,8 +98,8 @@ cd backend
 }
 ```
 
-- [ ] Run targeted test and confirm GREEN.
-- [ ] Commit:
+- [x] Run targeted test and confirm GREEN.
+- [x] Commit:
 
 ```bash
 git add backend/routers/market.py backend/tests/test_market_router.py
@@ -110,23 +110,23 @@ git commit -m "fix: await market quote endpoint"
 
 **Goal:** centralize provider selection rules outside the fetch service.
 
-- [ ] Create `backend/services/market_data_types.py` with dataclasses:
+- [x] Create `backend/services/market_data_types.py` with dataclasses:
   - `MarketDataRequest`
   - `MarketDataProviderResult`
   - `MarketDataProviderError`
   - `ProviderRoute`
-- [ ] Create `backend/services/provider_router.py` with:
+- [x] Create `backend/services/provider_router.py` with:
   - `detect_asset_route(symbol, exchange=None, core_type=None, market=None, instrument=None)`.
   - deterministic routes for `CRYPTO`, `A_SHARE`, `HK`, `US`, `FOREX`, `FUND`.
   - provider fallback order for US: `["finnhub", "yfinance"]`.
-- [ ] Add tests in `backend/tests/test_market_data_orchestrator.py`:
+- [x] Add tests in `backend/tests/test_market_data_orchestrator.py`:
   - `BTCUSDT` routes to Binance.
   - `600519` routes to AKShare A-share.
   - `0700.HK` routes to AKShare HK.
   - `MSFT` routes to Finnhub then YFinance.
   - `USDCNY` routes to FX provider.
-- [ ] Run targeted test and confirm GREEN.
-- [ ] Commit:
+- [x] Run targeted test and confirm GREEN.
+- [x] Commit:
 
 ```bash
 git add backend/services/market_data_types.py backend/services/provider_router.py backend/tests/test_market_data_orchestrator.py
@@ -137,22 +137,22 @@ git commit -m "feat: add market provider routing contracts"
 
 **Goal:** each provider returns normalized values and does not decide product-level degradation semantics.
 
-- [ ] Create `backend/services/providers/finnhub_provider.py` with:
+- [x] Create `backend/services/providers/finnhub_provider.py` with:
   - `get_quote(symbol, client) -> dict`
   - `get_history(symbol, start, end, client) -> list[dict]`
-- [ ] Add adapter functions to existing provider modules:
+- [x] Add adapter functions to existing provider modules:
   - `akshare_provider.get_normalized_quote(symbol, market)`
   - `binance_provider.get_normalized_quote(symbol)`
-- [ ] Remove direct `print()` in `binance_provider.get_klines`; replace with structured logger or empty result reason.
-- [ ] Add `backend/tests/test_market_provider_contracts.py` with fake provider data and no network calls.
-- [ ] Run:
+- [x] Remove direct `print()` in `binance_provider.get_klines`; replace with structured logger or empty result reason.
+- [x] Add `backend/tests/test_market_provider_contracts.py` with fake provider data and no network calls.
+- [x] Run:
 
 ```bash
 cd backend
 ../.venv313/bin/python -m unittest discover -s tests -p test_market_provider_contracts.py
 ```
 
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add backend/services/providers/finnhub_provider.py backend/services/providers/akshare_provider.py backend/services/providers/binance_provider.py backend/services/providers/__init__.py backend/tests/test_market_provider_contracts.py
@@ -163,23 +163,23 @@ git commit -m "feat: normalize market provider adapters"
 
 **Goal:** quote failures become explainable read-model metadata.
 
-- [ ] Create `backend/services/market_data_orchestrator.py` with:
+- [x] Create `backend/services/market_data_orchestrator.py` with:
   - `get_quote_with_metadata(request, db)`.
   - provider fallback loop.
   - cache hit freshness.
   - degradation reason when primary provider fails and fallback succeeds.
   - structured log events for provider failure and fallback success.
-- [ ] Modify `MarketDataService.get_quote(...)` to delegate to orchestrator but preserve legacy quote keys.
-- [ ] Add public response schemas in `backend/schemas.py`:
+- [x] Modify `MarketDataService.get_quote(...)` to delegate to orchestrator but preserve legacy quote keys.
+- [x] Add public response schemas in `backend/schemas.py`:
   - `MarketQuoteTrustMeta`
   - `MarketQuoteResponse`
   - `MarketValidationResponse`
-- [ ] Modify `backend/routers/market.py` to include `provider`, `freshness`, `degraded`, and `source_refs`.
-- [ ] Add tests:
+- [x] Modify `backend/routers/market.py` to include `provider`, `freshness`, `degraded`, and `source_refs`.
+- [x] Add tests:
   - primary success returns `freshness=FRESH`.
   - fallback success returns `degraded=true`.
   - all providers fail returns stable `error` and `source_refs`.
-- [ ] Run:
+- [x] Run:
 
 ```bash
 cd backend
@@ -187,7 +187,7 @@ cd backend
 ../.venv313/bin/python -m unittest discover -s tests -p test_market_router.py
 ```
 
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add backend/services/market_data_orchestrator.py backend/services/market_data_service.py backend/routers/market.py backend/schemas.py backend/tests/test_market_data_orchestrator.py backend/tests/test_market_router.py
@@ -198,14 +198,14 @@ git commit -m "feat: add market data freshness metadata"
 
 **Goal:** users can tell whether market data is fresh, stale, or degraded.
 
-- [ ] Extend `frontend/lib/api.ts` market types with freshness metadata.
-- [ ] Update `frontend/components/MarketStatus.tsx` to show:
+- [x] Extend `frontend/lib/api.ts` market types with freshness metadata.
+- [x] Update `frontend/components/MarketStatus.tsx` to show:
   - provider name.
   - freshness label.
   - degraded reason when present.
-- [ ] Add `frontend/tests/market-data.test.mts` covering adapter/label logic.
-- [ ] Update `docs/market_data_sources.md` with provider routing, fallback, freshness, and validation commands.
-- [ ] Run:
+- [x] Add `frontend/tests/market-data.test.mts` covering adapter/label logic.
+- [x] Update `docs/market_data_sources.md` with provider routing, fallback, freshness, and validation commands.
+- [x] Run:
 
 ```bash
 cd frontend
@@ -213,7 +213,7 @@ node --experimental-strip-types --test tests/market-data.test.mts
 ./node_modules/.bin/tsc --noEmit --pretty false
 ```
 
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add frontend/lib/api.ts frontend/components/MarketStatus.tsx frontend/tests/market-data.test.mts docs/market_data_sources.md
@@ -222,10 +222,10 @@ git commit -m "feat: show market data freshness metadata"
 
 ## Task 6: P16 Completion Gate
 
-- [ ] Backend market targeted tests pass.
-- [ ] Full backend tests pass.
-- [ ] Frontend typecheck, lint, and Node tests pass.
-- [ ] `docs/TODO.md` marks P16 complete and P17 as next lane.
+- [x] Backend market targeted tests pass.
+- [x] Full backend tests pass.
+- [x] Frontend typecheck, lint, and Node tests pass.
+- [x] `docs/TODO.md` marks P16 complete and P17 as next lane.
 
 Final verification:
 
@@ -240,6 +240,28 @@ cd ..
 git diff --check
 git status --short --branch
 ```
+
+## Execution Log
+
+- Task 1 committed as `c9bf3f7 fix: await market quote endpoint`.
+- Task 2 committed as `907cb07 feat: add market provider routing contracts`.
+- Task 3 committed as `377a632 feat: normalize market provider adapters`.
+- Task 4 committed as `d6f45fa feat: add market data freshness metadata`.
+- Task 5 committed as `ae50afc feat: show market data freshness metadata`.
+- P16 targeted verification completed:
+  - `test_market_router.py`: passed.
+  - `test_market_data_orchestrator.py`: passed.
+  - `test_market_provider_contracts.py`: passed.
+  - `test_openapi_contracts.py`: passed.
+  - `frontend/tests/market-data.test.mts`: passed.
+  - Frontend typecheck and lint: passed.
+- Final completion gate:
+  - Backend full test suite: 212 tests passed.
+  - Frontend typecheck: passed.
+  - Frontend lint: passed.
+  - Frontend Node tests: 109 tests passed.
+  - `git diff --check`: passed.
+- P16 completion docs updated to mark P17 as the next active lane.
 
 ## Stop Conditions
 

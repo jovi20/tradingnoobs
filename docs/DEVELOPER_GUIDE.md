@@ -14,8 +14,8 @@
 - [superpowers/specs/2026-04-07-frontend-experience-redesign-design.md](./superpowers/specs/2026-04-07-frontend-experience-redesign-design.md) 是前端体验重设计基线。
 - [superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md](./superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md) 是平台 + 前端迁移顺序基线。
 - [TODO.md](./TODO.md) 是当前执行清单。
-- [superpowers/plans/2026-06-11-dev-p16-market-data-platform-plan.md](./superpowers/plans/2026-06-11-dev-p16-market-data-platform-plan.md) 是当前 active lane，负责市场数据 provider routing、quote freshness、degradation metadata 与验证方案。
-- P16-P19 后续计划已创建，按 `docs/TODO.md` 的阶段表顺序执行，不要跳过每个计划里的验证门。
+- [superpowers/plans/2026-06-11-dev-p17-admin-operations-plan.md](./superpowers/plans/2026-06-11-dev-p17-admin-operations-plan.md) 是当前 active lane，负责数据库备份、管理员用户操作和 job recovery 安全入口。
+- P17-P19 后续计划已创建，按 `docs/TODO.md` 的阶段表顺序执行，不要跳过每个计划里的验证门。
 - [release-rollback-playbook.md](./release-rollback-playbook.md) 是 truth writes、Timeline snapshot、legacy mutation guard 的发布与回滚手册。
 - [current-state-baseline.md](./current-state-baseline.md) 是 2026-04-05 历史审计快照，不再作为当前实现依据。
 - [顶层设计.md](./顶层设计.md) 已降级为历史草案。
@@ -124,7 +124,7 @@
 | Dashboard | `宏观视图已重构` | 已从默认首页退到宏观视图；chart schema/freshness/trust 包装已接入。 |
 | Insights / AI | `artifact-first 已落地` | `InsightRun / InsightArtifact`、artifact detail、证据链接展示已落地；AI 分析请求支持成对日期范围、366 天上限校验，artifact payload/source refs/evidence refs 会写入 `date-range:<start>:<end>`，`/api/insights/analyze/history` 支持复访近期分析。 |
 | 异步任务 | `基础已落地` | Job model、outbox relay、worker CLI、business lock、idempotency、admin jobs UI/API 已落地。 |
-| 市场数据 | `可用 / 待拆分` | 多市场 provider 可用；orchestration/provider mapping 和可重复验证方案仍待收敛。 |
+| 市场数据 | `P16 已落地` | `provider_router`、`market_data_orchestrator`、normalized provider adapters、quote freshness/degradation metadata、前端 freshness 标签和可重复验证文档已完成；`MarketDataService` 仍作为 legacy facade 保留。 |
 | 风控预警 | `P13 已落地` | 组合风险、单日亏损上限、风险提醒、Dashboard 风险栏与 Timeline/Review Inbox 风险行动卡已完成 V1；不含 SSE/WebSocket。 |
 | PDF 导出 | `P14 已落地` | 导入模板说明、周报 PDF 渲染服务、Insights PDF 导出接口、前端导出按钮和导出 runbook 已完成。 |
 
@@ -280,8 +280,8 @@ npm run build
 
 优先级以 [TODO.md](./TODO.md) 为准。当前建议顺序：
 
-1. P16：Market data platform，先锁定 quote endpoint async contract，再拆 provider routing、normalized adapters、freshness/degradation metadata。
-2. P17-P19：专项计划已创建，依次执行 Admin operations、Chart renderer migration、Release readiness。
+1. P17：Admin operations，先实现数据库备份 service 与 `POST /api/admin/ops/backups` 管理员入口。
+2. P18-P19：专项计划已创建，依次执行 Chart renderer migration、Release readiness。
 3. P10D 剩余项：停止扩张 `frontend/lib/api.ts`，让新页面优先走 read-model adapter 或 generated contract。
 4. P10E 后续执行：在 truth/legacy 边界稳定后拆分 `backend/models.py`。
 
