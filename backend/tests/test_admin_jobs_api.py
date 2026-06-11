@@ -1,7 +1,7 @@
 import os
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -399,6 +399,89 @@ class AdminJobsApiTests(unittest.TestCase):
         self.assertEqual(payload["events"][-1]["from_status"], "RUNNING")
         self.assertEqual(payload["events"][-1]["to_status"], "CANCELLED")
         self.assertEqual(payload["events"][-1]["metadata"]["force"], True)
+        self.assertIn("warning", payload["events"][-1]["metadata"])
+        self.assertIn("business locks", payload["events"][-1]["metadata"]["warning"].lower())
+
+    def test_stale_running_job_returns_stale_reason_and_recommended_action(self):
+        db = self.SessionLocal()
+        try:
+            db.add(self.admin_user)
+            db.flush()
+            definition = JobDefinition(
+                key="derived.timeline.refresh",
+                display_name="Refresh Timeline Read Model",
+                queue_name="derived",
+                retry_policy={"max_attempts": 3},
+                timeout_seconds=300,
+                is_active=True,
+            )
+            db.add(definition)
+            db.flush()
+            db.add(
+                JobRun(
+                    user_id=self.admin_user.id,
+                    job_definition_id=definition.id,
+                    public_id="job-stale-running",
+                    status=JobRunStatus.RUNNING,
+                    payload={"position_event_public_id": "evt-stale"},
+                    max_attempts=3,
+                    attempt_count=1,
+                    queue_name="derived",
+                    locked_by="worker-a",
+                    locked_at=datetime.now(timezone.utc) - timedelta(minutes=10),
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        response = self.client.get("/api/admin/jobs?status=RUNNING&limit=10")
+
+        self.assertEqual(response.status_code, 200)
+        item = response.json()["items"][0]
+        self.assertEqual(item["public_id"], "job-stale-running")
+        self.assertIn("exceeded", item["stale_reason"].lower())
+        self.assertEqual(item["recommended_action"], "FORCE_CANCEL")
+        self.assertIn("business locks", item["force_cancel_warning"].lower())
+
+    def test_failed_job_returns_requeue_recommended_action(self):
+        db = self.SessionLocal()
+        try:
+            db.add(self.admin_user)
+            db.flush()
+            definition = JobDefinition(
+                key="derived.timeline.refresh",
+                display_name="Refresh Timeline Read Model",
+                queue_name="derived",
+                retry_policy={"max_attempts": 3},
+                timeout_seconds=300,
+                is_active=True,
+            )
+            db.add(definition)
+            db.flush()
+            db.add(
+                JobRun(
+                    user_id=self.admin_user.id,
+                    job_definition_id=definition.id,
+                    public_id="job-failed-recommended",
+                    status=JobRunStatus.FAILED,
+                    payload={"position_event_public_id": "evt-failed"},
+                    error_message="handler exploded",
+                    max_attempts=3,
+                    attempt_count=3,
+                    queue_name="derived",
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        response = self.client.get("/api/admin/jobs/job-failed-recommended")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["recommended_action"], "REQUEUE")
+        self.assertIsNone(payload["stale_reason"])
 
 
 if __name__ == "__main__":

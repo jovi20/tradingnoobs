@@ -680,6 +680,7 @@ export interface FeatureFlag {
 }
 
 export type AdminJobStatus = 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'RETRYING' | 'CANCELLED'
+export type AdminJobRecommendedAction = 'REQUEUE' | 'CANCEL' | 'FORCE_CANCEL' | 'WAIT'
 
 export interface AdminJobDefinitionRef {
     public_id: string
@@ -701,6 +702,9 @@ export interface AdminJobRunSummary {
     finished_at: string | null
     created_at: string
     error_message: string | null
+    stale_reason?: string | null
+    recommended_action?: AdminJobRecommendedAction | null
+    force_cancel_warning?: string | null
 }
 
 export interface AdminJobRunEvent {

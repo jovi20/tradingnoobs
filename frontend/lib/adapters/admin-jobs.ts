@@ -1,4 +1,4 @@
-import type { AdminJobListResponse, AdminJobRunSummary, AdminJobStatus } from '../api.ts'
+import type { AdminJobListResponse, AdminJobRecommendedAction, AdminJobRunSummary, AdminJobStatus } from '../api.ts'
 
 const STATUS_TONES: Record<AdminJobStatus, { label: string; className: string; accent: string }> = {
     QUEUED: {
@@ -33,12 +33,22 @@ const STATUS_TONES: Record<AdminJobStatus, { label: string; className: string; a
     },
 }
 
+const RECOMMENDED_ACTION_LABELS: Record<AdminJobRecommendedAction, string> = {
+    REQUEUE: 'Requeue',
+    CANCEL: 'Cancel',
+    FORCE_CANCEL: 'Force cancel',
+    WAIT: 'Wait',
+}
+
 export interface AdminJobViewModel extends AdminJobRunSummary {
     statusLabel: string
     statusClassName: string
     statusAccentClassName: string
     attemptLabel: string
     createdLabel: string
+    recoveryHint: string | null
+    recommendedActionLabel: string | null
+    forceCancelWarning: string | null
     actionState: {
         canRequeue: boolean
         canCancel: boolean
@@ -63,6 +73,10 @@ function formatDateTime(value: string | null): string {
     return new Date(value).toLocaleString('zh-CN')
 }
 
+export function formatAdminJobRecommendedAction(action: AdminJobRecommendedAction | null | undefined): string | null {
+    return action ? RECOMMENDED_ACTION_LABELS[action] : null
+}
+
 function adaptJob(item: AdminJobRunSummary): AdminJobViewModel {
     const tone = getAdminJobStatusTone(item.status)
     return {
@@ -72,6 +86,9 @@ function adaptJob(item: AdminJobRunSummary): AdminJobViewModel {
         statusAccentClassName: tone.accent,
         attemptLabel: `${item.attempt_count}/${item.max_attempts} attempts`,
         createdLabel: formatDateTime(item.created_at),
+        recoveryHint: item.stale_reason ?? null,
+        recommendedActionLabel: formatAdminJobRecommendedAction(item.recommended_action),
+        forceCancelWarning: item.force_cancel_warning ?? null,
         actionState: getAdminJobActions(item.status),
     }
 }

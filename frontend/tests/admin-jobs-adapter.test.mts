@@ -88,3 +88,36 @@ test('admin job status tones stay deterministic', () => {
   assert.equal(getAdminJobStatusTone('RETRYING').label, 'Retrying')
   assert.equal(getAdminJobStatusTone('CANCELLED').label, 'Cancelled')
 })
+
+test('admin job adapter surfaces recovery guidance metadata', () => {
+  const result = adaptAdminJobsPageData({
+    items: [
+      {
+        public_id: 'job-stale',
+        definition: { public_id: 'def-1', key: 'derived.timeline.refresh', display_name: 'Refresh Timeline' },
+        status: 'RUNNING',
+        queue_name: 'derived',
+        priority: 0,
+        attempt_count: 1,
+        max_attempts: 3,
+        next_run_at: null,
+        started_at: '2026-05-05T10:00:00Z',
+        finished_at: null,
+        created_at: '2026-05-05T10:00:00Z',
+        error_message: null,
+        stale_reason: 'RUNNING job lock exceeded 300 seconds timeout.',
+        recommended_action: 'FORCE_CANCEL',
+        force_cancel_warning: 'Force-cancel releases active business locks owned by this job.',
+      },
+    ],
+    total: 1,
+    limit: 50,
+  })
+
+  assert.equal(result.items[0].recoveryHint, 'RUNNING job lock exceeded 300 seconds timeout.')
+  assert.equal(result.items[0].recommendedActionLabel, 'Force cancel')
+  assert.equal(
+    result.items[0].forceCancelWarning,
+    'Force-cancel releases active business locks owned by this job.',
+  )
+})

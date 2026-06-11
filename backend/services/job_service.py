@@ -422,6 +422,7 @@ def force_cancel_running_job_run(
             metadata_json={
                 "source": "admin",
                 "force": True,
+                "warning": "Force-cancel releases active business locks owned by this job and may leave partial work behind.",
                 "released_business_locks": [lock.public_id for lock in active_locks],
             },
         )

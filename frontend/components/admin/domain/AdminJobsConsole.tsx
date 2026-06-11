@@ -1,3 +1,6 @@
+'use client'
+
+import { useState } from 'react'
 import {
     AlertTriangle,
     Ban,
@@ -13,7 +16,7 @@ import {
 
 import type { AdminJobRunDetail, AdminJobStatus } from '@/lib/api'
 import type { AdminJobViewModel } from '@/lib/adapters/admin-jobs'
-import { getAdminJobStatusTone } from '@/lib/adapters/admin-jobs'
+import { formatAdminJobRecommendedAction, getAdminJobStatusTone } from '@/lib/adapters/admin-jobs'
 
 const STATUS_FILTERS: Array<{ value: AdminJobStatus | 'ALL'; label: string }> = [
     { value: 'ALL', label: 'All' },
@@ -24,6 +27,7 @@ const STATUS_FILTERS: Array<{ value: AdminJobStatus | 'ALL'; label: string }> = 
     { value: 'SUCCEEDED', label: 'Succeeded' },
     { value: 'CANCELLED', label: 'Cancelled' },
 ]
+const FORCE_CANCEL_CONFIRMATION = 'FORCE CANCEL'
 
 interface AdminJobsConsoleProps {
     jobs: AdminJobViewModel[]
@@ -67,6 +71,13 @@ export function AdminJobsConsole({
     onForceCancelJob,
 }: AdminJobsConsoleProps) {
     const selectedTone = selectedJob ? getAdminJobStatusTone(selectedJob.status) : null
+    const selectedRecommendedActionLabel = formatAdminJobRecommendedAction(selectedJob?.recommended_action)
+    const [forceCancelConfirmation, setForceCancelConfirmation] = useState({ jobPublicId: '', value: '' })
+    const activeForceCancelConfirmation =
+        selectedJob?.status === 'RUNNING' && forceCancelConfirmation.jobPublicId === selectedJob.public_id
+            ? forceCancelConfirmation.value
+            : ''
+    const isForceCancelConfirmed = activeForceCancelConfirmation.trim() === FORCE_CANCEL_CONFIRMATION
 
     return (
         <div className="space-y-6 pb-20 md:pb-8">
@@ -189,6 +200,17 @@ export function AdminJobsConsole({
                                                 {job.error_message}
                                             </span>
                                         )}
+                                        {job.recoveryHint && (
+                                            <span className="inline-flex items-center gap-1 text-amber-600">
+                                                <ShieldAlert className="h-3.5 w-3.5" />
+                                                {job.recoveryHint}
+                                            </span>
+                                        )}
+                                        {job.recommendedActionLabel && (
+                                            <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                                建议：{job.recommendedActionLabel}
+                                            </span>
+                                        )}
                                     </div>
                                 </button>
                             ))}
@@ -231,6 +253,34 @@ export function AdminJobsConsole({
                                 <Metric label="Next run" value={selectedJob.next_run_at ? new Date(selectedJob.next_run_at).toLocaleString('zh-CN') : 'None'} />
                             </div>
 
+                            {(selectedJob.stale_reason || selectedRecommendedActionLabel || selectedJob.force_cancel_warning) && (
+                                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+                                    <div className="flex items-start gap-3">
+                                        <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0" />
+                                        <div className="space-y-2">
+                                            {selectedJob.stale_reason && (
+                                                <p>
+                                                    <span className="font-bold">Stale reason：</span>
+                                                    {selectedJob.stale_reason}
+                                                </p>
+                                            )}
+                                            {selectedRecommendedActionLabel && (
+                                                <p>
+                                                    <span className="font-bold">Recommended action：</span>
+                                                    {selectedRecommendedActionLabel}
+                                                </p>
+                                            )}
+                                            {selectedJob.force_cancel_warning && (
+                                                <p>
+                                                    <span className="font-bold">Force-cancel warning：</span>
+                                                    {selectedJob.force_cancel_warning}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             <div>
                                 <h4 className="mb-3 text-sm font-bold">Business locks</h4>
                                 {selectedJob.business_locks.length === 0 ? (
@@ -254,35 +304,59 @@ export function AdminJobsConsole({
                                 )}
                             </div>
 
-                            <div className="flex gap-2">
-                                <button
-                                    type="button"
-                                    disabled={isActionRunning || !(selectedJob.status === 'FAILED' || selectedJob.status === 'RETRYING')}
-                                    onClick={() => onRequeueJob(selectedJob.public_id)}
-                                    className="btn btn-secondary flex-1 disabled:opacity-50"
-                                >
-                                    <PlayCircle className="mr-2 h-4 w-4" />
-                                    Requeue
-                                </button>
-                                <button
-                                    type="button"
-                                    disabled={isActionRunning || !(selectedJob.status === 'QUEUED' || selectedJob.status === 'RETRYING')}
-                                    onClick={() => onCancelJob(selectedJob.public_id)}
-                                    className="btn btn-outline flex-1 disabled:opacity-50"
-                                >
-                                    <Ban className="mr-2 h-4 w-4" />
-                                    Cancel
-                                </button>
-                                <button
-                                    type="button"
-                                    disabled={isActionRunning || selectedJob.status !== 'RUNNING'}
-                                    onClick={() => onForceCancelJob(selectedJob.public_id)}
-                                    className="btn btn-danger flex-1 disabled:opacity-50"
-                                    title="Force-cancel only applies to RUNNING jobs and releases active business locks owned by this job."
-                                >
-                                    <ShieldAlert className="mr-2 h-4 w-4" />
-                                    Force
-                                </button>
+                            <div className="space-y-3">
+                                {selectedJob.status === 'RUNNING' && (
+                                    <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-100">
+                                        <label className="block text-xs font-bold uppercase tracking-[0.18em] text-rose-500">
+                                            Type {FORCE_CANCEL_CONFIRMATION} to unlock force-cancel
+                                        </label>
+                                        <input
+                                            className="input mt-2 border-rose-200 bg-white text-sm dark:border-rose-900 dark:bg-slate-950"
+                                            value={activeForceCancelConfirmation}
+                                            onChange={(event) => setForceCancelConfirmation({
+                                                jobPublicId: selectedJob.public_id,
+                                                value: event.target.value,
+                                            })}
+                                            placeholder={FORCE_CANCEL_CONFIRMATION}
+                                        />
+                                        <p className="mt-2 text-xs">
+                                            Force-cancel is reserved for stale worker locks. It releases active business locks and records warning metadata.
+                                        </p>
+                                    </div>
+                                )}
+                                <div className="flex gap-2">
+                                    <button
+                                        type="button"
+                                        disabled={isActionRunning || !(selectedJob.status === 'FAILED' || selectedJob.status === 'RETRYING')}
+                                        onClick={() => onRequeueJob(selectedJob.public_id)}
+                                        className="btn btn-secondary flex-1 disabled:opacity-50"
+                                    >
+                                        <PlayCircle className="mr-2 h-4 w-4" />
+                                        Requeue
+                                    </button>
+                                    <button
+                                        type="button"
+                                        disabled={isActionRunning || !(selectedJob.status === 'QUEUED' || selectedJob.status === 'RETRYING')}
+                                        onClick={() => onCancelJob(selectedJob.public_id)}
+                                        className="btn btn-outline flex-1 disabled:opacity-50"
+                                    >
+                                        <Ban className="mr-2 h-4 w-4" />
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        disabled={isActionRunning || selectedJob.status !== 'RUNNING' || !isForceCancelConfirmed}
+                                        onClick={() => {
+                                            if (!isForceCancelConfirmed) return
+                                            onForceCancelJob(selectedJob.public_id)
+                                        }}
+                                        className="btn btn-danger flex-1 disabled:opacity-50"
+                                        title="Force-cancel only applies to RUNNING jobs and releases active business locks owned by this job."
+                                    >
+                                        <ShieldAlert className="mr-2 h-4 w-4" />
+                                        Force
+                                    </button>
+                                </div>
                             </div>
 
                             <JsonBlock title="Payload" value={selectedJob.payload} />

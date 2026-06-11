@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -32,6 +33,8 @@ router = APIRouter(
 )
 logger = get_structured_logger("admin")
 ADMIN_BACKUP_DIR = "backend/backups"
+DEFAULT_JOB_STALE_TIMEOUT_SECONDS = 30 * 60
+FORCE_CANCEL_WARNING = "Force-cancel releases active business locks owned by this job and may leave partial work behind."
 
 
 def _enum_value(value):
@@ -62,6 +65,59 @@ def _business_locks_for_job_run(db: Session, job_run: JobRun) -> list[BusinessLo
     )
 
 
+def _as_utc(value):
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _job_timeout_seconds(job_run: JobRun) -> int:
+    timeout_seconds = getattr(job_run.definition, "timeout_seconds", None)
+    return timeout_seconds or DEFAULT_JOB_STALE_TIMEOUT_SECONDS
+
+
+def _job_stale_reason(job_run: JobRun) -> str | None:
+    if job_run.status != JobRunStatus.RUNNING or not job_run.locked_at:
+        return None
+    locked_at = _as_utc(job_run.locked_at)
+    timeout_seconds = _job_timeout_seconds(job_run)
+    stale_after = locked_at + timedelta(seconds=timeout_seconds)
+    if stale_after >= datetime.now(timezone.utc):
+        return None
+    return f"RUNNING job lock exceeded {timeout_seconds} seconds timeout."
+
+
+def _job_recommended_action(job_run: JobRun, stale_reason: str | None) -> str | None:
+    if job_run.status == JobRunStatus.FAILED:
+        return "REQUEUE"
+    if job_run.status == JobRunStatus.RETRYING:
+        return "WAIT"
+    if job_run.status == JobRunStatus.QUEUED:
+        return "CANCEL"
+    if stale_reason:
+        return "FORCE_CANCEL"
+    if job_run.status == JobRunStatus.RUNNING:
+        return "WAIT"
+    return None
+
+
+def _job_force_cancel_warning(job_run: JobRun) -> str | None:
+    if job_run.status == JobRunStatus.RUNNING:
+        return FORCE_CANCEL_WARNING
+    return None
+
+
+def _job_recovery_metadata(job_run: JobRun) -> dict:
+    stale_reason = _job_stale_reason(job_run)
+    return {
+        "stale_reason": stale_reason,
+        "recommended_action": _job_recommended_action(job_run, stale_reason),
+        "force_cancel_warning": _job_force_cancel_warning(job_run),
+    }
+
+
 def _job_run_detail(job_run: JobRun, business_locks: list[BusinessLock] | None = None) -> dict:
     return {
         "public_id": job_run.public_id,
@@ -88,6 +144,7 @@ def _job_run_detail(job_run: JobRun, business_locks: list[BusinessLock] | None =
         "finished_at": job_run.finished_at,
         "created_at": job_run.created_at,
         "updated_at": job_run.updated_at,
+        **_job_recovery_metadata(job_run),
         "business_locks": [_business_lock_detail(business_lock) for business_lock in (business_locks or [])],
         "events": [
             {
@@ -122,6 +179,7 @@ def _job_run_summary(job_run: JobRun) -> dict:
         "finished_at": job_run.finished_at,
         "created_at": job_run.created_at,
         "error_message": job_run.error_message,
+        **_job_recovery_metadata(job_run),
     }
 
 def get_current_admin(current_user: User = Depends(get_current_user)):
