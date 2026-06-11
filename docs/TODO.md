@@ -43,16 +43,16 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 | Lifecycle Detail | `truth-first 体验已落地` | 单笔详情已优先展示 truth lifecycle、evidence、AI sidecar；latest active event reversal 走审计 `REVERSAL`，非最新 reversal、`OPEN` reversal、legacy hard delete/batch edit 已被保护为非普通路径。 |
 | Dashboard / Insights | `已重构为工作台形态` | Dashboard 保持宏观视图；Insights 已接入 auditable artifact 与 artifact detail；图表已有 schema/freshness 包装。 |
 | 前端依赖与质量 | `已完成 P8-P9F` | Next 16 / React 19 已升级；React 19 strict hooks lint 全局启用；前端 lint 已到 0 warning。 |
-| 文档状态 | `P14 已完成 / P15 待开发` | P10 文档、legacy inventory、observability、read-model marker、model modularization plan 已落地；P11 hard cutover、P12 platform contract hardening、P12B observability/error contract hardening、P13 Risk / review product features、P14 Reporting / export 已完成；P15-P19 专项计划已补齐。 |
+| 文档状态 | `P15 已完成 / P16 待开发` | P10 文档、legacy inventory、observability、read-model marker、model modularization plan 已落地；P11 hard cutover、P12 platform contract hardening、P12B observability/error contract hardening、P13 Risk / review product features、P14 Reporting / export、P15 AI analysis workflow 已完成；P16-P19 专项计划已补齐。 |
 
 ---
 
 ## 当前 Active Lane
 
-- 当前 active lane：P15 AI analysis workflow。
-- 当前计划：[2026-06-11-dev-p15-ai-analysis-workflow-plan.md](./superpowers/plans/2026-06-11-dev-p15-ai-analysis-workflow-plan.md)。
-- P15 第一执行任务：为 AI 分析助手补日期范围选择，并收敛请求/结果契约与回归测试。
-- 前一完成 lane：[2026-06-11-dev-p14-reporting-export-plan.md](./superpowers/plans/2026-06-11-dev-p14-reporting-export-plan.md)。
+- 当前 active lane：P16 Market data platform。
+- 当前计划：[2026-06-11-dev-p16-market-data-platform-plan.md](./superpowers/plans/2026-06-11-dev-p16-market-data-platform-plan.md)。
+- P16 第一执行任务：锁定 `/api/market/quote/{symbol}` 异步契约，修复 quote endpoint 未 `await` 的回归风险。
+- 前一完成 lane：[2026-06-11-dev-p15-ai-analysis-workflow-plan.md](./superpowers/plans/2026-06-11-dev-p15-ai-analysis-workflow-plan.md)。
 
 ### 后续阶段执行顺序
 
@@ -60,8 +60,8 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 |------|----------|----------|
 | P13 | `已完成` | [Risk / review product features](./superpowers/plans/2026-06-11-dev-p13-risk-review-product-plan.md) |
 | P14 | `已完成` | [Reporting and export](./superpowers/plans/2026-06-11-dev-p14-reporting-export-plan.md) |
-| P15 | `待开发` | [AI analysis workflow](./superpowers/plans/2026-06-11-dev-p15-ai-analysis-workflow-plan.md) |
-| P16 | `已计划` | [Market data platform](./superpowers/plans/2026-06-11-dev-p16-market-data-platform-plan.md) |
+| P15 | `已完成` | [AI analysis workflow](./superpowers/plans/2026-06-11-dev-p15-ai-analysis-workflow-plan.md) |
+| P16 | `待开发` | [Market data platform](./superpowers/plans/2026-06-11-dev-p16-market-data-platform-plan.md) |
 | P17 | `已计划` | [Admin operations](./superpowers/plans/2026-06-11-dev-p17-admin-operations-plan.md) |
 | P18 | `已计划` | [Chart renderer migration](./superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md) |
 | P19 | `已计划` | [Release readiness](./superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md) |
@@ -100,6 +100,7 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 - [x] P19：创建 Release readiness implementation plan。
 - [x] P13：实现组合风险监控、单日亏损上限、风险提醒和 Timeline/Review Inbox 风险行动卡。
 - [x] P14：补齐导入模板说明、周报 PDF 渲染服务、Insights PDF 导出接口、前端导出按钮和导出 runbook。
+- [x] P15：补齐 AI 分析日期范围验证、artifact evidence refs、分析历史接口、Insights 日期选择与复访入口。
 
 ---
 
@@ -191,8 +192,10 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 - [x] 前端在 Insights 页面新增 AI 分析助手卡片。
 - [x] 前端实现分析类型选择器。
 - [x] 前端实现分析结果展示。
-- [ ] 前端实现日期范围选择器。
-- [ ] 前后端补 AI 分析助手回归测试或最小验收用例。
+- [x] 前端实现日期范围选择器。
+- [x] 前后端补 AI 分析助手回归测试或最小验收用例。
+- [x] 后端分析 artifact 写入 `date-range:<start>:<end>` refs 与 payload。
+- [x] 后端提供 `/api/insights/analyze/history`，前端展示近期分析记录并可跳转 artifact detail。
 
 ### 市场数据与验证
 

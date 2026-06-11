@@ -14,8 +14,8 @@
 - [superpowers/specs/2026-04-07-frontend-experience-redesign-design.md](./superpowers/specs/2026-04-07-frontend-experience-redesign-design.md) 是前端体验重设计基线。
 - [superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md](./superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md) 是平台 + 前端迁移顺序基线。
 - [TODO.md](./TODO.md) 是当前执行清单。
-- [superpowers/plans/2026-06-11-dev-p13-risk-review-product-plan.md](./superpowers/plans/2026-06-11-dev-p13-risk-review-product-plan.md) 是当前 active lane，负责风险 read model、风险提醒、Dashboard 风险展示和 Timeline/Review Inbox 风险行动卡。
-- P14-P19 后续计划已创建，按 `docs/TODO.md` 的阶段表顺序执行，不要跳过每个计划里的验证门。
+- [superpowers/plans/2026-06-11-dev-p16-market-data-platform-plan.md](./superpowers/plans/2026-06-11-dev-p16-market-data-platform-plan.md) 是当前 active lane，负责市场数据 provider routing、quote freshness、degradation metadata 与验证方案。
+- P16-P19 后续计划已创建，按 `docs/TODO.md` 的阶段表顺序执行，不要跳过每个计划里的验证门。
 - [release-rollback-playbook.md](./release-rollback-playbook.md) 是 truth writes、Timeline snapshot、legacy mutation guard 的发布与回滚手册。
 - [current-state-baseline.md](./current-state-baseline.md) 是 2026-04-05 历史审计快照，不再作为当前实现依据。
 - [顶层设计.md](./顶层设计.md) 已降级为历史草案。
@@ -69,6 +69,7 @@
 - `/api/timeline/home`：Timeline 首页 read model，默认 `SNAPSHOT_ONLY`，由 `DerivedTimelineSnapshot` 与 auditable insight artifacts 驱动；`timeline_legacy_mixed_feed_enabled` 可作为 rollback flag 恢复 legacy mixed feed。
 - `/api/dashboard`
 - `/api/insights`
+- `/api/insights/analyze/history`
 - `/api/v1/insights/runs`
 - `/api/v1/insights/artifacts`
 - `/api/admin/jobs`
@@ -121,11 +122,19 @@
 | Timeline 首页 | `truth/snapshot 默认` | Timeline / Review Inbox 已是产品中心；Timeline events 与 Review Inbox 默认使用 `DerivedTimelineSnapshot` / auditable insight artifacts，legacy mixed feed 只作为 rollback。 |
 | Lifecycle Detail | `truth-first 已落地` | 单笔详情已展示 truth lifecycle、evidence、ledger cash effects、AI sidecar；canonical review lives in `PositionEvent` narrative，legacy review 只作为 migration context 展示；latest active event reversal 会追加 `REVERSAL`，非最新 reversal 和 `OPEN` reversal 暂拒绝，直到补偿事件或 void/archive UX 明确。 |
 | Dashboard | `宏观视图已重构` | 已从默认首页退到宏观视图；chart schema/freshness/trust 包装已接入。 |
-| Insights / AI | `artifact-first 已启动` | `InsightRun / InsightArtifact`、artifact detail、证据链接展示已落地；日期范围选择器仍待补。 |
+| Insights / AI | `artifact-first 已落地` | `InsightRun / InsightArtifact`、artifact detail、证据链接展示已落地；AI 分析请求支持成对日期范围、366 天上限校验，artifact payload/source refs/evidence refs 会写入 `date-range:<start>:<end>`，`/api/insights/analyze/history` 支持复访近期分析。 |
 | 异步任务 | `基础已落地` | Job model、outbox relay、worker CLI、business lock、idempotency、admin jobs UI/API 已落地。 |
 | 市场数据 | `可用 / 待拆分` | 多市场 provider 可用；orchestration/provider mapping 和可重复验证方案仍待收敛。 |
-| 风控预警 | `未开发` | 组合风险、单日亏损上限、实时通知仍在 backlog。 |
-| PDF 导出 | `未开发` | CSV/Excel 导入已完成，PDF 报告导出仍在 backlog。 |
+| 风控预警 | `P13 已落地` | 组合风险、单日亏损上限、风险提醒、Dashboard 风险栏与 Timeline/Review Inbox 风险行动卡已完成 V1；不含 SSE/WebSocket。 |
+| PDF 导出 | `P14 已落地` | 导入模板说明、周报 PDF 渲染服务、Insights PDF 导出接口、前端导出按钮和导出 runbook 已完成。 |
+
+### 5.1 Insights AI 日期范围与复访契约
+
+- `POST /api/insights/analyze` 的 `start_date` 与 `end_date` 必须同时提供或同时省略。
+- 日期范围是 inclusive；`start_date > end_date` 或超过 366 天会返回 P12B 标准错误 envelope。
+- 生成 artifact 时，`InsightRun.input_refs`、artifact evidence refs、trust source refs 和 payload `date_range` 都会包含同一个范围标记。
+- `GET /api/insights/analyze/history?limit=5` 返回当前用户近期分析 artifact，前端 `/insights` 会展示为“近期分析记录”，并链接到 `/insights/{artifact_public_id}`。
+- 前端日期默认范围由 `frontend/lib/adapters/analysis.ts` 计算，为当前日期向前 30 个 calendar day inclusive。
 
 ---
 
@@ -271,8 +280,8 @@ npm run build
 
 优先级以 [TODO.md](./TODO.md) 为准。当前建议顺序：
 
-1. P13：Risk / review product features，按已创建计划从风险 read model 测试开始，开发组合风险监控、单日亏损上限、风险提醒和 Timeline/Review Inbox 风险行动卡。
-2. P14-P19：专项计划已创建，依次执行 Reporting/export、AI analysis workflow、Market data platform、Admin operations、Chart renderer migration、Release readiness。
+1. P16：Market data platform，先锁定 quote endpoint async contract，再拆 provider routing、normalized adapters、freshness/degradation metadata。
+2. P17-P19：专项计划已创建，依次执行 Admin operations、Chart renderer migration、Release readiness。
 3. P10D 剩余项：停止扩张 `frontend/lib/api.ts`，让新页面优先走 read-model adapter 或 generated contract。
 4. P10E 后续执行：在 truth/legacy 边界稳定后拆分 `backend/models.py`。
 
