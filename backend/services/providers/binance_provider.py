@@ -2,9 +2,13 @@
 Binance Provider - 加密货币行情数据
 """
 from binance.spot import Spot
-from binance.spot import Spot
 from typing import Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timezone
+
+from observability import get_structured_logger, log_event
+
+
+logger = get_structured_logger("market_data.providers.binance")
 
 
 def get_crypto_quote(symbol: str) -> Dict[str, Any]:
@@ -36,6 +40,26 @@ def get_crypto_quote(symbol: str) -> Dict[str, Any]:
         }
     except Exception as e:
         raise Exception(f"Binance 查询失败: {str(e)}")
+
+
+def get_normalized_quote(symbol: str) -> Dict[str, Any]:
+    symbol_upper = symbol.upper().replace('-', '').replace('/', '')
+    raw = get_crypto_quote(symbol_upper)
+    return {
+        "symbol": symbol_upper,
+        "provider": "binance",
+        "price": raw.get("c"),
+        "previous_close": raw.get("pc"),
+        "high": raw.get("h"),
+        "low": raw.get("l"),
+        "open": raw.get("o"),
+        "change_percent": raw.get("change_percent", raw.get("dp")),
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "freshness": "FRESH",
+        "degraded": False,
+        "source_refs": ["provider:binance", f"symbol:{symbol_upper}"],
+        "raw": raw,
+    }
 
 
 def get_crypto_price_simple(symbol: str) -> float:
@@ -106,5 +130,5 @@ def get_klines(symbol: str, interval: str, start_time: int, end_time: int) -> Li
             
         return result
     except Exception as e:
-        print(f"Binance klines error for {symbol}: {e}")
+        log_event(logger, "warning", "binance_klines_failed", symbol=symbol, error=str(e))
         return []

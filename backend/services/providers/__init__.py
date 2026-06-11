@@ -1,1 +1,3 @@
-# Providers package
+from . import akshare_provider, binance_provider, finnhub_provider
+
+__all__ = ["akshare_provider", "binance_provider", "finnhub_provider"]

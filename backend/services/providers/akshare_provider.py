@@ -9,7 +9,7 @@ os.environ['no_proxy'] = '*'
 
 from typing import Dict, Any, List
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 
 logger = logging.getLogger(__name__)
@@ -18,6 +18,38 @@ logger = logging.getLogger(__name__)
 # Format: {'key': {'data': df, 'time': datetime}}
 _BULK_CACHE = {}
 _BULK_CACHE_TTL = 3600 * 4  # 4 Hours TTL (User asked for "once per day", setting generous TTL)
+
+
+def _normalize_quote(symbol: str, market: str, raw: Dict[str, Any]) -> Dict[str, Any]:
+    symbol_upper = symbol.upper()
+    return {
+        "symbol": symbol_upper,
+        "provider": "akshare",
+        "price": raw.get("c"),
+        "previous_close": raw.get("pc"),
+        "high": raw.get("h"),
+        "low": raw.get("l"),
+        "open": raw.get("o"),
+        "change_percent": raw.get("change_percent", raw.get("dp")),
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "freshness": "FRESH",
+        "degraded": False,
+        "source_refs": ["provider:akshare", f"symbol:{symbol_upper}", f"market:{market}"],
+        "raw": raw,
+    }
+
+
+def get_normalized_quote(symbol: str, market: str) -> Dict[str, Any]:
+    market_upper = market.upper()
+    if market_upper == "A_SHARE":
+        return _normalize_quote(symbol, market_upper, get_a_stock_quote(symbol))
+    if market_upper == "HK":
+        return _normalize_quote(symbol, market_upper, get_hk_stock_quote(symbol))
+    if market_upper in {"FUND", "CN_FUND"}:
+        return _normalize_quote(symbol, market_upper, get_fund_quote(symbol))
+    if market_upper == "FOREX":
+        return _normalize_quote(symbol, market_upper, get_forex_quote(symbol))
+    raise ValueError(f"Unsupported AKShare market: {market}")
 
 def _get_cached_bulk_data(key: str, fetch_func) -> pd.DataFrame:
     """Helper to get bulk data with caching"""
