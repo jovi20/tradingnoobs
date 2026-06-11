@@ -5,6 +5,8 @@ from database import get_db
 from models import BusinessLock, FeatureFlag, IntegrationCredential, JobRun, JobRunStatus, PlatformSetting, SystemSetting, User
 from schemas import (
     AdminBackupResponse,
+    AdminPasswordResetResponse,
+    AdminUserOperationResponse,
     FeatureFlagResponse,
     FeatureFlagUpdate,
     IntegrationCredentialResponse,
@@ -17,6 +19,7 @@ from schemas import (
 from routers.auth import get_current_user
 import httpx
 from observability import get_structured_logger, log_event
+from services.admin_user_service import AdminUserNotFound, promote_user_to_admin, reset_user_password
 from services.backup_service import BackupProviderNotConfigured, trigger_database_backup
 from services.credential_service import decrypt_secret, encrypt_secret, mask_secret
 from services.job_service import cancel_job_run, force_cancel_running_job_run, requeue_job_run
@@ -164,6 +167,52 @@ async def trigger_database_backup_endpoint(
         database_backend=backup_result["database_backend"],
     )
     return AdminBackupResponse(**backup_result)
+
+
+@router.post("/users/{user_public_id}/promote", response_model=AdminUserOperationResponse)
+async def promote_admin_user_endpoint(
+    user_public_id: str,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    try:
+        result = promote_user_to_admin(db, user_public_id=user_public_id, actor_user=current_admin)
+    except AdminUserNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="USER_NOT_FOUND") from exc
+
+    db.commit()
+    log_event(
+        logger,
+        "info",
+        "admin_user_promoted",
+        actor_user_public_id=current_admin.public_id,
+        target_user_public_id=user_public_id,
+    )
+    return AdminUserOperationResponse(**result)
+
+
+@router.post("/users/{user_public_id}/reset-password", response_model=AdminPasswordResetResponse)
+async def reset_admin_user_password_endpoint(
+    user_public_id: str,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    try:
+        result = reset_user_password(db, user_public_id=user_public_id, actor_user=current_admin)
+    except AdminUserNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="USER_NOT_FOUND") from exc
+
+    db.commit()
+    log_event(
+        logger,
+        "info",
+        "admin_user_password_reset",
+        actor_user_public_id=current_admin.public_id,
+        target_user_public_id=user_public_id,
+        revoked_session_count=result["revoked_session_count"],
+        revoked_token_count=result["revoked_token_count"],
+    )
+    return AdminPasswordResetResponse(**result)
 
 
 @router.get("/jobs/{job_public_id}")

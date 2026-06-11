@@ -927,6 +927,23 @@ class AdminBackupResponse(BaseModel):
     message: str
 
 
+class AdminUserOperationResponse(BaseModel):
+    status: AdminOperationStatus
+    user_public_id: str
+    role: str
+    message: str
+
+
+class AdminPasswordResetResponse(BaseModel):
+    status: AdminOperationStatus
+    user_public_id: str
+    temporary_password: str
+    active_sessions_revoked: bool
+    revoked_session_count: int
+    revoked_token_count: int
+    message: str
+
+
 # ============== Position & Batch Schemas ==============
 
 class TradeBatchCreate(BaseModel):
