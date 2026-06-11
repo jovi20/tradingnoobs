@@ -4,7 +4,7 @@
 执行分支：`dev`
 当前 HEAD：`d6fe118 docs: complete p18 chart renderer migration gate`
 比较范围：`origin/dev..dev`
-当前状态：`P19_TASK_3_MIGRATION_REHEARSAL_RECORDED`
+当前状态：`P19_TASK_4_BROWSER_SMOKE_RECORDED`
 
 本文档是 P19 发布就绪闸门的证据矩阵。它不代表已经可以发布；只有自动化验证、迁移演练、authenticated browser smoke 和 release decision 都补齐后，才能进入 merge/tag/staging 决策。
 
@@ -184,20 +184,27 @@ Current evidence carried into P19:
 - `/insights` loaded after clean reload with no `Failed to fetch` state and no browser console errors.
 - Mobile 390px viewport showed no horizontal overflow on `/dashboard` or `/insights`.
 
-P19 Task 4 must still perform release-grade authenticated browser smoke:
-- `/`
-- `/timeline`
-- `/dashboard`
-- `/positions`
-- `/positions/[id]`
-- `/positions/[id]/add-batch`
-- `/positions/new`
-- `/insights`
-- `/settings`
-- `/admin/jobs` as admin
+P19 Task 4 release-grade authenticated browser smoke:
+- Smoke environment: isolated local SQLite database at `/private/tmp/tradingnoobs_p19_smoke_20260611.db`, backend on `127.0.0.1:8000`, frontend on `localhost:51559`.
+- Fixture user: `p19-smoke-user-20260611@example.com`.
+- Fixture admin: `p19-smoke-admin-20260611@example.com`.
+- Fixture data: one USD smoke account and one open AAPL long position with legacy public id `cd001766-034e-41af-b5d0-fabb11852a00`.
 
-Important boundary:
-- P18 browser smoke used an empty portfolio. P19 should add or use a fixture with populated trading data before calling chart visual coverage release-ready.
+| Route | Result | Visible primary content | Console / fetch status |
+|-------|--------|-------------------------|------------------------|
+| `/` | `PASS` | Redirected to Timeline-first home, Review Inbox, AAPL risk action context. | No browser console errors; no `Failed to fetch`. |
+| `/timeline` | `PASS` | 决策时间流, 主时间线, Review Inbox with AAPL concentration alert. | No browser console errors; no `Failed to fetch`. |
+| `/dashboard` | `PASS` | Macro Command Center, 资金曲线, 风险预警, AAPL allocation/risk content. | No browser console errors; no `Failed to fetch`. |
+| `/positions` | `PASS` | 交易记录 with AAPL, P19 Smoke Account, open position PnL. | No browser console errors; no `Failed to fetch`. |
+| `/positions/cd001766-034e-41af-b5d0-fabb11852a00` | `PASS` | AAPL lifecycle detail, event spine, evidence/cash sections. | No browser console errors; no `Failed to fetch`. |
+| `/positions/cd001766-034e-41af-b5d0-fabb11852a00/add-batch?type=ENTRY` | `PASS` | 加仓 / 平仓 form with truth write path explanation. | No browser console errors; no `Failed to fetch`. |
+| `/positions/new` | `PASS` | 新增交易 form with P19 Smoke Account selectable. | No browser console errors; no `Failed to fetch`. |
+| `/insights` | `PASS` | AI 洞察, Auditable Insight Artifacts, AI 分析助手, 周报历史. | No browser console errors; no `Failed to fetch`. |
+| `/settings` | `PASS` | 设置, 实盘账户管理, P19 Smoke Account, appearance/data sections. | No browser console errors; no `Failed to fetch`. |
+| `/admin/jobs` | `PASS` | 后台任务控制台, job status cards, empty job list as admin. | No browser console errors; no `Failed to fetch`. |
+
+Important observation:
+- `/dashboard`, `/positions`, and `/positions/new` needed a longer post-load wait than the first pass to let account/position data settle. After recheck, all three routes showed expected primary content and no browser errors.
 
 ---
 

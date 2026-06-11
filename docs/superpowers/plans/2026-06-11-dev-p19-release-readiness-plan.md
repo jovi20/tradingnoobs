@@ -152,9 +152,9 @@ git commit -m "docs: record migration rehearsal"
 
 **Goal:** verify the real app flows after login, including the P11 blocker that remains open.
 
-- [ ] Start backend and frontend using the normal local commands for this repo.
-- [ ] Log into the app with a test user.
-- [ ] Smoke these routes:
+- [x] Start backend and frontend using the normal local commands for this repo.
+- [x] Log into the app with a test user.
+- [x] Smoke these routes:
   - `/`
   - `/timeline`
   - `/dashboard`
@@ -165,14 +165,14 @@ git commit -m "docs: record migration rehearsal"
   - `/insights`
   - `/settings`
   - `/admin/jobs` as admin.
-- [ ] For each route, record:
+- [x] For each route, record:
   - loaded or failed.
   - visible primary content.
   - console errors.
   - network errors.
-- [ ] If a blocking issue appears, fix it in a separate commit before continuing.
-- [ ] Update `docs/release-readiness-checklist.md` with smoke evidence.
-- [ ] Commit:
+- [x] If a blocking issue appears, fix it in a separate commit before continuing.
+- [x] Update `docs/release-readiness-checklist.md` with smoke evidence.
+- [x] Commit:
 
 ```bash
 git add docs/release-readiness-checklist.md
