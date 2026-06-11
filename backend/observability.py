@@ -94,6 +94,20 @@ def build_error_response_payload(
     }
 
 
+def _json_safe_validation_errors(errors: list[dict]) -> list[dict]:
+    safe_errors: list[dict] = []
+    for error in errors:
+        safe_error = dict(error)
+        ctx = safe_error.get("ctx")
+        if isinstance(ctx, dict):
+            safe_error["ctx"] = {
+                key: str(value) if isinstance(value, Exception) else value
+                for key, value in ctx.items()
+            }
+        safe_errors.append(safe_error)
+    return safe_errors
+
+
 def _request_id_from_state_or_headers(request: Request) -> str:
     request_id = getattr(request.state, "request_id", None)
     return get_or_create_request_id(request_id or request.headers.get(REQUEST_ID_HEADER))
@@ -119,7 +133,7 @@ def add_error_handlers(app: FastAPI) -> None:
         request_id = _request_id_from_state_or_headers(request)
         payload = build_error_response_payload(
             code=make_error_code("validation", "request_invalid"),
-            detail=exc.errors(),
+            detail=_json_safe_validation_errors(exc.errors()),
             message="Request validation failed",
             request_id=request_id,
             status_code=422,

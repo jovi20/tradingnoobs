@@ -1,7 +1,7 @@
 """
 Trading Noobs Backend - Pydantic Schemas
 """
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
 from typing import Any, Dict, Generic, List, Optional, TypeVar
 from datetime import datetime, date
 from decimal import Decimal
@@ -583,6 +583,19 @@ class AnalysisRequest(BaseModel):
     analysis_type: AnalysisType
     start_date: Optional[date] = None
     end_date: Optional[date] = None
+
+    @model_validator(mode="after")
+    def validate_date_range(self):
+        if (self.start_date is None) != (self.end_date is None):
+            raise ValueError("start_date and end_date must be supplied together")
+
+        if self.start_date and self.end_date:
+            if self.start_date > self.end_date:
+                raise ValueError("start_date must be before or equal to end_date")
+            if (self.end_date - self.start_date).days + 1 > 366:
+                raise ValueError("analysis date range cannot exceed 366 inclusive days")
+
+        return self
 
 
 class AnalysisResponse(BaseModel):
