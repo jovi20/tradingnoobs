@@ -42,7 +42,7 @@ Frontend:
 
 **Goal:** create one checklist that says exactly what is in the release.
 
-- [ ] Create `docs/release-readiness-checklist.md` with sections:
+- [x] Create `docs/release-readiness-checklist.md` with sections:
   - release branch and commit range.
   - included lanes.
   - excluded lanes.
@@ -51,7 +51,7 @@ Frontend:
   - browser smoke evidence.
   - rollback steps.
   - known residual risks.
-- [ ] Record current branch and commit:
+- [x] Record current branch and commit:
 
 ```bash
 git status --short --branch
@@ -59,8 +59,8 @@ git log -1 --oneline
 git log --oneline origin/dev..dev
 ```
 
-- [ ] Record the exact P13-P18 lane completion states from `docs/TODO.md`.
-- [ ] Commit:
+- [x] Record the exact P13-P18 lane completion states from `docs/TODO.md`.
+- [x] Commit:
 
 ```bash
 git add docs/release-readiness-checklist.md docs/TODO.md

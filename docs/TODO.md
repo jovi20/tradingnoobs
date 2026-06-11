@@ -235,7 +235,7 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 
 专项计划：[P19 Release readiness](./superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md)
 
-- [ ] 明确本次 release scope 包含哪些 P13-P18 lane。
+- [x] 明确本次 release scope 包含哪些 P13-P18 lane。
 - [ ] 完成后端、前端、lint、Node tests、`git diff --check` 全量验证。
 - [ ] 完成 Alembic、truth sync、derived timeline refresh 的迁移与回填演练。
 - [ ] 完成 authenticated browser smoke，覆盖 P11 遗留的 `/positions`、`/positions/[id]`、`/positions/[id]/add-batch`。

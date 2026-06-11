@@ -1,0 +1,223 @@
+# Trading Noobs P19 Release Readiness Checklist
+
+更新时间：2026-06-11
+执行分支：`dev`
+当前 HEAD：`d6fe118 docs: complete p18 chart renderer migration gate`
+比较范围：`origin/dev..dev`
+当前状态：`P19_TASK_1_SCOPE_FROZEN`
+
+本文档是 P19 发布就绪闸门的证据矩阵。它不代表已经可以发布；只有自动化验证、迁移演练、authenticated browser smoke 和 release decision 都补齐后，才能进入 merge/tag/staging 决策。
+
+---
+
+## 1. Branch And Commit Range
+
+当前分支状态：
+
+```text
+## dev...origin/dev [ahead 54]
+ M frontend/next-env.d.ts
+ M frontend/tsconfig.tsbuildinfo
+?? docs/superpowers/demos/
+```
+
+说明：
+- `frontend/next-env.d.ts` 与 `frontend/tsconfig.tsbuildinfo` 是本地前端验证生成项，不纳入 P19 文档提交。
+- `docs/superpowers/demos/` 是既有未跟踪用户内容，不纳入 P19 提交。
+- 本轮不创建 PR、不 merge 到 `main`、不 tag release，除非用户后续明确要求。
+
+`origin/dev..dev` 提交清单：
+
+```text
+d6fe118 docs: complete p18 chart renderer migration gate
+e5938b5 chore: remove recharts dependency
+fbd5bd5 feat: migrate portfolio sankey to svg renderer
+f7f13d7 feat: migrate standard charts to svg renderers
+438c164 feat: add internal chart geometry helpers
+22c675f test: guard chart renderer imports
+3989d51 docs: complete p17 admin operations gate
+1ff6303 feat: add admin operations console
+ebae744 feat: harden admin job recovery ux
+3a2161e feat: add admin user operations
+9729589 feat: add admin database backup trigger
+8071284 docs: complete p16 market data platform gate
+ae50afc feat: show market data freshness metadata
+d6f45fa feat: add market data freshness metadata
+377a632 feat: normalize market provider adapters
+907cb07 feat: add market provider routing contracts
+c9bf3f7 fix: await market quote endpoint
+cf8b356 docs: complete p15 ai analysis workflow gate
+c071a3b feat: add date ranged ai analysis workflow
+e1d125f feat: add ai analysis history endpoint
+f2fbe63 feat: attach date range evidence to ai analysis artifacts
+2f7da40 feat: validate ai analysis date ranges
+ebed361 docs: complete p14 reporting export gate
+da80ccd feat: add weekly report pdf export action
+e8511ae feat: expose weekly report pdf export
+1bc6875 feat: add weekly report pdf renderer
+71bf0a9 docs: document import template
+8d442e7 docs: complete p13 risk review gate
+d01749f feat: add risk action cards to timeline
+800867a feat: surface risk alerts on dashboard
+6b2f26f feat: expose portfolio risk summary
+a3a4969 docs: plan p13 through p19 roadmap
+755836c docs: complete p12b observability gate
+35a6336 chore: replace business prints with structured logs
+0643e94 feat: add structured logging helper
+cda1a3f feat: add backend error response contract
+5c1bd4c docs: complete p12 contract hardening gate
+31ab8ef docs: add p11 rollback playbook
+1c06a7a chore: add generated contract boundary
+ac37043 test: snapshot core api contracts
+9af3762 test: freeze frontend legacy dto boundaries
+7207fb5 docs: complete p11 hard cutover gate
+b06f231 feat: isolate legacy trading controls
+2c82e54 feat: default timeline to truth snapshots
+715816f feat: guard destructive legacy mutations
+e9fbafe feat: protect truth narrative from legacy review writes
+a7fa1da feat: sync new positions to truth lifecycle
+5a70275 feat: harden truth-first trading writes
+410df97 docs: plan p11 truth hard cutover
+f4c5abe docs: plan backend model modularization
+824d101 docs: mark handwritten read model types
+a205e77 feat: add request observability middleware
+c4a9b4e docs: inventory legacy truth cutover paths
+f86e72e docs: sync dev progress and p10 plan
+```
+
+---
+
+## 2. Included Lanes
+
+本次 P19 release scope 包含 P13-P18 全部已完成 lane：
+
+| Lane | 状态 | 关键提交 | 发布范围说明 |
+|------|------|----------|--------------|
+| P13 Risk Review Product Features | `INCLUDED_COMPLETE` | `6b2f26f`、`800867a`、`d01749f`、`8d442e7` | 组合风险、单日亏损上限、Dashboard 风险栏、Timeline/Review Inbox 风险行动卡。 |
+| P14 Reporting And Export | `INCLUDED_COMPLETE` | `71bf0a9`、`1bc6875`、`e8511ae`、`da80ccd`、`ebed361` | 导入模板说明、周报 PDF 渲染、Insights PDF 导出接口与前端操作。 |
+| P15 AI Analysis Workflow | `INCLUDED_COMPLETE` | `2f7da40`、`f2fbe63`、`e1d125f`、`c071a3b`、`cf8b356` | 日期范围校验、artifact evidence refs、分析历史接口、Insights 复访入口。 |
+| P16 Market Data Platform | `INCLUDED_COMPLETE` | `907cb07`、`377a632`、`d6f45fa`、`ae50afc`、`8071284` | provider routing、normalized adapters、quote freshness/degradation metadata、前端 freshness 标签。 |
+| P17 Admin Operations | `INCLUDED_COMPLETE` | `9729589`、`3a2161e`、`ebae744`、`1ff6303`、`3989d51` | 数据库备份触发、管理员晋升、密码重置、job recovery UX、`/admin/ops`。 |
+| P18 Chart Renderer Migration | `INCLUDED_COMPLETE` | `22c675f`、`438c164`、`f7f13d7`、`fbd5bd5`、`e5938b5`、`d6fe118` | Recharts import guard、内部 SVG renderer、Portfolio Sankey SVG、`recharts` 依赖移除。 |
+
+Prerequisite scope also present in the same commit range:
+- P11 truth hard cutover gate.
+- P12 platform contract hardening.
+- P12B observability and error contract hardening.
+- P10 progress/docs/model modularization planning.
+
+## 3. Excluded Lanes
+
+No P13-P18 lane is intentionally excluded from this release-readiness gate.
+
+Not included as release-ready feature work:
+- P10B final legacy model/route/DTO deletion remains future cleanup.
+- P10D remaining API DTO contraction remains future cleanup.
+- P10E physical `backend/models.py` split remains future cleanup.
+
+---
+
+## 4. Verification Evidence
+
+Current evidence carried into P19:
+- P18 completion gate ran backend full suite: 222 tests OK.
+- P18 completion gate ran frontend typecheck: exit 0.
+- P18 completion gate ran frontend lint: exit 0.
+- P18 completion gate ran frontend Node tests: 119 tests OK.
+- P18 completion gate ran static Recharts scan: no Recharts import/dependency matches.
+- P18 completion gate ran `git diff --check`: exit 0.
+
+P19 Task 2 must still re-run and record fresh release-gate evidence:
+- Backend full suite.
+- Frontend typecheck.
+- Frontend lint.
+- Frontend Node tests.
+- `git diff --check`.
+- `git status --short --branch`.
+
+Known benign warnings to track:
+- Backend market tests may warn about offline provider fallback or Yahoo/YFinance DNS resolution.
+- Frontend Node tests may warn about `MODULE_TYPELESS_PACKAGE_JSON`.
+
+---
+
+## 5. Migration Evidence
+
+Current status: `PENDING_P19_TASK_3`.
+
+Required before release decision:
+- Alembic chain test.
+- Truth sync/backfill targeted tests.
+- Derived timeline refresh targeted tests.
+- Documented command order:
+  - database backup.
+  - Alembic upgrade.
+  - truth sync/backfill command or test-backed service path.
+  - derived timeline refresh.
+  - smoke check.
+
+---
+
+## 6. Browser Smoke Evidence
+
+Current evidence carried into P19:
+- P18 authenticated smoke used isolated local SQLite and temporary user `p18-smoke-20260611@example.com`.
+- `/timeline` loaded after login with authenticated navigation.
+- `/dashboard` loaded chart cards in empty-data state with SVG output and no browser console errors.
+- `/insights` loaded after clean reload with no `Failed to fetch` state and no browser console errors.
+- Mobile 390px viewport showed no horizontal overflow on `/dashboard` or `/insights`.
+
+P19 Task 4 must still perform release-grade authenticated browser smoke:
+- `/`
+- `/timeline`
+- `/dashboard`
+- `/positions`
+- `/positions/[id]`
+- `/positions/[id]/add-batch`
+- `/positions/new`
+- `/insights`
+- `/settings`
+- `/admin/jobs` as admin
+
+Important boundary:
+- P18 browser smoke used an empty portfolio. P19 should add or use a fixture with populated trading data before calling chart visual coverage release-ready.
+
+---
+
+## 7. Rollback Steps
+
+Current source of truth:
+- [release-rollback-playbook.md](./release-rollback-playbook.md)
+
+P19 Task 3 and Task 5 must confirm rollback coverage for included lanes:
+- Truth writes and legacy mutation guards.
+- Timeline snapshot fallback.
+- P13 risk alerts display/read-model behavior.
+- P14 PDF export failure handling.
+- P15 AI analysis workflow/artifacts.
+- P16 market provider routing/freshness fallback.
+- P17 admin backup/user operations safety.
+- P18 internal SVG chart renderer and Recharts dependency removal.
+
+---
+
+## 8. Known Residual Risks
+
+- Authenticated release smoke for P11 legacy/truth routes is still pending.
+- Populated chart visual smoke is still pending; P18 only covered authenticated empty-state chart cards.
+- External market data live provider validation depends on network/API keys; P16 has repeatable provider-routing tests but live provider quality remains environment-dependent.
+- PostgreSQL backup provider behavior requires production-like database configuration; SQLite backup path is covered locally.
+- Generated local files remain dirty after frontend checks and must not be staged unless intentionally regenerated.
+
+---
+
+## 9. Release Decision
+
+Current decision: `PENDING`.
+
+Allowed final values:
+- `READY_TO_MERGE`
+- `READY_FOR_STAGING_ONLY`
+- `BLOCKED`
+
+Decision cannot be updated until P19 Tasks 2-4 are complete or explicitly blocked with evidence.
