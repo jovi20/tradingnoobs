@@ -105,12 +105,12 @@ Backend response shape for `GET /api/risk/summary`:
 
 **Goal:** compute deterministic risk summary and alerts without touching UI.
 
-- [ ] Write failing unit tests in `backend/tests/test_risk_alert_service.py`:
+- [x] Write failing unit tests in `backend/tests/test_risk_alert_service.py`:
   - `test_daily_loss_warning_crosses_three_percent_threshold`
   - `test_daily_loss_critical_crosses_five_percent_threshold`
   - `test_symbol_concentration_alert_uses_gross_exposure`
   - `test_no_alerts_for_empty_portfolio_returns_fresh_empty_summary`
-- [ ] Run targeted test and confirm RED:
+- [x] Run targeted test and confirm RED:
 
 ```bash
 cd backend
@@ -119,13 +119,13 @@ cd backend
 
 Expected: import failure for `services.risk_alert_service`.
 
-- [ ] Create `backend/services/risk_alert_service.py` with:
+- [x] Create `backend/services/risk_alert_service.py` with:
   - `RiskAlertSeverity = Literal["INFO", "NOTICE", "WARNING", "CRITICAL"]`
   - `RiskAlertKind = Literal["DAILY_LOSS_LIMIT", "CONCENTRATION", "DRAWDOWN", "DATA_STALE"]`
   - `RiskThresholds` dataclass containing the default thresholds listed above.
   - `build_portfolio_risk_summary(db, user_id, as_of=None, thresholds=None)`.
   - Pure helpers for daily loss percent, concentration, and drawdown classification.
-- [ ] Run targeted test and confirm GREEN.
+- [x] Run targeted test and confirm GREEN.
 - [ ] Commit:
 
 ```bash
@@ -133,24 +133,35 @@ git add backend/services/risk_alert_service.py backend/tests/test_risk_alert_ser
 git commit -m "feat: add portfolio risk alert service"
 ```
 
+P13 Task 1 result:
+- Added `backend/services/risk_alert_service.py` with deterministic portfolio risk summary generation.
+- Added default V1 thresholds for daily loss, concentration, and drawdown.
+- Added pure severity classifiers for daily loss percent, concentration ratio, and drawdown ratio.
+- Added tests for warning daily loss, critical daily loss, single-symbol concentration, and empty portfolio summary.
+
+Verification log:
+- RED backend: `../.venv313/bin/python -m unittest discover -s tests -p test_risk_alert_service.py` failed because `services.risk_alert_service` did not exist.
+- GREEN backend: `../.venv313/bin/python -m unittest discover -s tests -p test_risk_alert_service.py` ran 4 tests OK.
+- Commit is pending because the Git commit approval request timed out twice in this session.
+
 ## Task 2: Add Risk API Contract
 
 **Goal:** expose risk summary through a stable endpoint and OpenAPI snapshot.
 
-- [ ] Add Pydantic models in `backend/schemas.py`:
+- [x] Add Pydantic models in `backend/schemas.py`:
   - `RiskRecommendedAction`
   - `RiskTrustMeta`
   - `RiskAlert`
   - `RiskPortfolioSummary`
   - `RiskSummaryResponse`
-- [ ] Create `backend/routers/risk.py` with `GET /api/risk/summary`.
-- [ ] Register the router in `backend/main.py`.
-- [ ] Add `backend/tests/test_risk_router.py` covering:
+- [x] Create `backend/routers/risk.py` with `GET /api/risk/summary`.
+- [x] Register the router in `backend/main.py`.
+- [x] Add `backend/tests/test_risk_router.py` covering:
   - authenticated user can fetch `alerts` and `portfolio`.
   - unauthenticated request returns `401`.
   - response includes stable `trust.source_refs`.
-- [ ] Extend `backend/tests/test_openapi_contracts.py` to assert `/api/risk/summary` exists.
-- [ ] Run:
+- [x] Extend `backend/tests/test_openapi_contracts.py` to assert `/api/risk/summary` exists.
+- [x] Run:
 
 ```bash
 cd backend
@@ -164,6 +175,20 @@ cd backend
 git add backend/routers/risk.py backend/main.py backend/schemas.py backend/tests/test_risk_router.py backend/tests/test_openapi_contracts.py
 git commit -m "feat: expose portfolio risk summary api"
 ```
+
+P13 Task 2 result:
+- Added `RiskRecommendedAction`, `RiskTrustMeta`, `RiskAlert`, `RiskPortfolioSummary`, and `RiskSummaryResponse` schemas.
+- Added `GET /api/risk/summary` in `backend/routers/risk.py`.
+- Registered the risk router in `backend/main.py`.
+- Added route tests for authenticated access, unauthenticated `401`, and stable trust source refs.
+- Extended OpenAPI contract tests for the risk path and response schema.
+
+Verification log:
+- RED backend: `../.venv313/bin/python -m unittest discover -s tests -p test_risk_router.py` failed with `404` because `/api/risk/summary` was not registered.
+- RED OpenAPI: `../.venv313/bin/python -m unittest discover -s tests -p test_openapi_contracts.py` failed because `/api/risk/summary` and `RiskSummaryResponse` were absent.
+- GREEN backend: `../.venv313/bin/python -m unittest discover -s tests -p test_risk_router.py` ran 3 tests OK.
+- GREEN OpenAPI: `../.venv313/bin/python -m unittest discover -s tests -p test_openapi_contracts.py` ran 3 tests OK.
+- GREEN risk service regression: `../.venv313/bin/python -m unittest discover -s tests -p test_risk_alert_service.py` ran 4 tests OK.
 
 ## Task 3: Feed Risk Alerts Into Dashboard
 

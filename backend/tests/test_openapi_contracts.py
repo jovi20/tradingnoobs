@@ -17,6 +17,7 @@ class OpenAPIContractTests(unittest.TestCase):
             "/api/trading-positions/{position_public_id}/events/{event_public_id}/narrative",
             "/api/timeline/home",
             "/api/positions",
+            "/api/risk/summary",
         ):
             with self.subTest(path=path):
                 self.assertIn(path, paths)
@@ -26,6 +27,7 @@ class OpenAPIContractTests(unittest.TestCase):
 
         self.assertIn("TimelineHomeResponse", schemas)
         self.assertIn("TradingPositionLifecycleResponse", schemas)
+        self.assertIn("RiskSummaryResponse", schemas)
 
     def test_legacy_fallback_headers_are_documented_on_protected_routes(self):
         protected_routes = (

@@ -174,6 +174,47 @@ class TrustMeta(BaseModel):
     note: Optional[str] = None
 
 
+class RiskRecommendedAction(BaseModel):
+    kind: str
+    label: str
+    href: str
+
+
+class RiskTrustMeta(BaseModel):
+    freshness: FreshnessStatusEnum
+    source: DataSourceEnum
+    value_status: Optional[ValueStatusEnum] = None
+    source_refs: List[str] = Field(default_factory=list)
+    note: Optional[str] = None
+
+
+class RiskAlert(BaseModel):
+    public_id: str
+    kind: str
+    severity: InboxSeverityEnum
+    summary: str
+    reason: str
+    recommended_action: RiskRecommendedAction
+    source_refs: List[str] = Field(default_factory=list)
+    trust: RiskTrustMeta
+
+
+class RiskPortfolioSummary(BaseModel):
+    gross_exposure: float = 0.0
+    net_liquidation_value: float = 0.0
+    daily_pnl: Optional[float] = None
+    daily_pnl_percent: Optional[float] = None
+    max_drawdown: Optional[float] = None
+
+
+class RiskSummaryResponse(BaseModel):
+    as_of: str
+    base_currency: str
+    portfolio: RiskPortfolioSummary
+    alerts: List[RiskAlert] = Field(default_factory=list)
+    trust: RiskTrustMeta
+
+
 class ReadModelEnvelope(BaseModel, Generic[T]):
     data: T
     meta: TrustMeta
