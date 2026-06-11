@@ -13,9 +13,7 @@ import {
 
 const SCAN_ROOTS = ['app', 'components', 'lib']
 const SOURCE_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx', '.mts', '.cts'])
-const ALLOWED_RECHARTS_IMPORTS = new Set([
-  'components/PortfolioSankey.tsx',
-])
+const ALLOWED_RECHARTS_IMPORTS = new Set<string>()
 
 const RECHARTS_IMPORT_PATTERN = /from\s+['"]recharts(?:\/[^'"]*)?['"]|import\s*\(\s*['"]recharts(?:\/[^'"]*)?['"]\s*\)|require\s*\(\s*['"]recharts(?:\/[^'"]*)?['"]\s*\)/
 
