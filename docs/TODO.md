@@ -43,16 +43,16 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 | Lifecycle Detail | `truth-first 体验已落地` | 单笔详情已优先展示 truth lifecycle、evidence、AI sidecar；latest active event reversal 走审计 `REVERSAL`，非最新 reversal、`OPEN` reversal、legacy hard delete/batch edit 已被保护为非普通路径。 |
 | Dashboard / Insights | `已重构为工作台形态` | Dashboard 保持宏观视图；Insights 已接入 auditable artifact 与 artifact detail；图表已有 schema/freshness 包装。 |
 | 前端依赖与质量 | `已完成 P8-P9F` | Next 16 / React 19 已升级；React 19 strict hooks lint 全局启用；前端 lint 已到 0 warning。 |
-| 文档状态 | `P16 已完成 / P17 待开发` | P10 文档、legacy inventory、observability、read-model marker、model modularization plan 已落地；P11 hard cutover、P12 platform contract hardening、P12B observability/error contract hardening、P13 Risk / review product features、P14 Reporting / export、P15 AI analysis workflow、P16 Market data platform 已完成；P17-P19 专项计划已补齐。 |
+| 文档状态 | `P17 已完成 / P18 待开发` | P10 文档、legacy inventory、observability、read-model marker、model modularization plan 已落地；P11 hard cutover、P12 platform contract hardening、P12B observability/error contract hardening、P13 Risk / review product features、P14 Reporting / export、P15 AI analysis workflow、P16 Market data platform、P17 Admin operations 已完成；P18-P19 专项计划已补齐。 |
 
 ---
 
 ## 当前 Active Lane
 
-- 当前 active lane：P17 Admin operations。
-- 当前计划：[2026-06-11-dev-p17-admin-operations-plan.md](./superpowers/plans/2026-06-11-dev-p17-admin-operations-plan.md)。
-- P17 第一执行任务：新增数据库备份 service 与 `POST /api/admin/ops/backups` 管理员入口。
-- 前一完成 lane：[2026-06-11-dev-p16-market-data-platform-plan.md](./superpowers/plans/2026-06-11-dev-p16-market-data-platform-plan.md)。
+- 当前 active lane：P18 Chart renderer migration。
+- 当前计划：[2026-06-11-dev-p18-chart-renderer-migration-plan.md](./superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md)。
+- P18 第一执行任务：新增 Recharts import static guard，先 allowlist 当前 5 个已知文件，阻止继续扩散。
+- 前一完成 lane：[2026-06-11-dev-p17-admin-operations-plan.md](./superpowers/plans/2026-06-11-dev-p17-admin-operations-plan.md)。
 
 ### 后续阶段执行顺序
 
@@ -62,8 +62,8 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 | P14 | `已完成` | [Reporting and export](./superpowers/plans/2026-06-11-dev-p14-reporting-export-plan.md) |
 | P15 | `已完成` | [AI analysis workflow](./superpowers/plans/2026-06-11-dev-p15-ai-analysis-workflow-plan.md) |
 | P16 | `已完成` | [Market data platform](./superpowers/plans/2026-06-11-dev-p16-market-data-platform-plan.md) |
-| P17 | `待开发` | [Admin operations](./superpowers/plans/2026-06-11-dev-p17-admin-operations-plan.md) |
-| P18 | `已计划` | [Chart renderer migration](./superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md) |
+| P17 | `已完成` | [Admin operations](./superpowers/plans/2026-06-11-dev-p17-admin-operations-plan.md) |
+| P18 | `待开发` | [Chart renderer migration](./superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md) |
 | P19 | `已计划` | [Release readiness](./superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md) |
 
 ### P11 完成状态
@@ -102,6 +102,7 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 - [x] P14：补齐导入模板说明、周报 PDF 渲染服务、Insights PDF 导出接口、前端导出按钮和导出 runbook。
 - [x] P15：补齐 AI 分析日期范围验证、artifact evidence refs、分析历史接口、Insights 日期选择与复访入口。
 - [x] P16：拆出 market provider routing、normalized adapters、quote freshness/degradation metadata、前端 freshness 标签和可重复验证文档。
+- [x] P17：补齐数据库备份触发、管理员晋升、密码重置、stale/failed job 解释、force-cancel 确认和运维 runbook。
 
 ---
 
@@ -211,10 +212,11 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 
 专项计划：[P17 Admin operations](./superpowers/plans/2026-06-11-dev-p17-admin-operations-plan.md)
 
-- [ ] 后端提供数据库备份触发入口。
-- [ ] 后端提供账户升级为管理员的安全入口。
-- [ ] 后端提供管理员重置账户密码能力。
-- [ ] Admin Jobs 页面继续扩展 stale / failed / force-cancel 的解释和操作保护。
+- [x] 后端提供数据库备份触发入口。
+- [x] 后端提供账户升级为管理员的安全入口。
+- [x] 后端提供管理员重置账户密码能力。
+- [x] Admin Jobs 页面继续扩展 stale / failed / force-cancel 的解释和操作保护。
+- [x] 前端新增 `/admin/ops` 管理员运维控制台。
 
 ### 图表渲染迁移
 

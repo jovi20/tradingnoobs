@@ -48,33 +48,33 @@ Docs:
 
 **Goal:** admins can trigger a local SQLite backup with an auditable response.
 
-- [ ] Create tests in `backend/tests/test_admin_operations_api.py`:
+- [x] Create tests in `backend/tests/test_admin_operations_api.py`:
   - `test_admin_can_trigger_sqlite_backup`
   - `test_non_admin_cannot_trigger_backup`
   - `test_postgres_backup_returns_provider_not_configured`
-- [ ] Create `backend/services/backup_service.py` with:
+- [x] Create `backend/services/backup_service.py` with:
   - `detect_database_backend(database_url)`.
   - `create_sqlite_backup(database_url, backup_dir, now)`.
   - `trigger_database_backup(database_url, backup_dir="backend/backups")`.
-- [ ] Add schemas in `backend/schemas.py`:
+- [x] Add schemas in `backend/schemas.py`:
   - `AdminBackupResponse`
   - `AdminOperationStatus`
-- [ ] Add `POST /api/admin/ops/backups` to `backend/routers/admin.py`.
-- [ ] Return fields:
+- [x] Add `POST /api/admin/ops/backups` to `backend/routers/admin.py`.
+- [x] Return fields:
   - `status`
   - `backup_id`
   - `path`
   - `database_backend`
   - `created_at`
   - `message`
-- [ ] Run:
+- [x] Run:
 
 ```bash
 cd backend
 ../.venv313/bin/python -m unittest discover -s tests -p test_admin_operations_api.py
 ```
 
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add backend/services/backup_service.py backend/routers/admin.py backend/schemas.py backend/tests/test_admin_operations_api.py
@@ -85,30 +85,30 @@ git commit -m "feat: add admin database backup trigger"
 
 **Goal:** admins can promote a user and reset a password through audited endpoints.
 
-- [ ] Extend `backend/tests/test_admin_operations_api.py` with:
+- [x] Extend `backend/tests/test_admin_operations_api.py` with:
   - `test_admin_can_promote_user_by_public_id`
   - `test_promote_missing_user_returns_404`
   - `test_admin_can_reset_user_password`
   - `test_password_reset_updates_user_credential_hash`
   - `test_non_admin_cannot_reset_password`
-- [ ] Create `backend/services/admin_user_service.py` with:
+- [x] Create `backend/services/admin_user_service.py` with:
   - `promote_user_to_admin(db, user_public_id, actor_user)`.
   - `generate_temporary_password(length=18)`.
   - `reset_user_password(db, user_public_id, actor_user)`.
-- [ ] Use `services.auth_service.get_password_hash`.
-- [ ] Add endpoints:
+- [x] Use `services.auth_service.get_password_hash`.
+- [x] Add endpoints:
   - `POST /api/admin/users/{user_public_id}/promote`
   - `POST /api/admin/users/{user_public_id}/reset-password`
-- [ ] Return the temporary password only once in the reset response.
-- [ ] Add structured log events for promotion and password reset.
-- [ ] Run:
+- [x] Return the temporary password only once in the reset response.
+- [x] Add structured log events for promotion and password reset.
+- [x] Run:
 
 ```bash
 cd backend
 ../.venv313/bin/python -m unittest discover -s tests -p test_admin_operations_api.py
 ```
 
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add backend/services/admin_user_service.py backend/routers/admin.py backend/schemas.py backend/tests/test_admin_operations_api.py
@@ -119,22 +119,22 @@ git commit -m "feat: add admin user operations"
 
 **Goal:** operators understand stale/failed jobs and cannot force-cancel by accident.
 
-- [ ] Extend `_job_run_summary` and `_job_run_detail` in `backend/routers/admin.py` with:
+- [x] Extend `_job_run_summary` and `_job_run_detail` in `backend/routers/admin.py` with:
   - `stale_reason`
   - `recommended_action`
   - `force_cancel_warning`
-- [ ] Define stale logic:
+- [x] Define stale logic:
   - `RUNNING` and `locked_at` older than `timeout_seconds` from job definition means stale.
   - if no timeout exists, use 30 minutes.
-- [ ] Extend `backend/tests/test_admin_jobs_api.py`:
+- [x] Extend `backend/tests/test_admin_jobs_api.py`:
   - stale running job returns stale reason.
   - failed job returns recommended action `REQUEUE`.
   - force-cancel releases active locks and records warning metadata.
-- [ ] Update `frontend/lib/adapters/admin-jobs.ts` and `frontend/components/admin/domain/AdminJobsConsole.tsx`:
+- [x] Update `frontend/lib/adapters/admin-jobs.ts` and `frontend/components/admin/domain/AdminJobsConsole.tsx`:
   - show stale reason.
   - show recommended action.
   - require typing `FORCE CANCEL` before calling `onForceCancelJob`.
-- [ ] Run:
+- [x] Run:
 
 ```bash
 cd backend
@@ -143,7 +143,7 @@ cd ../frontend
 node --experimental-strip-types --test tests/admin-jobs-adapter.test.mts
 ```
 
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add backend/routers/admin.py backend/tests/test_admin_jobs_api.py frontend/lib/adapters/admin-jobs.ts frontend/components/admin/domain/AdminJobsConsole.tsx frontend/tests/admin-jobs-adapter.test.mts
@@ -154,15 +154,15 @@ git commit -m "feat: harden admin job recovery ux"
 
 **Goal:** backup and user ops are discoverable from the app for admins.
 
-- [ ] Extend `frontend/lib/api.ts` with:
+- [x] Extend `frontend/lib/api.ts` with:
   - `adminAPI.triggerBackup(token)`
   - `adminAPI.promoteUser(token, userPublicId)`
   - `adminAPI.resetUserPassword(token, userPublicId)`
-- [ ] Create `frontend/lib/adapters/admin-ops.ts` with formatting helpers for backup result and temporary password notice.
-- [ ] Add `/admin/ops` page in `frontend/app/admin/ops/page.tsx`.
-- [ ] Add navigation item in `frontend/lib/navigation.ts` for admin users.
-- [ ] Add tests in `frontend/tests/admin-ops-adapter.test.mts`.
-- [ ] Run:
+- [x] Create `frontend/lib/adapters/admin-ops.ts` with formatting helpers for backup result and temporary password notice.
+- [x] Add `/admin/ops` page in `frontend/app/admin/ops/page.tsx`.
+- [x] Add navigation item in `frontend/lib/navigation.ts` for admin users.
+- [x] Add tests in `frontend/tests/admin-ops-adapter.test.mts`.
+- [x] Run:
 
 ```bash
 cd frontend
@@ -170,7 +170,7 @@ node --experimental-strip-types --test tests/admin-ops-adapter.test.mts tests/na
 ./node_modules/.bin/tsc --noEmit --pretty false
 ```
 
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add frontend/lib/api.ts frontend/lib/adapters/admin-ops.ts frontend/app/admin/ops/page.tsx frontend/lib/navigation.ts frontend/tests/admin-ops-adapter.test.mts frontend/tests/navigation.test.mts
@@ -179,16 +179,16 @@ git commit -m "feat: add admin operations console"
 
 ## Task 5: Add Operations Runbook And Completion Gate
 
-- [ ] Create `docs/admin-operations-runbook.md` documenting:
+- [x] Create `docs/admin-operations-runbook.md` documenting:
   - backup behavior for SQLite and PostgreSQL.
   - admin promotion process.
   - password reset process.
   - stale job explanation.
   - force-cancel risks and required confirmation.
   - restore drill outline.
-- [ ] Add docs link to `docs/README.md`.
-- [ ] Update `docs/TODO.md` with P17 completion status and P18 as next lane.
-- [ ] Run final verification:
+- [x] Add docs link to `docs/README.md`.
+- [x] Update `docs/TODO.md` with P17 completion status and P18 as next lane.
+- [x] Run final verification:
 
 ```bash
 cd backend
@@ -208,6 +208,21 @@ git status --short --branch
 git add docs/admin-operations-runbook.md docs/README.md docs/TODO.md docs/superpowers/plans/2026-06-11-dev-p17-admin-operations-plan.md
 git commit -m "docs: complete p17 admin operations gate"
 ```
+
+## Execution Log
+
+- Task 1 committed as `9729589 feat: add admin database backup trigger`.
+- Task 2 committed as `3a2161e feat: add admin user operations`.
+- Task 3 committed as `ebae744 feat: harden admin job recovery ux`.
+- Task 4 committed as `1ff6303 feat: add admin operations console`.
+- Browser smoke: temporary frontend dev server on `127.0.0.1:51559` compiled `/admin/ops`; unauthenticated state followed the existing login flow and browser console reported no errors.
+- Final completion gate:
+  - Backend full test suite: 222 tests passed.
+  - Frontend typecheck: passed.
+  - Frontend lint: passed.
+  - Frontend Node tests: 113 tests passed.
+  - `git diff --check`: passed.
+- P17 completion docs updated to mark P18 as the next active lane.
 
 ## Stop Conditions
 

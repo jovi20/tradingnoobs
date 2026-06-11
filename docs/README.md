@@ -19,15 +19,17 @@
    交易 CSV/Excel 导入模板说明，覆盖当前模板列、示例行和必填字段校验规则。
 5. [report-export.md](./report-export.md)
    周报 PDF 导出 runbook，覆盖接口、V1 内容、ReportLab 依赖、验证命令和已知限制。
-6. [superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md](./superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md)
+6. [admin-operations-runbook.md](./admin-operations-runbook.md)
+   管理员备份、用户操作、stale job、force-cancel 与恢复演练 runbook。
+7. [superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md](./superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md)
    平台底座与前端重设计的总 sequencing plan。
-7. [superpowers/plans/2026-05-02-dev-branch-checkpoint.md](./superpowers/plans/2026-05-02-dev-branch-checkpoint.md)
+8. [superpowers/plans/2026-05-02-dev-branch-checkpoint.md](./superpowers/plans/2026-05-02-dev-branch-checkpoint.md)
    `dev` 分支阶段 checkpoint 与验收记录。
-8. [superpowers/specs/2026-04-06-platform-foundation-design.md](./superpowers/specs/2026-04-06-platform-foundation-design.md)
+9. [superpowers/specs/2026-04-06-platform-foundation-design.md](./superpowers/specs/2026-04-06-platform-foundation-design.md)
    平台底座目标架构基线。
-9. [superpowers/specs/2026-04-07-frontend-experience-redesign-design.md](./superpowers/specs/2026-04-07-frontend-experience-redesign-design.md)
+10. [superpowers/specs/2026-04-07-frontend-experience-redesign-design.md](./superpowers/specs/2026-04-07-frontend-experience-redesign-design.md)
    前端体验重设计基线。
-10. 专题附录：
+11. 专题附录：
    [market_data_sources.md](./market_data_sources.md),
    [trading-metrics.md](./trading-metrics.md),
    [trading-fields-design.md](./trading-fields-design.md)
@@ -38,12 +40,12 @@
 
 | 文档 | 用途 |
 |------|------|
-| [2026-06-11-dev-p13-risk-review-product-plan.md](./superpowers/plans/2026-06-11-dev-p13-risk-review-product-plan.md) | P13 risk/review product features 专项计划；当前 active lane，负责组合风险监控、单日亏损提醒、Dashboard 风险展示和 Timeline/Review Inbox 风险行动卡。 |
+| [2026-06-11-dev-p13-risk-review-product-plan.md](./superpowers/plans/2026-06-11-dev-p13-risk-review-product-plan.md) | P13 risk/review product features 专项计划，已完成；负责组合风险监控、单日亏损提醒、Dashboard 风险展示和 Timeline/Review Inbox 风险行动卡。 |
 | [2026-06-11-dev-p14-reporting-export-plan.md](./superpowers/plans/2026-06-11-dev-p14-reporting-export-plan.md) | P14 reporting/export 专项计划，负责导入模板文档、周报 PDF 后端生成、前端导出动作和验证夹具。 |
 | [2026-06-11-dev-p15-ai-analysis-workflow-plan.md](./superpowers/plans/2026-06-11-dev-p15-ai-analysis-workflow-plan.md) | P15 AI analysis workflow 专项计划，负责日期范围选择、分析契约收敛、artifact-backed history 和回归测试。 |
 | [2026-06-11-dev-p16-market-data-platform-plan.md](./superpowers/plans/2026-06-11-dev-p16-market-data-platform-plan.md) | P16 market data platform 专项计划，负责 provider orchestration 拆分、行情 freshness/degradation 元数据和可重复 provider 验证。 |
-| [2026-06-11-dev-p17-admin-operations-plan.md](./superpowers/plans/2026-06-11-dev-p17-admin-operations-plan.md) | P17 admin operations 专项计划，负责备份触发、管理员晋升、密码重置、stale/failed job 解释和 force-cancel 防护。 |
-| [2026-06-11-dev-p18-chart-renderer-migration-plan.md](./superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md) | P18 chart renderer migration 专项计划，负责一次性迁移剩余 Recharts renderer，并保持 `chart.v1` 数据契约稳定。 |
+| [2026-06-11-dev-p17-admin-operations-plan.md](./superpowers/plans/2026-06-11-dev-p17-admin-operations-plan.md) | P17 admin operations 专项计划，已完成；负责备份触发、管理员晋升、密码重置、stale/failed job 解释和 force-cancel 防护。 |
+| [2026-06-11-dev-p18-chart-renderer-migration-plan.md](./superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md) | P18 chart renderer migration 专项计划；当前 active lane，负责一次性迁移剩余 Recharts renderer，并保持 `chart.v1` 数据契约稳定。 |
 | [2026-06-11-dev-p19-release-readiness-plan.md](./superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md) | P19 release readiness 专项计划，负责全量验证、authenticated browser smoke、迁移演练、发布清单和回滚清单。 |
 | [2026-06-11-dev-p12b-observability-error-contract-plan.md](./superpowers/plans/2026-06-11-dev-p12b-observability-error-contract-plan.md) | P12B observability/error contract hardening 专项计划，已完成。 |
 | [2026-06-10-dev-p12-platform-contract-hardening-plan.md](./superpowers/plans/2026-06-10-dev-p12-platform-contract-hardening-plan.md) | P12 platform contract hardening 专项计划，已完成；后续 P12B observability/error contract hardening 也已完成。 |
@@ -84,6 +86,7 @@
 | [architecture_review.md](./architecture_review.md) | 架构审阅记录。 |
 | [import-template.md](./import-template.md) | 交易 CSV/Excel 导入模板说明，覆盖模板列、示例行、必填校验和可选字段建议。 |
 | [report-export.md](./report-export.md) | 周报 PDF 导出 runbook，覆盖接口、V1 内容、依赖、验证命令和限制。 |
+| [admin-operations-runbook.md](./admin-operations-runbook.md) | 管理员备份、用户操作、stale job、force-cancel 与恢复演练 runbook。 |
 | [market_data_sources.md](./market_data_sources.md) | 市场数据 provider、路由、配置、限制和排障。 |
 | [trading-metrics.md](./trading-metrics.md) | 指标算法与实现状态。 |
 | [trading-fields-design.md](./trading-fields-design.md) | 当前 / 实施中字段边界。 |
