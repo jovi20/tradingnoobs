@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import BusinessLock, FeatureFlag, IntegrationCredential, JobRun, JobRunStatus, PlatformSetting, SystemSetting, User
 from schemas import (
+    AdminBackupResponse,
     FeatureFlagResponse,
     FeatureFlagUpdate,
     IntegrationCredentialResponse,
@@ -16,6 +17,7 @@ from schemas import (
 from routers.auth import get_current_user
 import httpx
 from observability import get_structured_logger, log_event
+from services.backup_service import BackupProviderNotConfigured, trigger_database_backup
 from services.credential_service import decrypt_secret, encrypt_secret, mask_secret
 from services.job_service import cancel_job_run, force_cancel_running_job_run, requeue_job_run
 from services.platform_config_service import get_llm_runtime_config
@@ -26,6 +28,7 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 logger = get_structured_logger("admin")
+ADMIN_BACKUP_DIR = "backend/backups"
 
 
 def _enum_value(value):
@@ -125,6 +128,42 @@ def get_current_admin(current_user: User = Depends(get_current_user)):
             detail="The user doesn't have enough privileges"
         )
     return current_user
+
+
+def resolve_database_url_for_backup(db: Session) -> str:
+    return str(db.get_bind().url)
+
+
+@router.post("/ops/backups", response_model=AdminBackupResponse)
+async def trigger_database_backup_endpoint(
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    database_url = resolve_database_url_for_backup(db)
+    try:
+        backup_result = trigger_database_backup(database_url, backup_dir=ADMIN_BACKUP_DIR)
+    except BackupProviderNotConfigured as exc:
+        log_event(
+            logger,
+            "warning",
+            "database_backup_provider_not_configured",
+            actor_user_public_id=current_admin.public_id,
+            error=str(exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="BACKUP_PROVIDER_NOT_CONFIGURED",
+        ) from exc
+
+    log_event(
+        logger,
+        "info",
+        "database_backup_triggered",
+        actor_user_public_id=current_admin.public_id,
+        backup_id=backup_result["backup_id"],
+        database_backend=backup_result["database_backend"],
+    )
+    return AdminBackupResponse(**backup_result)
 
 
 @router.get("/jobs/{job_public_id}")

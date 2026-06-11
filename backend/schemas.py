@@ -911,6 +911,22 @@ class FeatureFlagResponse(BaseModel):
         from_attributes = True
 
 
+# ============== Admin Operations Schemas ==============
+
+class AdminOperationStatus(str, Enum):
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+
+
+class AdminBackupResponse(BaseModel):
+    status: AdminOperationStatus
+    backup_id: str
+    path: str
+    database_backend: str
+    created_at: datetime
+    message: str
+
+
 # ============== Position & Batch Schemas ==============
 
 class TradeBatchCreate(BaseModel):
