@@ -44,7 +44,7 @@ async def get_quote(
     service = MarketDataService(db)
     
     try:
-        quote = service.get_quote(symbol, exchange)
+        quote = await service.get_quote(symbol, exchange)
         asset_type = service.detect_asset_type(symbol, exchange)
         return {
             "symbol": symbol.upper(),
