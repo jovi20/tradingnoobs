@@ -15,8 +15,9 @@
 - [superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md](./superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md) 是平台 + 前端迁移顺序基线。
 - [TODO.md](./TODO.md) 是当前执行清单。
 - [superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md](./superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md) 已完成，剩余 Recharts renderer 已迁移到内部 SVG renderer，并保持 `chart.v1` 数据契约稳定。
-- [superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md](./superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md) 是当前 active lane，负责发布范围冻结、全量验证、迁移演练、authenticated browser smoke 与最终 release decision。
+- [superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md](./superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md) 已完成，当前 release decision 为 `READY_FOR_STAGING_ONLY`；后续先用 staging/dev 部署验证，再决定是否推进生产发布。
 - [release-rollback-playbook.md](./release-rollback-playbook.md) 是 truth writes、Timeline snapshot、legacy mutation guard 的发布与回滚手册。
+- [vps-dev-parallel-deployment.md](./vps-dev-parallel-deployment.md) 说明已有 main VPS 部署时，如何在同一台 VPS 上隔离部署 `dev` staging。
 - [current-state-baseline.md](./current-state-baseline.md) 是 2026-04-05 历史审计快照，不再作为当前实现依据。
 - [顶层设计.md](./顶层设计.md) 已降级为历史草案。
 
@@ -33,7 +34,7 @@
 | 迁移 | Alembic revision chain 是主迁移路径；开发启动仍有受保护的 schema bootstrap |
 | 异步与派生 | 本地 DB job worker、outbox relay、idempotency、business lock、derived timeline snapshot |
 | 外部服务 | Finnhub, AKShare, Binance, 可配置 OpenAI 兼容 LLM 接口 |
-| 部署 | Docker Compose + Caddy |
+| 部署 | Docker Compose + Caddy；同机 main/dev 并行部署见 [vps-dev-parallel-deployment.md](./vps-dev-parallel-deployment.md) |
 | 可观测性 | `X-Request-ID`、`X-Response-Time-Ms`、统一错误 `error.code/message/request_id/status_code` envelope、`tradingnoobs.*` 结构化日志 helper |
 
 ---
@@ -285,7 +286,7 @@ npm run build
 
 优先级以 [TODO.md](./TODO.md) 为准。当前建议顺序：
 
-1. P19：Release readiness，完成发布范围冻结、全量验证、authenticated browser smoke、迁移演练、发布清单和回滚清单。
+1. VPS dev/staging 部署验证：按 [vps-dev-parallel-deployment.md](./vps-dev-parallel-deployment.md) 在已有 main VPS 上隔离部署 `dev`，并跑 P19 smoke checklist。
 2. P10D 剩余项：停止扩张 `frontend/lib/api.ts`，让新页面优先走 read-model adapter 或 generated contract。
 3. P10E 后续执行：在 truth/legacy 边界稳定后拆分 `backend/models.py`。
 

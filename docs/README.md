@@ -17,21 +17,23 @@
    P19 release readiness 证据矩阵，当前决策为 `READY_FOR_STAGING_ONLY`。
 4. [release-rollback-playbook.md](./release-rollback-playbook.md)
    P11-P18 后 truth writes、Timeline snapshot、legacy mutation guard、P13-P18 功能 lane 的发布与回滚手册。
-5. [import-template.md](./import-template.md)
+5. [vps-dev-parallel-deployment.md](./vps-dev-parallel-deployment.md)
+   已有 main VPS 部署时，如何在同一台 VPS 上隔离部署 `dev` staging。
+6. [import-template.md](./import-template.md)
    交易 CSV/Excel 导入模板说明，覆盖当前模板列、示例行和必填字段校验规则。
-6. [report-export.md](./report-export.md)
+7. [report-export.md](./report-export.md)
    周报 PDF 导出 runbook，覆盖接口、V1 内容、ReportLab 依赖、验证命令和已知限制。
-7. [admin-operations-runbook.md](./admin-operations-runbook.md)
+8. [admin-operations-runbook.md](./admin-operations-runbook.md)
    管理员备份、用户操作、stale job、force-cancel 与恢复演练 runbook。
-8. [superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md](./superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md)
+9. [superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md](./superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md)
    平台底座与前端重设计的总 sequencing plan。
-9. [superpowers/plans/2026-05-02-dev-branch-checkpoint.md](./superpowers/plans/2026-05-02-dev-branch-checkpoint.md)
+10. [superpowers/plans/2026-05-02-dev-branch-checkpoint.md](./superpowers/plans/2026-05-02-dev-branch-checkpoint.md)
    `dev` 分支阶段 checkpoint 与验收记录。
-10. [superpowers/specs/2026-04-06-platform-foundation-design.md](./superpowers/specs/2026-04-06-platform-foundation-design.md)
+11. [superpowers/specs/2026-04-06-platform-foundation-design.md](./superpowers/specs/2026-04-06-platform-foundation-design.md)
    平台底座目标架构基线。
-11. [superpowers/specs/2026-04-07-frontend-experience-redesign-design.md](./superpowers/specs/2026-04-07-frontend-experience-redesign-design.md)
+12. [superpowers/specs/2026-04-07-frontend-experience-redesign-design.md](./superpowers/specs/2026-04-07-frontend-experience-redesign-design.md)
    前端体验重设计基线。
-12. 专题附录：
+13. 专题附录：
    [market_data_sources.md](./market_data_sources.md),
    [trading-metrics.md](./trading-metrics.md),
    [trading-fields-design.md](./trading-fields-design.md)
@@ -90,6 +92,7 @@
 | [report-export.md](./report-export.md) | 周报 PDF 导出 runbook，覆盖接口、V1 内容、依赖、验证命令和限制。 |
 | [admin-operations-runbook.md](./admin-operations-runbook.md) | 管理员备份、用户操作、stale job、force-cancel 与恢复演练 runbook。 |
 | [release-readiness-checklist.md](./release-readiness-checklist.md) | P19 发布就绪证据矩阵与 staging-only 决策记录。 |
+| [vps-dev-parallel-deployment.md](./vps-dev-parallel-deployment.md) | 同一台 VPS 上 main 与 dev staging 并行部署指南，覆盖 Compose override、Caddy 反代、独立数据库和验证步骤。 |
 | [market_data_sources.md](./market_data_sources.md) | 市场数据 provider、路由、配置、限制和排障。 |
 | [trading-metrics.md](./trading-metrics.md) | 指标算法与实现状态。 |
 | [trading-fields-design.md](./trading-fields-design.md) | 当前 / 实施中字段边界。 |
