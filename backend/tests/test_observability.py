@@ -3,7 +3,13 @@ import unittest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
-from observability import add_error_handlers, add_observability_middleware, make_error_code
+from observability import (
+    add_error_handlers,
+    add_observability_middleware,
+    get_structured_logger,
+    log_event,
+    make_error_code,
+)
 
 
 def build_test_client() -> TestClient:
@@ -86,6 +92,22 @@ class ObservabilityTests(unittest.TestCase):
         self.assertEqual(payload["error"]["code"], "VALIDATION_REQUEST_INVALID")
         self.assertEqual(payload["error"]["request_id"], "req-validation-contract")
         self.assertEqual(payload["error"]["status_code"], 422)
+
+    def test_structured_logger_uses_project_namespace(self):
+        logger = get_structured_logger("market-data")
+
+        self.assertEqual(logger.name, "tradingnoobs.market_data")
+
+    def test_log_event_emits_structured_fields(self):
+        logger = get_structured_logger("market_data")
+
+        with self.assertLogs(logger.name, level="WARNING") as captured:
+            log_event(logger, "warning", "quote_failed", symbol="MSFT", provider="yahoo")
+
+        self.assertEqual(len(captured.output), 1)
+        self.assertIn("event=quote_failed", captured.output[0])
+        self.assertIn("provider=yahoo", captured.output[0])
+        self.assertIn("symbol=MSFT", captured.output[0])
 
 
 if __name__ == "__main__":

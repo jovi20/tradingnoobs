@@ -47,7 +47,7 @@ Docs:
   - add handlers for `HTTPException`, Starlette `HTTPException`, and `RequestValidationError`.
 - [x] Wire `add_error_handlers(app)` in `backend/main.py` after `add_observability_middleware(app)`.
 - [x] Run `cd backend && ../.venv313/bin/python -m unittest discover -s tests -p test_observability.py` and confirm it passes.
-- [ ] Commit with `feat: add backend error response contract`.
+- [x] Commit with `feat: add backend error response contract`.
 
 P12B Task 1 result:
 - Backend HTTP errors now return a compatibility-preserving payload with top-level `detail` plus a stable `error` envelope containing `code`, `message`, `request_id`, and `status_code`.
@@ -61,6 +61,7 @@ Verification log:
 - P12B Task 1 bridge compatibility: `../.venv313/bin/python -m unittest discover -s tests -p test_position_truth_bridge_router.py` ran 9 tests OK.
 - P12B Task 1 lifecycle compatibility: `../.venv313/bin/python -m unittest discover -s tests -p test_trading_position_lifecycle_router.py` ran 25 tests OK.
 - P12B Task 1 OpenAPI compatibility: `../.venv313/bin/python -m unittest discover -s tests -p test_openapi_contracts.py` ran 3 tests OK.
+- Commit: `cda1a3f feat: add backend error response contract`.
 
 Verification:
 
@@ -75,15 +76,23 @@ cd backend
 
 **Goal:** provide a lightweight structured logging path before replacing broad `print()` usage.
 
-- [ ] Write failing tests in `backend/tests/test_observability.py`:
+- [x] Write failing tests in `backend/tests/test_observability.py`:
   - `get_structured_logger("market_data")` returns a logger named `tradingnoobs.market_data`.
   - `log_event(logger, "warning", "quote_failed", symbol="MSFT")` emits a log message containing `event=quote_failed` and `symbol=MSFT`.
-- [ ] Run `cd backend && ../.venv313/bin/python -m unittest discover -s tests -p test_observability.py` and confirm the logging tests fail.
-- [ ] Implement in `backend/observability.py`:
+- [x] Run `cd backend && ../.venv313/bin/python -m unittest discover -s tests -p test_observability.py` and confirm the logging tests fail.
+- [x] Implement in `backend/observability.py`:
   - `get_structured_logger(namespace: str)`.
   - `log_event(logger, level: str, event: str, **fields)`.
-- [ ] Run `cd backend && ../.venv313/bin/python -m unittest discover -s tests -p test_observability.py` and confirm it passes.
+- [x] Run `cd backend && ../.venv313/bin/python -m unittest discover -s tests -p test_observability.py` and confirm it passes.
 - [ ] Commit with `feat: add structured logging helper`.
+
+P12B Task 2 result:
+- Added `get_structured_logger(namespace)` with the `tradingnoobs.<namespace>` naming convention.
+- Added `log_event(logger, level, event, **fields)` with stable `key=value` output sorted by field name.
+
+Verification log:
+- RED backend: `../.venv313/bin/python -m unittest discover -s tests -p test_observability.py` failed because `get_structured_logger` did not exist.
+- GREEN targeted backend: `../.venv313/bin/python -m unittest discover -s tests -p test_observability.py` ran 8 tests OK.
 
 Verification:
 

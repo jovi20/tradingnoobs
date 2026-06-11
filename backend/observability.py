@@ -1,3 +1,4 @@
+import logging
 import re
 import time
 from http import HTTPStatus
@@ -11,6 +12,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 REQUEST_ID_HEADER = "X-Request-ID"
 RESPONSE_TIME_HEADER = "X-Response-Time-Ms"
+LOGGER_PREFIX = "tradingnoobs"
 
 
 def _normalize_error_part(value: str) -> str:
@@ -20,6 +22,24 @@ def _normalize_error_part(value: str) -> str:
 
 def make_error_code(namespace: str, error: str) -> str:
     return f"{_normalize_error_part(namespace)}_{_normalize_error_part(error)}"
+
+
+def _normalize_logger_namespace(namespace: str) -> str:
+    return re.sub(r"[^A-Za-z0-9]+", "_", namespace).strip("_").lower()
+
+
+def get_structured_logger(namespace: str) -> logging.Logger:
+    normalized_namespace = _normalize_logger_namespace(namespace)
+    return logging.getLogger(f"{LOGGER_PREFIX}.{normalized_namespace}")
+
+
+def log_event(logger: logging.Logger, level: str, event: str, **fields) -> None:
+    level_name = level.lower()
+    log_method = getattr(logger, level_name, logger.info)
+    field_parts = [f"event={event}"]
+    for key in sorted(fields):
+        field_parts.append(f"{key}={fields[key]}")
+    log_method(" ".join(field_parts))
 
 
 def get_or_create_request_id(request_id: str | None) -> str:
