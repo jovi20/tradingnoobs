@@ -118,14 +118,14 @@ git commit -m "docs: record p19 automated verification"
 
 **Goal:** verify schema and derived-data paths can be reproduced without guessing.
 
-- [ ] Run Alembic chain tests:
+- [x] Run Alembic chain tests:
 
 ```bash
 cd backend
 ../.venv313/bin/python -m unittest discover -s tests -p test_alembic_chain.py
 ```
 
-- [ ] Run targeted tests for truth/snapshot/backfill paths:
+- [x] Run targeted tests for truth/snapshot/backfill paths:
 
 ```bash
 cd backend
@@ -134,14 +134,14 @@ cd backend
 ../.venv313/bin/python -m unittest discover -s tests -p test_derived_timeline_read_service.py
 ```
 
-- [ ] Document migration command order in `docs/release-readiness-checklist.md`:
+- [x] Document migration command order in `docs/release-readiness-checklist.md`:
   - database backup.
   - Alembic upgrade.
   - truth sync/backfill command or test-backed service path.
   - derived timeline refresh.
   - smoke check.
-- [ ] Update `docs/release-rollback-playbook.md` if any rollback step is missing for included lanes.
-- [ ] Commit:
+- [x] Update `docs/release-rollback-playbook.md` if any rollback step is missing for included lanes.
+- [x] Commit:
 
 ```bash
 git add docs/release-readiness-checklist.md docs/release-rollback-playbook.md

@@ -4,7 +4,7 @@
 执行分支：`dev`
 当前 HEAD：`d6fe118 docs: complete p18 chart renderer migration gate`
 比较范围：`origin/dev..dev`
-当前状态：`P19_TASK_2_AUTOMATED_VERIFICATION_RECORDED`
+当前状态：`P19_TASK_3_MIGRATION_REHEARSAL_RECORDED`
 
 本文档是 P19 发布就绪闸门的证据矩阵。它不代表已经可以发布；只有自动化验证、迁移演练、authenticated browser smoke 和 release decision 都补齐后，才能进入 merge/tag/staging 决策。
 
@@ -154,18 +154,24 @@ Known benign warnings to track:
 
 ## 5. Migration Evidence
 
-Current status: `PENDING_P19_TASK_3`.
+Current status: `P19_TASK_3_PASSED`.
 
-Required before release decision:
-- Alembic chain test.
-- Truth sync/backfill targeted tests.
-- Derived timeline refresh targeted tests.
-- Documented command order:
-  - database backup.
-  - Alembic upgrade.
-  - truth sync/backfill command or test-backed service path.
-  - derived timeline refresh.
-  - smoke check.
+Targeted migration/backfill rehearsal:
+- Alembic chain: `../.venv313/bin/python -m unittest discover -s tests -p test_alembic_chain.py` ran 1 test OK.
+- Truth sync/backfill: `../.venv313/bin/python -m unittest discover -s tests -p test_legacy_truth_sync.py` ran 5 tests OK.
+- Derived refresh handlers: `../.venv313/bin/python -m unittest discover -s tests -p test_derived_refresh_handlers.py` ran 1 test OK.
+- Derived timeline read service: `../.venv313/bin/python -m unittest discover -s tests -p test_derived_timeline_read_service.py` ran 1 test OK.
+
+Release migration command order:
+1. Trigger or take a database backup before schema/data changes.
+2. Run Alembic upgrade using the deployment standard migration command for the target environment.
+3. Run or verify truth sync/backfill path for legacy positions using the test-backed `legacy_truth_sync` service path.
+4. Run or verify derived timeline refresh handlers to rebuild `DerivedTimelineSnapshot` data.
+5. Smoke `/api/timeline/home`, `/`, `/timeline`, `/dashboard`, `/positions`, and `/insights` with authenticated state.
+6. Keep `timeline_legacy_mixed_feed_enabled` available as the first Timeline rollback lever.
+
+Rollback playbook update:
+- [release-rollback-playbook.md](./release-rollback-playbook.md) now covers P13 risk review, P14 reporting/PDF, P15 AI analysis workflow, P16 market data platform, P17 admin operations, and P18 chart renderer migration.
 
 ---
 
@@ -200,7 +206,7 @@ Important boundary:
 Current source of truth:
 - [release-rollback-playbook.md](./release-rollback-playbook.md)
 
-P19 Task 3 and Task 5 must confirm rollback coverage for included lanes:
+Rollback coverage confirmed in P19 Task 3 for included lanes:
 - Truth writes and legacy mutation guards.
 - Timeline snapshot fallback.
 - P13 risk alerts display/read-model behavior.

@@ -237,7 +237,7 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 
 - [x] 明确本次 release scope 包含哪些 P13-P18 lane。
 - [x] 完成后端、前端、lint、Node tests、`git diff --check` 全量验证。
-- [ ] 完成 Alembic、truth sync、derived timeline refresh 的迁移与回填演练。
+- [x] 完成 Alembic、truth sync、derived timeline refresh 的迁移与回填演练。
 - [ ] 完成 authenticated browser smoke，覆盖 P11 遗留的 `/positions`、`/positions/[id]`、`/positions/[id]/add-batch`。
 - [ ] 更新 release checklist 和 rollback checklist 后，再决定 merge、tag 或继续 staging。
 
