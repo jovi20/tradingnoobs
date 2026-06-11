@@ -71,43 +71,43 @@ git commit -m "docs: start p19 release readiness checklist"
 
 **Goal:** prove backend and frontend tests pass from a clean working tree except documented untracked user content.
 
-- [ ] Run backend tests:
+- [x] Run backend tests:
 
 ```bash
 cd backend
 ../.venv313/bin/python -m unittest discover -s tests
 ```
 
-- [ ] Run frontend typecheck:
+- [x] Run frontend typecheck:
 
 ```bash
 cd frontend
 ./node_modules/.bin/tsc --noEmit --pretty false
 ```
 
-- [ ] Run frontend lint:
+- [x] Run frontend lint:
 
 ```bash
 cd frontend
 npm run lint
 ```
 
-- [ ] Run frontend Node tests:
+- [x] Run frontend Node tests:
 
 ```bash
 cd frontend
 node --experimental-strip-types --test tests/*.test.mts
 ```
 
-- [ ] Run whitespace and status checks:
+- [x] Run whitespace and status checks:
 
 ```bash
 git diff --check
 git status --short --branch
 ```
 
-- [ ] Paste summarized results into `docs/release-readiness-checklist.md`, including known benign warnings.
-- [ ] Commit:
+- [x] Paste summarized results into `docs/release-readiness-checklist.md`, including known benign warnings.
+- [x] Commit:
 
 ```bash
 git add docs/release-readiness-checklist.md

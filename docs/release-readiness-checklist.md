@@ -4,7 +4,7 @@
 执行分支：`dev`
 当前 HEAD：`d6fe118 docs: complete p18 chart renderer migration gate`
 比较范围：`origin/dev..dev`
-当前状态：`P19_TASK_1_SCOPE_FROZEN`
+当前状态：`P19_TASK_2_AUTOMATED_VERIFICATION_RECORDED`
 
 本文档是 P19 发布就绪闸门的证据矩阵。它不代表已经可以发布；只有自动化验证、迁移演练、authenticated browser smoke 和 release decision 都补齐后，才能进入 merge/tag/staging 决策。
 
@@ -127,13 +127,24 @@ Current evidence carried into P19:
 - P18 completion gate ran static Recharts scan: no Recharts import/dependency matches.
 - P18 completion gate ran `git diff --check`: exit 0.
 
-P19 Task 2 must still re-run and record fresh release-gate evidence:
-- Backend full suite.
-- Frontend typecheck.
-- Frontend lint.
-- Frontend Node tests.
-- `git diff --check`.
-- `git status --short --branch`.
+P19 Task 2 fresh release-gate evidence:
+- Backend full suite: `../.venv313/bin/python -m unittest discover -s tests` ran 222 tests OK.
+- Frontend typecheck: `./node_modules/.bin/tsc --noEmit --pretty false` exited 0.
+- Frontend lint: `npm run lint` exited 0.
+- Frontend Node tests: `node --experimental-strip-types --test tests/*.test.mts` ran 119 tests OK.
+- Whitespace check: `git diff --check` exited 0.
+- Status check:
+
+```text
+## dev...origin/dev [ahead 55]
+ M frontend/next-env.d.ts
+ M frontend/tsconfig.tsbuildinfo
+?? docs/superpowers/demos/
+```
+
+Interpretation:
+- The automated verification gate is green at P19 Task 2.
+- The remaining dirty files are known local generated/user-content items and must remain unstaged.
 
 Known benign warnings to track:
 - Backend market tests may warn about offline provider fallback or Yahoo/YFinance DNS resolution.
