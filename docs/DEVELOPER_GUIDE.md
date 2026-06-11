@@ -33,7 +33,7 @@
 | 异步与派生 | 本地 DB job worker、outbox relay、idempotency、business lock、derived timeline snapshot |
 | 外部服务 | Finnhub, AKShare, Binance, 可配置 OpenAI 兼容 LLM 接口 |
 | 部署 | Docker Compose + Caddy |
-| 可观测性 | `X-Request-ID`、`X-Response-Time-Ms`、统一错误 `error.code/message/request_id/status_code` envelope |
+| 可观测性 | `X-Request-ID`、`X-Response-Time-Ms`、统一错误 `error.code/message/request_id/status_code` envelope、`tradingnoobs.*` 结构化日志 helper |
 
 ---
 

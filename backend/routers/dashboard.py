@@ -9,6 +9,7 @@ from datetime import date, timedelta
 
 from database import get_db
 from models import User, Position, PositionStatus, TradingAccount, TradeBatch, BatchType, UserSettings
+from observability import get_structured_logger, log_event
 from schemas import DashboardStats, AssetAllocation, PositionMover, AccountAllocation, PortfolioFlow, SankeyNode, SankeyLink
 from services.account_ledger_service import calculate_account_cash_balance_read_model
 from services.auth_service import get_current_user
@@ -21,6 +22,7 @@ from services.metrics_service import MetricsService
 from services.trading_accounting_service import calculate_mark_to_market_position
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
+logger = get_structured_logger("dashboard")
 
 
 def _enum_value(value):
@@ -533,7 +535,7 @@ async def get_dashboard_stats(
             
             db.commit()
     except Exception as e:
-        print(f"Snapshot recording failed: {e}")
+        log_event(logger, "warning", "snapshot_record_failed", error=str(e))
         # Don't block main response
 
     # Calculate Total Portfolio PnL (Realized + Unrealized) — 换算到显示币种

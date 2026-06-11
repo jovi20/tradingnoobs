@@ -14,12 +14,14 @@ import asyncio
 from fastapi.concurrency import run_in_threadpool
 
 from models import AssetMetadata, AssetCoreType, AssetMarket, AssetCurrency, AssetRiskLevel
+from observability import get_structured_logger, log_event
 from services.providers import akshare_provider, binance_provider
 from services.llm_service import classify_asset, classify_asset_rich
 from services.platform_config_service import get_finnhub_api_key
 
 # Cache TTL in seconds (1 minute)
 CACHE_TTL_SECONDS = 60
+logger = get_structured_logger("market_data")
 
 
 class MarketDataService:
@@ -51,7 +53,7 @@ class MarketDataService:
             }
             return data
         except Exception as e:
-            print(f"Error fetching quote for {symbol}: {e}")
+            log_event(logger, "warning", "quote_fetch_failed", symbol=symbol, error=str(e))
             raise e
     _asset_type_cache: Dict[str, str] = {}
     
@@ -184,7 +186,7 @@ class MarketDataService:
                 metadata.instrument = rich_info.get('instrument', 'Spot')
                 
         except Exception as e:
-            print(f"Error in rich LLM detection for {symbol}: {e}")
+            log_event(logger, "warning", "rich_llm_detection_failed", symbol=symbol, error=str(e))
             
         # 4. Final Fallbacks
         if not metadata.core_type:
@@ -300,10 +302,10 @@ class MarketDataService:
         if cached:
             cache_age = datetime.now() - cached['timestamp']
             if cache_age.total_seconds() < CACHE_TTL_SECONDS:
-                print(f"[Cache HIT] Finnhub quote for {symbol_upper} from cache")
+                log_event(logger, "debug", "finnhub_quote_cache_hit", symbol=symbol_upper)
                 return cached['data']
             else:
-                print(f"[Cache EXPIRED] Finnhub quote for {symbol_upper}")
+                log_event(logger, "debug", "finnhub_quote_cache_expired", symbol=symbol_upper)
         
         # 1. Try Finnhub first
         try:
@@ -331,11 +333,11 @@ class MarketDataService:
                     'data': result,
                     'timestamp': datetime.now()
                 }
-                print(f"[Cache UPDATE] Finnhub quote for {symbol_upper} cached")
+                log_event(logger, "debug", "finnhub_quote_cache_updated", symbol=symbol_upper)
                 
                 return result
         except Exception as e:
-            print(f"Finnhub error for {symbol}: {e}")
+            log_event(logger, "warning", "finnhub_quote_failed", symbol=symbol, error=str(e))
             # Continue to fallback
             
         # 2. Fallback to Yahoo Finance
@@ -483,7 +485,7 @@ class MarketDataService:
                 return await run_in_threadpool(self._get_yfinance_history, symbol, start, end)
                 
         except Exception as e:
-            print(f"Error fetching history for {symbol}: {e}")
+            log_event(logger, "warning", "history_fetch_failed", symbol=symbol, error=str(e))
             return []
 
     def _get_us_history(self, symbol: str, start: datetime, end: datetime) -> List[Dict[str, Any]]:

@@ -1,20 +1,20 @@
 import pandas as pd
 import io
 import uuid
-import logging
 from typing import List, Dict, Any, Tuple
 from datetime import datetime
 from sqlalchemy.orm import Session
 from fastapi import UploadFile, HTTPException
 
 from models import AssetCoreType, PositionDirection, BatchType, Position, TradeBatch, Strategy
+from observability import get_structured_logger, log_event
 from schemas import PositionCreate, BatchTypeEnum, PositionDirectionEnum
 
 # In-memory cache for uploaded files preview (in production use Redis)
 # format: {token: {rows: [], df: DataFrame, meta: {}}}
 IMPORT_CACHE = {}
 
-logger = logging.getLogger(__name__)
+logger = get_structured_logger("import_service")
 
 class ImportService:
     def __init__(self, db: Session):
@@ -285,7 +285,7 @@ class ImportService:
                 # For import, we might be importing a full history.
                 # If we see a CLOSE without OPEN, it might be data gap.
                 # Let's Skip for now to be safe, or error.
-                print(f"Skipping orphan exit for {symbol}")
+                log_event(logger, "warning", "import_orphan_exit_skipped", symbol=symbol)
                 return
 
         # 2. Add Batch. PnL is assigned by the centralized FIFO recalculation below.

@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
@@ -10,6 +11,17 @@ from observability import (
     log_event,
     make_error_code,
 )
+
+
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+BUSINESS_LOGGING_FILES = [
+    "routers/admin.py",
+    "routers/dashboard.py",
+    "routers/positions.py",
+    "services/import_service.py",
+    "services/llm_service.py",
+    "services/market_data_service.py",
+]
 
 
 def build_test_client() -> TestClient:
@@ -108,6 +120,12 @@ class ObservabilityTests(unittest.TestCase):
         self.assertIn("event=quote_failed", captured.output[0])
         self.assertIn("provider=yahoo", captured.output[0])
         self.assertIn("symbol=MSFT", captured.output[0])
+
+    def test_business_paths_do_not_use_print_for_logging(self):
+        for relative_path in BUSINESS_LOGGING_FILES:
+            with self.subTest(file=relative_path):
+                source = (BACKEND_ROOT / relative_path).read_text()
+                self.assertNotIn("print(", source)
 
 
 if __name__ == "__main__":

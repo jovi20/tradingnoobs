@@ -69,8 +69,8 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 
 - [x] P12B：创建 Observability / error contract hardening plan。
 - [x] P12B：在路由异常处理中实际使用统一 error code。
-- [ ] P12B：建立结构化日志策略，逐步替换后端业务路径中的 `print()`。
-- [ ] P12B：补最小回归测试，保证错误响应包含稳定 code、request id、可排障信息。
+- [x] P12B：建立结构化日志策略，逐步替换后端业务路径中的 `print()`。
+- [x] P12B：补最小回归测试，保证错误响应包含稳定 code、request id、可排障信息。
 
 ---
 
@@ -106,7 +106,7 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 - [x] 增加请求耗时 `X-Response-Time-Ms`。
 - [x] 冻结 error code 命名规则，新增 `make_error_code(namespace, error)` helper。
 - [x] 在路由异常处理中实际使用统一 error code。
-- [ ] 建立结构化日志策略，逐步替换后端业务路径中的 `print()`。
+- [x] 建立结构化日志策略，逐步替换后端业务路径中的 `print()`。
 - [x] 补 release / rollback playbook，特别是 truth hard cutover 和 derived snapshot 切换；详见 [release-rollback-playbook.md](./release-rollback-playbook.md)。
 
 ### P10D 前端 API 契约收敛

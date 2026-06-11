@@ -84,7 +84,7 @@ cd backend
   - `get_structured_logger(namespace: str)`.
   - `log_event(logger, level: str, event: str, **fields)`.
 - [x] Run `cd backend && ../.venv313/bin/python -m unittest discover -s tests -p test_observability.py` and confirm it passes.
-- [ ] Commit with `feat: add structured logging helper`.
+- [x] Commit with `feat: add structured logging helper`.
 
 P12B Task 2 result:
 - Added `get_structured_logger(namespace)` with the `tradingnoobs.<namespace>` naming convention.
@@ -93,6 +93,7 @@ P12B Task 2 result:
 Verification log:
 - RED backend: `../.venv313/bin/python -m unittest discover -s tests -p test_observability.py` failed because `get_structured_logger` did not exist.
 - GREEN targeted backend: `../.venv313/bin/python -m unittest discover -s tests -p test_observability.py` ran 8 tests OK.
+- Commit: `0643e94 feat: add structured logging helper`.
 
 Verification:
 
@@ -107,18 +108,28 @@ cd backend
 
 **Goal:** remove noisy production-path prints from trading, dashboard, import, market data, and LLM services while leaving CLI ops prints alone.
 
-- [ ] Write a failing static test in `backend/tests/test_observability.py` that rejects `print(` usage in:
+- [x] Write a failing static test in `backend/tests/test_observability.py` that rejects `print(` usage in:
   - `backend/routers/admin.py`
   - `backend/routers/dashboard.py`
   - `backend/routers/positions.py`
   - `backend/services/import_service.py`
   - `backend/services/llm_service.py`
   - `backend/services/market_data_service.py`
-- [ ] Run `cd backend && ../.venv313/bin/python -m unittest discover -s tests -p test_observability.py` and confirm it fails on existing `print()` calls.
-- [ ] Replace those prints with `get_structured_logger(...)` and `log_event(...)`.
-- [ ] Leave CLI and ops scripts unchanged in this task.
-- [ ] Run `cd backend && ../.venv313/bin/python -m unittest discover -s tests -p test_observability.py` and confirm it passes.
+- [x] Run `cd backend && ../.venv313/bin/python -m unittest discover -s tests -p test_observability.py` and confirm it fails on existing `print()` calls.
+- [x] Replace those prints with `get_structured_logger(...)` and `log_event(...)`.
+- [x] Leave CLI and ops scripts unchanged in this task.
+- [x] Run `cd backend && ../.venv313/bin/python -m unittest discover -s tests -p test_observability.py` and confirm it passes.
 - [ ] Commit with `chore: replace business prints with structured logs`.
+
+P12B Task 3 result:
+- Removed production-path `print()` usage from admin, dashboard, positions, import, LLM, and market data business modules.
+- Replaced those calls with stable structured events such as `llm_test_success`, `snapshot_record_failed`, `quote_fetch_failed`, `position_export_row_failed`, and `history_fetch_failed`.
+- CLI/ops stdout behavior remains untouched.
+
+Verification log:
+- RED backend: `../.venv313/bin/python -m unittest discover -s tests -p test_observability.py` failed on `print(` usage in the six guarded business files.
+- GREEN targeted backend: `../.venv313/bin/python -m unittest discover -s tests -p test_observability.py` ran 9 tests OK.
+- P12B Task 3 full backend regression: `../.venv313/bin/python -m unittest discover -s tests` ran 168 tests OK; output included the existing Yahoo/MSFT DNS warning.
 
 Verification:
 

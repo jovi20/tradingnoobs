@@ -14,6 +14,7 @@ import io
 from datetime import datetime
 
 from database import get_db
+from observability import get_structured_logger, log_event
 from routers.auth import get_current_user
 from models import (
     User, Position, TradeBatch, TradingAccount, AssetMetadata,
@@ -39,6 +40,7 @@ from services.trading_accounting_service import (
 import asyncio
 
 router = APIRouter(prefix="/api/positions", tags=["positions"])
+logger = get_structured_logger("positions")
 
 LEGACY_BATCH_WRITE_FALLBACK_DESCRIPTION = (
     "Migration fallback only. Use X-Migration-Fallback: legacy-batch-write to allow a legacy "
@@ -387,7 +389,7 @@ async def get_position(
                     )
                     position.unrealized_pnl = float(mark.unrealized_pnl)
         except Exception as e:
-            print(f"Error fetching quote for {position.symbol}: {e}")
+            log_event(logger, "warning", "quote_fetch_failed", symbol=position.symbol, error=str(e))
             # Continue without real-time price
             pass
     
@@ -852,7 +854,15 @@ async def analyze_position(
     if not start_date:
         return position # Should not happen for valid position
         
-    print(f"Analyzing position {position.id} ({position.symbol}) from {start_date} to {end_date}")
+    log_event(
+        logger,
+        "info",
+        "position_history_analysis_started",
+        position_id=position.id,
+        symbol=position.symbol,
+        start_date=start_date,
+        end_date=end_date,
+    )
     
     history = await market_service.get_price_history(position.symbol, start_date, end_date)
     
@@ -869,7 +879,7 @@ async def analyze_position(
         db.commit()
         db.refresh(position)
     else:
-        print(f"No history found for {position.symbol}")
+        log_event(logger, "info", "position_history_missing", position_id=position.id, symbol=position.symbol)
         
     # Construct Response (Similar to get_position)
     drift_analysis = calculate_drift(position)
@@ -1062,7 +1072,7 @@ async def export_positions_csv(
                 ])
         except Exception as e:
             # Log error but skip row to allow partial export
-            print(f"Error exporting position {pos.id}: {str(e)}")
+            log_event(logger, "warning", "position_export_row_failed", position_id=pos.id, error=str(e))
             continue
     
     # Prepare response with UTF-8 BOM for Excel compatibility

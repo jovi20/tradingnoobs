@@ -8,8 +8,10 @@ from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
 from models import UserSettings, WeeklyReport, TradeBatch, Position, BatchType
+from observability import get_structured_logger, log_event
 from services.platform_config_service import get_llm_runtime_config
 
+logger = get_structured_logger("llm_service")
 
 MUNGER_PROMPT = """你是一位投资分析师，精通查理·芒格的投资哲学。请根据以下一周的交易记录，生成交易洞察报告。
 
@@ -137,7 +139,7 @@ async def classify_asset_rich(db: Session, symbol: str, name: Optional[str] = No
             return json.loads(content.strip())
             
     except Exception as e:
-        print(f"Rich LLM Classification failed for {symbol}: {str(e)}")
+        log_event(logger, "warning", "rich_llm_classification_failed", symbol=symbol, error=str(e))
         return None
 
 
@@ -190,7 +192,7 @@ async def classify_asset(db: Session, symbol: str, exchange: Optional[str] = Non
             return json.loads(content.strip())
             
     except Exception as e:
-        print(f"LLM Classification failed: {str(e)}")
+        log_event(logger, "warning", "llm_classification_failed", symbol=symbol, error=str(e))
         return None
 
 

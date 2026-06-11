@@ -15,6 +15,7 @@ from schemas import (
 )
 from routers.auth import get_current_user
 import httpx
+from observability import get_structured_logger, log_event
 from services.credential_service import decrypt_secret, encrypt_secret, mask_secret
 from services.job_service import cancel_job_run, force_cancel_running_job_run, requeue_job_run
 from services.platform_config_service import get_llm_runtime_config
@@ -24,6 +25,7 @@ router = APIRouter(
     tags=["admin"],
     responses={404: {"description": "Not found"}},
 )
+logger = get_structured_logger("admin")
 
 
 def _enum_value(value):
@@ -424,7 +426,7 @@ async def test_llm_connection(
             )
             
             if response.status_code == 200:
-                print(f"LLM Test Success: {response.json()}") # Debug log
+                log_event(logger, "info", "llm_test_success", response_body=response.json())
                 return {"status": "success", "message": "Connection successful"}
             else:
                 error_msg = response.text
