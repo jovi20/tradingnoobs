@@ -1,6 +1,6 @@
 # 市场数据接入附录
 
-本文档只描述当前仓库中的真实实现，对应 `backend/services/market_data_service.py` 与 `backend/services/providers/*`。
+本文档只描述当前仓库中的真实实现，对应 `backend/services/market_data_service.py`、`backend/services/market_data_orchestrator.py`、`backend/services/provider_router.py` 与 `backend/services/providers/*`。
 
 如果文档与代码不一致，以代码为准，再回头修正文档。
 
@@ -9,11 +9,13 @@
 ## 1. 路由入口与职责
 
 统一入口：
-- `backend/services/market_data_service.py`
+- `backend/services/market_data_service.py`：对旧调用方保留 facade，`get_quote()` 仍返回包含 `c / pc / h / l / o` 的 legacy quote dict。
+- `backend/services/provider_router.py`：负责 provider routing，按 symbol / exchange / market / core_type 生成确定性 provider 顺序。
+- `backend/services/market_data_orchestrator.py`：负责 provider fallback、60 秒 quote cache、freshness/degradation metadata 与 structured logs。
 
 主要职责：
 - 根据代码模式或资产元数据选择 provider
-- 做 60 秒级行情缓存
+- 做 60 秒级行情缓存，并在 cache hit 时标记 `freshness=CACHED`
 - 提供 symbol 校验、报价查询、历史价格查询
 - 辅助写入或补全 `AssetMetadata`
 
@@ -31,14 +33,43 @@
 
 | 资产类别 | 当前主 provider | 触发规则 | 主要回退 |
 |----------|-----------------|----------|----------|
-| A 股 | AKShare | 6 位股票代码、北交所代码、`market=A_SHARE` | YFinance |
+| A 股 | AKShare | 6 位股票代码、北交所代码、`market=A_SHARE` | provider 内部部分场景回退 YFinance |
 | 港股 | AKShare / `akshare-one` | 5 位数字港股代码、`.HK`、`exchange=HK*` | 无统一二级 provider，失败时报错 |
-| 美股 | Finnhub | 字母代码、`market=US`、`asset_type=US_STOCK` | YFinance |
+| 美股 | Finnhub | 字母代码、`market=US`、`asset_type=US_STOCK` | orchestrator fallback 到 YFinance |
 | 加密货币 | Binance | 后缀 `USDT/BUSD/BTC/ETH`、`exchange=BINANCE/CRYPTO` | 无 |
 | 基金 | AKShare | 基金代码模式、`asset_type=FUND/ETF_*` | 部分场景回退 YFinance |
 | 外汇 | AKShare | 6 位字母货币对、`market=FOREX` | YFinance |
 
-### 2.2 detect_asset_type 现有识别逻辑
+### 2.2 Public quote metadata
+
+`GET /api/market/quote/{symbol}` 保留旧结构：
+
+```json
+{
+  "symbol": "MSFT",
+  "asset_type": "US_STOCK",
+  "quote": {"c": 421.13, "pc": 418.9},
+  "provider": "finnhub",
+  "freshness": "FRESH",
+  "degraded": false,
+  "source_refs": ["provider:finnhub", "symbol:MSFT"],
+  "trust": {
+    "freshness": "FRESH",
+    "degraded": false,
+    "source_refs": ["provider:finnhub", "symbol:MSFT"]
+  }
+}
+```
+
+metadata 规则：
+- `freshness=FRESH`：provider 直接成功返回。
+- `freshness=CACHED`：命中 orchestrator 60 秒 quote cache。
+- `freshness=UNAVAILABLE`：所有 provider 均失败，`quote=null`，`error` 为稳定错误摘要。
+- `degraded=true`：主 provider 失败但 fallback 成功，或所有 provider 失败。
+- `degraded_reason`：记录失败 provider 与原因，供 UI 解释“为什么用了 fallback”。
+- `source_refs`：至少包含 `symbol:*` 和参与路由的 `provider:*` refs，方便和其他 read model / artifact 统一展示来源。
+
+### 2.3 detect_asset_type 现有识别逻辑
 
 当前识别主要基于代码模式：
 - `CRYPTO`
@@ -162,7 +193,8 @@ YFinance 在当前项目中是回退 provider，不是统一主数据源。
 
 ### 5.1 缓存
 
-- `MarketDataService` 报价缓存：60 秒
+- `market_data_orchestrator` 报价缓存：60 秒，返回 `freshness=CACHED`
+- `MarketDataService._quote_cache` 仍保留给旧 helper 使用，新增 quote facade 已转向 orchestrator
 - AKShare 批量基金数据缓存：当前实现为小时级内存缓存
 
 ### 5.2 历史价格
@@ -229,3 +261,24 @@ YFinance 在当前项目中是回退 provider，不是统一主数据源。
 - 先检查 symbol 与 exchange 是否录入准确
 - 再检查 `AssetMetadata` 是否被旧数据缓存过
 - 必要时通过持仓元数据更新逻辑手动修正
+
+---
+
+## 8. P16 验证命令
+
+后端 market 目标测试：
+
+```bash
+cd backend
+../.venv313/bin/python -m unittest discover -s tests -p test_market_router.py
+../.venv313/bin/python -m unittest discover -s tests -p test_market_data_orchestrator.py
+../.venv313/bin/python -m unittest discover -s tests -p test_market_provider_contracts.py
+```
+
+前端 freshness label 测试：
+
+```bash
+cd frontend
+node --experimental-strip-types --test tests/market-data.test.mts
+./node_modules/.bin/tsc --noEmit --pretty false
+```

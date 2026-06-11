@@ -1182,9 +1182,33 @@ export interface SymbolValidation {
     price?: number
     name?: string
     provider?: string
+    freshness?: string
+    degraded?: boolean
+    degraded_reason?: string
+    source_refs?: string[]
     error?: string
     metadata?: any // Rich metadata
     candidates?: { symbol: string; reason: string }[]
+}
+
+export interface MarketQuoteTrustMeta {
+    freshness: string
+    degraded: boolean
+    degraded_reason?: string
+    source_refs: string[]
+}
+
+export interface MarketQuoteResponse {
+    symbol: string
+    asset_type?: string
+    quote?: Record<string, any>
+    provider?: string
+    freshness: string
+    degraded: boolean
+    degraded_reason?: string
+    source_refs: string[]
+    error?: string
+    trust: MarketQuoteTrustMeta
 }
 
 
@@ -1213,7 +1237,7 @@ export const marketAPI = {
         return fetchAPI(`/api/market/validate/${symbol}${query ? `?${query}` : ''}`, {}, token)
     },
 
-    getQuote: async (token: string, symbol: string, exchange?: string): Promise<any> => {
+    getQuote: async (token: string, symbol: string, exchange?: string): Promise<MarketQuoteResponse> => {
         const params = new URLSearchParams()
         if (exchange) params.append('exchange', exchange)
         const query = params.toString()

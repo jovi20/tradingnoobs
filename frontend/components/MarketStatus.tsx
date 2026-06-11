@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Globe, Clock, Moon, Sun } from 'lucide-react'
+import { Globe } from 'lucide-react'
+import { buildMarketDataStatus, type MarketDataFreshnessMeta, type MarketFreshnessTone } from '@/lib/adapters/market-data'
 
 // Market definitions
 type MarketStatusType = 'OPEN' | 'CLOSED' | 'PRE' | 'POST' | 'OVERNIGHT' | 'WEEKEND' | 'HOLIDAY'
@@ -51,8 +52,20 @@ const MARKETS: MarketInfo[] = [
     }
 ]
 
-export default function MarketStatus() {
+const freshnessToneClasses: Record<MarketFreshnessTone, string> = {
+    positive: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-300',
+    neutral: 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300',
+    warning: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300',
+    danger: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300',
+}
+
+interface MarketStatusProps {
+    quoteMeta?: MarketDataFreshnessMeta | null
+}
+
+export default function MarketStatus({ quoteMeta = null }: MarketStatusProps) {
     const [currentTime, setCurrentTime] = useState(new Date())
+    const quoteStatus = quoteMeta ? buildMarketDataStatus(quoteMeta) : null
 
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000)
@@ -165,35 +178,48 @@ export default function MarketStatus() {
     }
 
     return (
-        <div className="grid grid-cols-3 gap-2 bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm w-full">
-            {MARKETS.map(market => {
-                const { status, label, color } = getMarketStatus(market, currentTime)
+        <div className="w-full rounded-xl border border-slate-100 bg-white p-2 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+            <div className="grid grid-cols-3 gap-2">
+                {MARKETS.map(market => {
+                    const { label, color } = getMarketStatus(market, currentTime)
 
-                // Get Local Display Time for that market (to show "What time is it there")
-                const localTimeStr = new Intl.DateTimeFormat('en-US', {
-                    timeZone: market.timezone,
-                    hour: 'numeric',
-                    minute: 'numeric',
-                    hour12: false
-                }).format(currentTime)
+                    // Get Local Display Time for that market (to show "What time is it there")
+                    const localTimeStr = new Intl.DateTimeFormat('en-US', {
+                        timeZone: market.timezone,
+                        hour: 'numeric',
+                        minute: 'numeric',
+                        hour12: false
+                    }).format(currentTime)
 
-                return (
-                    <div key={market.id} className="flex flex-col items-center justify-center gap-1 px-1 border-r last:border-0 border-slate-100 dark:border-slate-700">
-                        <div className="text-xs text-center">
-                            <div className="flex items-center justify-center gap-1 font-medium text-slate-700 dark:text-slate-300">
-                                {market.id === 'US' ? <Globe className="w-3 h-3" /> : null}
-                                {market.name}
+                    return (
+                        <div key={market.id} className="flex flex-col items-center justify-center gap-1 px-1 border-r last:border-0 border-slate-100 dark:border-slate-700">
+                            <div className="text-xs text-center">
+                                <div className="flex items-center justify-center gap-1 font-medium text-slate-700 dark:text-slate-300">
+                                    {market.id === 'US' ? <Globe className="w-3 h-3" /> : null}
+                                    {market.name}
+                                </div>
+                                <div className="text-slate-400 scale-90 font-mono">
+                                    {localTimeStr}
+                                </div>
                             </div>
-                            <div className="text-slate-400 scale-90 font-mono">
-                                {localTimeStr}
+                            <div className={`text-xs font-bold ${color} px-1.5 py-0.5 rounded bg-slate-50 dark:bg-slate-700/50`}>
+                                {label}
                             </div>
                         </div>
-                        <div className={`text-xs font-bold ${color} px-1.5 py-0.5 rounded bg-slate-50 dark:bg-slate-700/50`}>
-                            {label}
-                        </div>
+                    )
+                })}
+            </div>
+            {quoteStatus && (
+                <div className={`mt-2 rounded-lg border px-2 py-1.5 text-[11px] ${freshnessToneClasses[quoteStatus.tone]}`}>
+                    <div className="flex flex-wrap items-center justify-between gap-1">
+                        <span className="font-semibold">行情源：{quoteStatus.providerLabel}</span>
+                        <span>新鲜度：{quoteStatus.freshnessLabel}</span>
                     </div>
-                )
-            })}
+                    {quoteStatus.degradedReason && (
+                        <p className="mt-1 line-clamp-2 opacity-80">降级原因：{quoteStatus.degradedReason}</p>
+                    )}
+                </div>
+            )}
         </div>
     )
 }
