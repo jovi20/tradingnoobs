@@ -183,24 +183,24 @@ git commit -m "docs: record authenticated browser smoke"
 
 **Goal:** make the final release decision explicit.
 
-- [ ] In `docs/release-readiness-checklist.md`, add one release decision:
+- [x] In `docs/release-readiness-checklist.md`, add one release decision:
   - `READY_TO_MERGE`
   - `READY_FOR_STAGING_ONLY`
   - `BLOCKED`
-- [ ] If `BLOCKED`, list exact blockers and owners.
-- [ ] If ready, document:
+- [x] If `BLOCKED`, list exact blockers and owners.
+- [x] If ready, document:
   - merge target.
   - backup file or backup command.
   - release tag candidate.
   - rollback feature flags and commands.
-- [ ] Re-run:
+- [x] Re-run:
 
 ```bash
 git diff --check
 git status --short --branch
 ```
 
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add docs/release-readiness-checklist.md docs/TODO.md docs/README.md docs/superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md

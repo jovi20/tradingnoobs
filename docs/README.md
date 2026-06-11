@@ -13,23 +13,25 @@
    当前代码库与运行方式说明，回答“现在实际实现到了哪里”。
 2. [TODO.md](./TODO.md)
    当前唯一执行清单，记录 P10 之后的优先级和仍未开发的 backlog。
-3. [release-rollback-playbook.md](./release-rollback-playbook.md)
-   P11/P12 后 truth writes、Timeline snapshot、legacy mutation guard 的发布与回滚手册。
-4. [import-template.md](./import-template.md)
+3. [release-readiness-checklist.md](./release-readiness-checklist.md)
+   P19 release readiness 证据矩阵，当前决策为 `READY_FOR_STAGING_ONLY`。
+4. [release-rollback-playbook.md](./release-rollback-playbook.md)
+   P11-P18 后 truth writes、Timeline snapshot、legacy mutation guard、P13-P18 功能 lane 的发布与回滚手册。
+5. [import-template.md](./import-template.md)
    交易 CSV/Excel 导入模板说明，覆盖当前模板列、示例行和必填字段校验规则。
-5. [report-export.md](./report-export.md)
+6. [report-export.md](./report-export.md)
    周报 PDF 导出 runbook，覆盖接口、V1 内容、ReportLab 依赖、验证命令和已知限制。
-6. [admin-operations-runbook.md](./admin-operations-runbook.md)
+7. [admin-operations-runbook.md](./admin-operations-runbook.md)
    管理员备份、用户操作、stale job、force-cancel 与恢复演练 runbook。
-7. [superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md](./superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md)
+8. [superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md](./superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md)
    平台底座与前端重设计的总 sequencing plan。
-8. [superpowers/plans/2026-05-02-dev-branch-checkpoint.md](./superpowers/plans/2026-05-02-dev-branch-checkpoint.md)
+9. [superpowers/plans/2026-05-02-dev-branch-checkpoint.md](./superpowers/plans/2026-05-02-dev-branch-checkpoint.md)
    `dev` 分支阶段 checkpoint 与验收记录。
-9. [superpowers/specs/2026-04-06-platform-foundation-design.md](./superpowers/specs/2026-04-06-platform-foundation-design.md)
+10. [superpowers/specs/2026-04-06-platform-foundation-design.md](./superpowers/specs/2026-04-06-platform-foundation-design.md)
    平台底座目标架构基线。
-10. [superpowers/specs/2026-04-07-frontend-experience-redesign-design.md](./superpowers/specs/2026-04-07-frontend-experience-redesign-design.md)
+11. [superpowers/specs/2026-04-07-frontend-experience-redesign-design.md](./superpowers/specs/2026-04-07-frontend-experience-redesign-design.md)
    前端体验重设计基线。
-11. 专题附录：
+12. 专题附录：
    [market_data_sources.md](./market_data_sources.md),
    [trading-metrics.md](./trading-metrics.md),
    [trading-fields-design.md](./trading-fields-design.md)
@@ -45,8 +47,8 @@
 | [2026-06-11-dev-p15-ai-analysis-workflow-plan.md](./superpowers/plans/2026-06-11-dev-p15-ai-analysis-workflow-plan.md) | P15 AI analysis workflow 专项计划，负责日期范围选择、分析契约收敛、artifact-backed history 和回归测试。 |
 | [2026-06-11-dev-p16-market-data-platform-plan.md](./superpowers/plans/2026-06-11-dev-p16-market-data-platform-plan.md) | P16 market data platform 专项计划，负责 provider orchestration 拆分、行情 freshness/degradation 元数据和可重复 provider 验证。 |
 | [2026-06-11-dev-p17-admin-operations-plan.md](./superpowers/plans/2026-06-11-dev-p17-admin-operations-plan.md) | P17 admin operations 专项计划，已完成；负责备份触发、管理员晋升、密码重置、stale/failed job 解释和 force-cancel 防护。 |
-| [2026-06-11-dev-p18-chart-renderer-migration-plan.md](./superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md) | P18 chart renderer migration 专项计划；当前 active lane，负责一次性迁移剩余 Recharts renderer，并保持 `chart.v1` 数据契约稳定。 |
-| [2026-06-11-dev-p19-release-readiness-plan.md](./superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md) | P19 release readiness 专项计划，负责全量验证、authenticated browser smoke、迁移演练、发布清单和回滚清单。 |
+| [2026-06-11-dev-p18-chart-renderer-migration-plan.md](./superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md) | P18 chart renderer migration 专项计划，已完成；剩余 Recharts renderer 已迁移到内部 SVG renderer，并保持 `chart.v1` 数据契约稳定。 |
+| [2026-06-11-dev-p19-release-readiness-plan.md](./superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md) | P19 release readiness 专项计划，已完成；当前 release decision 为 `READY_FOR_STAGING_ONLY`。 |
 | [2026-06-11-dev-p12b-observability-error-contract-plan.md](./superpowers/plans/2026-06-11-dev-p12b-observability-error-contract-plan.md) | P12B observability/error contract hardening 专项计划，已完成。 |
 | [2026-06-10-dev-p12-platform-contract-hardening-plan.md](./superpowers/plans/2026-06-10-dev-p12-platform-contract-hardening-plan.md) | P12 platform contract hardening 专项计划，已完成；后续 P12B observability/error contract hardening 也已完成。 |
 | [2026-06-10-dev-p11-truth-hard-cutover-plan.md](./superpowers/plans/2026-06-10-dev-p11-truth-hard-cutover-plan.md) | P11 truth hard cutover 专项计划，记录 truth-first writes、snapshot Timeline、legacy migration guard 的完成门。 |
@@ -87,6 +89,7 @@
 | [import-template.md](./import-template.md) | 交易 CSV/Excel 导入模板说明，覆盖模板列、示例行、必填校验和可选字段建议。 |
 | [report-export.md](./report-export.md) | 周报 PDF 导出 runbook，覆盖接口、V1 内容、依赖、验证命令和限制。 |
 | [admin-operations-runbook.md](./admin-operations-runbook.md) | 管理员备份、用户操作、stale job、force-cancel 与恢复演练 runbook。 |
+| [release-readiness-checklist.md](./release-readiness-checklist.md) | P19 发布就绪证据矩阵与 staging-only 决策记录。 |
 | [market_data_sources.md](./market_data_sources.md) | 市场数据 provider、路由、配置、限制和排障。 |
 | [trading-metrics.md](./trading-metrics.md) | 指标算法与实现状态。 |
 | [trading-fields-design.md](./trading-fields-design.md) | 当前 / 实施中字段边界。 |

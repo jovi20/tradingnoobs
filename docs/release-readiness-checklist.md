@@ -2,20 +2,20 @@
 
 更新时间：2026-06-11
 执行分支：`dev`
-当前 HEAD：`d6fe118 docs: complete p18 chart renderer migration gate`
+P19 evidence HEAD：`cabc857 docs: record authenticated browser smoke`
 比较范围：`origin/dev..dev`
-当前状态：`P19_TASK_4_BROWSER_SMOKE_RECORDED`
+当前状态：`P19_COMPLETE_READY_FOR_STAGING_ONLY`
 
-本文档是 P19 发布就绪闸门的证据矩阵。它不代表已经可以发布；只有自动化验证、迁移演练、authenticated browser smoke 和 release decision 都补齐后，才能进入 merge/tag/staging 决策。
+本文档是 P19 发布就绪闸门的证据矩阵。当前结论是 `READY_FOR_STAGING_ONLY`：可以作为 `dev` staging 候选继续推进，但本轮不创建 PR、不 merge 到 `main`、不创建 tag。
 
 ---
 
 ## 1. Branch And Commit Range
 
-当前分支状态：
+Task 5 decision 前观测到的分支状态：
 
 ```text
-## dev...origin/dev [ahead 54]
+## dev...origin/dev [ahead 58]
  M frontend/next-env.d.ts
  M frontend/tsconfig.tsbuildinfo
 ?? docs/superpowers/demos/
@@ -83,6 +83,15 @@ f4c5abe docs: plan backend model modularization
 a205e77 feat: add request observability middleware
 c4a9b4e docs: inventory legacy truth cutover paths
 f86e72e docs: sync dev progress and p10 plan
+```
+
+P19 evidence commits after initial scope freeze:
+
+```text
+cabc857 docs: record authenticated browser smoke
+ec7ddb8 docs: record migration rehearsal
+2b2d899 docs: record p19 automated verification
+3757df3 docs: start p19 release readiness checklist
 ```
 
 ---
@@ -227,21 +236,29 @@ Rollback coverage confirmed in P19 Task 3 for included lanes:
 
 ## 8. Known Residual Risks
 
-- Authenticated release smoke for P11 legacy/truth routes is still pending.
-- Populated chart visual smoke is still pending; P18 only covered authenticated empty-state chart cards.
 - External market data live provider validation depends on network/API keys; P16 has repeatable provider-routing tests but live provider quality remains environment-dependent.
 - PostgreSQL backup provider behavior requires production-like database configuration; SQLite backup path is covered locally.
 - Generated local files remain dirty after frontend checks and must not be staged unless intentionally regenerated.
+- P10B/P10D/P10E remaining cleanup items are intentionally not included as release-ready feature work.
+- No PR, merge, release tag, or push is performed by this checklist.
 
 ---
 
 ## 9. Release Decision
 
-Current decision: `PENDING`.
+Current decision: `READY_FOR_STAGING_ONLY`.
 
-Allowed final values:
-- `READY_TO_MERGE`
-- `READY_FOR_STAGING_ONLY`
-- `BLOCKED`
+Rationale:
+- P13-P18 scope is frozen and included.
+- Full backend/frontend automated verification passed in P19 Task 2.
+- Alembic, truth sync/backfill, and derived timeline refresh rehearsal tests passed in P19 Task 3.
+- Authenticated browser release smoke passed across product and admin routes in P19 Task 4.
+- Rollback playbook covers P11-P18 release levers.
+- Staging-only is the safer decision because production backup/provider credentials, merge/tag timing, and remote push are operational decisions outside this local checklist.
 
-Decision cannot be updated until P19 Tasks 2-4 are complete or explicitly blocked with evidence.
+Staging decision details:
+- Merge target: keep current work on `dev` until the user explicitly asks to merge.
+- Backup command: use `/api/admin/ops/backups` or the production database backup procedure before any deployment migration.
+- Release tag candidate: `p19-dev-readiness-20260611` if staging acceptance later approves tagging.
+- Rollback first levers: database restore, `timeline_legacy_mixed_feed_enabled`, provider fallback/degraded metadata, hiding risky admin/UI entry points, and commit-level rollback per [release-rollback-playbook.md](./release-rollback-playbook.md).
+- Next action after this checklist: push `dev` when the user asks to publish these commits to remote; do not create PR unless explicitly requested.

@@ -229,7 +229,7 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 - [x] 剩余 Recharts renderer 已迁移到内部 SVG renderer，并用静态测试阻止 Recharts import 回流。
 - [x] `frontend/package.json` 与 `frontend/package-lock.json` 已移除 `recharts` 依赖。
 - [x] P18 authenticated browser smoke 已用隔离临时用户覆盖 `/dashboard`、`/insights` 的空数据图表卡、控制台 error 和移动端横向溢出。
-- [ ] P19 release gate 仍需用发布级 fixture 完整覆盖带数据图表和 P11 遗留 routes：`/positions`、`/positions/[id]`、`/positions/[id]/add-batch`。
+- [x] P19 release gate 已用发布级 fixture 覆盖带数据图表和 P11 遗留 routes：`/positions`、`/positions/[id]`、`/positions/[id]/add-batch`。
 
 ### 发布就绪
 
@@ -239,7 +239,7 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 - [x] 完成后端、前端、lint、Node tests、`git diff --check` 全量验证。
 - [x] 完成 Alembic、truth sync、derived timeline refresh 的迁移与回填演练。
 - [x] 完成 authenticated browser smoke，覆盖 P11 遗留的 `/positions`、`/positions/[id]`、`/positions/[id]/add-batch`。
-- [ ] 更新 release checklist 和 rollback checklist 后，再决定 merge、tag 或继续 staging。
+- [x] 更新 release checklist 和 rollback checklist 后，release decision 标记为 `READY_FOR_STAGING_ONLY`。
 
 ---
 
