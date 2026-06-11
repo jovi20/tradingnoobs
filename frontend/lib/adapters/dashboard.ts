@@ -92,8 +92,18 @@ export function getDashboardPeriodOptions(now: Date = new Date()): Array<Dashboa
 }
 
 export function getDashboardRiskPosture(
-    stats: Pick<DashboardStats, 'max_drawdown' | 'sharpe_ratio'>
+    stats: Pick<DashboardStats, 'max_drawdown' | 'sharpe_ratio' | 'risk_summary'>
 ): DashboardRiskPosture {
+    const riskAlerts = stats.risk_summary?.alerts ?? []
+    const criticalAlert = riskAlerts.find((alert) => alert.severity === 'CRITICAL')
+    if (criticalAlert) {
+        return { label: '风险预警', detail: criticalAlert.summary, tone: 'danger' }
+    }
+    const warningAlert = riskAlerts.find((alert) => alert.severity === 'WARNING')
+    if (warningAlert) {
+        return { label: '需要处理', detail: warningAlert.summary, tone: 'warning' }
+    }
+
     const drawdown = stats.max_drawdown ?? 0
     const hasSharpe = typeof stats.sharpe_ratio === 'number'
     const sharpe = stats.sharpe_ratio ?? 0
@@ -255,5 +265,6 @@ export function adaptDashboardPageData({
         stats,
         pnlHistory,
         periodMetrics: calculateDashboardPeriodMetrics(pnlHistory),
+        riskAlerts: stats.risk_summary?.alerts ?? [],
     }
 }

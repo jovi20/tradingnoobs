@@ -203,6 +203,112 @@ test('dashboard risk posture maps drawdown and ratios to readable state', () => 
   assert.equal(getDashboardRiskPosture({ max_drawdown: 0.32, sharpe_ratio: 0.4 }).tone, 'danger')
 })
 
+test('dashboard risk posture is danger when a critical risk alert exists', () => {
+  const posture = getDashboardRiskPosture({
+    max_drawdown: 0.05,
+    sharpe_ratio: 1.4,
+    risk_summary: {
+      as_of: '2026-06-11T10:30:00Z',
+      base_currency: 'USD',
+      portfolio: {
+        gross_exposure: 100000,
+        net_liquidation_value: 94000,
+        daily_pnl: -6000,
+        daily_pnl_percent: -6,
+        max_drawdown: 0.06,
+      },
+      alerts: [{
+        public_id: 'risk:daily_loss:2026-06-11',
+        kind: 'DAILY_LOSS_LIMIT',
+        severity: 'CRITICAL',
+        summary: '今日亏损已达到 -6.00%',
+        reason: 'Daily equity change crossed the -5% critical threshold.',
+        recommended_action: {
+          kind: 'OPEN_DASHBOARD',
+          label: '查看组合风险',
+          href: '/dashboard',
+        },
+        source_refs: ['daily_snapshot:2026-06-11'],
+        trust: {
+          freshness: 'FRESH',
+          source: 'DERIVED',
+          value_status: 'ESTIMATED',
+        },
+      }],
+      trust: {
+        freshness: 'FRESH',
+        source: 'DERIVED',
+        source_refs: ['TradingPosition', 'AccountLedgerEntry', 'DailySnapshot'],
+      },
+    },
+  })
+
+  assert.equal(posture.tone, 'danger')
+  assert.equal(posture.label, '风险预警')
+})
+
+test('adaptDashboardPageData exposes risk alerts from stats', () => {
+  const result = adaptDashboardPageData({
+    stats: {
+      total_assets: 1000,
+      total_pnl: -120,
+      win_rate: 40,
+      avg_pnl_ratio: 0.7,
+      total_trades: 10,
+      open_positions: 2,
+      closed_trades: 8,
+      asset_allocation: [],
+      core_type_allocation: [],
+      market_allocation: [],
+      risk_level_allocation: [],
+      account_allocation: [],
+      top_movers: [],
+      bottom_movers: [],
+      risk_summary: {
+        as_of: '2026-06-11T10:30:00Z',
+        base_currency: 'USD',
+        portfolio: {
+          gross_exposure: 100000,
+          net_liquidation_value: 94000,
+          daily_pnl: -6000,
+          daily_pnl_percent: -6,
+          max_drawdown: 0.06,
+        },
+        alerts: [{
+          public_id: 'risk:daily_loss:2026-06-11',
+          kind: 'DAILY_LOSS_LIMIT',
+          severity: 'CRITICAL',
+          summary: '今日亏损已达到 -6.00%',
+          reason: 'Daily equity change crossed the -5% critical threshold.',
+          recommended_action: {
+            kind: 'OPEN_DASHBOARD',
+            label: '查看组合风险',
+            href: '/dashboard',
+          },
+          source_refs: ['daily_snapshot:2026-06-11'],
+          trust: {
+            freshness: 'FRESH',
+            source: 'DERIVED',
+            value_status: 'ESTIMATED',
+          },
+        }],
+        trust: {
+          freshness: 'FRESH',
+          source: 'DERIVED',
+          source_refs: ['TradingPosition', 'AccountLedgerEntry', 'DailySnapshot'],
+        },
+      },
+    },
+    openPositions: [],
+    allPositions: [],
+    pnlHistory: [],
+    displayCurrency: 'USD',
+  })
+
+  assert.equal(result.riskAlerts.length, 1)
+  assert.equal(result.riskAlerts[0].severity, 'CRITICAL')
+})
+
 test('dashboard account rows format values and preserve broker context', () => {
   const rows = formatDashboardAccountRows([
     { name: 'IBKR Main', broker: 'IBKR', value: 12345.67, percent: 61.2 },

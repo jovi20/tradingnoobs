@@ -690,6 +690,7 @@ class DashboardStats(BaseModel):
     sortino_ratio: Optional[float] = None
     calmar_ratio: Optional[float] = None
     max_drawdown: Optional[float] = None
+    risk_summary: Optional[RiskSummaryResponse] = None
 
 
 class AccountAllocation(BaseModel):

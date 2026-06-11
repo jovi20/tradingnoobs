@@ -126,7 +126,7 @@ Expected: import failure for `services.risk_alert_service`.
   - `build_portfolio_risk_summary(db, user_id, as_of=None, thresholds=None)`.
   - Pure helpers for daily loss percent, concentration, and drawdown classification.
 - [x] Run targeted test and confirm GREEN.
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add backend/services/risk_alert_service.py backend/tests/test_risk_alert_service.py
@@ -142,7 +142,7 @@ P13 Task 1 result:
 Verification log:
 - RED backend: `../.venv313/bin/python -m unittest discover -s tests -p test_risk_alert_service.py` failed because `services.risk_alert_service` did not exist.
 - GREEN backend: `../.venv313/bin/python -m unittest discover -s tests -p test_risk_alert_service.py` ran 4 tests OK.
-- Commit is pending because the Git commit approval request timed out twice in this session.
+- Commit: `6b2f26f feat: expose portfolio risk summary`.
 
 ## Task 2: Add Risk API Contract
 
@@ -169,7 +169,7 @@ cd backend
 ../.venv313/bin/python -m unittest discover -s tests -p test_openapi_contracts.py
 ```
 
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add backend/routers/risk.py backend/main.py backend/schemas.py backend/tests/test_risk_router.py backend/tests/test_openapi_contracts.py
@@ -189,22 +189,23 @@ Verification log:
 - GREEN backend: `../.venv313/bin/python -m unittest discover -s tests -p test_risk_router.py` ran 3 tests OK.
 - GREEN OpenAPI: `../.venv313/bin/python -m unittest discover -s tests -p test_openapi_contracts.py` ran 3 tests OK.
 - GREEN risk service regression: `../.venv313/bin/python -m unittest discover -s tests -p test_risk_alert_service.py` ran 4 tests OK.
+- Commit: `6b2f26f feat: expose portfolio risk summary`.
 
 ## Task 3: Feed Risk Alerts Into Dashboard
 
 **Goal:** Dashboard shows a concrete risk stack instead of only ratio tiles.
 
-- [ ] Extend `DashboardStats` in `backend/schemas.py` with `risk_summary: Optional[RiskSummaryResponse]`.
-- [ ] In `backend/routers/dashboard.py`, call `build_portfolio_risk_summary(...)` after portfolio totals are calculated and attach it to the response.
-- [ ] Add backend regression in `backend/tests/test_risk_router.py` or `backend/tests/test_router_platform_config_usage.py` verifying `/api/dashboard/stats` contains `risk_summary.alerts`.
-- [ ] Extend frontend `DashboardStats` in `frontend/lib/api.ts` and read-model types in `frontend/lib/read-models.ts`.
-- [ ] Update `frontend/lib/adapters/dashboard.ts` so `adaptDashboardPageData(...)` returns `riskAlerts` and a stronger `riskPosture` when a critical risk alert exists.
-- [ ] Create `frontend/components/risk/RiskAlertStack.tsx`.
-- [ ] Render `RiskAlertStack` inside `frontend/components/dashboard/workbench/DashboardRiskRail.tsx`.
-- [ ] Add frontend tests:
+- [x] Extend `DashboardStats` in `backend/schemas.py` with `risk_summary: Optional[RiskSummaryResponse]`.
+- [x] In `backend/routers/dashboard.py`, call `build_portfolio_risk_summary(...)` after portfolio totals are calculated and attach it to the response.
+- [x] Add backend regression in `backend/tests/test_risk_router.py` or `backend/tests/test_router_platform_config_usage.py` verifying `/api/dashboard/stats` contains `risk_summary.alerts`.
+- [x] Extend frontend `DashboardStats` in `frontend/lib/api.ts`; `frontend/lib/read-models.ts` has no Dashboard boundary in the current codebase.
+- [x] Update `frontend/lib/adapters/dashboard.ts` so `adaptDashboardPageData(...)` returns `riskAlerts` and a stronger `riskPosture` when a critical risk alert exists.
+- [x] Create `frontend/components/risk/RiskAlertStack.tsx`.
+- [x] Render `RiskAlertStack` inside `frontend/components/dashboard/workbench/DashboardRiskRail.tsx`.
+- [x] Add frontend tests:
   - `frontend/tests/dashboard-adapter.test.mts` covers critical alert overriding posture.
   - `frontend/tests/risk-alerts.test.mts` covers severity labels and href mapping.
-- [ ] Run:
+- [x] Run:
 
 ```bash
 cd frontend
@@ -217,6 +218,21 @@ node --experimental-strip-types --test tests/dashboard-adapter.test.mts tests/ri
 git add backend/routers/dashboard.py backend/schemas.py backend/tests/test_risk_router.py frontend/lib/api.ts frontend/lib/read-models.ts frontend/lib/adapters/dashboard.ts frontend/components/risk/RiskAlertStack.tsx frontend/components/dashboard/workbench/DashboardRiskRail.tsx frontend/tests/dashboard-adapter.test.mts frontend/tests/risk-alerts.test.mts
 git commit -m "feat: surface risk alerts on dashboard"
 ```
+
+P13 Task 3 result:
+- Dashboard stats now include `risk_summary`.
+- Frontend `DashboardStats` now carries the risk summary contract.
+- Dashboard adapter exposes `riskAlerts` and escalates posture to `danger` when a critical risk alert exists.
+- Added `RiskAlertStack` and rendered it in the Dashboard risk rail.
+
+Verification log:
+- RED backend: `../.venv313/bin/python -m unittest discover -s tests -p test_risk_router.py` failed because `/api/dashboard/stats` did not include `risk_summary`.
+- RED frontend: `node --experimental-strip-types --test tests/dashboard-adapter.test.mts tests/risk-alerts.test.mts` failed because `risk-alerts.ts` did not exist and Dashboard adapter did not expose risk alerts.
+- GREEN backend: `../.venv313/bin/python -m unittest discover -s tests -p test_risk_router.py` ran 4 tests OK.
+- GREEN frontend: `node --experimental-strip-types --test tests/dashboard-adapter.test.mts tests/risk-alerts.test.mts` ran 18 tests OK; Node emitted the existing `MODULE_TYPELESS_PACKAGE_JSON` warnings.
+- Typecheck: `./node_modules/.bin/tsc --noEmit --pretty false` exited 0.
+- OpenAPI regression: `../.venv313/bin/python -m unittest discover -s tests -p test_openapi_contracts.py` ran 3 tests OK.
+- Risk service regression: `../.venv313/bin/python -m unittest discover -s tests -p test_risk_alert_service.py` ran 4 tests OK.
 
 ## Task 4: Feed Risk Alerts Into Timeline And Review Inbox
 

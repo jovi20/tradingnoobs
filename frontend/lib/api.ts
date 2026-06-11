@@ -101,6 +101,50 @@ export interface PositionMover {
     current_price: number
 }
 
+export type RiskAlertSeverity = 'INFO' | 'NOTICE' | 'WARNING' | 'CRITICAL'
+export type RiskAlertKind = 'DAILY_LOSS_LIMIT' | 'CONCENTRATION' | 'DRAWDOWN' | 'DATA_STALE' | string
+
+export interface RiskRecommendedAction {
+    kind: string
+    label: string
+    href: string
+}
+
+export interface RiskTrustMeta {
+    freshness: string
+    source: string
+    value_status?: string
+    source_refs?: string[]
+    note?: string
+}
+
+export interface RiskAlert {
+    public_id: string
+    kind: RiskAlertKind
+    severity: RiskAlertSeverity
+    summary: string
+    reason: string
+    recommended_action: RiskRecommendedAction
+    source_refs: string[]
+    trust: RiskTrustMeta
+}
+
+export interface RiskPortfolioSummary {
+    gross_exposure: number
+    net_liquidation_value: number
+    daily_pnl?: number | null
+    daily_pnl_percent?: number | null
+    max_drawdown?: number | null
+}
+
+export interface RiskSummaryResponse {
+    as_of: string
+    base_currency: string
+    portfolio: RiskPortfolioSummary
+    alerts: RiskAlert[]
+    trust: RiskTrustMeta
+}
+
 export interface SankeyNode {
     name: string
 }
@@ -145,6 +189,7 @@ export interface DashboardStats {
     sortino_ratio?: number
     calmar_ratio?: number
     max_drawdown?: number
+    risk_summary?: RiskSummaryResponse | null
 }
 
 export interface DailySummary {

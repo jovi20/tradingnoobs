@@ -19,6 +19,7 @@ from services.exchange_rate_service import get_exchange_rate, get_rates_batch
 import asyncio
 from models import DailySnapshot
 from services.metrics_service import MetricsService
+from services.risk_alert_service import build_portfolio_risk_summary
 from services.trading_accounting_service import calculate_mark_to_market_position
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
@@ -613,7 +614,8 @@ async def get_dashboard_stats(
         sharpe_ratio=sharpe_ratio,
         sortino_ratio=sortino_ratio,
         calmar_ratio=calmar_ratio,
-        max_drawdown=max_drawdown
+        max_drawdown=max_drawdown,
+        risk_summary=build_portfolio_risk_summary(db, current_user.id),
     )
 
 

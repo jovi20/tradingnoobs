@@ -76,6 +76,7 @@ export function DashboardWorkbench({
                     riskPosture={riskPosture}
                     openPositionsCount={dashboard.openPositionsCount}
                     hasPnlHistory={dashboard.pnlHistory.length > 0}
+                    riskAlerts={dashboard.riskAlerts}
                 />
             </div>
             <DashboardStructureGrid

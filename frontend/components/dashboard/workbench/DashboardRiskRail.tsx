@@ -3,14 +3,17 @@ import { SectionHeader } from '@/components/ui/SectionHeader'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { Surface } from '@/components/ui/Surface'
 import type { DashboardRiskPosture } from '@/lib/adapters/dashboard'
+import type { RiskAlert } from '@/lib/api'
+import { RiskAlertStack } from '@/components/risk/RiskAlertStack'
 
 interface DashboardRiskRailProps {
     riskPosture: DashboardRiskPosture
     openPositionsCount: number
     hasPnlHistory: boolean
+    riskAlerts?: RiskAlert[]
 }
 
-export function DashboardRiskRail({ riskPosture, openPositionsCount, hasPnlHistory }: DashboardRiskRailProps) {
+export function DashboardRiskRail({ riskPosture, openPositionsCount, hasPnlHistory, riskAlerts = [] }: DashboardRiskRailProps) {
     return (
         <aside className="space-y-4">
             <Surface variant="rail" className="p-4">
@@ -24,6 +27,7 @@ export function DashboardRiskRail({ riskPosture, openPositionsCount, hasPnlHisto
                     <div className={`h-2 rounded-full ${riskPosture.tone === 'danger' ? 'w-full bg-red-500' : riskPosture.tone === 'warning' ? 'w-2/3 bg-amber-500' : 'w-1/3 bg-emerald-500'}`} />
                 </div>
             </Surface>
+            <RiskAlertStack alerts={riskAlerts} />
             <Surface className="p-4">
                 <div className="flex items-start gap-3">
                     <Database className="mt-1 h-4 w-4 text-slate-400" />
