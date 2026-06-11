@@ -1,6 +1,6 @@
 # docs 文档索引
 
-更新时间：2026-06-10
+更新时间：2026-06-11
 当前执行分支：`dev`
 
 `docs/` 目录按“目标架构 + 当前实现 + 执行清单 + 阶段计划 + 历史基线 + 专题附录”组织。
@@ -34,7 +34,14 @@
 
 | 文档 | 用途 |
 |------|------|
-| [2026-06-11-dev-p12b-observability-error-contract-plan.md](./superpowers/plans/2026-06-11-dev-p12b-observability-error-contract-plan.md) | P12B observability/error contract hardening 专项计划，已完成；下一条建议 lane 是 P13 risk/review product features。 |
+| [2026-06-11-dev-p13-risk-review-product-plan.md](./superpowers/plans/2026-06-11-dev-p13-risk-review-product-plan.md) | P13 risk/review product features 专项计划；当前 active lane，负责组合风险监控、单日亏损提醒、Dashboard 风险展示和 Timeline/Review Inbox 风险行动卡。 |
+| [2026-06-11-dev-p14-reporting-export-plan.md](./superpowers/plans/2026-06-11-dev-p14-reporting-export-plan.md) | P14 reporting/export 专项计划，负责导入模板文档、周报 PDF 后端生成、前端导出动作和验证夹具。 |
+| [2026-06-11-dev-p15-ai-analysis-workflow-plan.md](./superpowers/plans/2026-06-11-dev-p15-ai-analysis-workflow-plan.md) | P15 AI analysis workflow 专项计划，负责日期范围选择、分析契约收敛、artifact-backed history 和回归测试。 |
+| [2026-06-11-dev-p16-market-data-platform-plan.md](./superpowers/plans/2026-06-11-dev-p16-market-data-platform-plan.md) | P16 market data platform 专项计划，负责 provider orchestration 拆分、行情 freshness/degradation 元数据和可重复 provider 验证。 |
+| [2026-06-11-dev-p17-admin-operations-plan.md](./superpowers/plans/2026-06-11-dev-p17-admin-operations-plan.md) | P17 admin operations 专项计划，负责备份触发、管理员晋升、密码重置、stale/failed job 解释和 force-cancel 防护。 |
+| [2026-06-11-dev-p18-chart-renderer-migration-plan.md](./superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md) | P18 chart renderer migration 专项计划，负责一次性迁移剩余 Recharts renderer，并保持 `chart.v1` 数据契约稳定。 |
+| [2026-06-11-dev-p19-release-readiness-plan.md](./superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md) | P19 release readiness 专项计划，负责全量验证、authenticated browser smoke、迁移演练、发布清单和回滚清单。 |
+| [2026-06-11-dev-p12b-observability-error-contract-plan.md](./superpowers/plans/2026-06-11-dev-p12b-observability-error-contract-plan.md) | P12B observability/error contract hardening 专项计划，已完成。 |
 | [2026-06-10-dev-p12-platform-contract-hardening-plan.md](./superpowers/plans/2026-06-10-dev-p12-platform-contract-hardening-plan.md) | P12 platform contract hardening 专项计划，已完成；后续 P12B observability/error contract hardening 也已完成。 |
 | [2026-06-10-dev-p11-truth-hard-cutover-plan.md](./superpowers/plans/2026-06-10-dev-p11-truth-hard-cutover-plan.md) | P11 truth hard cutover 专项计划，记录 truth-first writes、snapshot Timeline、legacy migration guard 的完成门。 |
 | [2026-06-10-dev-p10-progress-next-plan.md](./superpowers/plans/2026-06-10-dev-p10-progress-next-plan.md) | 下一阶段 P10 文档同步、truth hard cutover、observability、API 契约和模型拆分计划。 |

@@ -51,7 +51,7 @@ This section is the single forward-plan inventory for all currently planned task
 
 ### Planned Feature Inventory
 
-| Feature / function | Current state | Target state | Dedicated plan to create |
+| Feature / function | Current state | Target state | Dedicated plan |
 |--------------------|---------------|--------------|--------------------------|
 | Legacy truth cutover | Bridge/fallback exists. | Ordinary user flows use truth models as primary path. | `2026-06-10-dev-p10-legacy-cutover-inventory.md`, then a P11 implementation plan. |
 | Timeline final read model | Snapshot-first with bridge/rollback support. | Pure truth/snapshot-backed default without legacy primary dependency. | P11 Timeline read-model cutover plan. |
@@ -60,18 +60,18 @@ This section is the single forward-plan inventory for all currently planned task
 | Observability | Minimal middleware landed in P10C. | `X-Request-ID`, `X-Response-Time-Ms`, and error-code helper exist; structured logging and route-level error-code adoption remain follow-up work. | P12 platform contract hardening plan. |
 | OpenAPI frontend types | `frontend/lib/read-models.ts` is marked as handwritten temporary read-model types. | Generated OpenAPI types with stable import boundaries. | P12 API contract generation plan. |
 | Backend model modularization | P10E split plan exists; code is intentionally still monolithic. | `backend/models/` package with compatibility exports. | P12 model modularization implementation plan. |
-| Risk alerts | Planned, not implemented. | Risk service, daily loss checks, alert surfaces. | P13 risk alert implementation plan. |
-| PDF report export | Planned, not implemented. | Weekly PDF generation and export button. | P14 PDF report implementation plan. |
-| AI date range selector | Analysis flow exists; date range UX missing. | Explicit date-range analysis and regression tests. | P15 AI analysis workflow plan. |
-| Market provider validation | Providers exist; validation is ad hoc. | Repeatable provider tests and freshness/degradation metadata. | P16 market data platform plan. |
-| Admin backup and user ops | CLI/support paths exist; admin UI/API incomplete. | Audited backup trigger, admin promotion, password reset. | P17 admin operations plan. |
-| Full chart renderer migration | Recharts renderers remain behind schema wrappers. | Final renderer chosen and migrated if product still wants it. | P18 chart renderer migration plan. |
-| Release/rollback readiness | Partial checkpoint records exist. | Release checklist, migration dry run, rollback drill. | P19 release readiness plan. |
+| Risk alerts | Planned, not implemented. | Risk service, daily loss checks, alert surfaces. | `2026-06-11-dev-p13-risk-review-product-plan.md`. |
+| PDF report export | Planned, not implemented. | Weekly PDF generation and export button. | `2026-06-11-dev-p14-reporting-export-plan.md`. |
+| AI date range selector | Analysis flow exists; date range UX missing. | Explicit date-range analysis and regression tests. | `2026-06-11-dev-p15-ai-analysis-workflow-plan.md`. |
+| Market provider validation | Providers exist; validation is ad hoc. | Repeatable provider tests and freshness/degradation metadata. | `2026-06-11-dev-p16-market-data-platform-plan.md`. |
+| Admin backup and user ops | CLI/support paths exist; admin UI/API incomplete. | Audited backup trigger, admin promotion, password reset. | `2026-06-11-dev-p17-admin-operations-plan.md`. |
+| Full chart renderer migration | Recharts renderers remain behind schema wrappers. | Internal SVG renderers replace remaining Recharts while `chart.v1` stays stable. | `2026-06-11-dev-p18-chart-renderer-migration-plan.md`. |
+| Release/rollback readiness | Partial checkpoint records exist. | Release checklist, migration dry run, rollback drill. | `2026-06-11-dev-p19-release-readiness-plan.md`. |
 
 ### Execution Rules For The Forward Roadmap
 
 - Finish P10 consolidation before deleting legacy code.
-- Create one dedicated implementation plan per feature lane before touching code.
+- P13-P19 dedicated implementation plans now exist; execute the active lane task-by-task before touching the next lane.
 - Do not execute P13-P18 in parallel with P11 truth cutover unless their data dependencies are isolated.
 - Do not remove legacy tables, models, or API responses until migration-only users and fallback paths are documented.
 - Do not add new raw DTO coupling to `frontend/lib/api.ts`; new user-facing pages should prefer read-model adapters.

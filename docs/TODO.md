@@ -1,6 +1,6 @@
 # Trading Noobs 开发任务清单
 
-更新时间：2026-06-10
+更新时间：2026-06-11
 当前执行分支：`dev`
 P10 起始基线：`3418a27 docs: mark p9f pushed`
 
@@ -22,6 +22,13 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 - [superpowers/plans/2026-06-10-dev-p11-truth-hard-cutover-plan.md](./superpowers/plans/2026-06-10-dev-p11-truth-hard-cutover-plan.md)
 - [superpowers/plans/2026-06-10-dev-p12-platform-contract-hardening-plan.md](./superpowers/plans/2026-06-10-dev-p12-platform-contract-hardening-plan.md)
 - [superpowers/plans/2026-06-11-dev-p12b-observability-error-contract-plan.md](./superpowers/plans/2026-06-11-dev-p12b-observability-error-contract-plan.md)
+- [superpowers/plans/2026-06-11-dev-p13-risk-review-product-plan.md](./superpowers/plans/2026-06-11-dev-p13-risk-review-product-plan.md)
+- [superpowers/plans/2026-06-11-dev-p14-reporting-export-plan.md](./superpowers/plans/2026-06-11-dev-p14-reporting-export-plan.md)
+- [superpowers/plans/2026-06-11-dev-p15-ai-analysis-workflow-plan.md](./superpowers/plans/2026-06-11-dev-p15-ai-analysis-workflow-plan.md)
+- [superpowers/plans/2026-06-11-dev-p16-market-data-platform-plan.md](./superpowers/plans/2026-06-11-dev-p16-market-data-platform-plan.md)
+- [superpowers/plans/2026-06-11-dev-p17-admin-operations-plan.md](./superpowers/plans/2026-06-11-dev-p17-admin-operations-plan.md)
+- [superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md](./superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md)
+- [superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md](./superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md)
 - [release-rollback-playbook.md](./release-rollback-playbook.md)
 
 ---
@@ -36,15 +43,28 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 | Lifecycle Detail | `truth-first 体验已落地` | 单笔详情已优先展示 truth lifecycle、evidence、AI sidecar；latest active event reversal 走审计 `REVERSAL`，非最新 reversal、`OPEN` reversal、legacy hard delete/batch edit 已被保护为非普通路径。 |
 | Dashboard / Insights | `已重构为工作台形态` | Dashboard 保持宏观视图；Insights 已接入 auditable artifact 与 artifact detail；图表已有 schema/freshness 包装。 |
 | 前端依赖与质量 | `已完成 P8-P9F` | Next 16 / React 19 已升级；React 19 strict hooks lint 全局启用；前端 lint 已到 0 warning。 |
-| 文档状态 | `P12B 完成 / P13 待计划` | P10 文档、legacy inventory、observability、read-model marker、model modularization plan 已落地；P11 hard cutover、P12 platform contract hardening、P12B observability/error contract hardening 已完成，下一条建议 lane 是 P13 risk/review product features。 |
+| 文档状态 | `P13-P19 已计划 / P13 待开发` | P10 文档、legacy inventory、observability、read-model marker、model modularization plan 已落地；P11 hard cutover、P12 platform contract hardening、P12B observability/error contract hardening 已完成；P13-P19 专项计划已补齐。 |
 
 ---
 
 ## 当前 Active Lane
 
-- 当前 active lane：P12B Observability / error contract hardening 已完成。
-- 完成计划：[2026-06-11-dev-p12b-observability-error-contract-plan.md](./superpowers/plans/2026-06-11-dev-p12b-observability-error-contract-plan.md)。
-- 下一条建议 active lane：P13 Risk / review product features，先创建专项计划，再开发组合风险监控、单日亏损上限、风险提醒和 Timeline/Review Inbox 风险行动卡。
+- 当前 active lane：P13 Risk / review product features，计划已创建，代码尚未开始。
+- 当前计划：[2026-06-11-dev-p13-risk-review-product-plan.md](./superpowers/plans/2026-06-11-dev-p13-risk-review-product-plan.md)。
+- P13 第一执行任务：新增 `backend/services/risk_alert_service.py` 与风险 read model 测试，再接 `/api/risk/summary`、Dashboard、Timeline/Review Inbox。
+- 前一完成 lane：[2026-06-11-dev-p12b-observability-error-contract-plan.md](./superpowers/plans/2026-06-11-dev-p12b-observability-error-contract-plan.md)。
+
+### 后续阶段执行顺序
+
+| 阶段 | 当前状态 | 专项计划 |
+|------|----------|----------|
+| P13 | `待开发` | [Risk / review product features](./superpowers/plans/2026-06-11-dev-p13-risk-review-product-plan.md) |
+| P14 | `已计划` | [Reporting and export](./superpowers/plans/2026-06-11-dev-p14-reporting-export-plan.md) |
+| P15 | `已计划` | [AI analysis workflow](./superpowers/plans/2026-06-11-dev-p15-ai-analysis-workflow-plan.md) |
+| P16 | `已计划` | [Market data platform](./superpowers/plans/2026-06-11-dev-p16-market-data-platform-plan.md) |
+| P17 | `已计划` | [Admin operations](./superpowers/plans/2026-06-11-dev-p17-admin-operations-plan.md) |
+| P18 | `已计划` | [Chart renderer migration](./superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md) |
+| P19 | `已计划` | [Release readiness](./superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md) |
 
 ### P11 完成状态
 
@@ -65,13 +85,19 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 - [x] P12 Task 4：补 release / rollback playbook，覆盖 truth writes、snapshot Timeline、legacy mutation guards。
 - [x] P12 Task 5：完成 P12 全量验证门。
 
-### 下一条建议计划
+### 后续计划状态
 
 - [x] P12B：创建 Observability / error contract hardening plan。
 - [x] P12B：在路由异常处理中实际使用统一 error code。
 - [x] P12B：建立结构化日志策略，逐步替换后端业务路径中的 `print()`。
 - [x] P12B：补最小回归测试，保证错误响应包含稳定 code、request id、可排障信息。
-- [ ] P13：创建 Risk / review product features implementation plan。
+- [x] P13：创建 Risk / review product features implementation plan。
+- [x] P14：创建 Reporting / export implementation plan。
+- [x] P15：创建 AI analysis workflow implementation plan。
+- [x] P16：创建 Market data platform implementation plan。
+- [x] P17：创建 Admin operations implementation plan。
+- [x] P18：创建 Chart renderer migration implementation plan。
+- [x] P19：创建 Release readiness implementation plan。
 - [ ] P13：实现组合风险监控、单日亏损上限、风险提醒和 Timeline/Review Inbox 风险行动卡。
 
 ---
@@ -132,6 +158,8 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 
 ### 风控预警系统
 
+专项计划：[P13 Risk / review product features](./superpowers/plans/2026-06-11-dev-p13-risk-review-product-plan.md)
+
 - [ ] 后端创建 `services/risk_alert_service.py`。
 - [ ] 后端实现组合风险检查逻辑。
 - [ ] 后端实现单日亏损上限检查。
@@ -140,6 +168,8 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 - [ ] 前端集成 Toast 或工作台内预警通知。
 
 ### 数据导入导出
+
+专项计划：[P14 Reporting and export](./superpowers/plans/2026-06-11-dev-p14-reporting-export-plan.md)
 
 - [x] 后端创建导入端点 `/api/positions/import`。
 - [x] 后端解析 CSV/Excel 文件。
@@ -152,6 +182,8 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 
 ### AI 分析助手
 
+专项计划：[P15 AI analysis workflow](./superpowers/plans/2026-06-11-dev-p15-ai-analysis-workflow-plan.md)
+
 - [x] 后端创建 `services/analytics_service.py`。
 - [x] 后端扩展 `routers/insights.py`，新增 `/api/insights/analyze`。
 - [x] 后端扩展 `llm_service.py`，新增分析型 Prompt。
@@ -163,12 +195,16 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 
 ### 市场数据与验证
 
+专项计划：[P16 Market data platform](./superpowers/plans/2026-06-11-dev-p16-market-data-platform-plan.md)
+
 - [ ] 拆分 market orchestration 与 provider adapter。
 - [ ] 稳定 provider mapping，明确 A 股 / 港股 / 美股 / Crypto / 外汇 / 基金路由规则。
 - [ ] 为市场数据 provider 补充可重复执行的验证方案。
 - [ ] 明确行情降级、缓存、错误显示和 freshness 元数据规则。
 
 ### 管理员运维能力
+
+专项计划：[P17 Admin operations](./superpowers/plans/2026-06-11-dev-p17-admin-operations-plan.md)
 
 - [ ] 后端提供数据库备份触发入口。
 - [ ] 后端提供账户升级为管理员的安全入口。
@@ -177,10 +213,22 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 
 ### 图表渲染迁移
 
+专项计划：[P18 Chart renderer migration](./superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md)
+
 - [x] 建立 `chart.v1` schema 与 freshness/trust 包装。
 - [x] Dashboard / Insights 主要图表接入共享 `ChartFrame`。
 - [ ] 如果确认“彻底去 Recharts”，再把剩余 Recharts renderer 迁移到目标图表引擎。
 - [ ] 迁移前先确认 ECharts、Canvas、自研 SVG 或其他 renderer 的产品目标，避免为迁移而迁移。
+
+### 发布就绪
+
+专项计划：[P19 Release readiness](./superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md)
+
+- [ ] 明确本次 release scope 包含哪些 P13-P18 lane。
+- [ ] 完成后端、前端、lint、Node tests、`git diff --check` 全量验证。
+- [ ] 完成 Alembic、truth sync、derived timeline refresh 的迁移与回填演练。
+- [ ] 完成 authenticated browser smoke，覆盖 P11 遗留的 `/positions`、`/positions/[id]`、`/positions/[id]/add-batch`。
+- [ ] 更新 release checklist 和 rollback checklist 后，再决定 merge、tag 或继续 staging。
 
 ---
 

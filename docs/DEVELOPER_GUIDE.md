@@ -1,6 +1,6 @@
 # Trading Noobs 当前代码库指南
 
-更新时间：2026-06-10
+更新时间：2026-06-11
 当前执行分支：`dev`
 当前 HEAD：以当前 `dev` 最新提交为准；阶段状态见 [TODO.md](./TODO.md)。
 
@@ -14,7 +14,8 @@
 - [superpowers/specs/2026-04-07-frontend-experience-redesign-design.md](./superpowers/specs/2026-04-07-frontend-experience-redesign-design.md) 是前端体验重设计基线。
 - [superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md](./superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md) 是平台 + 前端迁移顺序基线。
 - [TODO.md](./TODO.md) 是当前执行清单。
-- [superpowers/plans/2026-06-10-dev-p12-platform-contract-hardening-plan.md](./superpowers/plans/2026-06-10-dev-p12-platform-contract-hardening-plan.md) 是 P11 后当前 active lane，负责 OpenAPI/frontend contract 边界硬化。
+- [superpowers/plans/2026-06-11-dev-p13-risk-review-product-plan.md](./superpowers/plans/2026-06-11-dev-p13-risk-review-product-plan.md) 是当前 active lane，负责风险 read model、风险提醒、Dashboard 风险展示和 Timeline/Review Inbox 风险行动卡。
+- P14-P19 后续计划已创建，按 `docs/TODO.md` 的阶段表顺序执行，不要跳过每个计划里的验证门。
 - [release-rollback-playbook.md](./release-rollback-playbook.md) 是 truth writes、Timeline snapshot、legacy mutation guard 的发布与回滚手册。
 - [current-state-baseline.md](./current-state-baseline.md) 是 2026-04-05 历史审计快照，不再作为当前实现依据。
 - [顶层设计.md](./顶层设计.md) 已降级为历史草案。
@@ -270,10 +271,10 @@ npm run build
 
 优先级以 [TODO.md](./TODO.md) 为准。当前建议顺序：
 
-1. P13：Risk / review product features，先创建专项计划，再开发组合风险监控、单日亏损上限、风险提醒和 Timeline/Review Inbox 风险行动卡。
-2. P10D 剩余项：停止扩张 `frontend/lib/api.ts`，让新页面优先走 read-model adapter 或 generated contract。
-3. P10E 后续执行：在 truth/legacy 边界稳定后拆分 `backend/models.py`。
-4. 中期 backlog：风控预警、PDF 导出、AI 日期范围、市场数据验证、管理员运维、图表 renderer 迁移。
+1. P13：Risk / review product features，按已创建计划从风险 read model 测试开始，开发组合风险监控、单日亏损上限、风险提醒和 Timeline/Review Inbox 风险行动卡。
+2. P14-P19：专项计划已创建，依次执行 Reporting/export、AI analysis workflow、Market data platform、Admin operations、Chart renderer migration、Release readiness。
+3. P10D 剩余项：停止扩张 `frontend/lib/api.ts`，让新页面优先走 read-model adapter 或 generated contract。
+4. P10E 后续执行：在 truth/legacy 边界稳定后拆分 `backend/models.py`。
 
 ---
 
