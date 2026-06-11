@@ -3,6 +3,7 @@
 import { useEffect, useEffectEvent, useState } from 'react'
 import {
     FileText,
+    Download,
     TrendingUp,
     TrendingDown,
     Sparkles,
@@ -24,6 +25,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import ReactMarkdown from 'react-markdown'
 import { useInsightRuns } from '@/hooks/useInsightRuns'
 import { insightsAPI, WeeklyReport, AISummary, AnalysisType, AnalysisResponse } from '@/lib/api'
+import { downloadBlob } from '@/lib/download'
 import { useTrendColor } from '@/hooks/useTrendColor'
 
 // ============== 分析维度定义 ==============
@@ -45,6 +47,8 @@ export default function InsightsPage() {
     const [isLoading, setIsLoading] = useState(true)
     const [isGenerating, setIsGenerating] = useState(false)
     const [expandedReport, setExpandedReport] = useState<number | null>(null)
+    const [exportingReportId, setExportingReportId] = useState<number | null>(null)
+    const [exportErrors, setExportErrors] = useState<Record<number, string>>({})
     const [error, setError] = useState('')
 
     // 随笔摘要状态
@@ -122,6 +126,21 @@ export default function InsightsPage() {
         } catch (err: any) {
             setError(err.message || '生成洞察失败，请确保已配置 LLM API')
         } finally { setIsGenerating(false) }
+    }
+
+    const handleExportReport = async (reportId: number) => {
+        if (!token) return
+        setExportingReportId(reportId)
+        setExportErrors(prev => ({ ...prev, [reportId]: '' }))
+
+        try {
+            const { blob, filename } = await insightsAPI.exportWeeklyReportPdf(token, reportId)
+            downloadBlob(filename, blob)
+        } catch (err: any) {
+            setExportErrors(prev => ({ ...prev, [reportId]: err.message || '导出 PDF 失败' }))
+        } finally {
+            setExportingReportId(prev => prev === reportId ? null : prev)
+        }
     }
 
     const handleGenerateSummary = async () => {
@@ -440,18 +459,22 @@ export default function InsightsPage() {
                             <div className="space-y-3 max-h-[calc(100vh-12rem)] overflow-y-auto pr-1 scrollbar-thin">
                                 {reports.map((report) => {
                                     const isExpanded = expandedReport === report.id
+                                    const isExporting = exportingReportId === report.id
+                                    const exportError = exportErrors[report.id]
                                     return (
                                         <div key={report.id} className="card overflow-hidden">
                                             {/* 报告头部 */}
-                                            <button
-                                                onClick={() => setExpandedReport(isExpanded ? null : report.id)}
+                                            <div
                                                 className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
                                             >
-                                                <div className="flex items-center gap-3">
+                                                <button
+                                                    onClick={() => setExpandedReport(isExpanded ? null : report.id)}
+                                                    className="min-w-0 flex flex-1 items-center gap-3 text-left"
+                                                >
                                                     <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center shrink-0">
                                                         <FileText className="w-4 h-4 text-white" />
                                                     </div>
-                                                    <div className="text-left">
+                                                    <div className="min-w-0">
                                                         <h3 className="font-semibold text-sm">
                                                             {formatDate(report.week_start)} - {formatDate(report.week_end)}
                                                         </h3>
@@ -459,12 +482,36 @@ export default function InsightsPage() {
                                                             {new Date(report.created_at).toLocaleDateString('zh-CN')}
                                                         </p>
                                                     </div>
+                                                </button>
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={() => handleExportReport(report.id)}
+                                                        disabled={isExporting}
+                                                        className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 shadow-sm transition-all hover:border-indigo-200 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-indigo-500/50 dark:hover:text-indigo-300"
+                                                    >
+                                                        {isExporting
+                                                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                            : <Download className="w-3.5 h-3.5" />
+                                                        }
+                                                        <span>PDF</span>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setExpandedReport(isExpanded ? null : report.id)}
+                                                        className="rounded-full p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                                                        aria-label={isExpanded ? '收起周报' : '展开周报'}
+                                                    >
+                                                        {isExpanded
+                                                            ? <ChevronUp className="w-4 h-4 shrink-0" />
+                                                            : <ChevronDown className="w-4 h-4 shrink-0" />
+                                                        }
+                                                    </button>
                                                 </div>
-                                                {isExpanded
-                                                    ? <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" />
-                                                    : <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
-                                                }
-                                            </button>
+                                            </div>
+                                            {exportError && (
+                                                <div className="mx-4 mb-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-medium text-rose-600 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300">
+                                                    {exportError}
+                                                </div>
+                                            )}
 
                                             {/* 展开的报告内容 */}
                                             {isExpanded && (

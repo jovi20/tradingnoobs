@@ -1,5 +1,6 @@
 import type { LifecycleDetailResponse, TimelineHomeResponse } from './read-models'
 import type { DashboardChartPayload } from './chartSchemas'
+import { buildBlobDownloadFromResponse, type BlobDownloadPayload } from './download.ts'
 
 /**
  * Trading Noobs Frontend - API Client
@@ -421,6 +422,23 @@ export const insightsAPI = {
         return fetchAPI('/api/insights/generate-current-week', {
             method: 'POST',
         }, token)
+    },
+
+    exportWeeklyReportPdf: async (token: string, reportId: number): Promise<BlobDownloadPayload> => {
+        const response = await fetch(`${API_BASE}/api/insights/${reportId}/export/pdf`, {
+            headers: {
+                Accept: 'application/pdf',
+                Authorization: `Bearer ${token}`,
+            },
+        })
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ detail: 'PDF export failed' }))
+            const detail = typeof error.detail === 'string' ? error.detail : error.error?.message
+            throw new Error(detail || `HTTP ${response.status}`)
+        }
+
+        return buildBlobDownloadFromResponse(response, `tradingnoobs-weekly-report-${reportId}.pdf`)
     },
 
     // AI Summary methods
