@@ -14,8 +14,8 @@
 - [superpowers/specs/2026-04-07-frontend-experience-redesign-design.md](./superpowers/specs/2026-04-07-frontend-experience-redesign-design.md) 是前端体验重设计基线。
 - [superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md](./superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md) 是平台 + 前端迁移顺序基线。
 - [TODO.md](./TODO.md) 是当前执行清单。
-- [superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md](./superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md) 是当前 active lane，负责剩余 Recharts renderer 迁移到内部 SVG renderer，并保持 `chart.v1` 数据契约稳定。
-- P18-P19 后续计划已创建，按 `docs/TODO.md` 的阶段表顺序执行，不要跳过每个计划里的验证门。
+- [superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md](./superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md) 已完成，剩余 Recharts renderer 已迁移到内部 SVG renderer，并保持 `chart.v1` 数据契约稳定。
+- [superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md](./superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md) 是当前 active lane，负责发布范围冻结、全量验证、迁移演练、authenticated browser smoke 与最终 release decision。
 - [release-rollback-playbook.md](./release-rollback-playbook.md) 是 truth writes、Timeline snapshot、legacy mutation guard 的发布与回滚手册。
 - [current-state-baseline.md](./current-state-baseline.md) 是 2026-04-05 历史审计快照，不再作为当前实现依据。
 - [顶层设计.md](./顶层设计.md) 已降级为历史草案。
@@ -27,7 +27,7 @@
 | 层级 | 当前实现 |
 |------|----------|
 | 前端 | Next.js 16.2.7, React 19.2.7, TypeScript 5, Tailwind CSS, React Query 5 |
-| 图表 | 仍有 Recharts renderer；前端已建立 `chart.v1` schema、`ChartFrame`、freshness/trust 包装 |
+| 图表 | 内部 SVG renderer；前端已建立 `chart.v1` schema、`ChartFrame`、freshness/trust 包装，`recharts` 依赖已移除 |
 | 后端 | FastAPI, SQLAlchemy, Pydantic |
 | 数据库 | 开发默认 SQLite，部署默认 PostgreSQL |
 | 迁移 | Alembic revision chain 是主迁移路径；开发启动仍有受保护的 schema bootstrap |
@@ -285,10 +285,9 @@ npm run build
 
 优先级以 [TODO.md](./TODO.md) 为准。当前建议顺序：
 
-1. P18：Chart renderer migration，先新增 Recharts import static guard，再把剩余 Recharts renderer 迁移到内部 SVG renderer。
-2. P19：Release readiness，完成全量验证、authenticated browser smoke、迁移演练、发布清单和回滚清单。
-3. P10D 剩余项：停止扩张 `frontend/lib/api.ts`，让新页面优先走 read-model adapter 或 generated contract。
-4. P10E 后续执行：在 truth/legacy 边界稳定后拆分 `backend/models.py`。
+1. P19：Release readiness，完成发布范围冻结、全量验证、authenticated browser smoke、迁移演练、发布清单和回滚清单。
+2. P10D 剩余项：停止扩张 `frontend/lib/api.ts`，让新页面优先走 read-model adapter 或 generated contract。
+3. P10E 后续执行：在 truth/legacy 边界稳定后拆分 `backend/models.py`。
 
 ---
 

@@ -41,18 +41,18 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 | Truth 交易模型 | `P11 硬切代码完成` | `TradingPosition / PositionEvent / AccountLedgerEntry` 已落地；新建仓位已 create-and-sync 到 truth lifecycle，已有仓位加仓/减仓/平仓/复盘/叙事已 truth-first；legacy batch/review/delete 写入在 truth lifecycle 存在时默认被保护为 migration fallback。 |
 | Timeline 首页 | `truth/snapshot 默认` | `/` 和 `/timeline` 已转向时间流/复盘工作台；Timeline events 与 Review Inbox 默认使用 `DerivedTimelineSnapshot` / auditable artifacts，`timeline_legacy_mixed_feed_enabled` 是 legacy mixed rollback。 |
 | Lifecycle Detail | `truth-first 体验已落地` | 单笔详情已优先展示 truth lifecycle、evidence、AI sidecar；latest active event reversal 走审计 `REVERSAL`，非最新 reversal、`OPEN` reversal、legacy hard delete/batch edit 已被保护为非普通路径。 |
-| Dashboard / Insights | `已重构为工作台形态` | Dashboard 保持宏观视图；Insights 已接入 auditable artifact 与 artifact detail；图表已有 schema/freshness 包装。 |
+| Dashboard / Insights | `已重构为工作台形态` | Dashboard 保持宏观视图；Insights 已接入 auditable artifact 与 artifact detail；图表已有 schema/freshness 包装，剩余 Recharts renderer 已迁移为内部 SVG renderer。 |
 | 前端依赖与质量 | `已完成 P8-P9F` | Next 16 / React 19 已升级；React 19 strict hooks lint 全局启用；前端 lint 已到 0 warning。 |
-| 文档状态 | `P17 已完成 / P18 待开发` | P10 文档、legacy inventory、observability、read-model marker、model modularization plan 已落地；P11 hard cutover、P12 platform contract hardening、P12B observability/error contract hardening、P13 Risk / review product features、P14 Reporting / export、P15 AI analysis workflow、P16 Market data platform、P17 Admin operations 已完成；P18-P19 专项计划已补齐。 |
+| 文档状态 | `P18 代码完成 / P19 待执行` | P10 文档、legacy inventory、observability、read-model marker、model modularization plan 已落地；P11 hard cutover、P12 platform contract hardening、P12B observability/error contract hardening、P13 Risk / review product features、P14 Reporting / export、P15 AI analysis workflow、P16 Market data platform、P17 Admin operations、P18 Chart renderer migration 已完成；P19 Release readiness 是下一道发布闸门。 |
 
 ---
 
 ## 当前 Active Lane
 
-- 当前 active lane：P18 Chart renderer migration。
-- 当前计划：[2026-06-11-dev-p18-chart-renderer-migration-plan.md](./superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md)。
-- P18 第一执行任务：新增 Recharts import static guard，先 allowlist 当前 5 个已知文件，阻止继续扩散。
-- 前一完成 lane：[2026-06-11-dev-p17-admin-operations-plan.md](./superpowers/plans/2026-06-11-dev-p17-admin-operations-plan.md)。
+- 当前 active lane：P19 Release readiness。
+- 当前计划：[2026-06-11-dev-p19-release-readiness-plan.md](./superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md)。
+- P19 第一执行任务：冻结 release scope，创建 release readiness checklist，并记录 P13-P18 的提交范围与证据矩阵。
+- 前一完成 lane：[2026-06-11-dev-p18-chart-renderer-migration-plan.md](./superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md)。
 
 ### 后续阶段执行顺序
 
@@ -63,8 +63,8 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 | P15 | `已完成` | [AI analysis workflow](./superpowers/plans/2026-06-11-dev-p15-ai-analysis-workflow-plan.md) |
 | P16 | `已完成` | [Market data platform](./superpowers/plans/2026-06-11-dev-p16-market-data-platform-plan.md) |
 | P17 | `已完成` | [Admin operations](./superpowers/plans/2026-06-11-dev-p17-admin-operations-plan.md) |
-| P18 | `待开发` | [Chart renderer migration](./superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md) |
-| P19 | `已计划` | [Release readiness](./superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md) |
+| P18 | `已完成` | [Chart renderer migration](./superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md) |
+| P19 | `当前 active lane` | [Release readiness](./superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md) |
 
 ### P11 完成状态
 
@@ -103,6 +103,7 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 - [x] P15：补齐 AI 分析日期范围验证、artifact evidence refs、分析历史接口、Insights 日期选择与复访入口。
 - [x] P16：拆出 market provider routing、normalized adapters、quote freshness/degradation metadata、前端 freshness 标签和可重复验证文档。
 - [x] P17：补齐数据库备份触发、管理员晋升、密码重置、stale/failed job 解释、force-cancel 确认和运维 runbook。
+- [x] P18：补齐 Recharts import static guard、内部 SVG chart renderers、Portfolio Sankey SVG renderer，并移除 `recharts` 依赖。
 
 ---
 
@@ -224,8 +225,11 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 
 - [x] 建立 `chart.v1` schema 与 freshness/trust 包装。
 - [x] Dashboard / Insights 主要图表接入共享 `ChartFrame`。
-- [ ] 如果确认“彻底去 Recharts”，再把剩余 Recharts renderer 迁移到目标图表引擎。
-- [ ] 迁移前先确认 ECharts、Canvas、自研 SVG 或其他 renderer 的产品目标，避免为迁移而迁移。
+- [x] 已确认 P18 V1 目标为内部 SVG renderer，不新增 ECharts/Canvas 等图表依赖。
+- [x] 剩余 Recharts renderer 已迁移到内部 SVG renderer，并用静态测试阻止 Recharts import 回流。
+- [x] `frontend/package.json` 与 `frontend/package-lock.json` 已移除 `recharts` 依赖。
+- [x] P18 authenticated browser smoke 已用隔离临时用户覆盖 `/dashboard`、`/insights` 的空数据图表卡、控制台 error 和移动端横向溢出。
+- [ ] P19 release gate 仍需用发布级 fixture 完整覆盖带数据图表和 P11 遗留 routes：`/positions`、`/positions/[id]`、`/positions/[id]/add-batch`。
 
 ### 发布就绪
 
