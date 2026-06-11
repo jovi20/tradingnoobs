@@ -75,13 +75,17 @@ def _create_insight_artifact_for_analysis(
     ai_insights: str | None,
     created_at: datetime,
     analysis_result_id: int,
+    start_date: date | None = None,
+    end_date: date | None = None,
 ) -> None:
     service = InsightArtifactService(db)
+    input_refs = _analysis_input_refs(analysis_type, start_date, end_date)
+    date_range_payload = _analysis_date_range_payload(start_date, end_date)
     run = service.start_run(
         user_id=current_user.id,
         run_type=f"analysis.{analysis_type}",
         prompt_version="legacy-analysis-bridge",
-        input_refs=["surface:insights", f"analysis:{analysis_type}"],
+        input_refs=input_refs,
         started_at=created_at,
     )
     chart_schema = build_analysis_chart_schema(analysis_type=analysis_type, raw_data=raw_data)
@@ -95,17 +99,42 @@ def _create_insight_artifact_for_analysis(
             "linked_surface": "insights",
             "analysis_type": analysis_type,
             "analysis_result_id": analysis_result_id,
+            "date_range": date_range_payload,
             "raw_data": raw_data,
         },
-        evidence_refs=[f"analysis:{analysis_type}", "dataset:positions"],
+        evidence_refs=[ref for ref in input_refs if ref != "surface:insights"] + ["dataset:positions"],
         chart_schema=chart_schema,
         trust_meta={
             "freshness": "FRESH",
             "source": "AI_GENERATED",
-            "source_refs": [f"analysis:{analysis_type}", "dataset:positions"],
+            "source_refs": [ref for ref in input_refs if ref != "surface:insights"] + ["dataset:positions"],
         },
     )
     service.complete_run(run_public_id=run.public_id)
+
+
+def _analysis_date_range_ref(start_date: date | None, end_date: date | None) -> str | None:
+    if not start_date or not end_date:
+        return None
+    return f"date-range:{start_date.isoformat()}:{end_date.isoformat()}"
+
+
+def _analysis_input_refs(analysis_type: str, start_date: date | None, end_date: date | None) -> list[str]:
+    refs = ["surface:insights", f"analysis:{analysis_type}"]
+    date_range_ref = _analysis_date_range_ref(start_date, end_date)
+    if date_range_ref:
+        refs.append(date_range_ref)
+    return refs
+
+
+def _analysis_date_range_payload(start_date: date | None, end_date: date | None) -> dict | None:
+    if not start_date or not end_date:
+        return None
+    return {
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "label": f"{start_date.isoformat()} to {end_date.isoformat()}",
+    }
 
 
 def _begin_idempotent_insights_request(
@@ -513,6 +542,8 @@ async def analyze_trading_data(
         ai_insights=ai_insights,
         created_at=ai_result.created_at,
         analysis_result_id=ai_result.id,
+        start_date=request.start_date,
+        end_date=request.end_date,
     )
 
     response_content = jsonable_encoder(AnalysisResponse(

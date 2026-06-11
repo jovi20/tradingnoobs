@@ -18,7 +18,7 @@ sys.modules.setdefault("binance.spot", types.SimpleNamespace(Spot=lambda *args, 
 
 from database import Base, get_db
 from main import app
-from models import User
+from models import InsightArtifact, InsightRun, User
 from services.auth_service import get_current_user
 
 
@@ -131,6 +131,47 @@ class InsightsAnalysisWorkflowTests(unittest.TestCase):
         self.assertEqual(kwargs["start_date"], date(2026, 6, 1))
         self.assertEqual(kwargs["end_date"], date(2026, 6, 11))
         self.assertEqual(insight.await_count, 1)
+
+    def create_ranged_analysis_artifact(self):
+        payload = {
+            "analysis_type": "strategy_health",
+            "start_date": "2026-06-01",
+            "end_date": "2026-06-11",
+        }
+
+        with (
+            patch("routers.insights.AnalyticsService.analyze", return_value={"stats": {"A": {"count": 1}}}),
+            patch("routers.insights.get_analysis_insight", new_callable=AsyncMock, return_value="AI notes"),
+        ):
+            response = self.client.post("/api/insights/analyze", json=payload)
+
+        self.assertEqual(response.status_code, 200)
+        self.db.expire_all()
+        run = self.db.query(InsightRun).one()
+        artifact = self.db.query(InsightArtifact).one()
+        return run, artifact
+
+    def test_generated_insight_run_input_refs_contain_date_range(self):
+        run, _ = self.create_ranged_analysis_artifact()
+
+        self.assertIn("analysis:strategy_health", run.input_refs)
+        self.assertIn("date-range:2026-06-01:2026-06-11", run.input_refs)
+
+    def test_generated_artifact_payload_contains_date_range(self):
+        _, artifact = self.create_ranged_analysis_artifact()
+
+        self.assertEqual(artifact.payload["analysis_type"], "strategy_health")
+        self.assertEqual(artifact.payload["date_range"], {
+            "start_date": "2026-06-01",
+            "end_date": "2026-06-11",
+            "label": "2026-06-01 to 2026-06-11",
+        })
+
+    def test_generated_artifact_trust_source_refs_contain_date_range(self):
+        _, artifact = self.create_ranged_analysis_artifact()
+
+        self.assertIn("date-range:2026-06-01:2026-06-11", artifact.evidence_refs)
+        self.assertIn("date-range:2026-06-01:2026-06-11", artifact.trust_meta["source_refs"])
 
 
 if __name__ == "__main__":
