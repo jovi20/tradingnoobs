@@ -15,15 +15,17 @@
    当前唯一执行清单，记录 P10 之后的优先级和仍未开发的 backlog。
 3. [release-rollback-playbook.md](./release-rollback-playbook.md)
    P11/P12 后 truth writes、Timeline snapshot、legacy mutation guard 的发布与回滚手册。
-4. [superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md](./superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md)
+4. [import-template.md](./import-template.md)
+   交易 CSV/Excel 导入模板说明，覆盖当前模板列、示例行和必填字段校验规则。
+5. [superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md](./superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md)
    平台底座与前端重设计的总 sequencing plan。
-5. [superpowers/plans/2026-05-02-dev-branch-checkpoint.md](./superpowers/plans/2026-05-02-dev-branch-checkpoint.md)
+6. [superpowers/plans/2026-05-02-dev-branch-checkpoint.md](./superpowers/plans/2026-05-02-dev-branch-checkpoint.md)
    `dev` 分支阶段 checkpoint 与验收记录。
-6. [superpowers/specs/2026-04-06-platform-foundation-design.md](./superpowers/specs/2026-04-06-platform-foundation-design.md)
+7. [superpowers/specs/2026-04-06-platform-foundation-design.md](./superpowers/specs/2026-04-06-platform-foundation-design.md)
    平台底座目标架构基线。
-7. [superpowers/specs/2026-04-07-frontend-experience-redesign-design.md](./superpowers/specs/2026-04-07-frontend-experience-redesign-design.md)
+8. [superpowers/specs/2026-04-07-frontend-experience-redesign-design.md](./superpowers/specs/2026-04-07-frontend-experience-redesign-design.md)
    前端体验重设计基线。
-8. 专题附录：
+9. 专题附录：
    [market_data_sources.md](./market_data_sources.md),
    [trading-metrics.md](./trading-metrics.md),
    [trading-fields-design.md](./trading-fields-design.md)
@@ -78,6 +80,7 @@
 |------|------|
 | [current-state-baseline.md](./current-state-baseline.md) | 2026-04-05 历史审计基线。 |
 | [architecture_review.md](./architecture_review.md) | 架构审阅记录。 |
+| [import-template.md](./import-template.md) | 交易 CSV/Excel 导入模板说明，覆盖模板列、示例行、必填校验和可选字段建议。 |
 | [market_data_sources.md](./market_data_sources.md) | 市场数据 provider、路由、配置、限制和排障。 |
 | [trading-metrics.md](./trading-metrics.md) | 指标算法与实现状态。 |
 | [trading-fields-design.md](./trading-fields-design.md) | 当前 / 实施中字段边界。 |
