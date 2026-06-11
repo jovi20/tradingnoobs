@@ -270,7 +270,7 @@ npm run build
 
 优先级以 [TODO.md](./TODO.md) 为准。当前建议顺序：
 
-1. P12B：Observability / error contract hardening，接入统一 error code、结构化日志和错误响应回归测试。
+1. P13：Risk / review product features，先创建专项计划，再开发组合风险监控、单日亏损上限、风险提醒和 Timeline/Review Inbox 风险行动卡。
 2. P10D 剩余项：停止扩张 `frontend/lib/api.ts`，让新页面优先走 read-model adapter 或 generated contract。
 3. P10E 后续执行：在 truth/legacy 边界稳定后拆分 `backend/models.py`。
 4. 中期 backlog：风控预警、PDF 导出、AI 日期范围、市场数据验证、管理员运维、图表 renderer 迁移。

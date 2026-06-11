@@ -36,15 +36,15 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 | Lifecycle Detail | `truth-first 体验已落地` | 单笔详情已优先展示 truth lifecycle、evidence、AI sidecar；latest active event reversal 走审计 `REVERSAL`，非最新 reversal、`OPEN` reversal、legacy hard delete/batch edit 已被保护为非普通路径。 |
 | Dashboard / Insights | `已重构为工作台形态` | Dashboard 保持宏观视图；Insights 已接入 auditable artifact 与 artifact detail；图表已有 schema/freshness 包装。 |
 | 前端依赖与质量 | `已完成 P8-P9F` | Next 16 / React 19 已升级；React 19 strict hooks lint 全局启用；前端 lint 已到 0 warning。 |
-| 文档状态 | `P12 完成 / P12B 待计划` | P10 文档、legacy inventory、observability、read-model marker、model modularization plan 已落地；P11 hard cutover 与 P12 platform contract hardening 已完成，下一条建议 lane 是 P12B observability/error contract hardening。 |
+| 文档状态 | `P12B 完成 / P13 待计划` | P10 文档、legacy inventory、observability、read-model marker、model modularization plan 已落地；P11 hard cutover、P12 platform contract hardening、P12B observability/error contract hardening 已完成，下一条建议 lane 是 P13 risk/review product features。 |
 
 ---
 
 ## 当前 Active Lane
 
-- 当前 active lane：P12 Platform contract hardening 已完成。
-- 完成计划：[2026-06-10-dev-p12-platform-contract-hardening-plan.md](./superpowers/plans/2026-06-10-dev-p12-platform-contract-hardening-plan.md)。
-- 下一条建议 active lane：P12B Observability / error contract hardening，先补统一 error code 接入和结构化日志，再进入风险、PDF、AI 日期范围、市场数据或 admin ops。
+- 当前 active lane：P12B Observability / error contract hardening 已完成。
+- 完成计划：[2026-06-11-dev-p12b-observability-error-contract-plan.md](./superpowers/plans/2026-06-11-dev-p12b-observability-error-contract-plan.md)。
+- 下一条建议 active lane：P13 Risk / review product features，先创建专项计划，再开发组合风险监控、单日亏损上限、风险提醒和 Timeline/Review Inbox 风险行动卡。
 
 ### P11 完成状态
 
@@ -71,6 +71,8 @@ P10 起始基线：`3418a27 docs: mark p9f pushed`
 - [x] P12B：在路由异常处理中实际使用统一 error code。
 - [x] P12B：建立结构化日志策略，逐步替换后端业务路径中的 `print()`。
 - [x] P12B：补最小回归测试，保证错误响应包含稳定 code、request id、可排障信息。
+- [ ] P13：创建 Risk / review product features implementation plan。
+- [ ] P13：实现组合风险监控、单日亏损上限、风险提醒和 Timeline/Review Inbox 风险行动卡。
 
 ---
 

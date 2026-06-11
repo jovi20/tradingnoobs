@@ -119,7 +119,7 @@ cd backend
 - [x] Replace those prints with `get_structured_logger(...)` and `log_event(...)`.
 - [x] Leave CLI and ops scripts unchanged in this task.
 - [x] Run `cd backend && ../.venv313/bin/python -m unittest discover -s tests -p test_observability.py` and confirm it passes.
-- [ ] Commit with `chore: replace business prints with structured logs`.
+- [x] Commit with `chore: replace business prints with structured logs`.
 
 P12B Task 3 result:
 - Removed production-path `print()` usage from admin, dashboard, positions, import, LLM, and market data business modules.
@@ -130,6 +130,7 @@ Verification log:
 - RED backend: `../.venv313/bin/python -m unittest discover -s tests -p test_observability.py` failed on `print(` usage in the six guarded business files.
 - GREEN targeted backend: `../.venv313/bin/python -m unittest discover -s tests -p test_observability.py` ran 9 tests OK.
 - P12B Task 3 full backend regression: `../.venv313/bin/python -m unittest discover -s tests` ran 168 tests OK; output included the existing Yahoo/MSFT DNS warning.
+- Commit: `35a6336 chore: replace business prints with structured logs`.
 
 Verification:
 
@@ -142,13 +143,26 @@ cd backend
 
 ## Task 4: P12B Completion Gate
 
-- [ ] Backend observability tests pass.
-- [ ] Backend full tests pass.
-- [ ] Frontend typecheck passes.
-- [ ] Frontend lint passes.
-- [ ] Frontend Node tests pass.
-- [ ] `git diff --check` passes.
-- [ ] `docs/TODO.md` marks P12B completed or lists precise remaining blockers.
+- [x] Backend observability tests pass.
+- [x] Backend full tests pass.
+- [x] Frontend typecheck passes.
+- [x] Frontend lint passes.
+- [x] Frontend Node tests pass.
+- [x] `git diff --check` passes.
+- [x] `docs/TODO.md` marks P12B completed or lists precise remaining blockers.
+
+P12B Task 4 result:
+- P12B Observability / Error Contract Hardening is complete.
+- Backend errors now carry a stable compatibility-preserving `error` envelope.
+- Request IDs are available in both response headers and error payloads.
+- Business-path logging in the guarded backend files now uses structured `tradingnoobs.*` loggers instead of `print()`.
+
+Verification log:
+- Backend observability targeted regression: `../.venv313/bin/python -m unittest discover -s tests -p test_observability.py` covered by the full backend run.
+- Full backend regression: `../.venv313/bin/python -m unittest discover -s tests` ran 168 tests OK; output included the existing Yahoo/MSFT DNS warning from market-data-related code.
+- Frontend typecheck: `./node_modules/.bin/tsc --noEmit --pretty false` exited 0.
+- Frontend lint: `npm run lint` exited 0.
+- Extended frontend regression: `node --experimental-strip-types --test tests/*.test.mts` ran 91 tests OK; Node emitted existing `MODULE_TYPELESS_PACKAGE_JSON` warnings.
 
 Final verification:
 
