@@ -52,6 +52,7 @@ from services.derived_timeline_read_service import list_recent_timeline_snapshot
 from services.insight_artifact_service import InsightArtifactService
 from services.market_data_service import MarketDataService
 from services.platform_config_service import get_feature_flag_enabled, get_llm_runtime_config
+from services.risk_alert_service import build_portfolio_risk_summary
 from services.timeline_source_policy import get_timeline_source_mode
 
 router = APIRouter(prefix="/api/timeline", tags=["Timeline"])
@@ -379,6 +380,68 @@ def _build_data_stale_items(positions: list[Position], db: Session, as_of: str) 
                     ),
                 )
             )
+    return items
+
+
+def _risk_review_kind(alert_kind: str) -> ReviewInboxKindEnum | None:
+    if alert_kind == "DAILY_LOSS_LIMIT":
+        return ReviewInboxKindEnum.DAILY_LOSS_LIMIT
+    if alert_kind == "CONCENTRATION":
+        return ReviewInboxKindEnum.PORTFOLIO_CONCENTRATION
+    if alert_kind == "DRAWDOWN":
+        return ReviewInboxKindEnum.DRAWDOWN_ALERT
+    return None
+
+
+def _build_risk_review_inbox_items(
+    *,
+    risk_summary: dict,
+    user: User,
+    as_of: str,
+) -> list[ReviewInboxItem]:
+    items: list[ReviewInboxItem] = []
+    for alert in risk_summary.get("alerts", []):
+        review_kind = _risk_review_kind(str(alert.get("kind", "")))
+        if review_kind is None:
+            continue
+
+        alert_trust = alert.get("trust") if isinstance(alert.get("trust"), dict) else {}
+        value_status = alert_trust.get("value_status")
+        items.append(
+            ReviewInboxItem(
+                public_id=f"inbox:{alert['public_id']}",
+                kind=review_kind,
+                severity=InboxSeverityEnum(alert["severity"]),
+                summary=alert["summary"],
+                reason=alert["reason"],
+                recommended_action=ReviewInboxAction(
+                    kind=RecommendedActionKindEnum.OPEN_DASHBOARD,
+                    label=alert.get("recommended_action", {}).get("label", "查看组合风险"),
+                    href=alert.get("recommended_action", {}).get("href", "/dashboard"),
+                ),
+                linked_object=LinkedObjectRef(
+                    object_type=LinkedObjectTypeEnum.PORTFOLIO,
+                    public_id=user.public_id or f"user:{user.id}",
+                    label="Portfolio Risk",
+                    href="/dashboard",
+                ),
+                occurred_at=risk_summary.get("as_of") or as_of,
+                trust=TrustMeta(
+                    as_of=as_of,
+                    generated_at=as_of,
+                    freshness=FreshnessStatusEnum(alert_trust.get("freshness", FreshnessStatusEnum.FRESH.value)),
+                    source=DataSourceEnum(alert_trust.get("source", DataSourceEnum.DERIVED.value)),
+                    maturity=MaturityEnum.EARLY_SIGNAL,
+                    value_status=(
+                        ValueStatusEnum(value_status)
+                        if value_status
+                        else ValueStatusEnum.ESTIMATED
+                    ),
+                    source_refs=alert.get("source_refs", []),
+                    note="Portfolio risk alert",
+                ),
+            )
+        )
     return items
 
 
@@ -858,6 +921,7 @@ def get_timeline_home(
         review_completion_rate = reviewed_closed_count / closed_count
 
     as_of = _utc_now_iso()
+    risk_summary = build_portfolio_risk_summary(db, current_user.id)
     legacy_mixed_feed_enabled = get_feature_flag_enabled(
         db,
         "timeline_legacy_mixed_feed_enabled",
@@ -887,6 +951,14 @@ def get_timeline_home(
         inbox_items = list(review_inbox.items)
         _append_losing_streak_inbox_item(inbox_items, positions, as_of)
         inbox_items.extend(_build_data_stale_items(positions, db, as_of))
+
+    inbox_items.extend(
+        _build_risk_review_inbox_items(
+            risk_summary=risk_summary,
+            user=current_user,
+            as_of=as_of,
+        )
+    )
 
     review_inbox = ReviewInbox(
         counts=ReviewInboxCounts(

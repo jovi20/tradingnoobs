@@ -30,6 +30,9 @@ export type ReviewInboxKind =
     | 'LOSING_STREAK'
     | 'DATA_STALE'
     | 'SYNC_EXCEPTION'
+    | 'DAILY_LOSS_LIMIT'
+    | 'PORTFOLIO_CONCENTRATION'
+    | 'DRAWDOWN_ALERT'
 export type InboxSeverity = 'INFO' | 'NOTICE' | 'WARNING' | 'CRITICAL'
 export type RecommendedActionKind =
     | 'OPEN_POSITION_DETAIL'
@@ -37,7 +40,8 @@ export type RecommendedActionKind =
     | 'COMPLETE_THESIS'
     | 'OPEN_SYNC_STATUS'
     | 'OPEN_INSIGHT'
-export type LinkedObjectType = 'TRADING_POSITION' | 'POSITION_EVENT' | 'ACCOUNT' | 'INSIGHT_ARTIFACT'
+    | 'OPEN_DASHBOARD'
+export type LinkedObjectType = 'TRADING_POSITION' | 'POSITION_EVENT' | 'ACCOUNT' | 'INSIGHT_ARTIFACT' | 'PORTFOLIO'
 export type TimelineGroupType = 'DAY' | 'WEEK_BUCKET'
 export type TimelineEventType =
     | 'OPEN'

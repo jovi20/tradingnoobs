@@ -1,4 +1,4 @@
-import type { SummaryBar, TimelineEventCard, TimelineEventType } from '../read-models.ts'
+import type { ReviewInboxItem, SummaryBar, TimelineEventCard, TimelineEventType } from '../read-models.ts'
 import type { TimelineHomeViewModel } from './timeline.ts'
 
 export type WorkbenchTone =
@@ -112,6 +112,39 @@ export function getTimelineEventTone(eventType: TimelineEventType): WorkbenchTon
         default:
             return 'neutral'
     }
+}
+
+export function getReviewInboxKindLabel(kind: ReviewInboxItem['kind']): string {
+    switch (kind) {
+        case 'DAILY_LOSS_LIMIT':
+            return '单日亏损上限'
+        case 'PORTFOLIO_CONCENTRATION':
+            return '组合集中度'
+        case 'DRAWDOWN_ALERT':
+            return '组合回撤'
+        case 'MISSING_REVIEW':
+            return '待补复盘'
+        case 'MISSING_THESIS':
+            return '待补交易计划'
+        case 'CHECKLIST_MISS':
+            return '纪律偏离'
+        case 'LOSING_STREAK':
+            return '连续亏损'
+        case 'DATA_STALE':
+            return '数据延迟'
+        case 'SYNC_EXCEPTION':
+            return '同步异常'
+        default:
+            return kind
+    }
+}
+
+export function getReviewInboxTone(item: Pick<ReviewInboxItem, 'kind' | 'severity'>): WorkbenchTone {
+    if (item.severity === 'CRITICAL') return 'danger'
+    if (item.kind === 'DAILY_LOSS_LIMIT' || item.kind === 'DRAWDOWN_ALERT') return 'danger'
+    if (item.severity === 'WARNING' || item.kind === 'PORTFOLIO_CONCENTRATION') return 'warning'
+    if (item.kind === 'MISSING_REVIEW') return 'review'
+    return 'neutral'
 }
 
 export function getWorkbenchMobileSectionOrder(timelineHome: Pick<TimelineHomeViewModel, 'reviewInbox'>): MobileWorkbenchSection[] {

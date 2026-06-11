@@ -1,7 +1,8 @@
 import os
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
@@ -12,6 +13,7 @@ from database import Base, get_db
 from main import app
 from models import (
     AIAnalysisResult,
+    DailySnapshot,
     DerivedTimelineSnapshot,
     FeatureFlag,
     InsightArtifact,
@@ -73,6 +75,19 @@ class TimelineHomeRouterTests(unittest.TestCase):
 
     def enable_legacy_mixed_feed(self):
         self.session.add(FeatureFlag(key="timeline_legacy_mixed_feed_enabled", enabled=True))
+        self.session.commit()
+
+    def add_daily_snapshot(self, snapshot_date: date, total_equity: str) -> None:
+        self.session.add(
+            DailySnapshot(
+                user_id=self.user.id,
+                date=snapshot_date,
+                total_assets=Decimal(total_equity),
+                total_liabilities=Decimal("0"),
+                total_equity=Decimal(total_equity),
+                net_transfers=Decimal("0"),
+            )
+        )
         self.session.commit()
 
     def test_timeline_home_returns_zero_state_when_user_has_no_accounts_or_positions(self):
@@ -619,6 +634,55 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.assertEqual(item["linked_object"]["href"], "/positions/tp-missing-review")
         self.assertEqual(item["trust"]["source"], "DERIVED")
         self.assertEqual(payload["data"]["summary_bar"]["priority_alert_count"], 1)
+
+    def test_timeline_home_adds_daily_loss_risk_alert_to_review_inbox(self):
+        self.add_daily_snapshot(date(2026, 6, 10), "100000")
+        self.add_daily_snapshot(date(2026, 6, 11), "94000")
+
+        response = self.client.get("/api/timeline/home")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        risk_items = [
+            item
+            for item in payload["data"]["review_inbox"]["items"]
+            if item["kind"] == "DAILY_LOSS_LIMIT"
+        ]
+        self.assertEqual(len(risk_items), 1)
+        self.assertEqual(risk_items[0]["severity"], "CRITICAL")
+        self.assertEqual(risk_items[0]["recommended_action"]["kind"], "OPEN_DASHBOARD")
+        self.assertEqual(risk_items[0]["recommended_action"]["href"], "/dashboard")
+        self.assertEqual(risk_items[0]["linked_object"]["object_type"], "PORTFOLIO")
+        self.assertEqual(payload["data"]["summary_bar"]["priority_alert_count"], 1)
+
+    def test_timeline_home_exception_view_counts_risk_review_inbox_alert(self):
+        self.add_daily_snapshot(date(2026, 6, 10), "100000")
+        self.add_daily_snapshot(date(2026, 6, 11), "96500")
+
+        response = self.client.get("/api/timeline/home?view=EXCEPTION")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["data"]["timeline"]["active_view"], "EXCEPTION")
+        self.assertEqual(payload["data"]["review_inbox"]["counts"]["total"], 1)
+        self.assertEqual(payload["data"]["review_inbox"]["counts"]["high_priority"], 1)
+        self.assertEqual(payload["data"]["summary_bar"]["priority_alert_count"], 1)
+
+    def test_timeline_home_does_not_add_risk_alert_for_empty_portfolio(self):
+        response = self.client.get("/api/timeline/home")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        risk_kinds = {
+            "DAILY_LOSS_LIMIT",
+            "PORTFOLIO_CONCENTRATION",
+            "DRAWDOWN_ALERT",
+        }
+        self.assertTrue(
+            risk_kinds.isdisjoint(
+                {item["kind"] for item in payload["data"]["review_inbox"]["items"]}
+            )
+        )
 
     def test_timeline_home_legacy_mixed_feed_restores_legacy_review_inbox_items(self):
         self.enable_legacy_mixed_feed()

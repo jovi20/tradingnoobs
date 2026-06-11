@@ -238,21 +238,21 @@ Verification log:
 
 **Goal:** risk warnings become action cards in the user's default time-flow surface.
 
-- [ ] Extend `ReviewInboxKindEnum` in `backend/schemas.py` with:
+- [x] Extend `ReviewInboxKindEnum` in `backend/schemas.py` with:
   - `DAILY_LOSS_LIMIT`
   - `PORTFOLIO_CONCENTRATION`
   - `DRAWDOWN_ALERT`
-- [ ] Extend `RecommendedActionKindEnum` with `OPEN_DASHBOARD`.
-- [ ] In `backend/routers/timeline.py`, append risk alerts from `build_portfolio_risk_summary(...)` into `ReviewInbox.items`.
-- [ ] Increment `SummaryBar.priority_alert_count` with critical and warning risk items.
-- [ ] Add tests in `backend/tests/test_timeline_home_router.py`:
+- [x] Extend `RecommendedActionKindEnum` with `OPEN_DASHBOARD`.
+- [x] In `backend/routers/timeline.py`, append risk alerts from `build_portfolio_risk_summary(...)` into `ReviewInbox.items`.
+- [x] Increment `SummaryBar.priority_alert_count` with critical and warning risk items.
+- [x] Add tests in `backend/tests/test_timeline_home_router.py`:
   - daily loss alert appears in review inbox.
   - `view=EXCEPTION` includes risk alert timeline event or inbox count.
   - no risk alert is produced for zero portfolio.
-- [ ] Update `frontend/lib/adapters/timeline-workbench.ts` tone mapping for new risk kinds.
-- [ ] Update `frontend/components/timeline/workbench/ReviewInboxPanel.tsx` labels to show risk-specific copy.
-- [ ] Add frontend regression in `frontend/tests/timeline-workbench.test.mts`.
-- [ ] Run:
+- [x] Update `frontend/lib/adapters/timeline-workbench.ts` tone mapping for new risk kinds.
+- [x] Update `frontend/components/timeline/workbench/ReviewInboxPanel.tsx` labels to show risk-specific copy.
+- [x] Add frontend regression in `frontend/tests/timeline-workbench.test.mts`.
+- [x] Run:
 
 ```bash
 cd backend
@@ -267,6 +267,20 @@ node --experimental-strip-types --test tests/timeline-workbench.test.mts
 git add backend/routers/timeline.py backend/schemas.py backend/tests/test_timeline_home_router.py frontend/lib/adapters/timeline-workbench.ts frontend/components/timeline/workbench/ReviewInboxPanel.tsx frontend/tests/timeline-workbench.test.mts
 git commit -m "feat: add risk action cards to timeline"
 ```
+
+P13 Task 4 result:
+- Timeline Home now appends portfolio risk alerts to Review Inbox in both snapshot-first and legacy-mixed modes.
+- Daily loss, portfolio concentration, and drawdown alerts map to first-class Review Inbox kinds.
+- Critical/warning risk items increment `summary_bar.priority_alert_count`.
+- Review Inbox now shows Chinese risk labels instead of raw enum values.
+
+Verification log:
+- RED backend: `../.venv313/bin/python -m unittest discover -s tests -p test_timeline_home_router.py` failed because daily loss risk alerts were absent from Review Inbox and `view=EXCEPTION` had zero risk inbox count.
+- GREEN backend: `../.venv313/bin/python -m unittest discover -s tests -p test_timeline_home_router.py` ran 22 tests OK; the existing market-data test emitted a DNS warning while still passing.
+- GREEN OpenAPI regression: `../.venv313/bin/python -m unittest discover -s tests -p test_openapi_contracts.py` ran 3 tests OK.
+- RED frontend: `node --experimental-strip-types --test tests/timeline-workbench.test.mts` failed because `getReviewInboxKindLabel` was not exported.
+- GREEN frontend: `node --experimental-strip-types --test tests/timeline-workbench.test.mts` ran 6 tests OK; Node emitted the existing `MODULE_TYPELESS_PACKAGE_JSON` warning.
+- Typecheck: `./node_modules/.bin/tsc --noEmit --pretty false` exited 0.
 
 ## Task 5: P13 Completion Gate
 

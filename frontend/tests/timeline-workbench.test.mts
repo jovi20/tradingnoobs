@@ -5,6 +5,8 @@ import {
   buildTimelineSummaryMetrics,
   formatTimelineEventImpact,
   formatTimelineEventMeta,
+  getReviewInboxKindLabel,
+  getReviewInboxTone,
   getTimelineEventTone,
   getWorkbenchMobileSectionOrder,
 } from '../lib/adapters/timeline-workbench.ts'
@@ -75,6 +77,14 @@ test('getTimelineEventTone maps trade, review, AI, and exception events', () => 
   assert.equal(getTimelineEventTone('REVIEW_COMPLETED'), 'review')
   assert.equal(getTimelineEventTone('AI_INSIGHT'), 'ai')
   assert.equal(getTimelineEventTone('SYNC_EXCEPTION'), 'danger')
+})
+
+test('review inbox helpers map risk actions to readable labels and urgent tones', () => {
+  assert.equal(getReviewInboxKindLabel('DAILY_LOSS_LIMIT'), '单日亏损上限')
+  assert.equal(getReviewInboxKindLabel('PORTFOLIO_CONCENTRATION'), '组合集中度')
+  assert.equal(getReviewInboxKindLabel('DRAWDOWN_ALERT'), '组合回撤')
+  assert.equal(getReviewInboxTone({ kind: 'DAILY_LOSS_LIMIT', severity: 'CRITICAL' }), 'danger')
+  assert.equal(getReviewInboxTone({ kind: 'PORTFOLIO_CONCENTRATION', severity: 'WARNING' }), 'warning')
 })
 
 test('getWorkbenchMobileSectionOrder puts actionable review inbox before feed', () => {

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { AlertTriangle, CheckCircle2, ChevronRight } from 'lucide-react'
 
 import { getReviewInboxSummary } from '@/lib/adapters/timeline'
+import { getReviewInboxKindLabel, getReviewInboxTone } from '@/lib/adapters/timeline-workbench'
 import type { TimelineHomeViewModel } from '@/lib/adapters/timeline'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { Surface } from '@/components/ui/Surface'
@@ -30,8 +31,8 @@ export function ReviewInboxPanel({ reviewInbox }: ReviewInboxPanelProps) {
                         <div key={item.public_id} className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950/60">
                             <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
-                                    <StatusPill tone={item.severity === 'CRITICAL' ? 'danger' : item.severity === 'WARNING' ? 'warning' : 'review'}>
-                                        {item.kind}
+                                    <StatusPill tone={getReviewInboxTone(item)}>
+                                        {getReviewInboxKindLabel(item.kind)}
                                     </StatusPill>
                                     <p className="mt-2 text-sm font-semibold text-slate-950 dark:text-white">{item.summary}</p>
                                     <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{item.reason}</p>

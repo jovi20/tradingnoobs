@@ -118,6 +118,9 @@ class ReviewInboxKindEnum(str, Enum):
     LOSING_STREAK = "LOSING_STREAK"
     DATA_STALE = "DATA_STALE"
     SYNC_EXCEPTION = "SYNC_EXCEPTION"
+    DAILY_LOSS_LIMIT = "DAILY_LOSS_LIMIT"
+    PORTFOLIO_CONCENTRATION = "PORTFOLIO_CONCENTRATION"
+    DRAWDOWN_ALERT = "DRAWDOWN_ALERT"
 
 
 class InboxSeverityEnum(str, Enum):
@@ -133,6 +136,7 @@ class RecommendedActionKindEnum(str, Enum):
     COMPLETE_THESIS = "COMPLETE_THESIS"
     OPEN_SYNC_STATUS = "OPEN_SYNC_STATUS"
     OPEN_INSIGHT = "OPEN_INSIGHT"
+    OPEN_DASHBOARD = "OPEN_DASHBOARD"
 
 
 class LinkedObjectTypeEnum(str, Enum):
@@ -140,6 +144,7 @@ class LinkedObjectTypeEnum(str, Enum):
     POSITION_EVENT = "POSITION_EVENT"
     ACCOUNT = "ACCOUNT"
     INSIGHT_ARTIFACT = "INSIGHT_ARTIFACT"
+    PORTFOLIO = "PORTFOLIO"
 
 
 class TimelineGroupTypeEnum(str, Enum):
