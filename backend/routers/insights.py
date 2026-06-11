@@ -1,7 +1,7 @@
 """
 Trading Noobs Backend - Weekly Report Router
 """
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, StreamingResponse
 from io import BytesIO
@@ -12,7 +12,7 @@ from datetime import date, timedelta, datetime, timezone
 import re
 
 from database import get_db
-from models import User, WeeklyReport, AISummary, AIAnalysisResult, Position, PositionStatus
+from models import User, WeeklyReport, AISummary, AIAnalysisResult, Position, PositionStatus, InsightArtifact, InsightRun
 from schemas import WeeklyReportCreate, WeeklyReportResponse, AISummaryResponse, AnalysisRequest, AnalysisResponse
 from services.auth_service import get_current_user
 from services.chart_schema_service import build_analysis_chart_schema
@@ -134,6 +134,30 @@ def _analysis_date_range_payload(start_date: date | None, end_date: date | None)
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat(),
         "label": f"{start_date.isoformat()} to {end_date.isoformat()}",
+    }
+
+
+def _analysis_type_from_history_row(run: InsightRun, artifact: InsightArtifact) -> str:
+    payload = artifact.payload if isinstance(artifact.payload, dict) else {}
+    payload_type = payload.get("analysis_type")
+    if isinstance(payload_type, str) and payload_type:
+        return payload_type
+    if run.run_type.startswith("analysis."):
+        return run.run_type.removeprefix("analysis.")
+    return run.run_type
+
+
+def _analysis_history_item(run: InsightRun, artifact: InsightArtifact) -> dict:
+    payload = artifact.payload if isinstance(artifact.payload, dict) else {}
+    return {
+        "run_public_id": run.public_id,
+        "artifact_public_id": artifact.public_id,
+        "analysis_type": _analysis_type_from_history_row(run, artifact),
+        "title": artifact.title,
+        "summary": artifact.summary,
+        "created_at": artifact.created_at,
+        "date_range": payload.get("date_range"),
+        "href": f"/insights/{artifact.public_id}",
     }
 
 
@@ -556,6 +580,39 @@ async def analyze_trading_data(
     db.commit()
 
     return JSONResponse(status_code=200, content=response_content)
+
+
+@router.get("/analyze/history")
+async def list_analysis_history(
+    analysis_type: str | None = None,
+    limit: int = Query(20, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List recent auditable AI analysis artifacts for the current user."""
+    query = (
+        db.query(InsightRun, InsightArtifact)
+        .join(InsightArtifact, InsightArtifact.insight_run_id == InsightRun.id)
+        .filter(
+            InsightRun.user_id == current_user.id,
+            InsightRun.run_type.like("analysis.%"),
+            InsightArtifact.artifact_type == "analysis_card",
+        )
+    )
+    if analysis_type:
+        query = query.filter(InsightRun.run_type == f"analysis.{analysis_type}")
+
+    rows = (
+        query
+        .order_by(InsightArtifact.created_at.desc(), InsightArtifact.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+    return jsonable_encoder([
+        _analysis_history_item(run, artifact)
+        for run, artifact in rows
+    ])
 
 
 @router.get("/analyze/latest/{analysis_type}", response_model=Optional[AnalysisResponse])

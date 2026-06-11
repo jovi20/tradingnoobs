@@ -19,6 +19,7 @@ class OpenAPIContractTests(unittest.TestCase):
             "/api/positions",
             "/api/risk/summary",
             "/api/insights/{report_id}/export/pdf",
+            "/api/insights/analyze/history",
         ):
             with self.subTest(path=path):
                 self.assertIn(path, paths)
