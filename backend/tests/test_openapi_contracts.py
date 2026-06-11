@@ -18,6 +18,7 @@ class OpenAPIContractTests(unittest.TestCase):
             "/api/timeline/home",
             "/api/positions",
             "/api/risk/summary",
+            "/api/market/quote/{symbol}",
             "/api/insights/{report_id}/export/pdf",
             "/api/insights/analyze/history",
         ):
@@ -30,6 +31,8 @@ class OpenAPIContractTests(unittest.TestCase):
         self.assertIn("TimelineHomeResponse", schemas)
         self.assertIn("TradingPositionLifecycleResponse", schemas)
         self.assertIn("RiskSummaryResponse", schemas)
+        self.assertIn("MarketQuoteResponse", schemas)
+        self.assertIn("MarketQuoteTrustMeta", schemas)
 
     def test_legacy_fallback_headers_are_documented_on_protected_routes(self):
         protected_routes = (

@@ -61,7 +61,14 @@ class MarketRouterTests(unittest.TestCase):
 
     def test_quote_endpoint_awaits_market_data_service(self):
         async def fake_get_quote(self, symbol, exchange):
-            return {"c": 100, "pc": 95}
+            return {
+                "c": 100,
+                "pc": 95,
+                "provider": "finnhub",
+                "freshness": "FRESH",
+                "degraded": False,
+                "source_refs": ["provider:finnhub", "symbol:MSFT"],
+            }
 
         with (
             patch("routers.market.MarketDataService.get_quote", new=fake_get_quote),
@@ -70,14 +77,16 @@ class MarketRouterTests(unittest.TestCase):
             response = self.client.get("/api/market/quote/MSFT?exchange=NASDAQ")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            response.json(),
-            {
-                "symbol": "MSFT",
-                "asset_type": "US_STOCK",
-                "quote": {"c": 100, "pc": 95},
-            },
-        )
+        payload = response.json()
+        self.assertEqual(payload["symbol"], "MSFT")
+        self.assertEqual(payload["asset_type"], "US_STOCK")
+        self.assertEqual(payload["quote"]["c"], 100)
+        self.assertEqual(payload["quote"]["pc"], 95)
+        self.assertEqual(payload["provider"], "finnhub")
+        self.assertEqual(payload["freshness"], "FRESH")
+        self.assertFalse(payload["degraded"])
+        self.assertEqual(payload["source_refs"], ["provider:finnhub", "symbol:MSFT"])
+        self.assertEqual(payload["trust"]["freshness"], "FRESH")
 
     def test_quote_endpoint_returns_error_payload_on_provider_failure(self):
         async def failing_get_quote(self, symbol, exchange):
@@ -87,7 +96,12 @@ class MarketRouterTests(unittest.TestCase):
             response = self.client.get("/api/market/quote/MSFT")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"symbol": "MSFT", "error": "provider down"})
+        payload = response.json()
+        self.assertEqual(payload["symbol"], "MSFT")
+        self.assertEqual(payload["error"], "provider down")
+        self.assertEqual(payload["freshness"], "UNAVAILABLE")
+        self.assertTrue(payload["degraded"])
+        self.assertIn("symbol:MSFT", payload["source_refs"])
 
     def test_validate_endpoint_preserves_existing_shape(self):
         async def fake_validate_symbol(self, symbol, exchange):

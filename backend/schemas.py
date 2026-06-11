@@ -605,6 +605,41 @@ class AnalysisResponse(BaseModel):
     created_at: datetime
 
 
+# ============== Market Data Schemas ==============
+
+class MarketQuoteTrustMeta(BaseModel):
+    freshness: str
+    degraded: bool = False
+    degraded_reason: Optional[str] = None
+    source_refs: List[str] = Field(default_factory=list)
+
+
+class MarketQuoteResponse(BaseModel):
+    symbol: str
+    asset_type: Optional[str] = None
+    quote: Optional[Dict[str, Any]] = None
+    provider: Optional[str] = None
+    freshness: str
+    degraded: bool = False
+    degraded_reason: Optional[str] = None
+    source_refs: List[str] = Field(default_factory=list)
+    error: Optional[str] = None
+    trust: MarketQuoteTrustMeta
+
+
+class MarketValidationResponse(BaseModel):
+    valid: bool
+    symbol: str
+    asset_type: Optional[str] = None
+    price: Optional[float] = None
+    name: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    provider: Optional[str] = None
+    error: Optional[str] = None
+    candidates: Optional[List[Dict[str, Any]]] = None
+    raw_error: Optional[str] = None
+
+
 # ============== Weekly Report Schemas ==============
 
 class WeeklyReportCreate(BaseModel):
