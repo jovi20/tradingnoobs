@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer } from 'recharts'
+import { SvgPieChart } from '@/components/charts/renderers/SvgPieChart'
 import type { AssetAllocation } from '@/lib/api'
 import { getCoreTypeLabel, getMarketLabel, getRiskLevelInfo, getAssetTypeHexColor, AssetMarket, AssetRiskLevel } from '@/lib/symbolUtils'
 
@@ -44,40 +44,23 @@ export default function AllocationPieChart({ data, dimension }: AllocationPieCha
         }
     })
 
+    const navigateToDimension = (entry: { originalName: string }) => {
+        let queryParam = 'asset_type';
+        if (dimension === 'CORE_TYPE') queryParam = 'core_type';
+        else if (dimension === 'MARKET') queryParam = 'market';
+        else if (dimension === 'RISK') queryParam = 'risk_level';
+        router.push(`/positions?${queryParam}=${entry.originalName}&dimension=${dimension}`)
+    }
+
     return (
         <div className="h-[300px] w-full mt-4">
-            <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                    <Pie
-                        data={chartData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
-                        paddingAngle={5}
-                        dataKey="value"
-                        nameKey="name"
-                        onClick={(entry) => {
-                            if (entry && entry.originalName) {
-                                let queryParam = 'asset_type';
-                                if (dimension === 'CORE_TYPE') queryParam = 'core_type';
-                                else if (dimension === 'MARKET') queryParam = 'market';
-                                else if (dimension === 'RISK') queryParam = 'risk_level';
-                                router.push(`/positions?${queryParam}=${entry.originalName}&dimension=${dimension}`)
-                            }
-                        }}
-                        className="cursor-pointer focus:outline-none"
-                    >
-                        {chartData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={getAssetTypeHexColor(entry.originalName)} />
-                        ))}
-                    </Pie>
-                    <Tooltip
-                        formatter={(value: number, name: string, props: any) => `${props.payload.percent}%`}
-                    />
-                    <Legend />
-                </PieChart>
-            </ResponsiveContainer>
+            <SvgPieChart
+                data={chartData}
+                getLabel={(entry) => entry.name}
+                getValue={(entry) => entry.value}
+                getColor={(entry) => getAssetTypeHexColor(entry.originalName)}
+                onSliceClick={navigateToDimension}
+            />
         </div>
     )
 }

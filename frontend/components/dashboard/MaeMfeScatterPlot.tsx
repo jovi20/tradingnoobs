@@ -1,5 +1,5 @@
-import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ZAxis, Cell } from 'recharts';
 import { ChartFrame } from '@/components/charts/ChartFrame';
+import { SvgScatterChart } from '@/components/charts/renderers/SvgScatterChart';
 import {
     buildMaeMfeScatterPoints,
     localLegacyAnalyticsTrust,
@@ -30,37 +30,15 @@ export function MaeMfeScatterPlot({ positions }: MaeMfeScatterPlotProps) {
         >
             <>
                 <div className="h-[300px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <ScatterChart
-                            margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
-                        >
-                            <CartesianGrid />
-                            <XAxis
-                                type="number"
-                                dataKey="mae"
-                                name="MAE %"
-                                unit="%"
-                                label={{ value: 'MAE (Adverse) %', position: 'insideBottom', offset: -10 }}
-                            />
-                            <YAxis
-                                type="number"
-                                dataKey="mfe"
-                                name="MFE %"
-                                unit="%"
-                                label={{ value: 'MFE (Favorable) %', angle: -90, position: 'insideLeft' }}
-                            />
-                            <ZAxis type="number" dataKey="id" range={[50, 50]} />
-                            <Tooltip cursor={{ strokeDasharray: '3 3' }} />
-                            <ReferenceLine y={0} stroke="#666" strokeDasharray="3 3" />
-                            <ReferenceLine x={0} stroke="#666" strokeDasharray="3 3" />
-
-                            <Scatter name="Positions" data={data} fill="#8884d8">
-                                {data.map((entry) => (
-                                    <Cell key={entry.id} fill={entry.pnl >= 0 ? '#10B981' : '#EF4444'} />
-                                ))}
-                            </Scatter>
-                        </ScatterChart>
-                    </ResponsiveContainer>
+                    <SvgScatterChart
+                        data={data}
+                        getX={(entry) => entry.mae}
+                        getY={(entry) => entry.mfe}
+                        getLabel={(entry) => String(entry.id)}
+                        getColor={(entry) => (entry.pnl >= 0 ? '#10B981' : '#EF4444')}
+                        xLabel="MAE (Adverse) %"
+                        yLabel="MFE (Favorable) %"
+                    />
                 </div>
                 <div className="mt-4 text-sm text-gray-500">
                     <p>

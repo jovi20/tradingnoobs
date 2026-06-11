@@ -15,10 +15,6 @@ const SCAN_ROOTS = ['app', 'components', 'lib']
 const SOURCE_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx', '.mts', '.cts'])
 const ALLOWED_RECHARTS_IMPORTS = new Set([
   'components/PortfolioSankey.tsx',
-  'components/insights/LegacyAnalysisChart.tsx',
-  'components/dashboard/MaeMfeScatterPlot.tsx',
-  'components/dashboard/AllocationPieChart.tsx',
-  'components/dashboard/workbench/DashboardEquityHero.tsx',
 ])
 
 const RECHARTS_IMPORT_PATTERN = /from\s+['"]recharts(?:\/[^'"]*)?['"]|import\s*\(\s*['"]recharts(?:\/[^'"]*)?['"]\s*\)|require\s*\(\s*['"]recharts(?:\/[^'"]*)?['"]\s*\)/

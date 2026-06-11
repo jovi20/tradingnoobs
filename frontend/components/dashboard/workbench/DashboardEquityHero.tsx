@@ -1,5 +1,5 @@
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ChartFrame } from '@/components/charts/ChartFrame'
+import { SvgLineChart } from '@/components/charts/renderers/SvgLineChart'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { Surface } from '@/components/ui/Surface'
 import { shouldRenderEquityLineChart } from '@/lib/adapters/chart-views'
@@ -96,15 +96,13 @@ export function DashboardEquityHero({
             >
                 {canRenderEquityChart && (
                     <div className="h-[280px] md:h-[340px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={pnlHistory}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                                <XAxis dataKey="date" tick={{ fontSize: 12 }} tickFormatter={(value) => String(value).slice(5)} />
-                                <YAxis tick={{ fontSize: 12 }} tickFormatter={(value) => `${value}%`} />
-                                <Tooltip formatter={(value: number) => [`${value.toFixed(2)}%`, '盈亏率']} labelFormatter={(label) => `日期: ${label}`} />
-                                <Line type="monotone" dataKey="pnl_percent" stroke={lineColor} strokeWidth={2.5} dot={false} />
-                            </LineChart>
-                        </ResponsiveContainer>
+                        <SvgLineChart
+                            data={pnlHistory}
+                            getXLabel={(entry) => entry.date}
+                            getValue={(entry) => entry.pnl_percent}
+                            stroke={lineColor}
+                            valueSuffix="%"
+                        />
                     </div>
                 )}
             </ChartFrame>
