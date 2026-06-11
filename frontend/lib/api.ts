@@ -681,6 +681,33 @@ export interface FeatureFlag {
 
 export type AdminJobStatus = 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'RETRYING' | 'CANCELLED'
 export type AdminJobRecommendedAction = 'REQUEUE' | 'CANCEL' | 'FORCE_CANCEL' | 'WAIT'
+export type AdminOperationStatus = 'SUCCESS' | 'FAILED'
+
+export interface AdminBackupResponse {
+    status: AdminOperationStatus
+    backup_id: string
+    path: string
+    database_backend: string
+    created_at: string
+    message: string
+}
+
+export interface AdminUserOperationResponse {
+    status: AdminOperationStatus
+    user_public_id: string
+    role: string
+    message: string
+}
+
+export interface AdminPasswordResetResponse {
+    status: AdminOperationStatus
+    user_public_id: string
+    temporary_password: string
+    active_sessions_revoked: boolean
+    revoked_session_count: number
+    revoked_token_count: number
+    message: string
+}
 
 export interface AdminJobDefinitionRef {
     public_id: string
@@ -848,6 +875,24 @@ export const adminAPI = {
 
     forceCancelJob: async (token: string, jobPublicId: string): Promise<AdminJobRunDetail> => {
         return fetchAPI(`/api/admin/jobs/${jobPublicId}/force-cancel`, {
+            method: 'POST',
+        }, token)
+    },
+
+    triggerBackup: async (token: string): Promise<AdminBackupResponse> => {
+        return fetchAPI('/api/admin/ops/backups', {
+            method: 'POST',
+        }, token)
+    },
+
+    promoteUser: async (token: string, userPublicId: string): Promise<AdminUserOperationResponse> => {
+        return fetchAPI(`/api/admin/users/${encodeURIComponent(userPublicId)}/promote`, {
+            method: 'POST',
+        }, token)
+    },
+
+    resetUserPassword: async (token: string, userPublicId: string): Promise<AdminPasswordResetResponse> => {
+        return fetchAPI(`/api/admin/users/${encodeURIComponent(userPublicId)}/reset-password`, {
             method: 'POST',
         }, token)
     },

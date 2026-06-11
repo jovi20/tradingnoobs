@@ -19,6 +19,7 @@ const productItems: NavigationItem[] = [
 
 const adminItems: NavigationItem[] = [
     { href: '/admin/jobs', label: 'Ops', icon: 'adminJobs', section: 'ops' },
+    { href: '/admin/ops', label: '运维', icon: 'adminJobs', section: 'ops' },
 ]
 
 const settingsItem: NavigationItem = { href: '/settings', label: '设置', icon: 'settings', section: 'settings' }
