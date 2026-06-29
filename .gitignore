@@ -70,3 +70,6 @@ htmlcov/
 
 # Codex visual companion temp files
 .superpowers/
+
+# Local git worktrees
+.worktrees/
