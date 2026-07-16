@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
+from uvicorn import Config
 
 from observability import (
     add_error_handlers,
@@ -138,6 +139,18 @@ class ObservabilityTests(unittest.TestCase):
 
         disable_unsafe_server_access_log()
 
+        self.assertTrue(logger.disabled)
+
+    def test_request_guard_survives_uvicorn_logging_reconfiguration(self):
+        client = build_test_client()
+        logger = logging.getLogger("uvicorn.access")
+
+        Config(app=client.app)
+        self.assertFalse(logger.disabled)
+
+        response = client.get("/api/validation/not-an-int?token=short-secret")
+
+        self.assertEqual(response.status_code, 422)
         self.assertTrue(logger.disabled)
 
     def test_documented_and_packaged_uvicorn_launches_disable_access_log(self):

@@ -178,6 +178,9 @@ def add_error_handlers(app: FastAPI) -> None:
 def add_observability_middleware(app: FastAPI) -> None:
     @app.middleware("http")
     async def observability_middleware(request: Request, call_next):
+        # Programmatic Uvicorn startup can configure logging after importing the
+        # app. Re-apply the guard before Uvicorn emits the completed access line.
+        disable_unsafe_server_access_log()
         request_id = get_or_create_request_id(request.headers.get(REQUEST_ID_HEADER))
         request.state.request_id = request_id
         started_at = time.perf_counter()
