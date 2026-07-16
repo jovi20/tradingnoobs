@@ -1,252 +1,62 @@
-# Trading Noobs 开发任务清单
+# Trading Noobs 当前任务清单
 
-更新时间：2026-06-11
+更新时间：2026-07-17
 当前执行分支：`dev`
-P10 起始基线：`3418a27 docs: mark p9f pushed`
+当前状态：`TRADING_JOURNAL_HARDENING_ACTIVE / NOT_READY_FOR_PRODUCTION`
 
-本文档是当前唯一执行清单。目标是回答三个问题：
-- 现在已经推进到哪里
-- 接下来优先做什么
-- 哪些早期规划仍未开发
+本文档只记录当前执行批次。完整范围、依赖和验收见 [2026-07-16-dev-trading-journal-development-plan.md](./superpowers/plans/2026-07-16-dev-trading-journal-development-plan.md)；审计来源见 [design-implementation-gap-plan-2026-07-15.md](./design-implementation-gap-plan-2026-07-15.md)。
 
-设计说明、架构说明和专题细节请查看：
-- [superpowers/specs/2026-04-06-platform-foundation-design.md](./superpowers/specs/2026-04-06-platform-foundation-design.md)
-- [superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md](./superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md)
-- [DEVELOPER_GUIDE.md](./DEVELOPER_GUIDE.md)
-- [market_data_sources.md](./market_data_sources.md)
-- [trading-metrics.md](./trading-metrics.md)
-- [trading-fields-design.md](./trading-fields-design.md)
-- [superpowers/plans/2026-06-10-dev-p10-progress-next-plan.md](./superpowers/plans/2026-06-10-dev-p10-progress-next-plan.md)
-- [superpowers/plans/2026-06-10-dev-p10-legacy-cutover-inventory.md](./superpowers/plans/2026-06-10-dev-p10-legacy-cutover-inventory.md)
-- [superpowers/plans/2026-06-10-dev-p10-model-modularization-plan.md](./superpowers/plans/2026-06-10-dev-p10-model-modularization-plan.md)
-- [superpowers/plans/2026-06-10-dev-p11-truth-hard-cutover-plan.md](./superpowers/plans/2026-06-10-dev-p11-truth-hard-cutover-plan.md)
-- [superpowers/plans/2026-06-10-dev-p12-platform-contract-hardening-plan.md](./superpowers/plans/2026-06-10-dev-p12-platform-contract-hardening-plan.md)
-- [superpowers/plans/2026-06-11-dev-p12b-observability-error-contract-plan.md](./superpowers/plans/2026-06-11-dev-p12b-observability-error-contract-plan.md)
-- [superpowers/plans/2026-06-11-dev-p13-risk-review-product-plan.md](./superpowers/plans/2026-06-11-dev-p13-risk-review-product-plan.md)
-- [superpowers/plans/2026-06-11-dev-p14-reporting-export-plan.md](./superpowers/plans/2026-06-11-dev-p14-reporting-export-plan.md)
-- [superpowers/plans/2026-06-11-dev-p15-ai-analysis-workflow-plan.md](./superpowers/plans/2026-06-11-dev-p15-ai-analysis-workflow-plan.md)
-- [superpowers/plans/2026-06-11-dev-p16-market-data-platform-plan.md](./superpowers/plans/2026-06-11-dev-p16-market-data-platform-plan.md)
-- [superpowers/plans/2026-06-11-dev-p17-admin-operations-plan.md](./superpowers/plans/2026-06-11-dev-p17-admin-operations-plan.md)
-- [superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md](./superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md)
-- [superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md](./superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md)
-- [release-rollback-playbook.md](./release-rollback-playbook.md)
+## 当前结论
 
----
+- 旧 P0-P19 只代表历史阶段切片归档，不代表产品或生产闭环完成。
+- 当前唯一 active lane 是 launch-safe 交易日志；source-bound IBKR statement 文件 Import 属于 M1，在线 Broker Sync、量化、Market Data、AI、PDF 和风险卡不进入首批执行。
+- 当前仍是 `NOT_READY_FOR_PRODUCTION`，不得直接部署真实用户环境。
+- 本轮不自动 merge 到 `main`、不创建 PR、不打 tag；这些属于后续显式操作。
+- 旧 P0-P19 阶段计划已归档到 [superpowers/plans/archive/](./superpowers/plans/archive/)。
 
-## 当前进度快照
+## 当前执行批次
 
-| 领域 | 当前状态 | 说明 |
-|------|----------|------|
-| 平台底座 | `已大幅落地` | Alembic、public_id、auth/session、platform config、feature flags、job/outbox/idempotency/business lock、derived timeline snapshot 已进入 `dev`。 |
-| Truth 交易模型 | `P11 硬切代码完成` | `TradingPosition / PositionEvent / AccountLedgerEntry` 已落地；新建仓位已 create-and-sync 到 truth lifecycle，已有仓位加仓/减仓/平仓/复盘/叙事已 truth-first；legacy batch/review/delete 写入在 truth lifecycle 存在时默认被保护为 migration fallback。 |
-| Timeline 首页 | `truth/snapshot 默认` | `/` 和 `/timeline` 已转向时间流/复盘工作台；Timeline events 与 Review Inbox 默认使用 `DerivedTimelineSnapshot` / auditable artifacts，`timeline_legacy_mixed_feed_enabled` 是 legacy mixed rollback。 |
-| Lifecycle Detail | `truth-first 体验已落地` | 单笔详情已优先展示 truth lifecycle、evidence、AI sidecar；latest active event reversal 走审计 `REVERSAL`，非最新 reversal、`OPEN` reversal、legacy hard delete/batch edit 已被保护为非普通路径。 |
-| Dashboard / Insights | `已重构为工作台形态` | Dashboard 保持宏观视图；Insights 已接入 auditable artifact 与 artifact detail；图表已有 schema/freshness 包装，剩余 Recharts renderer 已迁移为内部 SVG renderer。 |
-| 前端依赖与质量 | `已完成 P8-P9F` | Next 16 / React 19 已升级；React 19 strict hooks lint 全局启用；前端 lint 已到 0 warning。 |
-| 文档状态 | `P18 代码完成 / P19 待执行` | P10 文档、legacy inventory、observability、read-model marker、model modularization plan 已落地；P11 hard cutover、P12 platform contract hardening、P12B observability/error contract hardening、P13 Risk / review product features、P14 Reporting / export、P15 AI analysis workflow、P16 Market data platform、P17 Admin operations、P18 Chart renderer migration 已完成；P19 Release readiness 是下一道发布闸门。 |
+| 优先级 | 任务 | 退出条件 | 参考 |
+|--------|------|------|------|
+| P0 | `JRN-000` WIP、migration chain 与 checkpoint | WIP 有逐路径 disposition；四个 migration 进入 `9cad10111213` baseline；optional runtime 默认不可达。 | Active plan Step 0 |
+| P0 | `JRN-001` release contract 与 capability ceiling | 冻结币种/标的/事件合同；禁用能力不可由 API、Admin flag、secret 或 job 绕过。 | Active plan M0 |
+| P0 | `JRN-002` 可复现基线与 PostgreSQL CI | 干净环境、本地/CI 同命令、PostgreSQL 空库 migration 与 integration 可重跑。 | Active plan M0 |
+| P0 | `JRN-003` invite-only auth 与 release secret | 一次性邀请码、限流、弱密钥 fail-fast；普通 setting 无明文 Broker/Market/LLM secret。 | Active plan M0 |
+| P0 | `JRN-004` tenant/owner 边界封闭 | 当前 account/strategy/position/event/ledger/note/idempotency 两用户矩阵无越权；legacy import 已 owner-guard 或关闭；future resource harness 冻结。 | Active plan M0 |
 
----
+JRN-000 先冻结当前 WIP；之后 JRN-001 先行，JRN-002/003 可并行，JRN-004 后收口。五项全部通过后，按 active plan 的 JRN-005 至 015 进入会计、canonical writer、不可变纠错、通用 bootstrap、source-bound incremental Import 和 correction replay；JRN-011/013 preview 支线按依赖并行。不得提前做新页面、模型拆分、在线 Broker Sync、Market、AI 或量化功能。
 
-## 当前 Active Lane
+## 暂不做
 
-- 当前 active lane：P19 Release readiness。
-- 当前计划：[2026-06-11-dev-p19-release-readiness-plan.md](./superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md)。
-- P19 第一执行任务：冻结 release scope，创建 release readiness checklist，并记录 P13-P18 的提交范围与证据矩阵。
-- 前一完成 lane：[2026-06-11-dev-p18-chart-renderer-migration-plan.md](./superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md)。
+- 不把完整 gap inventory 当作当前任务队列；只执行 active trading-journal plan。
+- 不删除 legacy 表、模型或 API 响应，除非有迁移验证和 rollback 方案。
+- 不把 Dashboard 改回默认首页；默认入口继续围绕 Timeline / Review Inbox。
+- 不继续把新页面直接绑定 raw legacy DTO。
+- 不执行 Market Data、Redis、多 schema、完整 read-model 平台、模型拆分或任何量化主链。
+- 不自动 merge、push、PR、tag，除非用户明确要求。
 
-### 后续阶段执行顺序
+## 验证门
 
-| 阶段 | 当前状态 | 专项计划 |
-|------|----------|----------|
-| P13 | `已完成` | [Risk / review product features](./superpowers/plans/2026-06-11-dev-p13-risk-review-product-plan.md) |
-| P14 | `已完成` | [Reporting and export](./superpowers/plans/2026-06-11-dev-p14-reporting-export-plan.md) |
-| P15 | `已完成` | [AI analysis workflow](./superpowers/plans/2026-06-11-dev-p15-ai-analysis-workflow-plan.md) |
-| P16 | `已完成` | [Market data platform](./superpowers/plans/2026-06-11-dev-p16-market-data-platform-plan.md) |
-| P17 | `已完成` | [Admin operations](./superpowers/plans/2026-06-11-dev-p17-admin-operations-plan.md) |
-| P18 | `已完成` | [Chart renderer migration](./superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md) |
-| P19 | `当前 active lane` | [Release readiness](./superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md) |
+任何进入提交或部署前的整理至少跑：
 
-### P11 完成状态
+```bash
+git diff --check
+bash -n start.sh
+```
 
-- [x] P11 Task 1A：已有仓位加仓/减仓/平仓不再静默 fallback 到 legacy batch；legacy batch 写入需要显式 `X-Migration-Fallback: legacy-batch-write`。
-- [x] P11 Task 1B：全新开仓 create path 已采用 create-and-sync 过渡合同，`POST /api/positions` 返回 `truth_position_public_id`，前端优先跳转 truth detail。
-- [x] P11 Task 2：复盘与叙事最终写入 `PositionEvent` / truth lifecycle；legacy review fields 已变成 migration-only。
-- [x] P11 Task 3：historical reversal、`OPEN` reversal、archive/void/delete、legacy batch edit 最终语义。
-- [x] P11 Task 4：Timeline / Review Inbox 默认 truth/snapshot-backed。
-- [x] P11 Task 5：剩余 legacy UI 统一标为 migration tools。
-- [x] P11 自动化完成门：后端全量测试、前端 typecheck、lint、Node 测试、`git diff --check` 已通过。
-- [ ] P11 受限项：authenticated browser smoke 未完成；本轮只验证了 `/`、`/timeline`、`/login` 可服务，因浏览器未登录被重定向到 `/login`，还需带登录态覆盖 `/positions`、`/positions/[id]`、`/positions/[id]/add-batch`。
+涉及后端行为时跑：
 
-### P12 完成状态
+```bash
+cd backend
+venv/bin/python -m pytest -q
+```
 
-- [x] P12 Task 1：冻结 frontend raw legacy DTO import 边界，并用测试锁住 migration/support、create-sync bridge、legacy analytics、adapter boundary。
-- [x] P12 Task 2：增加 OpenAPI contract snapshot tests，覆盖 truth lifecycle、Timeline、legacy fallback headers。
-- [x] P12 Task 3：建立 `frontend/lib/generated/` 输出边界，为后续 OpenAPI type generation 做好落点。
-- [x] P12 Task 4：补 release / rollback playbook，覆盖 truth writes、snapshot Timeline、legacy mutation guards。
-- [x] P12 Task 5：完成 P12 全量验证门。
+涉及前端行为时跑：
 
-### 后续计划状态
-
-- [x] P12B：创建 Observability / error contract hardening plan。
-- [x] P12B：在路由异常处理中实际使用统一 error code。
-- [x] P12B：建立结构化日志策略，逐步替换后端业务路径中的 `print()`。
-- [x] P12B：补最小回归测试，保证错误响应包含稳定 code、request id、可排障信息。
-- [x] P13：创建 Risk / review product features implementation plan。
-- [x] P14：创建 Reporting / export implementation plan。
-- [x] P15：创建 AI analysis workflow implementation plan。
-- [x] P16：创建 Market data platform implementation plan。
-- [x] P17：创建 Admin operations implementation plan。
-- [x] P18：创建 Chart renderer migration implementation plan。
-- [x] P19：创建 Release readiness implementation plan。
-- [x] P13：实现组合风险监控、单日亏损上限、风险提醒和 Timeline/Review Inbox 风险行动卡。
-- [x] P14：补齐导入模板说明、周报 PDF 渲染服务、Insights PDF 导出接口、前端导出按钮和导出 runbook。
-- [x] P15：补齐 AI 分析日期范围验证、artifact evidence refs、分析历史接口、Insights 日期选择与复访入口。
-- [x] P16：拆出 market provider routing、normalized adapters、quote freshness/degradation metadata、前端 freshness 标签和可重复验证文档。
-- [x] P17：补齐数据库备份触发、管理员晋升、密码重置、stale/failed job 解释、force-cancel 确认和运维 runbook。
-- [x] P18：补齐 Recharts import static guard、内部 SVG chart renderers、Portfolio Sankey SVG renderer，并移除 `recharts` 依赖。
-
----
-
-## P10：下一阶段优先开发任务
-
-### P10A 文档与进度同步
-
-- [x] 复核 Opus 评审与当前 `dev` 状态，区分有效问题、过期问题和策略冲突。
-- [x] 更新 `DEVELOPER_GUIDE.md`，让技术栈、首页形态、数据模型、schema 初始化、已落地能力与 `dev` 一致。
-- [x] 更新 `docs/README.md`，补上当前计划、checkpoint、P9/P10 文档入口。
-- [x] 更新 sequencing plan，把 P9A-P9F 已完成事项从“待做”转为真实状态。
-- [x] 新增 P10 开发计划文档，明确 hard cutover、observability、legacy 清理、后续功能 backlog 的执行顺序。
-
-### P10B Truth hard cutover 设计与执行
-
-- [x] 盘点所有 legacy `Position / TradeBatch / Transaction / AssetMetadata / DailySnapshot` 引用，按 `primary path`、`migration-only`、`delete candidate` 分类。
-- [x] 把普通用户新增、加仓、减仓、平仓、复盘、叙事编辑统一到 `TradingPosition / PositionEvent` 路径；新增开仓已 create-and-sync，已有仓位加仓/减仓/平仓已默认 truth-first，复盘/叙事已写入 `PositionEvent` narrative。
-- [x] 明确 historical reversal、`OPEN` reversal、whole-position delete、legacy batch edit 的最终产品语义。
-- [x] 让 Timeline / Review Inbox 最终读 `TradingPosition / PositionEvent / InsightArtifact / DerivedTimelineSnapshot`，不再依赖 legacy bridge 作为主路径。
-- [ ] 完成 hard cutover 后，再删除或隔离旧模型、旧路由、旧 DTO、旧前端 fallback。
-
-### P11 后剩余 delete / isolation candidates
-
-- [ ] `frontend/app/positions/page.tsx` 的 legacy batch expansion：等 truth position list/read model 完成后删除或迁移。
-- [ ] `frontend/app/positions/new/page.tsx` 的 raw legacy create DTO：等 truth-native create endpoint 完成后替换。
-- [ ] `frontend/app/positions/[id]/add-batch/page.tsx` 的 raw `Position` 依赖：等 truth lifecycle response 提供表单所需数量、币种、账户上下文后替换。
-- [ ] `frontend/components/dashboard/MaeMfeScatterPlot.tsx` 与 `frontend/lib/adapters/chart-views.ts` 的 legacy position chart adapter：等 dashboard charts 全部 schema/read-model backed 后删除。
-- [ ] `frontend/lib/adapters/trading.ts` 的 legacy DTO adapter：等剩余 migration tools 拆出独立边界后收口。
-
-### P10C 平台可观测性与运维安全
-
-- [x] 增加请求级 `X-Request-ID`。
-- [x] 增加请求耗时 `X-Response-Time-Ms`。
-- [x] 冻结 error code 命名规则，新增 `make_error_code(namespace, error)` helper。
-- [x] 在路由异常处理中实际使用统一 error code。
-- [x] 建立结构化日志策略，逐步替换后端业务路径中的 `print()`。
-- [x] 补 release / rollback playbook，特别是 truth hard cutover 和 derived snapshot 切换；详见 [release-rollback-playbook.md](./release-rollback-playbook.md)。
-
-### P10D 前端 API 契约收敛
-
-- [x] 给 `frontend/lib/read-models.ts` 标记“手写类型，后续由 OpenAPI 生成替换”。
-- [ ] 停止继续扩张 `frontend/lib/api.ts` 作为永久 DTO 层。
-- [x] 规划 OpenAPI type generation 输出路径和导入边界；P12 Task 1-3 已完成。
-- [ ] 将新页面尽量绑定 read-model adapter，而不是直接绑定 raw API DTO。
-
-### P10E 模型与服务模块化
-
-- [x] 在 truth hard cutover 边界清楚后，规划 `backend/models.py` 拆分。
-- [x] 保留 `models/__init__.py` re-export 兼容层，避免一次性打断大量 `from models import ...`。
-- [x] 优先拆出 core/auth、trading truth、platform/job/outbox、analytics/read-model、legacy migration 五类边界。
-
----
-
-## 中期功能 backlog
-
-这些是早期已规划但尚未完整开发的产品能力。建议在 P10 hard cutover 稳定后再排期。
-
-### 风控预警系统
-
-专项计划：[P13 Risk / review product features](./superpowers/plans/2026-06-11-dev-p13-risk-review-product-plan.md)
-
-- [x] 后端创建 `services/risk_alert_service.py`。
-- [x] 后端实现组合风险检查逻辑。
-- [x] 后端实现单日亏损上限检查。
-- [x] 前端 Dashboard 显示当前组合风险。
-- [x] 后端提供 API/read-model 风险提醒通道；P13 V1 不引入 SSE/WebSocket。
-- [x] 前端集成 Dashboard 风险栏与 Timeline / Review Inbox 工作台内预警通知。
-
-### 数据导入导出
-
-专项计划：[P14 Reporting and export](./superpowers/plans/2026-06-11-dev-p14-reporting-export-plan.md)
-
-- [x] 后端创建导入端点 `/api/positions/import`。
-- [x] 后端解析 CSV/Excel 文件。
-- [x] 后端实现字段映射和数据验证。
-- [x] 前端实现导入向导 UI。
-- [x] 文档补充导入模板说明。
-- [x] 后端集成 PDF 生成库。
-- [x] 后端创建周报 PDF 模板。
-- [x] 前端报告页添加导出 PDF 按钮。
-
-### AI 分析助手
-
-专项计划：[P15 AI analysis workflow](./superpowers/plans/2026-06-11-dev-p15-ai-analysis-workflow-plan.md)
-
-- [x] 后端创建 `services/analytics_service.py`。
-- [x] 后端扩展 `routers/insights.py`，新增 `/api/insights/analyze`。
-- [x] 后端扩展 `llm_service.py`，新增分析型 Prompt。
-- [x] 前端在 Insights 页面新增 AI 分析助手卡片。
-- [x] 前端实现分析类型选择器。
-- [x] 前端实现分析结果展示。
-- [x] 前端实现日期范围选择器。
-- [x] 前后端补 AI 分析助手回归测试或最小验收用例。
-- [x] 后端分析 artifact 写入 `date-range:<start>:<end>` refs 与 payload。
-- [x] 后端提供 `/api/insights/analyze/history`，前端展示近期分析记录并可跳转 artifact detail。
-
-### 市场数据与验证
-
-专项计划：[P16 Market data platform](./superpowers/plans/2026-06-11-dev-p16-market-data-platform-plan.md)
-
-- [x] 拆分 market orchestration 与 provider adapter。
-- [x] 稳定 provider mapping，明确 A 股 / 港股 / 美股 / Crypto / 外汇 / 基金路由规则。
-- [x] 为市场数据 provider 补充可重复执行的验证方案。
-- [x] 明确行情降级、缓存、错误显示和 freshness 元数据规则。
-
-### 管理员运维能力
-
-专项计划：[P17 Admin operations](./superpowers/plans/2026-06-11-dev-p17-admin-operations-plan.md)
-
-- [x] 后端提供数据库备份触发入口。
-- [x] 后端提供账户升级为管理员的安全入口。
-- [x] 后端提供管理员重置账户密码能力。
-- [x] Admin Jobs 页面继续扩展 stale / failed / force-cancel 的解释和操作保护。
-- [x] 前端新增 `/admin/ops` 管理员运维控制台。
-
-### 图表渲染迁移
-
-专项计划：[P18 Chart renderer migration](./superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md)
-
-- [x] 建立 `chart.v1` schema 与 freshness/trust 包装。
-- [x] Dashboard / Insights 主要图表接入共享 `ChartFrame`。
-- [x] 已确认 P18 V1 目标为内部 SVG renderer，不新增 ECharts/Canvas 等图表依赖。
-- [x] 剩余 Recharts renderer 已迁移到内部 SVG renderer，并用静态测试阻止 Recharts import 回流。
-- [x] `frontend/package.json` 与 `frontend/package-lock.json` 已移除 `recharts` 依赖。
-- [x] P18 authenticated browser smoke 已用隔离临时用户覆盖 `/dashboard`、`/insights` 的空数据图表卡、控制台 error 和移动端横向溢出。
-- [x] P19 release gate 已用发布级 fixture 覆盖带数据图表和 P11 遗留 routes：`/positions`、`/positions/[id]`、`/positions/[id]/add-batch`。
-
-### 发布就绪
-
-专项计划：[P19 Release readiness](./superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md)
-
-- [x] 明确本次 release scope 包含哪些 P13-P18 lane。
-- [x] 完成后端、前端、lint、Node tests、`git diff --check` 全量验证。
-- [x] 完成 Alembic、truth sync、derived timeline refresh 的迁移与回填演练。
-- [x] 完成 authenticated browser smoke，覆盖 P11 遗留的 `/positions`、`/positions/[id]`、`/positions/[id]/add-batch`。
-- [x] 更新 release checklist 和 rollback checklist 后，release decision 标记为 `READY_FOR_STAGING_ONLY`。
-
----
-
-## 暂不扩张原则
-
-- 不继续把新页面绑定到 legacy `Position / TradeBatch` 主路径。
-- 不把 `frontend/lib/api.ts` 继续扩成长期契约层。
-- 不在 truth hard cutover 前删除 legacy 模型；先标记迁移边界，再安全清理。
-- 不把 Dashboard 重新做回默认首页；默认入口继续围绕 Timeline / Review Inbox。
-- 不在 observability 和 rollback 边界不清楚时进行不可逆数据迁移。
+```bash
+cd frontend
+npm test
+npm run lint
+npx tsc --noEmit
+npm run build
+```

@@ -1,7 +1,7 @@
 # 平台底座设计文档 — 架构审查报告
 
-> 审查对象：[2026-04-06-platform-foundation-design.md](file:///Users/m4x/Documents/tradingnoobs/docs/superpowers/specs/2026-04-06-platform-foundation-design.md)
-> 审查基线：当前代码库 ([models.py](file:///Users/m4x/Documents/tradingnoobs/backend/models.py), [docker-compose.yml](file:///Users/m4x/Documents/tradingnoobs/docker-compose.yml), router/service 层)
+> 审查对象：[2026-04-06-platform-foundation-design.md](./superpowers/specs/2026-04-06-platform-foundation-design.md)
+> 审查基线：当前代码库 ([models.py](../backend/models.py), [docker-compose.yml](../docker-compose.yml), router/service 层)
 > 审查时间：2026-04-06
 
 ---
@@ -62,7 +62,7 @@ flowchart TD
 1. **用户直接访问 Caddy**，不是先到 Web 再到 Caddy
 2. **Caddy 按路径分流**：`/api/*` → API，`/*` → Next.js
 3. **API 与 Worker 之间通过 Redis 队列解耦**（不是 API 直接调用 Worker）
-4. 当前你的 [Caddyfile](file:///Users/m4x/Documents/tradingnoobs/Caddyfile) 已经在按路径分流了，文档反而画反了
+4. 当前你的 [Caddyfile](../Caddyfile) 已经在按路径分流了，文档反而画反了
 
 ---
 

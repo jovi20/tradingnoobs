@@ -1,6 +1,6 @@
 # Trading Noobs 当前代码库指南
 
-更新时间：2026-06-11
+更新时间：2026-07-16
 当前执行分支：`dev`
 当前 HEAD：以当前 `dev` 最新提交为准；阶段状态见 [TODO.md](./TODO.md)。
 
@@ -12,14 +12,16 @@
 
 - [superpowers/specs/2026-04-06-platform-foundation-design.md](./superpowers/specs/2026-04-06-platform-foundation-design.md) 是平台底座目标架构来源。
 - [superpowers/specs/2026-04-07-frontend-experience-redesign-design.md](./superpowers/specs/2026-04-07-frontend-experience-redesign-design.md) 是前端体验重设计基线。
-- [superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md](./superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md) 是平台 + 前端迁移顺序基线。
+- [project-summary-and-roadmap.md](./project-summary-and-roadmap.md) 是当前项目描述与后续计划入口。
+- [superpowers/plans/archive/2026-04-13-platform-frontend-sequencing-plan.md](./superpowers/plans/archive/2026-04-13-platform-frontend-sequencing-plan.md) 是平台 + 前端迁移顺序历史基线，已归档。
 - [TODO.md](./TODO.md) 是当前执行清单。
-- [superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md](./superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md) 已完成，剩余 Recharts renderer 已迁移到内部 SVG renderer，并保持 `chart.v1` 数据契约稳定。
-- [superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md](./superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md) 已完成，当前 release decision 为 `READY_FOR_STAGING_ONLY`；后续先用 staging/dev 部署验证，再决定是否推进生产发布。
+- [superpowers/plans/2026-07-16-dev-trading-journal-development-plan.md](./superpowers/plans/2026-07-16-dev-trading-journal-development-plan.md) 是当前唯一 active implementation plan。
+- [superpowers/plans/archive/2026-06-11-dev-p18-chart-renderer-migration-plan.md](./superpowers/plans/archive/2026-06-11-dev-p18-chart-renderer-migration-plan.md) 已完成并归档，剩余 Recharts renderer 已迁移到内部 SVG renderer，并保持 `chart.v1` 数据契约稳定。
+- [superpowers/plans/archive/2026-06-11-dev-p19-release-readiness-plan.md](./superpowers/plans/archive/2026-06-11-dev-p19-release-readiness-plan.md) 是历史 release evidence；当前状态已由全量 gap 审计更新为 `NOT_READY_FOR_PRODUCTION`。
 - [release-rollback-playbook.md](./release-rollback-playbook.md) 是 truth writes、Timeline snapshot、legacy mutation guard 的发布与回滚手册。
 - [vps-dev-parallel-deployment.md](./vps-dev-parallel-deployment.md) 说明已有 main VPS 部署时，如何在同一台 VPS 上隔离部署 `dev` staging。
 - [current-state-baseline.md](./current-state-baseline.md) 是 2026-04-05 历史审计快照，不再作为当前实现依据。
-- [顶层设计.md](./顶层设计.md) 已降级为历史草案。
+- `顶层设计.md` 已降级为历史草案，当前仓库未跟踪。
 
 ---
 
@@ -47,14 +49,14 @@
 | `backend/alembic/` | Alembic 配置与迁移链 |
 | `backend/routers/` | API 路由层，包含 legacy 路由、truth 路由、timeline、admin jobs、insight artifacts |
 | `backend/services/` | 业务逻辑层，包含 truth sync/accounting、job/outbox/idempotency、chart schema、market data |
-| `backend/models.py` | 当前仍是单文件 SQLAlchemy 模型；后续 P10E 计划拆分 |
+| `backend/models.py` | 当前仍是单文件 SQLAlchemy 模型；拆分在 active journal plan 中标记为 `DEFERRED_BY_SCOPE` |
 | `backend/schemas.py` | Pydantic 请求/响应模型 |
 | `frontend/app/` | Next.js App Router 页面入口 |
 | `frontend/components/` | 页面级与领域组件，包括 timeline/dashboard/lifecycle/admin/ui primitives |
 | `frontend/lib/api.ts` | 当前前端 API client；后续不再扩为长期 DTO 契约层 |
 | `frontend/lib/read-models.ts` | 当前手写 read model 类型；后续计划迁到 OpenAPI 生成类型 |
 | `frontend/lib/adapters/` | 前端 read-model/domain adapter 层 |
-| `docs/superpowers/plans/` | 分阶段开发计划、checkpoint 和验收记录 |
+| `docs/superpowers/plans/` | 当前仍有效的后续参考计划；已完成阶段计划在 `docs/superpowers/plans/archive/` |
 | `docs/superpowers/specs/` | 架构、契约和设计基线 |
 
 ---
@@ -107,8 +109,8 @@
 前端 legacy DTO 边界：
 - 新功能不应直接从 `frontend/lib/api.ts` 引入 legacy `Position` / `TradeBatch` / `BatchCreate` / `Transaction`。
 - 当前允许的 raw legacy DTO 使用范围必须落在以下 allowlist 分组。
-- `migration_ui`：`app/positions/[id]/add-batch/page.tsx`、`app/positions/page.tsx`。
-- `create_sync_bridge`：`app/positions/new/page.tsx`。
+- `migration_ui`：`app/(product)/positions/[id]/add-batch/page.tsx`、`app/(product)/positions/page.tsx`。
+- `create_sync_bridge`：`app/(product)/positions/new/page.tsx`。
 - `legacy_analytics`：`components/dashboard/MaeMfeScatterPlot.tsx`、`lib/adapters/chart-views.ts`。
 - `adapter_boundary`：`lib/adapters/trading.ts`。
 - `frontend/tests/legacy-ui-boundaries.test.mts` 会阻止 raw legacy trading DTO import 继续扩散。
@@ -130,7 +132,7 @@
 | Insights / AI | `artifact-first 已落地` | `InsightRun / InsightArtifact`、artifact detail、证据链接展示已落地；AI 分析请求支持成对日期范围、366 天上限校验，artifact payload/source refs/evidence refs 会写入 `date-range:<start>:<end>`，`/api/insights/analyze/history` 支持复访近期分析。 |
 | 异步任务 | `基础已落地` | Job model、outbox relay、worker CLI、business lock、idempotency、admin jobs UI/API 已落地。 |
 | 管理员运维 | `P17 已落地` | `/api/admin/ops/backups`、管理员晋升、密码重置、stale/failed job recovery metadata、force-cancel typed confirmation 和 `/admin/ops` 控制台已完成；PostgreSQL backup provider 未配置时返回 `409 BACKUP_PROVIDER_NOT_CONFIGURED`。 |
-| 市场数据 | `P16 已落地` | `provider_router`、`market_data_orchestrator`、normalized provider adapters、quote freshness/degradation metadata、前端 freshness 标签和可重复验证文档已完成；`MarketDataService` 仍作为 legacy facade 保留。 |
+| 市场数据 | `大型 WIP / Beta hard-off` | 类型化 provider registry、报价/日线、mapping、水位、job handlers 与前端 freshness 代码存在于当前未冻结 WIP，但尚未形成 JRN-000 checkpoint；交易日志 Beta 必须由 deny stub 关闭 route/secret/job/UI，不能描述为已发布能力。 |
 | 风控预警 | `P13 已落地` | 组合风险、单日亏损上限、风险提醒、Dashboard 风险栏与 Timeline/Review Inbox 风险行动卡已完成 V1；不含 SSE/WebSocket。 |
 | PDF 导出 | `P14 已落地` | 导入模板说明、周报 PDF 渲染服务、Insights PDF 导出接口、前端导出按钮和导出 runbook 已完成。 |
 
@@ -146,7 +148,7 @@
 
 ## 6. 数据模型边界
 
-当前模型仍集中在 `backend/models.py`。后续会在 P10E 中拆分，但拆分前不应破坏现有 `from models import ...` 兼容路径。
+当前模型仍集中在 `backend/models.py`。模型拆分在会计和 truth/legacy 语义稳定前保持 `DEFERRED_BY_SCOPE`；以后执行时仍需保持 `from models import ...` 兼容路径。
 
 ### 6.1 Truth / 新主路径
 
@@ -185,7 +187,7 @@ P10 的关键目标不是马上删除 legacy，而是先把它们标为 `primary
 - `backend/main.py` 通过 `bootstrap_schema_if_enabled(...)` 执行受控 schema bootstrap。
 - `backend/app_bootstrap.py` 默认在非 production 环境允许自动 create_all，在 production 环境默认关闭，除非显式配置。
 - `backend/tests/test_schema_bootstrap.py` 覆盖了 production/development 默认行为和显式开关。
-- 老的 `backend/ops/migrate_db.py` 仍存在，但不应作为新增 schema 变更的主路径。
+- 老的 `backend/ops/migrate_db.py` 已删除；新增 schema 变更只走 Alembic revision。
 
 ---
 
@@ -286,9 +288,12 @@ npm run build
 
 优先级以 [TODO.md](./TODO.md) 为准。当前建议顺序：
 
-1. VPS dev/staging 部署验证：按 [vps-dev-parallel-deployment.md](./vps-dev-parallel-deployment.md) 在已有 main VPS 上隔离部署 `dev`，并跑 P19 smoke checklist。
-2. P10D 剩余项：停止扩张 `frontend/lib/api.ts`，让新页面优先走 read-model adapter 或 generated contract。
-3. P10E 后续执行：在 truth/legacy 边界稳定后拆分 `backend/models.py`。
+1. `JRN-000`：分类并 checkpoint 当前 WIP，固定 `9cad10111213` migration baseline 与 Broker/Market default-off disposition。
+2. `JRN-001`：冻结币种/标的/事件 release contract，并建立不可由 Admin 绕过的 deployment capability ceiling。
+3. `JRN-002`：固定运行环境并建立 PostgreSQL mandatory CI。
+4. `JRN-003`：关闭硬编码邀请和明文 Broker/Market/LLM release secret，完成 invite-only auth。
+5. `JRN-004`：补齐当前 account/strategy/position/event/ledger/note/idempotency 的 owner/tenant 负向边界，关闭 legacy import 越权面并冻结 future-resource harness；Import/source 新模型由各自创建任务验证。
+6. Step 0/M0 通过后再执行会计、canonical writer、通用 bootstrap 和 source-bound Import；真实 staging 位于 `JRN-021`，不是当前第一步。
 
 ---
 
