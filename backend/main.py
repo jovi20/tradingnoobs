@@ -104,10 +104,17 @@ def create_app(release_profile: ReleaseProfile | str | None = None) -> FastAPI:
 
         application.include_router(market.router)
     else:
-        from routers.disabled_capabilities import build_disabled_capability_router
+        from routers.disabled_capabilities import (
+            MARKET_DISABLED_ROUTES,
+            build_disabled_capability_router,
+        )
 
         application.include_router(
-            build_disabled_capability_router(prefix="/api/market", capability="MARKET")
+            build_disabled_capability_router(
+                prefix="/api/market",
+                capability="MARKET",
+                routes=MARKET_DISABLED_ROUTES,
+            )
         )
 
     if is_capability_enabled(RuntimeCapability.BROKER_SYNC, profile=profile):
@@ -115,12 +122,16 @@ def create_app(release_profile: ReleaseProfile | str | None = None) -> FastAPI:
 
         application.include_router(broker_sync.router)
     else:
-        from routers.disabled_capabilities import build_disabled_capability_router
+        from routers.disabled_capabilities import (
+            BROKER_SYNC_DISABLED_ROUTES,
+            build_disabled_capability_router,
+        )
 
         application.include_router(
             build_disabled_capability_router(
                 prefix="/api/broker-sync",
                 capability="BROKER_SYNC",
+                routes=BROKER_SYNC_DISABLED_ROUTES,
             )
         )
 
