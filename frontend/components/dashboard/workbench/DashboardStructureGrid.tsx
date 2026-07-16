@@ -49,17 +49,17 @@ export function DashboardStructureGrid({
                     chart={allocationChart}
                 />
                 <Surface className="p-4">
-                    <SectionHeader eyebrow="Accounts" title="账户分布" description="账户层面的资金结构，辅助判断集中度。" />
+                    <SectionHeader eyebrow="资金归属" title="账户分布" description="账户层面的资金结构，辅助判断集中度。" />
                     <div className="mt-4 space-y-3">
                         {accountRows.map((account) => (
-                            <div key={`${account.name}-${account.broker}`} className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 px-3 py-3 text-sm dark:bg-slate-800/60">
+                            <div key={`${account.name}-${account.broker}`} className="flex items-center justify-between gap-4 rounded-lg bg-panel-subtle px-3 py-3 text-sm">
                                 <div className="min-w-0">
-                                    <p className="truncate font-semibold text-slate-900 dark:text-slate-100">{account.name}</p>
-                                    <p className="text-xs text-slate-400">{account.broker}</p>
+                                    <p className="truncate font-semibold text-ink">{account.name}</p>
+                                    <p className="text-xs text-ink-faint">{account.broker}</p>
                                 </div>
                                 <div className="shrink-0 text-right">
-                                    <p className="font-semibold text-slate-900 dark:text-slate-100">{account.valueLabel}</p>
-                                    <p className="text-xs text-slate-400">{account.percentLabel}</p>
+                                    <p className="font-semibold text-ink tn-nums">{account.valueLabel}</p>
+                                    <p className="text-xs text-ink-faint tn-nums">{account.percentLabel}</p>
                                 </div>
                             </div>
                         ))}
@@ -68,7 +68,7 @@ export function DashboardStructureGrid({
             </div>
             <div className="space-y-6">
                 <Surface variant={riskPosture.tone === 'danger' ? 'danger' : riskPosture.tone === 'warning' ? 'warning' : 'panel'} className="p-4">
-                    <SectionHeader eyebrow="Macro Risk" title={riskPosture.label} description={riskPosture.detail} />
+                    <SectionHeader eyebrow="组合风险" title={riskPosture.label} description={riskPosture.detail} />
                 </Surface>
                 <RiskMetricsCard
                     sharpe={stats.sharpe_ratio}

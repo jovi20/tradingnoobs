@@ -20,7 +20,7 @@ test('formatTrustLabel joins freshness, value status, and maturity', () => {
       value_status: 'ESTIMATED',
       maturity: 'EARLY_SIGNAL',
     }),
-    'delayed · estimated · early_signal'
+    '延迟 · 估算 · 早期信号'
   )
 })
 
@@ -33,12 +33,33 @@ test('formatTrustLabel surfaces source-mode notes for fallback visibility', () =
       value_status: 'FINAL',
       note: 'Legacy mixed fallback enabled',
     }),
-    'fresh · final · Legacy mixed fallback enabled'
+    '最新 · 已确认 · 已启用旧版混合回退'
+  )
+
+  assert.equal(
+    formatTrustLabel({
+      as_of: '2026-04-15T00:00:00Z',
+      freshness: 'FRESH',
+      source: 'DERIVED',
+      value_status: 'ESTIMATED',
+      note: 'Snapshot-first truth/snapshot read model',
+    }),
+    '最新 · 估算 · 审计快照视图'
+  )
+
+  assert.equal(
+    formatTrustLabel({
+      as_of: '2026-04-15T00:00:00Z',
+      freshness: 'FRESH',
+      source: 'DERIVED',
+      note: 'Internal upstream implementation detail',
+    }),
+    '最新'
   )
 })
 
 test('getReviewInboxSummary reflects high priority counts', () => {
-  assert.equal(getReviewInboxSummary({ total: 0, highPriority: 0 }), '当前没有需要立即处理的 Review Inbox 项。')
+  assert.equal(getReviewInboxSummary({ total: 0, highPriority: 0 }), '当前没有需要立即处理的复盘待办。')
   assert.equal(getReviewInboxSummary({ total: 3, highPriority: 1 }), '3 项待处理 · 1 项高优先级')
 })
 
@@ -49,7 +70,7 @@ test('getTimelineEmptyState returns copy for zero and small-data states', () => 
   })
   assert.deepEqual(getTimelineEmptyState('SMALL_DATA'), {
     title: '已经有基础数据，但现在更适合看事件线和单笔复盘。',
-    detail: '继续记录更多交易后，Review Inbox 和宏观分析会更稳定。',
+    detail: '继续记录更多交易后，复盘待办和宏观分析会更稳定。',
   })
 })
 
@@ -85,6 +106,6 @@ test('timeline event href prefers auditable AI artifact links', () => {
 })
 
 test('getTimelineSourceModeLabel explains snapshot default and legacy fallback', () => {
-  assert.equal(getTimelineSourceModeLabel('SNAPSHOT_ONLY'), 'Snapshot-first')
-  assert.equal(getTimelineSourceModeLabel('LEGACY_MIXED'), 'Legacy mixed fallback')
+  assert.equal(getTimelineSourceModeLabel('SNAPSHOT_ONLY'), '快照优先')
+  assert.equal(getTimelineSourceModeLabel('LEGACY_MIXED'), '旧版混合回退')
 })

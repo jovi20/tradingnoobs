@@ -15,7 +15,7 @@ export function SvgPieChart<T>({ data, getLabel, getValue, getColor, onSliceClic
 
     return (
         <div className="grid h-full min-h-[300px] gap-4 md:grid-cols-[minmax(0,1fr)_180px] md:items-center">
-            <svg role="img" aria-label="Allocation pie chart" className="h-full min-h-[220px] w-full" viewBox={`0 0 ${radius * 2} ${radius * 2}`}>
+            <svg role="img" aria-label="资产配置饼图" className="h-full min-h-[220px] w-full" viewBox={`0 0 ${radius * 2} ${radius * 2}`}>
                 {slices.map((slice, index) => {
                     const item = data[index]
                     return (
@@ -32,11 +32,11 @@ export function SvgPieChart<T>({ data, getLabel, getValue, getColor, onSliceClic
                         </path>
                     )
                 })}
-                <circle cx={radius} cy={radius} r={54} fill="white" className="dark:fill-slate-950" />
-                <text x={radius} y={radius - 4} textAnchor="middle" className="fill-slate-500 text-[11px]">
-                    Total
+                <circle cx={radius} cy={radius} r={54} className="fill-panel" />
+                <text x={radius} y={radius - 4} textAnchor="middle" className="fill-ink-muted text-[11px]">
+                    类别
                 </text>
-                <text x={radius} y={radius + 16} textAnchor="middle" className="fill-slate-900 text-[16px] font-bold dark:fill-white">
+                <text x={radius} y={radius + 16} textAnchor="middle" className="fill-ink text-[16px] font-bold">
                     {data.length}
                 </text>
             </svg>
@@ -46,7 +46,7 @@ export function SvgPieChart<T>({ data, getLabel, getValue, getColor, onSliceClic
                         key={`${getLabel(item)}-${index}`}
                         type="button"
                         onClick={() => onSliceClick?.(item)}
-                        className="flex w-full items-center justify-between gap-3 rounded-xl px-2 py-1.5 text-left text-xs hover:bg-slate-100 dark:hover:bg-slate-800"
+                        className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left text-xs hover:bg-panel-subtle"
                     >
                         <span className="flex min-w-0 items-center gap-2">
                             <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: getColor(item) }} />

@@ -10,18 +10,18 @@ export function InsightArtifactDetailCard({ artifact }: { artifact: InsightArtif
 
     return (
         <article className="card overflow-hidden">
-            <div className="relative border-b border-slate-200 bg-slate-950 p-6 text-white dark:border-slate-800 md:p-8">
+            <div className="relative border-b border-line bg-ink p-6 text-canvas dark:border-line md:p-8">
                 <div className="absolute inset-0 opacity-30">
-                    <div className="absolute -right-16 -top-20 h-48 w-48 rounded-full bg-emerald-400 blur-3xl" />
-                    <div className="absolute -bottom-24 left-8 h-56 w-56 rounded-full bg-sky-500 blur-3xl" />
+                    <div className="absolute -right-16 -top-20 h-48 w-48 rounded-full bg-profit blur-3xl" />
+                    <div className="absolute -bottom-24 left-8 h-56 w-56 rounded-full bg-ai blur-3xl" />
                 </div>
                 <div className="relative">
-                    <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-200">
+                    <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-profit">
                         <Sparkles className="h-3.5 w-3.5" />
                         {view.artifactType}
                     </div>
                     <h1 className="mt-3 max-w-3xl text-2xl font-bold tracking-tight md:text-3xl">{view.title}</h1>
-                    <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-300">
+                    <div className="mt-4 flex flex-wrap gap-2 text-xs text-canvas/80">
                         <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-3 py-1">
                             <Bot className="h-3.5 w-3.5" />
                             {view.runType}
@@ -33,7 +33,7 @@ export function InsightArtifactDetailCard({ artifact }: { artifact: InsightArtif
                             </span>
                         )}
                         {view.chartBadge && (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-300/15 px-3 py-1 text-emerald-100">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-profit/15 px-3 py-1 text-profit">
                                 <ShieldCheck className="h-3.5 w-3.5" />
                                 {view.chartBadge}
                             </span>
@@ -43,17 +43,17 @@ export function InsightArtifactDetailCard({ artifact }: { artifact: InsightArtif
             </div>
 
             <div className="grid gap-5 p-5 md:grid-cols-[minmax(0,1fr)_280px] md:p-6">
-                <section className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950/40">
-                    <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">Primary insight</p>
-                    <p className="mt-4 text-base leading-8 text-slate-700 dark:text-slate-200">{view.primaryContent}</p>
+                <section className="rounded-lg border border-line bg-panel p-5">
+                    <p className="text-xs font-black text-ink-faint">核心洞察</p>
+                    <p className="mt-4 text-base leading-8 text-ink-soft">{view.primaryContent}</p>
 
                     {view.legacyReadOnlyContent && (
-                        <div className="mt-6 rounded-2xl border border-amber-200/80 bg-amber-50/80 p-4 dark:border-amber-500/20 dark:bg-amber-500/10">
-                            <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-amber-700 dark:text-amber-200">
+                        <div className="mt-6 rounded-lg border border-warning/30 bg-warning/12 p-4">
+                            <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-warning">
                                 <FileText className="h-3.5 w-3.5" />
-                                Legacy read-only markdown
+                                旧版只读内容
                             </div>
-                            <pre className="mt-3 whitespace-pre-wrap break-words font-sans text-sm leading-6 text-slate-700 dark:text-slate-200">
+                            <pre className="mt-3 whitespace-pre-wrap break-words font-sans text-sm leading-6 text-ink-soft">
                                 {view.legacyReadOnlyContent}
                             </pre>
                         </div>
@@ -61,13 +61,13 @@ export function InsightArtifactDetailCard({ artifact }: { artifact: InsightArtif
                 </section>
 
                 <aside className="space-y-4">
-                    <AuditBlock title="Evidence refs" values={view.evidenceRefs} emptyLabel="No evidence refs recorded." />
-                    <AuditBlock title="Source refs" values={view.sourceRefs} emptyLabel="No source refs recorded." />
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/40">
-                        <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">Trust</p>
-                        <div className="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                            <p>freshness: {view.trustMeta.freshness ?? 'UNKNOWN'}</p>
-                            <p>source: {view.trustMeta.source ?? 'UNKNOWN'}</p>
+                    <AuditBlock title="证据引用" values={view.evidenceRefs} emptyLabel="暂无证据引用。" />
+                    <AuditBlock title="来源引用" values={view.sourceRefs} emptyLabel="暂无来源引用。" />
+                    <div className="rounded-lg border border-line bg-panel-subtle p-4">
+                        <p className="text-xs font-black text-ink-faint">可信信息</p>
+                        <div className="mt-3 space-y-2 text-sm text-ink-soft">
+                            <p>新鲜度：{view.trustMeta.freshness ?? '未知'}</p>
+                            <p>来源：{view.trustMeta.source ?? '未知'}</p>
                         </div>
                     </div>
                 </aside>
@@ -78,21 +78,21 @@ export function InsightArtifactDetailCard({ artifact }: { artifact: InsightArtif
 
 function AuditBlock({ title, values, emptyLabel }: { title: string; values: string[]; emptyLabel: string }) {
     return (
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/40">
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">{title}</p>
+        <div className="rounded-lg border border-line bg-panel-subtle p-4">
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-ink-faint">{title}</p>
             {values.length > 0 ? (
                 <div className="mt-3 flex flex-wrap gap-2">
                     {values.map((value) => (
                         <span
                             key={value}
-                            className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300"
+                            className="rounded-full border border-line bg-panel px-2.5 py-1 text-[11px] font-medium text-ink-soft"
                         >
                             {value}
                         </span>
                     ))}
                 </div>
             ) : (
-                <p className="mt-3 text-sm text-slate-500">{emptyLabel}</p>
+                <p className="mt-3 text-sm text-ink-muted">{emptyLabel}</p>
             )}
         </div>
     )

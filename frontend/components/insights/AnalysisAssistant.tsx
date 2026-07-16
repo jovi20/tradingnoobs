@@ -87,16 +87,16 @@ export default function AnalysisAssistant() {
     }
 
     return (
-        <div className="card !p-0 overflow-hidden border border-indigo-100 dark:border-indigo-900/30">
+        <div className="rounded-lg border border-ai/20 bg-panel shadow-panel dark:shadow-none !p-0 overflow-hidden">
             {/* Header */}
-            <div className="p-6 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 border-b border-slate-100 dark:border-slate-800">
+            <div className="p-6 bg-ai/5 border-b border-line">
                 <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                    <div className="w-10 h-10 rounded-md bg-ai flex items-center justify-center">
                         <Brain className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                        <h2 className="text-lg font-bold text-slate-900 dark:text-white">AI 分析助手</h2>
-                        <p className="text-sm text-slate-500">
+                        <h2 className="text-lg font-bold text-ink">AI 分析助手</h2>
+                        <p className="text-sm text-ink-muted">
                             选择一个维度，AI 将为您诊断交易习惯并提供改进建议
                         </p>
                     </div>
@@ -107,7 +107,7 @@ export default function AnalysisAssistant() {
             <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Left: Options */}
                 <div className="space-y-3">
-                    <div className="rounded-2xl border border-slate-200 bg-white p-3 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900">
+                    <div className="rounded-lg border border-line bg-panel p-3 text-xs text-ink-muted">
                         <div className="grid grid-cols-1 gap-2">
                             <label className="space-y-1">
                                 <span>开始日期</span>
@@ -115,7 +115,7 @@ export default function AnalysisAssistant() {
                                     type="date"
                                     value={dateRange.startDate}
                                     onChange={(event) => setDateRange(prev => ({ ...prev, startDate: event.target.value }))}
-                                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
+                                    className="w-full rounded-md border border-line bg-panel px-2 py-1.5 text-sm"
                                 />
                             </label>
                             <label className="space-y-1">
@@ -124,11 +124,11 @@ export default function AnalysisAssistant() {
                                     type="date"
                                     value={dateRange.endDate}
                                     onChange={(event) => setDateRange(prev => ({ ...prev, endDate: event.target.value }))}
-                                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
+                                    className="w-full rounded-md border border-line bg-panel px-2 py-1.5 text-sm"
                                 />
                             </label>
                         </div>
-                        <p className="mt-2 text-[11px] text-slate-400">
+                        <p className="mt-2 text-[11px] text-ink-faint">
                             {formatAnalysisDateRangeLabel(dateRange.startDate, dateRange.endDate)}
                         </p>
                     </div>
@@ -140,26 +140,26 @@ export default function AnalysisAssistant() {
                                 key={opt.type}
                                 onClick={() => handleAnalyze(opt.type)}
                                 disabled={isLoading}
-                                className={`w-full text-left p-3 rounded-xl transition-all border
+                                className={`w-full text-left p-3 rounded-md transition-colors border
                                     ${isSelected
-                                        ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-500 ring-1 ring-indigo-500'
-                                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-700'}
+                                        ? 'bg-ai/10 border-ai ring-1 ring-ai'
+                                        : 'bg-panel border-line hover:border-ai/50'}
                                 `}
                             >
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center space-x-3">
-                                        <div className={`p-2 rounded-lg ${isSelected ? 'bg-indigo-500 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'}`}>
+                                        <div className={`p-2 rounded-md ${isSelected ? 'bg-ai text-white' : 'bg-panel-subtle text-ink-muted'}`}>
                                             <Icon className="w-4 h-4" />
                                         </div>
                                         <div>
-                                            <div className={`font-medium ${isSelected ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-300'}`}>
+                                            <div className={`font-medium ${isSelected ? 'text-ai' : 'text-ink-soft'}`}>
                                                 {opt.label}
                                             </div>
-                                            <div className="text-xs text-slate-400 line-clamp-1">{opt.desc}</div>
+                                            <div className="text-xs text-ink-faint line-clamp-1">{opt.desc}</div>
                                         </div>
                                     </div>
-                                    {isSelected && isLoading && <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />}
-                                    {isSelected && !isLoading && <ArrowRight className="w-4 h-4 text-indigo-500" />}
+                                    {isSelected && isLoading && <Loader2 className="w-4 h-4 animate-spin text-ai" />}
+                                    {isSelected && !isLoading && <ArrowRight className="w-4 h-4 text-ai" />}
                                 </div>
                             </button>
                         )
@@ -167,39 +167,39 @@ export default function AnalysisAssistant() {
                 </div>
 
                 {/* Right: Results */}
-                <div className="lg:col-span-2 bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-6 min-h-[400px]">
+                <div className="lg:col-span-2 bg-panel-subtle rounded-lg p-6 min-h-[400px]">
                     {!selectedType ? (
-                        <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                        <div className="h-full flex flex-col items-center justify-center text-ink-faint">
                             <Brain className="w-12 h-12 mb-4 opacity-20" />
                             <p>请点击左侧选项开始分析</p>
                         </div>
                     ) : isLoading ? (
-                        <div className="h-full flex flex-col items-center justify-center text-indigo-500">
+                        <div className="h-full flex flex-col items-center justify-center text-ai">
                             <Loader2 className="w-10 h-10 animate-spin mb-4" />
                             <p className="font-medium">AI 正在分析您的交易数据...</p>
-                            <p className="text-xs text-slate-400 mt-2">通常需要 10-20 秒</p>
+                            <p className="text-xs text-ink-faint mt-2">通常需要 10-20 秒</p>
                         </div>
                     ) : error ? (
-                        <div className="h-full flex items-center justify-center text-red-500 bg-red-50 dark:bg-red-900/10 rounded-xl border border-red-200 dark:border-red-900/30">
+                        <div className="h-full flex items-center justify-center text-loss bg-loss/10 rounded-md border border-loss/30">
                             <p>{error}</p>
                         </div>
                     ) : result ? (
                         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                             {/* Chart Section */}
                             <div>
-                                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">数据可视化</h3>
-                                <div className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-100 dark:border-slate-700">
+                                <h3 className="text-sm font-bold uppercase tracking-wider text-ink-muted mb-2">数据可视化</h3>
+                                <div className="bg-panel rounded-md p-4 shadow-panel dark:shadow-none border border-line">
                                     <LegacyAnalysisChart result={result} />
                                 </div>
                             </div>
 
                             {/* AI Insights Section */}
                             <div>
-                                <h3 className="text-sm font-bold uppercase tracking-wider text-indigo-500 mb-2 flex items-center gap-2">
+                                <h3 className="text-sm font-bold uppercase tracking-wider text-ai mb-2 flex items-center gap-2">
                                     <Sparkles className="w-4 h-4" />
                                     AI 深度诊断
                                 </h3>
-                                <div className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 prose prose-sm dark:prose-invert max-w-none break-words whitespace-pre-wrap">
+                                <div className="bg-panel rounded-md p-6 shadow-panel dark:shadow-none border border-line prose prose-sm dark:prose-invert max-w-none break-words whitespace-pre-wrap">
                                     <ReactMarkdown>{result.ai_insights || '暂无分析结论'}</ReactMarkdown>
                                 </div>
                             </div>

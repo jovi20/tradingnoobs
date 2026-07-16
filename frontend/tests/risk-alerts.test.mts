@@ -2,6 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
+  formatRiskAlertReason,
+  getRiskAlertSeverityLabel,
   getRiskAlertTone,
   summarizeRiskAlerts,
 } from '../lib/adapters/risk-alerts.ts'
@@ -11,6 +13,19 @@ test('getRiskAlertTone maps alert severity to dashboard tones', () => {
   assert.equal(getRiskAlertTone('WARNING'), 'warning')
   assert.equal(getRiskAlertTone('NOTICE'), 'review')
   assert.equal(getRiskAlertTone('INFO'), 'neutral')
+})
+
+test('risk alert severity and fallback reasons use Chinese user copy', () => {
+  assert.equal(getRiskAlertSeverityLabel('CRITICAL'), '严重')
+  assert.equal(getRiskAlertSeverityLabel('WARNING'), '警告')
+  assert.equal(formatRiskAlertReason({
+    kind: 'CONCENTRATION',
+    reason: 'Concentration warning.',
+  }), '单一持仓敞口已超过组合集中度阈值。')
+  assert.equal(formatRiskAlertReason({
+    kind: 'DRAWDOWN',
+    reason: '组合回撤已超过设定的风险阈值。',
+  }), '组合回撤已超过设定的风险阈值。')
 })
 
 test('summarizeRiskAlerts prefers critical alert summary', () => {
@@ -39,7 +54,8 @@ test('summarizeRiskAlerts prefers critical alert summary', () => {
 
   assert.equal(summary.headline, '今日亏损已达到 -6.00%')
   assert.equal(summary.tone, 'danger')
-  assert.equal(summary.countLabel, '2 alerts')
+  assert.equal(summary.detail, '当日损益已超过设定的风险阈值。')
+  assert.equal(summary.countLabel, '2 条提醒')
 })
 
 test('summarizeRiskAlerts returns calm copy for empty alerts', () => {
@@ -47,5 +63,5 @@ test('summarizeRiskAlerts returns calm copy for empty alerts', () => {
 
   assert.equal(summary.headline, '暂无风险预警')
   assert.equal(summary.tone, 'positive')
-  assert.equal(summary.countLabel, '0 alerts')
+  assert.equal(summary.countLabel, '0 条提醒')
 })

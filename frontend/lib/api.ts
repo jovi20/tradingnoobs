@@ -52,13 +52,65 @@ export interface UserSettings {
     theme: string
     up_color?: 'GREEN' | 'RED'
     display_currency?: 'USD' | 'HKD' | 'CNY' | 'EUR' | 'GBP'
-    ibkr_host?: string
-    ibkr_port?: number
-    ibkr_client_id?: number
+    ibkr_flex_query_id?: string
+    ibkr_flex_token?: string
+    ibkr_flex_start_date?: string
     binance_api_key?: string
+    binance_api_secret?: string
+    binance_api_secret_configured?: boolean
+    binance_market_type?: 'SPOT' | 'USD_M_FUTURES'
+    binance_symbols?: string[]
     finnhub_api_key?: string
     llm_api_url?: string
     llm_model?: string
+}
+
+export interface BrokerConnectionTestResponse {
+    ok: boolean
+    provider: string
+    message: string
+    reference_code?: string
+}
+
+export interface BrokerSyncRequest {
+    start_date?: string
+    end_date?: string
+}
+
+export interface BrokerSyncRun {
+    public_id: string
+    provider: string
+    market_type?: string | null
+    status: string
+    requested_start_date?: string | null
+    requested_end_date?: string | null
+    records_fetched: number
+    records_inserted: number
+    records_skipped: number
+    error_message?: string | null
+    metadata_json?: Record<string, any> | null
+    started_at?: string | null
+    finished_at?: string | null
+    created_at: string
+}
+
+export interface BrokerExecution {
+    public_id: string
+    provider: string
+    market_type?: string | null
+    account_ref?: string | null
+    symbol: string
+    side: string
+    quantity: number
+    price: number
+    trade_time: string
+    currency?: string | null
+    commission?: number | null
+    commission_currency?: string | null
+    external_trade_id: string
+    external_order_id?: string | null
+    import_status: string
+    created_at: string
 }
 
 export interface WeeklyReport {
@@ -273,6 +325,21 @@ export interface User {
     created_at: string
 }
 
+export interface UserProfileUpdate {
+    locale?: string
+    timezone?: string
+}
+
+export interface PasswordChangeRequest {
+    current_password: string
+    new_password: string
+}
+
+export interface PasswordChangeResponse {
+    message: string
+    active_sessions_revoked: boolean
+}
+
 export interface TradingAccountCreate {
     name: string
     broker: string
@@ -287,6 +354,20 @@ export interface TradingAccountCreate {
 }
 
 // ============== Helper Functions ==============
+
+export class ApiRequestError extends Error {
+    readonly status: number
+
+    constructor(status: number, message: string) {
+        super(message)
+        this.name = 'ApiRequestError'
+        this.status = status
+    }
+}
+
+export function isAuthenticationApiError(error: unknown): boolean {
+    return error instanceof ApiRequestError && (error.status === 401 || error.status === 403)
+}
 
 async function fetchAPI(
     endpoint: string,
@@ -312,7 +393,7 @@ async function fetchAPI(
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({ detail: 'Request failed' }))
-        throw new Error(error.detail || `HTTP ${response.status}`)
+        throw new ApiRequestError(response.status, error.detail || `HTTP ${response.status}`)
     }
 
     // Handle 204 No Content
@@ -355,6 +436,20 @@ export const authAPI = {
 
     me: async (token: string) => {
         return fetchAPI('/auth/me', {}, token)
+    },
+
+    updateMe: async (token: string, data: UserProfileUpdate): Promise<User> => {
+        return fetchAPI('/auth/me', {
+            method: 'PATCH',
+            body: JSON.stringify(data),
+        }, token)
+    },
+
+    changePassword: async (token: string, data: PasswordChangeRequest): Promise<PasswordChangeResponse> => {
+        return fetchAPI('/auth/change-password', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        }, token)
     },
 
     logout: async (token: string): Promise<void> => {
@@ -409,6 +504,40 @@ export const settingsAPI = {
             method: 'PATCH',
             body: JSON.stringify(data),
         }, token)
+    },
+}
+
+// ============== Broker Sync API ==============
+
+export const brokerSyncAPI = {
+    testIBKR: async (token: string): Promise<BrokerConnectionTestResponse> => {
+        return fetchAPI('/api/broker-sync/ibkr/test', { method: 'POST' }, token)
+    },
+
+    testBinance: async (token: string): Promise<BrokerConnectionTestResponse> => {
+        return fetchAPI('/api/broker-sync/binance/test', { method: 'POST' }, token)
+    },
+
+    syncIBKR: async (token: string, data: BrokerSyncRequest = {}): Promise<BrokerSyncRun> => {
+        return fetchAPI('/api/broker-sync/ibkr/sync', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        }, token)
+    },
+
+    syncBinance: async (token: string, data: BrokerSyncRequest = {}): Promise<BrokerSyncRun> => {
+        return fetchAPI('/api/broker-sync/binance/sync', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        }, token)
+    },
+
+    listRuns: async (token: string, limit = 5): Promise<BrokerSyncRun[]> => {
+        return fetchAPI(`/api/broker-sync/runs?limit=${limit}`, {}, token)
+    },
+
+    listExecutions: async (token: string, limit = 20): Promise<BrokerExecution[]> => {
+        return fetchAPI(`/api/broker-sync/executions?limit=${limit}`, {}, token)
     },
 }
 
@@ -692,11 +821,48 @@ export interface AdminBackupResponse {
     message: string
 }
 
+export interface AdminBackupSummary {
+    backup_id: string
+    path: string
+    database_backend: string
+    created_at: string
+    size_bytes: number
+}
+
+export interface AdminOpsSummary {
+    database_backend: string
+    backup_provider_configured: boolean
+    backup_count: number
+    latest_backup_at: string | null
+    user_count: number
+    active_user_count: number
+    admin_count: number
+    job_counts: Record<string, number>
+    stale_running_job_count: number
+    platform_setting_count: number
+    configured_integration_count: number
+    active_integration_count: number
+    enabled_feature_flag_count: number
+    expired_feature_flag_count: number
+    active_business_lock_count: number
+    expired_business_lock_count: number
+}
+
 export interface AdminUserOperationResponse {
     status: AdminOperationStatus
     user_public_id: string
     role: string
     message: string
+}
+
+export interface AdminUserSummary {
+    public_id: string
+    email: string
+    status: string
+    is_active: boolean
+    role: string
+    last_login_at: string | null
+    created_at: string
 }
 
 export interface AdminPasswordResetResponse {
@@ -824,6 +990,18 @@ export const adminAPI = {
         }, token)
     },
 
+    updateIntegrationCredentialActive: async (
+        token: string,
+        providerKey: string,
+        credentialKey: string,
+        isActive: boolean
+    ): Promise<IntegrationCredential> => {
+        return fetchAPI(`/api/admin/platform/integrations/${providerKey}/${credentialKey}/active`, {
+            method: 'PATCH',
+            body: JSON.stringify({ is_active: isActive }),
+        }, token)
+    },
+
     listFeatureFlags: async (token: string): Promise<FeatureFlag[]> => {
         return fetchAPI('/api/admin/platform/feature-flags', {}, token)
     },
@@ -885,6 +1063,10 @@ export const adminAPI = {
         }, token)
     },
 
+    listUsers: async (token: string, limit = 100): Promise<AdminUserSummary[]> => {
+        return fetchAPI(`/api/admin/users?limit=${limit}`, {}, token)
+    },
+
     promoteUser: async (token: string, userPublicId: string): Promise<AdminUserOperationResponse> => {
         return fetchAPI(`/api/admin/users/${encodeURIComponent(userPublicId)}/promote`, {
             method: 'POST',
@@ -894,6 +1076,28 @@ export const adminAPI = {
     resetUserPassword: async (token: string, userPublicId: string): Promise<AdminPasswordResetResponse> => {
         return fetchAPI(`/api/admin/users/${encodeURIComponent(userPublicId)}/reset-password`, {
             method: 'POST',
+        }, token)
+    },
+
+    getOpsSummary: async (token: string): Promise<AdminOpsSummary> => {
+        return fetchAPI('/api/admin/ops/summary', {}, token)
+    },
+
+    listBackups: async (token: string, limit = 20): Promise<AdminBackupSummary[]> => {
+        return fetchAPI(`/api/admin/ops/backups?limit=${limit}`, {}, token)
+    },
+
+    updateUserRole: async (token: string, userPublicId: string, role: 'user' | 'admin'): Promise<AdminUserOperationResponse> => {
+        return fetchAPI(`/api/admin/users/${encodeURIComponent(userPublicId)}/role`, {
+            method: 'PATCH',
+            body: JSON.stringify({ role }),
+        }, token)
+    },
+
+    updateUserActive: async (token: string, userPublicId: string, isActive: boolean): Promise<AdminUserOperationResponse> => {
+        return fetchAPI(`/api/admin/users/${encodeURIComponent(userPublicId)}/active`, {
+            method: 'PATCH',
+            body: JSON.stringify({ is_active: isActive }),
         }, token)
     },
 }
@@ -1235,6 +1439,7 @@ export interface SymbolValidation {
     degraded?: boolean
     degraded_reason?: string
     source_refs?: string[]
+    as_of?: string
     error?: string
     metadata?: any // Rich metadata
     candidates?: { symbol: string; reason: string }[]
@@ -1245,6 +1450,7 @@ export interface MarketQuoteTrustMeta {
     degraded: boolean
     degraded_reason?: string
     source_refs: string[]
+    as_of?: string
 }
 
 export interface MarketQuoteResponse {
@@ -1256,6 +1462,7 @@ export interface MarketQuoteResponse {
     degraded: boolean
     degraded_reason?: string
     source_refs: string[]
+    as_of?: string
     error?: string
     trust: MarketQuoteTrustMeta
 }
@@ -1276,6 +1483,46 @@ export interface MarketCalendar {
     holidays: MarketHoliday[]
     trading_days: string[]
     non_trading_days: string[]
+}
+
+export function buildLocalMarketCalendar(
+    market: string,
+    year: number,
+    month: number,
+): MarketCalendar {
+    const holidays = getHolidays(market, year, month - 1).map(holiday => ({
+        date: holiday.date,
+        name: holiday.name,
+        is_trading: false,
+    }))
+    const trading_days: string[] = []
+    const date = new Date(year, month - 1, 1)
+    const endDate = new Date(year, month, 0)
+
+    while (date <= endDate) {
+        const dateStr = [
+            date.getFullYear(),
+            String(date.getMonth() + 1).padStart(2, '0'),
+            String(date.getDate()).padStart(2, '0'),
+        ].join('-')
+        const day = date.getDay()
+        const isWeekend = day === 0 || day === 6
+        const isHoliday = holidays.some(holiday => holiday.date === dateStr)
+
+        if (!isWeekend && !isHoliday) {
+            trading_days.push(dateStr)
+        }
+        date.setDate(date.getDate() + 1)
+    }
+
+    return {
+        market,
+        year,
+        month,
+        holidays,
+        trading_days,
+        non_trading_days: [],
+    }
 }
 
 export const marketAPI = {
@@ -1299,39 +1546,7 @@ export const marketAPI = {
             return await fetchAPI(`/api/market/calendar?market=${market}&year=${year}&month=${month}`, {}, token)
         } catch (err) {
             console.warn(`Failed to fetch calendar for ${market}, using local fallback`, err)
-            // Fallback to local data
-            const holidays = getHolidays(market, year, month - 1).map(h => ({
-                date: h.date,
-                name: h.name,
-                is_trading: false
-            }))
-
-            // Simple generation of trading days (Mon-Fri minus holidays) for fallback
-            // This is an approximation
-            const trading_days: string[] = []
-            const date = new Date(year, month - 1, 1)
-            const endDate = new Date(year, month, 0)
-
-            while (date <= endDate) {
-                const dateStr = date.toISOString().split('T')[0]
-                const day = date.getDay()
-                const isWeekend = day === 0 || day === 6
-                const isHoliday = holidays.some(h => h.date === dateStr)
-
-                if (!isWeekend && !isHoliday) {
-                    trading_days.push(dateStr)
-                }
-                date.setDate(date.getDate() + 1)
-            }
-
-            return {
-                market,
-                year,
-                month,
-                holidays,
-                trading_days,
-                non_trading_days: []
-            }
+            return buildLocalMarketCalendar(market, year, month)
         }
     }
 }

@@ -36,19 +36,19 @@ export function DashboardSummaryStrip({
                 title="胜率"
                 value={`${winRate.toFixed(1)}%`}
                 icon={Target}
-                color="text-slate-900 dark:text-white"
+                color="text-ink"
             />
             <StatCard
                 title="盈亏比"
                 value={avgPnlRatio.toFixed(2)}
                 icon={BarChart3}
-                color="text-slate-900 dark:text-white"
+                color="text-ink"
             />
             <StatCard
                 title="持仓数量"
                 value={openPositions.toString()}
                 icon={Activity}
-                color="text-slate-900 dark:text-white"
+                color="text-ink"
             />
         </div>
     )

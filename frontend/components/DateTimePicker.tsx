@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
-import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, setHours, setMinutes } from 'date-fns'
+import { useEffect, useId, useRef, useState } from 'react'
+import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, setHours, setMinutes } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, X } from 'lucide-react'
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
 
 interface DateTimePickerProps {
     value: string // ISO string
@@ -14,10 +14,16 @@ interface DateTimePickerProps {
 
 export default function DateTimePicker({ value, onChange, label, required }: DateTimePickerProps) {
     const [isOpen, setIsOpen] = useState(false)
-    const [currentMonth, setCurrentMonth] = useState(new Date())
+    const [currentMonth, setCurrentMonth] = useState<Date>(value ? new Date(value) : new Date())
     const [selectedDate, setSelectedDate] = useState<Date>(value ? new Date(value) : new Date())
     const [timeValue, setTimeValue] = useState(value ? format(new Date(value), 'HH:mm') : format(new Date(), 'HH:mm'))
     const containerRef = useRef<HTMLDivElement>(null)
+    const triggerId = useId()
+    const timeInputId = useId()
+    const displayedValue = value
+        ? format(new Date(value), 'PPP p', { locale: zhCN })
+        : '未选择'
+    const triggerLabel = `${label || '日期和时间'}：${displayedValue}`
 
     // Sync internal state when prop value changes
     useEffect(() => {
@@ -26,6 +32,7 @@ export default function DateTimePicker({ value, onChange, label, required }: Dat
         const syncTimer = window.setTimeout(() => {
             const date = new Date(value)
             setSelectedDate(date)
+            setCurrentMonth(date)
             setTimeValue(format(date, 'HH:mm'))
         }, 0)
 
@@ -36,9 +43,7 @@ export default function DateTimePicker({ value, onChange, label, required }: Dat
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-                // Only close if it's the desktop dropdown (or click outside mobile modal content which is handled by backdrop click)
-                // Actually for mobile modal we have a separate backdrop click handler
-                // So this logic mainly serves desktop or clicks completely outside the react root
+                setIsOpen(false)
             }
         }
         document.addEventListener('mousedown', handleClickOutside)
@@ -76,23 +81,35 @@ export default function DateTimePicker({ value, onChange, label, required }: Dat
     const startDay = startOfMonth(currentMonth).getDay()
     const emptyDays = Array(startDay).fill(null)
 
-    const renderCalendar = () => (
+    const renderCalendar = (surface: 'mobile' | 'desktop') => (
         <>
             {/* Header */}
             <div className="flex items-center justify-between mb-4">
-                <button onClick={prevMonth} type="button" className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">
-                    <ChevronLeft className="w-5 h-5 text-slate-500" />
+                <button
+                    onClick={prevMonth}
+                    type="button"
+                    className="p-1 hover:bg-panel-subtle rounded-lg"
+                    aria-label="上一个月"
+                    title="上一个月"
+                >
+                    <ChevronLeft className="w-5 h-5 text-ink-muted" />
                 </button>
-                <span className="font-semibold text-slate-700 dark:text-slate-200">
+                <span className="font-semibold text-ink-soft">
                     {format(currentMonth, 'yyyy年 MM月', { locale: zhCN })}
                 </span>
-                <button onClick={nextMonth} type="button" className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">
-                    <ChevronRight className="w-5 h-5 text-slate-500" />
+                <button
+                    onClick={nextMonth}
+                    type="button"
+                    className="p-1 hover:bg-panel-subtle rounded-lg"
+                    aria-label="下一个月"
+                    title="下一个月"
+                >
+                    <ChevronRight className="w-5 h-5 text-ink-muted" />
                 </button>
             </div>
 
             {/* Weekdays */}
-            <div className="grid grid-cols-7 mb-2 text-center text-xs text-slate-400 font-medium">
+            <div className="grid grid-cols-7 mb-2 text-center text-xs text-ink-faint font-medium">
                 {['日', '一', '二', '三', '四', '五', '六'].map(d => (
                     <div key={d}>{d}</div>
                 ))}
@@ -109,12 +126,15 @@ export default function DateTimePicker({ value, onChange, label, required }: Dat
                             key={day.toISOString()}
                             type="button"
                             onClick={() => handleDateClick(day)}
+                            aria-label={format(day, 'yyyy年M月d日 EEEE', { locale: zhCN })}
+                            aria-pressed={isSelected}
+                            aria-current={isToday ? 'date' : undefined}
                             className={`
-                                h-8 w-8 rounded-lg text-sm flex items-center justify-center transition-all
+                                h-8 w-8 rounded-md text-sm flex items-center justify-center transition-colors tn-nums
                                 ${isSelected
-                                    ? 'bg-primary-500 text-white font-semibold shadow-md shadow-primary-500/30'
-                                    : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'}
-                                ${isToday && !isSelected ? 'text-primary-500 font-semibold' : ''}
+                                    ? 'bg-ink text-canvas font-semibold'
+                                    : 'hover:bg-panel-subtle text-ink-soft'}
+                                ${isToday && !isSelected ? 'text-ink font-semibold' : ''}
                             `}
                         >
                             {format(day, 'd')}
@@ -123,13 +143,14 @@ export default function DateTimePicker({ value, onChange, label, required }: Dat
                 })}
             </div>
 
-            <div className="h-px bg-slate-100 dark:bg-slate-700 my-4" />
+            <div className="h-px bg-line my-4" />
 
             {/* Time Picker */}
             <div className="flex items-center space-x-3 mb-4">
-                <Clock className="w-4 h-4 text-slate-400" />
-                <label className="text-sm text-slate-500">时间</label>
+                <Clock className="w-4 h-4 text-ink-faint" />
+                <label htmlFor={`${timeInputId}-${surface}`} className="text-sm text-ink-muted">时间</label>
                 <input
+                    id={`${timeInputId}-${surface}`}
                     type="time"
                     value={timeValue}
                     onChange={handleTimeChange}
@@ -142,14 +163,14 @@ export default function DateTimePicker({ value, onChange, label, required }: Dat
                 <button
                     type="button"
                     onClick={() => setIsOpen(false)}
-                    className="flex-1 py-2 rounded-lg text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                    className="flex-1 py-2 rounded-lg text-sm text-ink-muted hover:bg-panel-subtle transition-colors"
                 >
                     取消
                 </button>
                 <button
                     type="button"
                     onClick={handleConfirm}
-                    className="flex-1 py-2 rounded-lg text-sm bg-primary-500 text-white font-medium hover:bg-primary-600 shadow-lg shadow-primary-500/20 transition-all"
+                    className="flex-1 py-2 rounded-md text-sm bg-ink text-canvas font-medium hover:bg-ink-soft transition-colors"
                 >
                     确认
                 </button>
@@ -160,42 +181,54 @@ export default function DateTimePicker({ value, onChange, label, required }: Dat
     return (
         <div className={`relative ${isOpen ? 'z-50' : 'z-10'}`} ref={containerRef}>
             {label && (
-                <label className="block text-sm font-medium mb-2">
+                <label htmlFor={triggerId} className="block text-sm font-medium mb-2">
                     <CalendarIcon className="w-4 h-4 inline mr-1" />
                     {label} {required && '*'}
                 </label>
             )}
 
             {/* Input Trigger */}
-            <div
+            <button
+                id={triggerId}
+                type="button"
                 onClick={() => setIsOpen(!isOpen)}
-                className="input cursor-pointer flex items-center justify-between group hover:border-primary-400 transition-colors"
+                className="input group flex w-full cursor-pointer items-center justify-between text-left transition-colors hover:border-line-strong"
+                aria-label={triggerLabel}
+                aria-haspopup="dialog"
+                aria-expanded={isOpen}
             >
-                <span className={value ? 'text-slate-900 dark:text-slate-100' : 'text-slate-400'}>
+                <span className={value ? 'text-ink' : 'text-ink-faint'}>
                     {value ? format(new Date(value), 'PPP p', { locale: zhCN }) : '选择日期时间'}
                 </span>
-                <CalendarIcon className="w-4 h-4 text-slate-400 group-hover:text-primary-500 transition-colors" />
-            </div>
+                <CalendarIcon className="w-4 h-4 text-ink-faint group-hover:text-ink-muted transition-colors" />
+            </button>
 
             {/* Popover */}
             {isOpen && (
                 <>
                     {/* Mobile: Backdrop + Centered Modal */}
                     <div
-                        className="md:hidden fixed inset-0 z-[100] bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+                        className="md:hidden fixed inset-0 z-[100] bg-black/20 flex items-center justify-center p-4 animate-in fade-in duration-200"
                         onClick={() => setIsOpen(false)}
                     >
                         <div
-                            className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-sm p-4 animate-in zoom-in-95 duration-200 shadow-2xl"
+                            className="bg-panel rounded-lg border border-line w-full max-w-sm p-4 animate-in zoom-in-95 duration-200"
                             onClick={e => e.stopPropagation()}
+                            role="dialog"
+                            aria-modal="true"
+                            aria-label="选择日期和时间"
                         >
-                            {renderCalendar()}
+                            {renderCalendar('mobile')}
                         </div>
                     </div>
 
                     {/* Desktop: Absolute Dropdown */}
-                    <div className="hidden md:block absolute z-50 left-0 top-full mt-2 w-72 p-4 rounded-xl bg-white dark:bg-slate-800 shadow-xl border border-slate-200 dark:border-slate-700 animate-in fade-in slide-in-from-top-2 duration-200">
-                        {renderCalendar()}
+                    <div
+                        className="hidden md:block absolute z-50 left-0 top-full mt-2 w-72 p-4 rounded-md bg-panel border border-line animate-in fade-in slide-in-from-top-2 duration-200"
+                        role="dialog"
+                        aria-label="选择日期和时间"
+                    >
+                        {renderCalendar('desktop')}
                     </div>
                 </>
             )}

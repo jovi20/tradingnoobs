@@ -17,7 +17,7 @@ test('formatBackupResult surfaces backend, path, and created timestamp', () => {
     message: 'SQLite database backup completed.',
   })
 
-  assert.equal(result.statusLabel, 'SUCCESS')
+  assert.equal(result.statusLabel, '成功')
   assert.equal(result.backendLabel, 'SQLite')
   assert.equal(result.fileName, 'sqlite-20260611T101010000000Z.db')
   assert.match(result.createdLabel, /2026/)
@@ -36,8 +36,8 @@ test('formatPasswordResetNotice emphasizes one-time temporary password handling'
   })
 
   assert.equal(notice.temporaryPassword, 'TempPassword123456')
-  assert.equal(notice.sessionNotice, '2 sessions and 3 tokens revoked')
-  assert.match(notice.securityNotice, /only shown once/i)
+  assert.equal(notice.sessionNotice, '已撤销 2 个会话和 3 个令牌。')
+  assert.match(notice.securityNotice, /仅显示一次/)
 })
 
 test('isValidUserPublicIdInput rejects empty or whitespace input', () => {

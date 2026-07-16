@@ -28,6 +28,23 @@ export interface TimelineHomeViewModel {
 
 export type TimelineSourceMode = 'SNAPSHOT_ONLY' | 'LEGACY_MIXED'
 
+const TRUST_LABELS: Record<string, string> = {
+    FRESH: '最新',
+    DELAYED: '延迟',
+    STALE: '已过期',
+    DEGRADED: '已降级',
+    ESTIMATED: '估算',
+    FINAL: '已确认',
+    INSUFFICIENT_SAMPLE: '样本不足',
+    EARLY_SIGNAL: '早期信号',
+    STABLE: '稳定',
+}
+
+const TRUST_NOTE_LABELS: Record<string, string> = {
+    'Snapshot-first truth/snapshot read model': '审计快照视图',
+    'Legacy mixed fallback enabled': '已启用旧版混合回退',
+}
+
 export function adaptTimelineHome(response: TimelineHomeResponse): TimelineHomeViewModel {
     return {
         pageState: response.data.page_state,
@@ -51,16 +68,20 @@ export function adaptTimelineHome(response: TimelineHomeResponse): TimelineHomeV
 
 export function formatTrustLabel(trust?: TrustMeta): string | null {
     if (!trust) return null
-    const pieces = [trust.freshness.toLowerCase()]
-    if (trust.value_status) pieces.push(trust.value_status.toLowerCase())
-    if (trust.maturity) pieces.push(trust.maturity.toLowerCase())
-    if (trust.note) pieces.push(trust.note)
+    const pieces = [TRUST_LABELS[trust.freshness] ?? trust.freshness]
+    if (trust.value_status) pieces.push(TRUST_LABELS[trust.value_status] ?? trust.value_status)
+    if (trust.maturity) pieces.push(TRUST_LABELS[trust.maturity] ?? trust.maturity)
+    if (trust.note) {
+        const localizedNote = TRUST_NOTE_LABELS[trust.note]
+            || (/[\u3400-\u9fff]/.test(trust.note) ? trust.note : null)
+        if (localizedNote) pieces.push(localizedNote)
+    }
     return pieces.join(' · ')
 }
 
 export function getReviewInboxSummary(input: { total: number; highPriority: number }): string {
     if (input.total === 0) {
-        return '当前没有需要立即处理的 Review Inbox 项。'
+        return '当前没有需要立即处理的复盘待办。'
     }
     return input.highPriority > 0
         ? `${input.total} 项待处理 · ${input.highPriority} 项高优先级`
@@ -77,7 +98,7 @@ export function getTimelineEmptyState(pageState: TimelineHomeViewModel['pageStat
         case 'SMALL_DATA':
             return {
                 title: '已经有基础数据，但现在更适合看事件线和单笔复盘。',
-                detail: '继续记录更多交易后，Review Inbox 和宏观分析会更稳定。',
+                detail: '继续记录更多交易后，复盘待办和宏观分析会更稳定。',
             }
         case 'EMPTY_CONFIGURED':
             return {
@@ -123,9 +144,9 @@ export function getTimelineEventHref(event: TimelineEventCard): string {
 
 export function getTimelineSourceModeLabel(mode: TimelineSourceMode): string {
     if (mode === 'LEGACY_MIXED') {
-        return 'Legacy mixed fallback'
+        return '旧版混合回退'
     }
-    return 'Snapshot-first'
+    return '快照优先'
 }
 
 export function getInboxSeverityAccent(severity: ReviewInboxItem['severity']): string {

@@ -213,6 +213,7 @@ export type LifecycleNodeType = 'OPEN' | 'ADD' | 'REDUCE' | 'CLOSE' | 'REVERSAL'
 
 export interface LifecyclePositionSummary {
     public_id: string
+    route_public_id?: string
     title: string
     status: 'OPEN' | 'CLOSED' | 'ARCHIVED' | 'ERROR'
     side: 'LONG' | 'SHORT'
@@ -230,6 +231,12 @@ export interface LifecyclePositionSummary {
     realized_pnl_gross?: number
     realized_pnl_net?: number
     total_fees?: number
+    quantity_opened?: number
+    quantity_closed?: number
+    open_quantity?: number
+    average_open_price?: number
+    average_close_price?: number
+    base_currency?: string
     holding_period_seconds?: number
     pnl_basis: {
         cost_basis_method: string

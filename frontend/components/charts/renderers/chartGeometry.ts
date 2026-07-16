@@ -133,7 +133,7 @@ export function normalizeSankeyLinks(data: {
             nodes: [],
             links: [],
             isEmpty: true,
-            emptyReason: 'No sankey links available',
+            emptyReason: '暂无桑基图连接数据',
         }
     }
 

@@ -11,7 +11,7 @@ export function SvgBarChart<T>({
     getLabel,
     getValue,
     getColor = () => '#38bdf8',
-    valueLabel = 'Value',
+    valueLabel = '数值',
 }: SvgBarChartProps<T>) {
     const width = 640
     const height = 260
@@ -42,7 +42,7 @@ export function SvgBarChart<T>({
                             x={x + barWidth / 2}
                             y={height - 28}
                             textAnchor="middle"
-                            className="fill-slate-500 text-[11px]"
+                            className="fill-ink-muted text-[11px]"
                         >
                             {getLabel(item).slice(0, 10)}
                         </text>

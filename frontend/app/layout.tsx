@@ -1,11 +1,11 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { plexSans, plexMono } from './fonts'
 import { Providers } from '@/components/Providers'
-import { Navbar } from '@/components/Navbar'
 
 export const metadata: Metadata = {
     title: 'Trading Noobs | 交易日志与洞察',
-    description: '专业级交易日志记录、分析与 AI 深度复盘 system',
+    description: '专业级交易日志记录、分析与 AI 深度复盘系统',
     icons: {
         icon: '/logo.png',
         shortcut: '/logo.png',
@@ -19,16 +19,9 @@ export default function RootLayout({
     children: React.ReactNode
 }) {
     return (
-        <html lang="zh" suppressHydrationWarning>
-            <body className="tn-app-shell">
-                <Providers>
-                    <div className="min-h-screen flex flex-col">
-                        <Navbar />
-                        <main className="flex-1 container mx-auto px-4 py-6">
-                            {children}
-                        </main>
-                    </div>
-                </Providers>
+        <html lang="zh" suppressHydrationWarning className={`${plexSans.variable} ${plexMono.variable}`}>
+            <body>
+                <Providers>{children}</Providers>
             </body>
         </html>
     )

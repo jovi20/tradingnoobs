@@ -4,11 +4,14 @@ import { ChevronRight } from 'lucide-react'
 import {
     formatTimelineEventImpact,
     formatTimelineEventMeta,
+    getTimelineEventTypeLabel,
     getTimelineEventTone,
 } from '@/lib/adapters/timeline-workbench'
 import { getTimelineEventHref } from '@/lib/adapters/timeline'
 import type { TimelineEventCard } from '@/lib/read-models'
+import { cn } from '@/lib/cn'
 import { StatusPill } from '@/components/ui/StatusPill'
+import { toneDot, toneText } from '@/components/ui/tone'
 
 interface TimelineEventCardV2Props {
     event: TimelineEventCard
@@ -29,50 +32,63 @@ export function TimelineEventCardV2({ event }: TimelineEventCardV2Props) {
     )
 
     return (
-        <article className="rounded-[1.35rem] border border-slate-200 bg-white/90 p-4 shadow-sm shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-slate-950/30">
-            <div className="flex items-start gap-3">
-                <div className="mt-1.5 h-3 w-3 rounded-full bg-slate-300 ring-4 ring-slate-100 dark:ring-slate-800" />
+        <article className="group relative rounded-lg border border-line bg-panel p-4 shadow-panel transition-colors hover:border-line-strong dark:shadow-none">
+            <div className="flex items-start gap-3.5">
+                {/* Time spine marker */}
+                <div className="relative mt-1 flex flex-col items-center self-stretch">
+                    <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full ring-4 ring-panel-subtle', toneDot[tone])} />
+                    <span className="mt-1 w-px flex-1 bg-line" />
+                </div>
+
                 <div className="min-w-0 flex-1">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
-                                <StatusPill tone={tone}>{event.event_type}</StatusPill>
-                                <span className="text-xs text-slate-400">{formatTimelineEventMeta(event)}</span>
+                                <StatusPill tone={tone}>{getTimelineEventTypeLabel(event.event_type)}</StatusPill>
+                                <span className="text-xs text-ink-faint">{formatTimelineEventMeta(event)}</span>
                             </div>
-                            <h3 className="mt-2 text-base font-semibold tracking-tight text-slate-950 dark:text-white">
+                            <h3 className="mt-2 text-base font-semibold tracking-tight text-ink">
                                 {event.headline}
                             </h3>
-                            <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                            <p className="mt-1.5 text-sm leading-6 text-ink-muted">
                                 {event.summary}
                             </p>
                         </div>
                         {impact && (
                             <div className="shrink-0 text-right">
-                                <p className="text-xs uppercase tracking-[0.18em] text-slate-400">impact</p>
-                                <p className="mt-1 text-sm font-semibold text-slate-950 dark:text-white">{impact.label}</p>
+                                <p className="text-[10px] font-medium text-ink-faint">影响</p>
+                                <p className={cn('mt-1 text-sm font-semibold tn-nums', toneText[tone])}>{impact.label}</p>
                             </div>
                         )}
                     </div>
 
                     {hasDetail && (
-                        <details className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-800/60">
-                            <summary className="cursor-pointer text-xs font-semibold text-slate-500 dark:text-slate-300">
+                        <details className="group/details mt-3 rounded-md border border-line bg-panel-subtle/60 px-4 py-2.5">
+                            <summary className="flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-ink-muted transition-colors hover:text-ink [&::-webkit-details-marker]:hidden">
+                                <ChevronRight className="h-3.5 w-3.5 transition-transform group-open/details:rotate-90" />
                                 展开证据与执行细节
                             </summary>
-                            <div className="mt-3 space-y-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                                {event.thesis_excerpt && <p><strong>Thesis:</strong> {event.thesis_excerpt}</p>}
-                                {event.invalidation_excerpt && <p><strong>Invalidation:</strong> {event.invalidation_excerpt}</p>}
-                                {event.checklist_summary && <p><strong>Checklist:</strong> {event.checklist_summary}</p>}
-                                {event.emotion && <p><strong>Emotion:</strong> {event.emotion}</p>}
-                                {event.confidence !== undefined && <p><strong>Confidence:</strong> {event.confidence}</p>}
+                            <div className="mt-3 space-y-1.5 text-sm leading-6 text-ink-soft">
+                                {event.thesis_excerpt && <p><span className="font-semibold text-ink">交易计划</span> · {event.thesis_excerpt}</p>}
+                                {event.invalidation_excerpt && <p><span className="font-semibold text-ink">失效条件</span> · {event.invalidation_excerpt}</p>}
+                                {event.checklist_summary && <p><span className="font-semibold text-ink">检查清单</span> · {event.checklist_summary}</p>}
+                                {event.emotion && <p><span className="font-semibold text-ink">情绪</span> · {event.emotion}</p>}
+                                {event.confidence !== undefined && <p><span className="font-semibold text-ink">信心度</span> · {event.confidence}</p>}
                                 {event.ai_annotation && (
-                                    <p><strong>AI:</strong> {event.ai_annotation.summary}</p>
+                                    <p><span className="font-semibold text-ai">AI</span> · {event.ai_annotation.summary}</p>
+                                )}
+                                {event.tags && event.tags.length > 0 && (
+                                    <div className="flex flex-wrap gap-1.5 pt-1">
+                                        {event.tags.map((tag) => (
+                                            <span key={tag} className="rounded-full bg-panel px-2 py-0.5 text-[11px] text-ink-muted">#{tag}</span>
+                                        ))}
+                                    </div>
                                 )}
                             </div>
                         </details>
                     )}
 
-                    <Link href={href} className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-slate-700 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white">
+                    <Link href={href} className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-ink-soft transition-colors hover:text-ink">
                         打开关联记录
                         <ChevronRight className="h-3.5 w-3.5" />
                     </Link>

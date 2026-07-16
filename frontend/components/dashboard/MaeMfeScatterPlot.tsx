@@ -16,9 +16,9 @@ export function MaeMfeScatterPlot({ positions }: MaeMfeScatterPlotProps) {
 
     return (
         <ChartFrame
-            eyebrow="Legacy analytics"
-            title="MAE vs MFE 分析"
-            description="从旧 Position 数据本地计算最大不利/有利波动，用于迁移期复盘。"
+            eyebrow="迁移期分析"
+            title="最大不利与有利波动（MAE / MFE）"
+            description="从旧版持仓数据本地计算最大不利与有利波动，用于迁移期复盘。"
             schema={maeMfeScatterSchema}
             trustMeta={localLegacyAnalyticsTrust}
             emptyState={{
@@ -35,19 +35,17 @@ export function MaeMfeScatterPlot({ positions }: MaeMfeScatterPlotProps) {
                         getX={(entry) => entry.mae}
                         getY={(entry) => entry.mfe}
                         getLabel={(entry) => String(entry.id)}
-                        getColor={(entry) => (entry.pnl >= 0 ? '#10B981' : '#EF4444')}
-                        xLabel="MAE (Adverse) %"
-                        yLabel="MFE (Favorable) %"
+                        getColor={(entry) => (entry.pnl >= 0 ? '#1A7F5C' : '#B84A39')}
+                        xLabel="最大不利波动（MAE）%"
+                        yLabel="最大有利波动（MFE）%"
                     />
                 </div>
-                <div className="mt-4 text-sm text-gray-500">
+                <div className="mt-4 text-sm text-ink-muted">
                     <p>
-                        <strong>MAE (Maximum Adverse Excursion):</strong> Maximum loss % during the trade.
-                        Closer to 0 means better entry timing.
+                        <strong>最大不利波动（MAE）：</strong>持仓期间的最大浮亏比例，越接近 0 通常表示入场时机越好。
                     </p>
                     <p>
-                        <strong>MFE (Maximum Favorable Excursion):</strong> Maximum profit % during the trade.
-                        Indicates potential profit that was available.
+                        <strong>最大有利波动（MFE）：</strong>持仓期间的最大浮盈比例，反映曾经出现过的潜在收益。
                     </p>
                 </div>
             </>

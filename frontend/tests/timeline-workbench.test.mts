@@ -7,6 +7,7 @@ import {
   formatTimelineEventMeta,
   getReviewInboxKindLabel,
   getReviewInboxTone,
+  getTimelineEventTypeLabel,
   getTimelineEventTone,
   getWorkbenchMobileSectionOrder,
 } from '../lib/adapters/timeline-workbench.ts'
@@ -53,11 +54,17 @@ const event: TimelineEventCard = {
 
 test('buildTimelineSummaryMetrics formats the four workbench metrics', () => {
   assert.deepEqual(buildTimelineSummaryMetrics(summaryBar), [
-    { key: 'trades', label: '交易', value: '7', detail: 'This week', tone: 'neutral' },
+    { key: 'trades', label: '交易', value: '7', detail: '本周', tone: 'neutral' },
     { key: 'review_rate', label: '复盘完成', value: '63%', detail: '纪律覆盖率', tone: 'positive' },
     { key: 'equity_change', label: '净值变化', value: '-1,234.56', detail: '估算', tone: 'negative' },
     { key: 'alerts', label: '重点提醒', value: '2', detail: '需要处理', tone: 'warning' },
   ])
+})
+
+test('timeline event contract values use Chinese labels on the primary UI', () => {
+  assert.equal(getTimelineEventTypeLabel('OPEN'), '开仓')
+  assert.equal(getTimelineEventTypeLabel('REVIEW_COMPLETED'), '已复盘')
+  assert.equal(getTimelineEventTypeLabel('SYNC_EXCEPTION'), '同步异常')
 })
 
 test('formatTimelineEventImpact returns signed amount labels and tones', () => {

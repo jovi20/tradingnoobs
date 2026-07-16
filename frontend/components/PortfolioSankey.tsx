@@ -17,9 +17,9 @@ export default function PortfolioSankey({ data, totalAssets, isMobile }: Portfol
 
     return (
         <ChartFrame
-            eyebrow="Funds Flow"
+            eyebrow="资金结构"
             title="资金流向"
-            description="本地组合资金流向视图，等待后端 schema-first sankey payload。"
+            description="展示组合资金在不同资产与风险类别之间的分布和流向。"
             schema={chartView.schema}
             trustMeta={chartView.trustMeta}
             emptyState={chartView.emptyState}

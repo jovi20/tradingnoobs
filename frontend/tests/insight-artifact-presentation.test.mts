@@ -77,7 +77,7 @@ test('insight artifact detail view keeps summary primary and legacy markdown rea
 
     assert.equal(view.primaryContent, 'Average loss still needs work.')
     assert.equal(view.legacyReadOnlyContent, '# Legacy markdown')
-    assert.equal(view.chartBadge, 'chart.v1 · bar')
+    assert.equal(view.chartBadge, 'chart.v1 · 柱状图')
     assert.deepEqual(view.evidenceRefs, ['analysis:strategy_health'])
     assert.deepEqual(view.sourceRefs, ['dataset:positions'])
 })

@@ -6,6 +6,7 @@ import { getNextThemePreference } from '@/lib/theme'
 
 export function ThemeToggle() {
     const { theme, setTheme } = useTheme()
+    const themeLabel = theme === 'light' ? '浅色' : theme === 'dark' ? '深色' : '跟随系统'
 
     const toggleTheme = () => {
         setTheme(getNextThemePreference(theme))
@@ -13,13 +14,15 @@ export function ThemeToggle() {
 
     return (
         <button
+            type="button"
             onClick={toggleTheme}
-            className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-            title={`Current: ${theme}`}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-panel-subtle hover:text-ink"
+            title={`当前主题：${themeLabel}`}
+            aria-label={`切换主题，当前为${themeLabel}`}
         >
-            {theme === 'light' && <Sun className="w-5 h-5 text-amber-500" />}
-            {theme === 'dark' && <Moon className="w-5 h-5 text-indigo-400" />}
-            {theme === 'system' && <Monitor className="w-5 h-5 text-slate-500" />}
+            {theme === 'light' && <Sun className="h-[18px] w-[18px]" />}
+            {theme === 'dark' && <Moon className="h-[18px] w-[18px]" />}
+            {theme === 'system' && <Monitor className="h-[18px] w-[18px]" />}
         </button>
     )
 }

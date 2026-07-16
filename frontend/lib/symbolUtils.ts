@@ -131,7 +131,7 @@ export function detectSymbolType(symbol: string): SymbolDetection {
             return {
                 type: 'CRYPTO',
                 normalized: normalized,
-                label: '加密货币',
+                label: '加密资产',
                 provider: 'Binance',
                 format: '交易对 (如 BTCUSDT, ETHUSDT)'
             }
@@ -195,7 +195,7 @@ export function getAssetTypeLabel(type: AssetType): string {
     switch (type) {
         case 'A_STOCK': return 'A股'
         case 'HK_STOCK': return '港股'
-        case 'CRYPTO': return '加密货币'
+        case 'CRYPTO': return '加密资产'
         case 'US_STOCK': return '美股'
         case 'EQUITY': return '股票'
         case 'ETF_EQUITY': return '股票型ETF'
@@ -218,7 +218,7 @@ export function getCoreTypeLabel(type: AssetCoreType): string {
         COMMODITY: '大宗商品',
         FX: '外汇',
         DERIVATIVE: '衍生品',
-        CRYPTO: '加密货币',
+        CRYPTO: '加密资产',
         CASH: '现金'
     };
     return labels[type] || type;

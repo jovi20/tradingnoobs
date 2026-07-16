@@ -6,6 +6,7 @@ import { StatusPill } from '@/components/ui/StatusPill'
 import { Surface } from '@/components/ui/Surface'
 import {
     assertSupportedChartSchema,
+    formatChartEmptyStateCopy,
     formatChartTrustLabel,
     getChartFreshnessTone,
     getChartSchemaBadge,
@@ -32,7 +33,7 @@ interface ChartFrameProps {
 
 export function ChartFrame({
     title,
-    eyebrow = 'Chart',
+    eyebrow = '图表',
     description,
     schema,
     trustMeta,
@@ -46,6 +47,7 @@ export function ChartFrame({
 }: ChartFrameProps) {
     const schemaBadge = getChartSchemaBadge(schema)
     const trustLabel = formatChartTrustLabel(trustMeta)
+    const emptyStateCopy = formatChartEmptyStateCopy(emptyState)
     const hasData = dataCount === undefined
         ? !emptyState?.is_empty
         : hasChartData(new Array(dataCount).fill(true), emptyState)
@@ -73,14 +75,14 @@ export function ChartFrame({
             <div className={compact ? 'mt-3' : 'mt-4'}>
                 {hasData ? children : (
                     <EmptyStatePanel
-                        title={emptyState?.reason ?? 'NO_CHART_DATA'}
-                        detail={emptyState?.message ?? '当前图表没有可展示的数据。'}
+                        title={emptyStateCopy.title}
+                        detail={emptyStateCopy.detail}
                     />
                 )}
             </div>
             {trustMeta?.source_refs && trustMeta.source_refs.length > 0 && (
-                <p className="mt-3 break-all text-[11px] text-slate-400">
-                    source refs: {trustMeta.source_refs.join(', ')}
+                <p className="mt-3 break-all text-[11px] text-ink-faint">
+                    来源引用：{trustMeta.source_refs.join(', ')}
                 </p>
             )}
             {footer && <div className="mt-3">{footer}</div>}

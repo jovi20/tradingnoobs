@@ -49,9 +49,9 @@ export function DashboardEquityHero({
         <Surface className="overflow-hidden p-4 md:p-6">
             <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-start">
                 <SectionHeader
-                    eyebrow="Equity / Drawdown"
+                    eyebrow="净值与回撤"
                     title="资金曲线"
-                    description="主图回答当前阶段收益方向，风险解释放在右侧 rail。"
+                    description="主图展示当前阶段的收益方向，右侧同步给出风险解释。"
                 />
                 <div className="flex flex-wrap gap-1">
                     {periodOptions.map((option) => (
@@ -61,8 +61,8 @@ export function DashboardEquityHero({
                             onClick={() => onSelectPeriod(option.label)}
                             className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
                                 selectedPeriod === option.label
-                                    ? 'bg-slate-950 text-white dark:bg-slate-100 dark:text-slate-950'
-                                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                                    ? 'bg-ink text-canvas'
+                                    : 'bg-panel-subtle text-ink-muted hover:bg-panel'
                             }`}
                         >
                             {option.label}
@@ -71,18 +71,18 @@ export function DashboardEquityHero({
                 </div>
             </div>
             <div className="mt-4 flex flex-wrap items-end gap-2">
-                <p className={`text-3xl font-semibold tracking-tight ${trendClassName}`}>
+                <p className={`text-3xl font-semibold tracking-tight tn-nums ${trendClassName}`}>
                     {periodMetrics.periodPnl >= 0 ? '+' : ''}{periodMetrics.periodPnl.toFixed(2)}%
                 </p>
-                <p className={`pb-1 text-sm font-semibold ${periodValueClassName}`}>
+                <p className={`pb-1 text-sm font-semibold tn-nums ${periodValueClassName}`}>
                     ({periodMetrics.periodValue >= 0 ? '+' : ''}{currencySymbol}{Math.abs(periodMetrics.periodValue).toLocaleString()})
                 </p>
-                <p className="pb-1 text-xs text-slate-400">{selectedPeriod}阶段盈亏</p>
+                <p className="pb-1 text-xs text-ink-faint">{selectedPeriod}阶段盈亏</p>
             </div>
             <ChartFrame
-                eyebrow="Equity"
+                eyebrow="净值走势"
                 title="资金曲线数据"
-                description="本阶段仍使用前端本地曲线数据，等待后端 schema-first equity payload。"
+                description="本阶段使用已加载的本地历史数据绘制，数据来源与新鲜度见右上角标识。"
                 schema={equityChartSchema}
                 trustMeta={equityTrustMeta}
                 emptyState={{

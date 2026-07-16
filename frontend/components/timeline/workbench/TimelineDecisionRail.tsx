@@ -31,7 +31,7 @@ export function TimelineDecisionRail({
                 runs={insightRuns}
                 isLoading={insightRunsLoading}
                 error={insightRunsError}
-                title="Timeline AI Sidecar"
+                title="时间线 AI 洞察"
                 onRefresh={onRefreshInsights}
             />
             <TimelineContextRail

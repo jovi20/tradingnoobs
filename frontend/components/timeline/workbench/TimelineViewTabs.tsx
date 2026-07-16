@@ -15,16 +15,16 @@ interface TimelineViewTabsProps {
 
 export function TimelineViewTabs({ value, onChange }: TimelineViewTabsProps) {
     return (
-        <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white/70 p-2 dark:border-slate-800 dark:bg-slate-900/70">
+        <div className="flex flex-wrap gap-1 rounded-lg border border-line bg-panel-subtle p-1">
             {viewOptions.map((option) => (
                 <button
                     key={option.value}
                     type="button"
                     onClick={() => onChange(option.value)}
-                    className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                    className={`rounded-md px-3.5 py-1.5 text-xs font-semibold transition-colors ${
                         value === option.value
-                            ? 'bg-slate-950 text-white shadow-sm dark:bg-white dark:text-slate-950'
-                            : 'text-slate-500 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100'
+                            ? 'bg-panel text-ink shadow-panel dark:shadow-none dark:border dark:border-line-strong'
+                            : 'text-ink-muted hover:text-ink'
                     }`}
                 >
                     {option.label}

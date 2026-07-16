@@ -11,55 +11,55 @@ interface RiskMetricsCardProps {
 export default function RiskMetricsCard({ sharpe, sortino, calmar, maxDrawdown }: RiskMetricsCardProps) {
     const metrics = [
         {
-            label: 'Sharpe Ratio',
-            value: sharpe !== undefined && sharpe !== null ? sharpe.toFixed(2) : 'N/A',
-            desc: 'Risk-adjusted return',
+            label: '夏普比率',
+            value: sharpe !== undefined && sharpe !== null ? sharpe.toFixed(2) : '暂无',
+            desc: '风险调整后收益',
             icon: Activity,
-            color: 'text-blue-500',
-            bg: 'bg-blue-50 dark:bg-blue-900/20'
+            color: 'text-ai',
+            bg: 'bg-ai/10'
         },
         {
-            label: 'Sortino Ratio',
-            value: sortino !== undefined && sortino !== null ? sortino.toFixed(2) : 'N/A',
-            desc: 'Downside risk-adjusted',
+            label: '索提诺比率',
+            value: sortino !== undefined && sortino !== null ? sortino.toFixed(2) : '暂无',
+            desc: '下行风险调整后收益',
             icon: ShieldCheck,
-            color: 'text-emerald-500',
-            bg: 'bg-emerald-50 dark:bg-emerald-900/20'
+            color: 'text-profit',
+            bg: 'bg-profit/10'
         },
         {
-            label: 'Calmar Ratio',
-            value: calmar !== undefined && calmar !== null ? calmar.toFixed(2) : 'N/A',
-            desc: 'Return vs Max Drawdown',
+            label: '卡玛比率',
+            value: calmar !== undefined && calmar !== null ? calmar.toFixed(2) : '暂无',
+            desc: '收益与最大回撤之比',
             icon: TrendingUp,
-            color: 'text-purple-500',
-            bg: 'bg-purple-50 dark:bg-purple-900/20'
+            color: 'text-ai',
+            bg: 'bg-ai/10'
         },
         {
-            label: 'Max Drawdown',
-            value: maxDrawdown !== undefined && maxDrawdown !== null ? `-${(maxDrawdown * 100).toFixed(2)}%` : 'N/A',
-            desc: 'Peak to trough decline',
+            label: '最大回撤',
+            value: maxDrawdown !== undefined && maxDrawdown !== null ? `-${(maxDrawdown * 100).toFixed(2)}%` : '暂无',
+            desc: '净值从高点到低点的最大跌幅',
             icon: AlertTriangle,
-            color: 'text-amber-500',
-            bg: 'bg-amber-50 dark:bg-amber-900/20'
+            color: 'text-warning',
+            bg: 'bg-warning/12'
         }
     ]
 
     return (
-        <div className="card p-4 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-            <h3 className="text-sm font-semibold mb-4 text-slate-900 dark:text-white">风险指标</h3>
+        <div className="rounded-lg border border-line bg-panel p-4 shadow-panel dark:shadow-none">
+            <h3 className="text-sm font-semibold mb-4 text-ink">风险指标</h3>
             <div className="grid grid-cols-2 gap-4">
                 {metrics.map((m, idx) => {
                     const Icon = m.icon
                     return (
                         <div key={idx} className="space-y-1">
-                            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mb-1">
+                            <div className="flex items-center gap-2 text-xs text-ink-muted mb-1">
                                 <Icon className="w-3.5 h-3.5" />
                                 <span>{m.label}</span>
                             </div>
-                            <div className="text-lg font-semibold text-slate-900 dark:text-white">
+                            <div className="text-lg font-semibold text-ink tn-nums">
                                 {m.value}
                             </div>
-                            <div className="text-[10px] text-slate-400 dark:text-slate-500">
+                            <div className="text-[10px] text-ink-faint">
                                 {m.desc}
                             </div>
                         </div>

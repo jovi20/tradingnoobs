@@ -19,22 +19,22 @@ export default function StatCard({
     const trendColor = useTrendColor()
 
     const getBgClass = (colorClass: string) => {
-        if (colorClass.includes('emerald')) return 'bg-emerald-100 dark:bg-emerald-900/30'
-        if (colorClass.includes('red')) return 'bg-red-100 dark:bg-red-900/30'
-        if (colorClass.includes('blue')) return 'bg-blue-100 dark:bg-blue-900/30'
-        if (colorClass.includes('purple')) return 'bg-purple-100 dark:bg-purple-900/30'
-        if (colorClass.includes('amber')) return 'bg-amber-100 dark:bg-amber-900/30'
-        return 'bg-slate-100 dark:bg-slate-700'
+        if (colorClass.includes('emerald')) return 'bg-profit/10'
+        if (colorClass.includes('red')) return 'bg-loss/10'
+        if (colorClass.includes('blue')) return 'bg-ai/10'
+        if (colorClass.includes('purple')) return 'bg-ai/10'
+        if (colorClass.includes('amber')) return 'bg-warning/12'
+        return 'bg-panel-subtle'
     }
 
     return (
-        <div className="card p-3 md:p-6">
+        <div className="rounded-lg border border-line bg-panel shadow-panel dark:shadow-none p-3 md:p-6">
             <div className="flex items-start justify-between">
                 <div className="min-w-0 flex-1">
-                    <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400">{title}</p>
-                    <p className={`text-lg md:text-2xl font-bold mt-1 truncate ${color}`} title={value}>{value}</p>
+                    <p className="text-xs md:text-sm text-ink-muted">{title}</p>
+                    <p className={`text-lg md:text-2xl font-bold mt-1 truncate tn-nums ${color}`} title={value}>{value}</p>
                 </div>
-                <div className={`p-2 md:p-3 rounded-xl ml-2 shrink-0 ${getBgClass(color)}`}>
+                <div className={`p-2 md:p-3 rounded-md ml-2 shrink-0 ${getBgClass(color)}`}>
                     <Icon className={`w-5 h-5 md:w-6 md:h-6 ${color}`} />
                 </div>
             </div>

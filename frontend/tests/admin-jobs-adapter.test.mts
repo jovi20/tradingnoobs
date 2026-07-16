@@ -66,8 +66,8 @@ test('adaptAdminJobsPageData summarizes job status counts and latest failures', 
     RETRYING: 0,
     CANCELLED: 0,
   })
-  assert.equal(result.items[0].statusLabel, 'Failed')
-  assert.equal(result.items[0].attemptLabel, '3/3 attempts')
+  assert.equal(result.items[0].statusLabel, '已失败')
+  assert.equal(result.items[0].attemptLabel, '尝试 3/3 次')
   assert.equal(result.latestFailures[0].public_id, 'job-failed')
   assert.equal(result.queues.join(','), 'derived,market')
 })
@@ -81,12 +81,12 @@ test('admin job adapter exposes safe actions by status', () => {
 })
 
 test('admin job status tones stay deterministic', () => {
-  assert.equal(getAdminJobStatusTone('QUEUED').label, 'Queued')
-  assert.equal(getAdminJobStatusTone('RUNNING').label, 'Running')
-  assert.equal(getAdminJobStatusTone('SUCCEEDED').label, 'Succeeded')
-  assert.equal(getAdminJobStatusTone('FAILED').label, 'Failed')
-  assert.equal(getAdminJobStatusTone('RETRYING').label, 'Retrying')
-  assert.equal(getAdminJobStatusTone('CANCELLED').label, 'Cancelled')
+  assert.equal(getAdminJobStatusTone('QUEUED').label, '排队中')
+  assert.equal(getAdminJobStatusTone('RUNNING').label, '运行中')
+  assert.equal(getAdminJobStatusTone('SUCCEEDED').label, '已成功')
+  assert.equal(getAdminJobStatusTone('FAILED').label, '已失败')
+  assert.equal(getAdminJobStatusTone('RETRYING').label, '重试中')
+  assert.equal(getAdminJobStatusTone('CANCELLED').label, '已取消')
 })
 
 test('admin job adapter surfaces recovery guidance metadata', () => {
@@ -115,7 +115,7 @@ test('admin job adapter surfaces recovery guidance metadata', () => {
   })
 
   assert.equal(result.items[0].recoveryHint, 'RUNNING job lock exceeded 300 seconds timeout.')
-  assert.equal(result.items[0].recommendedActionLabel, 'Force cancel')
+  assert.equal(result.items[0].recommendedActionLabel, '强制取消')
   assert.equal(
     result.items[0].forceCancelWarning,
     'Force-cancel releases active business locks owned by this job.',

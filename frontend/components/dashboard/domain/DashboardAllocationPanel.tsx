@@ -17,7 +17,7 @@ export function DashboardAllocationPanel({
     chart,
 }: DashboardAllocationPanelProps) {
     const dimensionTabs = (
-        <div className="flex rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
+        <div className="flex rounded-lg bg-panel-subtle p-1">
             {[
                 { id: 'CORE_TYPE', label: '类型' },
                 { id: 'MARKET', label: '市场' },
@@ -27,10 +27,10 @@ export function DashboardAllocationPanel({
                     key={tab.id}
                     type="button"
                     onClick={() => onChangeDimension(tab.id as 'CORE_TYPE' | 'MARKET' | 'RISK')}
-                    className={`rounded-md px-2 py-1 text-[10px] font-medium transition-all ${
+                    className={`rounded-md px-2 py-1 text-[10px] font-medium transition-colors ${
                         allocationDimension === tab.id
-                            ? 'bg-white text-primary-600 shadow-sm dark:bg-slate-700'
-                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                            ? 'bg-panel text-ink shadow-panel'
+                            : 'text-ink-muted hover:text-ink-soft'
                     }`}
                 >
                     {tab.label}
@@ -41,9 +41,9 @@ export function DashboardAllocationPanel({
 
     return (
         <ChartFrame
-            eyebrow="Allocation"
+            eyebrow="资产结构"
             title="资产分布"
-            description="schema-first allocation view with local fallback trust when backend chart payloads are absent."
+            description="按类型、市场或风险维度查看资产集中度。"
             schema={chart?.schema}
             trustMeta={chart?.trustMeta}
             emptyState={chart?.emptyState}

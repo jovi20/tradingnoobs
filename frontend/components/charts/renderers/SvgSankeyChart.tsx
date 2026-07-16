@@ -22,9 +22,9 @@ interface LayoutNode {
 }
 
 function nodeColor(name: string) {
-    if (name.includes('负债') || name.includes('Short') || name.includes('Borrowed')) return '#f87171'
-    if (name.includes('资产') || name.includes('Long') || name.includes('Owned') || name.includes('Cash')) return '#34d399'
     if (name.includes('Total Assets') || name.includes('总资产')) return '#8b5cf6'
+    if (name.includes('负债') || name.includes('空头') || name.includes('Short') || name.includes('Borrowed')) return '#f87171'
+    if (name.includes('资产') || name.includes('多头') || name.includes('现金') || name.includes('Long') || name.includes('Owned') || name.includes('Cash')) return '#34d399'
     return '#94a3b8'
 }
 
@@ -86,7 +86,7 @@ function layoutNodes(nodes: SankeyNodeInput[], links: SankeyLinkInput[], width: 
         const x = (depth / maxDepth) * (width - nodeWidth)
         return {
             index,
-            name: node.name || `Node ${index + 1}`,
+            name: node.name || `节点 ${index + 1}`,
             value: values[index],
             depth,
             x,
@@ -101,7 +101,7 @@ function layoutNodes(nodes: SankeyNodeInput[], links: SankeyLinkInput[], width: 
 export function SvgSankeyChart({ data, totalAssets, isMobile }: SvgSankeyChartProps) {
     const normalized = normalizeSankeyLinks(data)
     if (normalized.isEmpty) {
-        return <div className="flex h-full min-h-[260px] items-center justify-center text-sm text-slate-500">暂无资金流向数据</div>
+        return <div className="flex h-full min-h-[260px] items-center justify-center text-sm text-ink-muted">暂无资金流向数据</div>
     }
 
     const width = 760
@@ -114,7 +114,7 @@ export function SvgSankeyChart({ data, totalAssets, isMobile }: SvgSankeyChartPr
     const total = totalAssets || 1
 
     return (
-        <svg role="img" aria-label="Portfolio funds flow sankey chart" className="h-full w-full" viewBox={`0 0 ${width} ${height}`}>
+        <svg role="img" aria-label="组合资金流向桑基图" className="h-full w-full" viewBox={`0 0 ${width} ${height}`}>
             <g transform={`translate(${padding.left},${padding.top})`}>
                 {normalized.links.map((link, index) => {
                     const source = nodes[Number(link.source)]
@@ -152,7 +152,7 @@ export function SvgSankeyChart({ data, totalAssets, isMobile }: SvgSankeyChartPr
                                         x={labelOnLeft ? node.x - 8 : node.x + node.width + 8}
                                         y={node.y + node.height / 2 - 5}
                                         textAnchor={labelOnLeft ? 'end' : 'start'}
-                                        className="fill-slate-700 text-[12px] font-semibold dark:fill-slate-200"
+                                        className="fill-ink-soft text-[12px] font-semibold"
                                     >
                                         {node.name}
                                     </text>
@@ -160,13 +160,13 @@ export function SvgSankeyChart({ data, totalAssets, isMobile }: SvgSankeyChartPr
                                         x={labelOnLeft ? node.x - 8 : node.x + node.width + 8}
                                         y={node.y + node.height / 2 + 11}
                                         textAnchor={labelOnLeft ? 'end' : 'start'}
-                                        className="fill-slate-500 text-[11px]"
+                                        className="fill-ink-muted text-[11px]"
                                     >
-                                        {percent}% (${node.value.toLocaleString()})
+                                        {percent}%（{node.value.toLocaleString()}）
                                     </text>
                                 </>
                             )}
-                            <title>{`${node.name}: ${percent}% (${node.value.toLocaleString()})`}</title>
+                            <title>{`${node.name}: ${percent}%（${node.value.toLocaleString()}）`}</title>
                         </g>
                     )
                 })}

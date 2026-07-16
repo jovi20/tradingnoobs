@@ -14,7 +14,7 @@ export default function AllocationPieChart({ data, dimension }: AllocationPieCha
     const router = useRouter()
 
     if (!data || data.length === 0) {
-        return <div className="h-full flex items-center justify-center text-slate-500 min-h-[300px]">暂无数据</div>
+        return <div className="h-full flex items-center justify-center text-ink-muted min-h-[300px]">暂无数据</div>
     }
 
     // Cross-dimension label map for keys that appear in all 3 allocation maps

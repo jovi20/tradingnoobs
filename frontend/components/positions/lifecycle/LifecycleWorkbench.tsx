@@ -62,7 +62,7 @@ export function LifecycleWorkbench({
 
     return (
         <PageFrame className="space-y-6 pb-20 md:pb-6">
-            <LifecycleWorkbenchHeader lifecycle={lifecycle} />
+            <LifecycleWorkbenchHeader lifecycle={lifecycle} legacyPosition={legacyPosition} />
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
                 <div className="space-y-6">
                     <LifecycleHero lifecycle={lifecycle} />

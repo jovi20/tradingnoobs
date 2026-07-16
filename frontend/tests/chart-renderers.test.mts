@@ -94,6 +94,6 @@ test('normalizeSankeyLinks exposes empty state for missing links', () => {
   const normalized = normalizeSankeyLinks({ nodes: [{ name: 'Cash' }], links: [] })
 
   assert.equal(normalized.isEmpty, true)
-  assert.equal(normalized.emptyReason, 'No sankey links available')
+  assert.equal(normalized.emptyReason, '暂无桑基图连接数据')
   assert.deepEqual(normalized.links, [])
 })

@@ -17,6 +17,7 @@ test('adaptLifecycleDetail maps truth lifecycle payload into preview-friendly vi
       review_status: 'CLOSED_PENDING_REVIEW',
       position_summary: {
         public_id: 'tp-1',
+        route_public_id: 'legacy-position-1',
         title: 'AAPL',
         status: 'CLOSED',
         side: 'LONG',
@@ -27,6 +28,11 @@ test('adaptLifecycleDetail maps truth lifecycle payload into preview-friendly vi
         realized_pnl_gross: 180,
         realized_pnl_net: 180,
         total_fees: 0,
+        quantity_opened: 10,
+        quantity_closed: 10,
+        open_quantity: 0,
+        average_open_price: 185,
+        average_close_price: 203,
         holding_period_seconds: 3600,
         pnl_basis: {
           cost_basis_method: 'FIFO',
@@ -114,6 +120,10 @@ test('adaptLifecycleDetail maps truth lifecycle payload into preview-friendly vi
   assert.equal(result.positionTitle, 'AAPL')
   assert.equal(result.reviewStatus, 'CLOSED_PENDING_REVIEW')
   assert.equal(result.positionStatus, 'CLOSED')
+  assert.equal(result.positionRouteId, 'legacy-position-1')
+  assert.equal(result.truthPositionPublicId, 'tp-1')
+  assert.equal(result.openQuantity, 0)
+  assert.equal(result.averageOpenPrice, 185)
   assert.equal(result.assetLabel, 'Apple Inc.')
   assert.equal(result.accountLabel, 'IBKR Main')
   assert.equal(result.nodeCount, 2)
@@ -221,7 +231,7 @@ test('lifecycle detail summaries make evidence and AI sidecar auditable', () => 
         { ref_type: 'LEDGER_ENTRY', public_id: 'ledger-1', label: 'REALIZED_PNL', href: '/positions/tp-1' },
       ],
     }),
-    '2 条 evidence · POSITION_EVENT, LEDGER_ENTRY'
+    '2 条证据 · POSITION_EVENT, LEDGER_ENTRY'
   )
 
   assert.equal(
@@ -265,7 +275,7 @@ test('getLifecycleReversalAction only exposes the latest unreversed truth trade 
       canReverse: true,
       eventPublicId: 'evt-reduce',
       nodeType: 'REDUCE',
-      label: '撤销最新 truth 事件',
+      label: '撤销最新事件',
       reason: '将追加 REVERSAL 节点并重放 FIFO，不会静默改写历史事件。',
     },
   )
@@ -301,7 +311,7 @@ test('getLifecycleReversalAction only exposes the latest unreversed truth trade 
       canReverse: false,
       eventPublicId: null,
       label: '暂无可撤销事件',
-      reason: 'OPEN 事件需要 position void/archive 语义，当前不可撤销。',
+      reason: '开仓事件需要完整的作废或归档语义，当前不可撤销。',
     },
   )
 })
@@ -309,23 +319,23 @@ test('getLifecycleReversalAction only exposes the latest unreversed truth trade 
 test('getLifecyclePreviewSummary produces stable copy', () => {
   assert.equal(
     getLifecyclePreviewSummary({ reviewStatus: 'CLOSED_PENDING_REVIEW', nodeCount: 2 }),
-    '新真相层已同步 2 个生命周期节点，且这笔交易仍待完成复盘。'
+    '审计生命周期已同步 2 个事件节点，这笔交易仍待完成复盘。'
   )
 })
 
 test('getLifecyclePreviewBadge maps review status to stable label and style token', () => {
   assert.deepEqual(getLifecyclePreviewBadge('CLOSED_PENDING_REVIEW'), {
-    label: 'Pending Review',
+    label: '待复盘',
     className: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-200',
   })
 
   assert.deepEqual(getLifecyclePreviewBadge('OPEN'), {
-    label: 'Open',
+    label: '持仓中',
     className: 'bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200',
   })
 
   assert.deepEqual(getLifecyclePreviewBadge('REVIEWED'), {
-    label: 'Reviewed',
+    label: '已复盘',
     className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200',
   })
 })
@@ -339,7 +349,7 @@ test('getLifecyclePreviewTrustSummary surfaces freshness, source, and value stat
       maturity: 'EARLY_SIGNAL',
       value_status: 'FINAL',
     }),
-    'fresh · derived · final · early_signal'
+    '最新 · 系统计算 · 已确认 · 早期信号'
   )
 })
 
@@ -372,19 +382,19 @@ test('lifecycle page sections keep truth story before legacy migration tools', (
 
 test('lifecycle review tone maps status to labels and readable tones', () => {
   assert.deepEqual(lifecycleAdapter.getLifecycleReviewTone('OPEN'), {
-    label: 'Open',
+    label: '持仓中',
     tone: 'neutral',
-    description: 'Position is still open; review remains in progress.',
+    description: '持仓仍在进行，复盘会随事件持续补充。',
   })
   assert.deepEqual(lifecycleAdapter.getLifecycleReviewTone('CLOSED_PENDING_REVIEW'), {
-    label: 'Pending Review',
+    label: '待复盘',
     tone: 'warning',
-    description: 'Position is closed and waiting for review.',
+    description: '持仓已关闭，等待完成复盘。',
   })
   assert.deepEqual(lifecycleAdapter.getLifecycleReviewTone('REVIEWED'), {
-    label: 'Reviewed',
+    label: '已复盘',
     tone: 'positive',
-    description: 'Review evidence has been recorded.',
+    description: '复盘结论和证据已经记录。',
   })
 })
 
@@ -392,22 +402,22 @@ test('lifecycle legacy panel state makes old DTO surfaces migration-only when tr
   assert.deepEqual(lifecycleAdapter.getLifecycleLegacyPanelState({ hasTruthLifecycle: true, hasLegacyPosition: true }), {
     shouldRender: true,
     mode: 'migration',
-    title: 'Legacy migration tools',
-    description: 'These sections still read from legacy Position / TradeBatch data and are secondary to the truth lifecycle.',
+    title: '旧版数据迁移工具',
+    description: '以下内容仍读取旧版持仓和批次数据（Position / TradeBatch），仅作为审计生命周期的迁移辅助信息。',
   })
 
   assert.deepEqual(lifecycleAdapter.getLifecycleLegacyPanelState({ hasTruthLifecycle: true, hasLegacyPosition: false }), {
     shouldRender: false,
     mode: 'hidden',
-    title: 'Legacy migration tools',
-    description: 'No legacy Position / TradeBatch data was loaded for this truth lifecycle.',
+    title: '旧版数据迁移工具',
+    description: '当前审计生命周期没有关联的旧版持仓或批次数据。',
   })
 
   assert.deepEqual(lifecycleAdapter.getLifecycleLegacyPanelState({ hasTruthLifecycle: false, hasLegacyPosition: true }), {
     shouldRender: true,
     mode: 'fallback',
-    title: 'Legacy fallback detail',
-    description: 'Truth lifecycle is unavailable, so this page is showing legacy Position / TradeBatch data.',
+    title: '旧版持仓详情',
+    description: '审计生命周期暂不可用，当前仅展示旧版持仓和批次数据。',
   })
 })
 
@@ -418,17 +428,17 @@ test('lifecycle primary actions combine narrative, reversal, and cash adjustment
       canReverse: true,
       eventPublicId: 'evt-reduce',
       nodeType: 'REDUCE',
-      label: '撤销最新 truth 事件',
+      label: '撤销最新事件',
       reason: '将追加 REVERSAL 节点并重放 FIFO，不会静默改写历史事件。',
     },
   })
 
   assert.equal(actions.narrative.canRun, true)
-  assert.equal(actions.narrative.label, '编辑 truth narrative')
+  assert.equal(actions.narrative.label, '编辑交易叙事')
   assert.equal(actions.reversal.canRun, true)
-  assert.equal(actions.reversal.label, '撤销最新 truth 事件')
+  assert.equal(actions.reversal.label, '撤销最新事件')
   assert.equal(actions.cashAdjustment.canRun, true)
-  assert.equal(actions.cashAdjustment.label, '记录 cash adjustment')
+  assert.equal(actions.cashAdjustment.label, '记录现金调整')
 })
 
 test('lifecycle event rail items expose node tone and date labels', () => {
@@ -440,8 +450,8 @@ test('lifecycle event rail items expose node tone and date labels', () => {
   })
 
   assert.deepEqual(items, [
-    { id: 'evt-open', type: 'OPEN', title: 'OPEN', summary: 'Opened thesis', dateLabel: '2026/6/1', tone: 'entry' },
-    { id: 'evt-ai', type: 'AI_CONCLUSION', title: 'AI', summary: 'AI conclusion', dateLabel: '2026/6/2', tone: 'ai' },
+    { id: 'evt-open', type: '开仓', title: 'OPEN', summary: 'Opened thesis', dateLabel: '2026/6/1', tone: 'entry' },
+    { id: 'evt-ai', type: 'AI 结论', title: 'AI', summary: 'AI conclusion', dateLabel: '2026/6/2', tone: 'ai' },
   ])
 })
 
@@ -462,7 +472,7 @@ test('lifecycle evidence panel summary combines evidence, cash, and AI counts', 
     ],
     aiItems: [{ title: 'AI conclusion', conclusion: 'Evidence-backed note.' }],
   }), {
-    evidenceLabel: '1 条 evidence · POSITION_EVENT',
+    evidenceLabel: '1 条证据 · POSITION_EVENT',
     cashLabel: '1 条现金流水 · USD 25.00',
     aiLabel: '1 条 AI 结论 · 0 条证据',
   })
@@ -471,10 +481,10 @@ test('lifecycle evidence panel summary combines evidence, cash, and AI counts', 
 test('lifecycle empty state copy distinguishes missing truth from missing all data', () => {
   assert.equal(
     lifecycleAdapter.getLifecycleEmptyState({ hasTruthLifecycle: false, hasLegacyPosition: true }).title,
-    'Truth lifecycle unavailable'
+    '审计生命周期不可用'
   )
   assert.equal(
     lifecycleAdapter.getLifecycleEmptyState({ hasTruthLifecycle: false, hasLegacyPosition: false }).title,
-    'Position not found'
+    '未找到持仓'
   )
 })

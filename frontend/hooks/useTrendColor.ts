@@ -12,16 +12,16 @@ export function useTrendColor() {
         // Core Logic
         isGreenUp,
 
-        // Tailwind Text Colors
-        upColor: isGreenUp ? 'text-emerald-500' : 'text-red-500',
-        downColor: isGreenUp ? 'text-red-500' : 'text-emerald-500',
+        // Tailwind Text Colors (semantic tokens; profit=up, loss=down by convention)
+        upColor: isGreenUp ? 'text-profit' : 'text-loss',
+        downColor: isGreenUp ? 'text-loss' : 'text-profit',
 
         // Tailwind Background+Text Colors (for tags/badges)
-        upBg: isGreenUp ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400' : 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400',
-        downBg: isGreenUp ? 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400' : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400',
+        upBg: isGreenUp ? 'bg-profit/10 text-profit' : 'bg-loss/10 text-loss',
+        downBg: isGreenUp ? 'bg-loss/10 text-loss' : 'bg-profit/10 text-profit',
 
-        // Hex Colors (for Charts)
-        upHex: isGreenUp ? '#10b981' : '#ef4444',
-        downHex: isGreenUp ? '#ef4444' : '#10b981'
+        // Hex Colors (for Charts — literal hex required by the SVG renderer)
+        upHex: isGreenUp ? '#1A7F5C' : '#B84A39',
+        downHex: isGreenUp ? '#B84A39' : '#1A7F5C'
     }
 }

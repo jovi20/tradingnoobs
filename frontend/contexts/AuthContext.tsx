@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { authAPI, settingsAPI, User, UserSettings } from '@/lib/api'
+import { authAPI, isAuthenticationApiError, settingsAPI, User, UserSettings } from '@/lib/api'
 
 interface AuthContextType {
     user: User | null
@@ -13,6 +13,7 @@ interface AuthContextType {
     login: (email: string, password: string) => Promise<void>
     register: (email: string, password: string, invite_code: string) => Promise<void>
     logout: () => Promise<void>
+    refreshUser: () => Promise<void>
     refreshSettings: () => Promise<void>
 }
 
@@ -48,8 +49,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
                     setToken(storedToken)
                 } catch (error) {
-                    // Token 无效，清除
-                    localStorage.removeItem(TOKEN_KEY)
+                    if (isAuthenticationApiError(error)) {
+                        localStorage.removeItem(TOKEN_KEY)
+                    } else {
+                        // Keep a valid stored session through transient network or navigation failures.
+                        console.error('Failed to restore authenticated session', error)
+                        setToken(storedToken)
+                    }
                 }
             }
             setIsLoading(false)
@@ -98,6 +104,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     }
 
+    const refreshUser = async () => {
+        if (!token) return
+        try {
+            const userData = await authAPI.me(token)
+            setUser(userData)
+        } catch (e) {
+            console.error('Failed to refresh user', e)
+        }
+    }
+
     const register = async (email: string, password: string, invite_code: string) => {
         await authAPI.register(email, password, invite_code)
         // 注册成功后自动登录
@@ -122,8 +138,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 加载中显示空白，避免闪烁
     if (isLoading) {
         return (
-            <div className="min-h-screen flex items-center justify-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+            <div className="min-h-screen flex items-center justify-center bg-canvas">
+                <div className="animate-spin rounded-full h-8 w-8 border-2 border-line border-t-ink"></div>
             </div>
         )
     }
@@ -139,6 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 login,
                 register,
                 logout,
+                refreshUser,
                 refreshSettings
             }}
         >

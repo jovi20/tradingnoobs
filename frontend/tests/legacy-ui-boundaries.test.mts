@@ -10,11 +10,11 @@ const repoRoot = resolve(frontendRoot, '..')
 
 const legacyDtoImportAllowlist = {
   migration_ui: [
-    'app/positions/[id]/add-batch/page.tsx',
-    'app/positions/page.tsx',
+    'app/(product)/positions/[id]/add-batch/page.tsx',
+    'app/(product)/positions/page.tsx',
   ],
   create_sync_bridge: [
-    'app/positions/new/page.tsx',
+    'app/(product)/positions/new/page.tsx',
   ],
   legacy_analytics: [
     'components/dashboard/MaeMfeScatterPlot.tsx',
@@ -50,20 +50,20 @@ function listSourceFiles(dir: string): string[] {
 }
 
 test('positions list labels expanded batch rows as migration/support context', () => {
-  const source = readFrontendFile('app/positions/page.tsx')
+  const source = readFrontendFile('app/(product)/positions/page.tsx')
 
-  assert.match(source, /Legacy batch timeline/)
-  assert.match(source, /Migration\/support context/)
-  assert.match(source, /Truth add event/)
-  assert.match(source, /Truth reduce\/close event/)
+  assert.match(source, /旧版批次记录/)
+  assert.match(source, /仅供迁移和排查使用/)
+  assert.match(source, /记录加仓/)
+  assert.match(source, /记录减仓或平仓/)
 })
 
 test('add-batch page visibly distinguishes truth writes from legacy migration fallback', () => {
-  const source = readFrontendFile('app/positions/[id]/add-batch/page.tsx')
+  const source = readFrontendFile('app/(product)/positions/[id]/add-batch/page.tsx')
 
-  assert.match(source, /Truth write path/)
-  assert.match(source, /TradingPosition \/ PositionEvent/)
-  assert.match(source, /legacy batch migration fallback/)
+  assert.match(source, /审计事件写入/)
+  assert.match(source, /权威审计生命周期/)
+  assert.match(source, /旧批次记录/)
 })
 
 test('raw legacy trading DTO imports stay inside migration and adapter boundaries', () => {

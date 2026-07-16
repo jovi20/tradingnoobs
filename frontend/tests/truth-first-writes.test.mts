@@ -21,7 +21,7 @@ function assertTruthCallBeforeLegacyFallback(source: string, fileLabel: string):
 }
 
 test('add-batch page makes legacy batch writes an explicit migration fallback', () => {
-  const source = readFrontendFile('app/positions/[id]/add-batch/page.tsx')
+  const source = readFrontendFile('app/(product)/positions/[id]/add-batch/page.tsx')
 
   assertTruthCallBeforeLegacyFallback(source, 'add-batch page')
   assert.match(source, /getTruthFirstWriteFallbackState/)
@@ -41,7 +41,7 @@ test('positions API marks explicit legacy batch fallback with migration header',
 })
 
 test('new-position add-to-existing flow does not silently fall back to legacy batch writes', () => {
-  const source = readFrontendFile('app/positions/new/page.tsx')
+  const source = readFrontendFile('app/(product)/positions/new/page.tsx')
 
   assertTruthCallBeforeLegacyFallback(source, 'new-position page')
   assert.match(source, /getTruthFirstWriteFallbackState/)
@@ -56,8 +56,8 @@ test('new-position add-to-existing flow does not silently fall back to legacy ba
   )
 })
 
-test('new-position create flow follows the create-and-sync truth lifecycle id', () => {
-  const source = readFrontendFile('app/positions/new/page.tsx')
+test('new-position create flow keeps the legacy public id as the canonical page route', () => {
+  const source = readFrontendFile('app/(product)/positions/new/page.tsx')
 
   assert.match(source, /truth_position_public_id/)
   assert.ok(
@@ -65,7 +65,26 @@ test('new-position create flow follows the create-and-sync truth lifecycle id', 
     'new-position page should read the truth id from the create response',
   )
   assert.ok(
-    source.indexOf('truth_position_public_id') < source.indexOf('router.push(`/positions/${createdPosition.truth_position_public_id}`)'),
-    'new-position page should route to the synced truth lifecycle when available',
+    source.indexOf('truth_position_public_id') < source.indexOf('router.push(`/positions/${createdPosition.public_id}`)'),
+    'new-position page should confirm truth sync before routing through the canonical legacy public id',
   )
+})
+
+test('add and close forms derive close limits from the truth lifecycle snapshot', () => {
+  const source = readFrontendFile('app/(product)/positions/[id]/add-batch/page.tsx')
+
+  assert.match(source, /truthLifecycle\?\.openQuantity/)
+  assert.match(source, /currentOpenQuantity/)
+  assert.ok(
+    source.indexOf('truthLifecycle?.openQuantity') < source.indexOf('平仓数量不能超过当前持仓'),
+    'truth open quantity should be selected before close validation',
+  )
+})
+
+test('truth event writes return to the canonical legacy position route', () => {
+  const addBatchSource = readFrontendFile('app/(product)/positions/[id]/add-batch/page.tsx')
+  const newPositionSource = readFrontendFile('app/(product)/positions/new/page.tsx')
+
+  assert.match(addBatchSource, /router\.push\(`\/positions\/\$\{position\.public_id\}`\)/)
+  assert.match(newPositionSource, /router\.push\(`\/positions\/\$\{existingPosition\.routeId\}`\)/)
 })

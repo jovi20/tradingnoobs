@@ -4,13 +4,15 @@ interface EmptyStatePanelProps {
     title: string
     detail?: string
     action?: ReactNode
+    icon?: ReactNode
 }
 
-export function EmptyStatePanel({ title, detail, action }: EmptyStatePanelProps) {
+export function EmptyStatePanel({ title, detail, action, icon }: EmptyStatePanelProps) {
     return (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 p-8 text-center dark:border-slate-700 dark:bg-slate-900/50">
-            <p className="font-semibold text-slate-900 dark:text-slate-100">{title}</p>
-            {detail && <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">{detail}</p>}
+        <div className="rounded-lg border border-dashed border-line-strong bg-panel-subtle/50 p-8 text-center">
+            {icon && <div className="mb-3 flex justify-center text-ink-faint">{icon}</div>}
+            <p className="font-semibold text-ink">{title}</p>
+            {detail && <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink-muted">{detail}</p>}
             {action && <div className="mt-5">{action}</div>}
         </div>
     )

@@ -8,8 +8,8 @@ interface DashboardMoversPanelProps {
 
 export function DashboardMoversPanel({ top, bottom }: DashboardMoversPanelProps) {
     return (
-        <div className="card p-4">
-            <h2 className="text-sm font-semibold mb-4 text-slate-900 dark:text-white">历史表现</h2>
+        <div className="rounded-lg border border-line bg-panel p-4 shadow-panel dark:shadow-none">
+            <h2 className="text-sm font-semibold mb-4 text-ink">历史表现</h2>
             <PerformanceMovers top={top} bottom={bottom} />
         </div>
     )

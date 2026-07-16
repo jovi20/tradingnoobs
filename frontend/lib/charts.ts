@@ -69,6 +69,36 @@ type AllocationPayloadInput = {
 
 const supportedChartTypes: ReadonlySet<string> = new Set(['bar', 'line', 'pie', 'scatter', 'sankey'])
 
+const chartTypeLabels: Record<SupportedChartType, string> = {
+  bar: '柱状图',
+  line: '折线图',
+  pie: '饼图',
+  scatter: '散点图',
+  sankey: '桑基图',
+}
+
+const chartFreshnessLabels: Record<string, string> = {
+  FRESH: '实时',
+  CACHED: '缓存',
+  DELAYED: '延迟',
+  STALE: '过期',
+  DEGRADED: '降级',
+  UNAVAILABLE: '不可用',
+}
+
+const chartSourceLabels: Record<string, string> = {
+  AI_GENERATED: 'AI 生成',
+  DERIVED: '系统计算',
+  DASHBOARD_DERIVED_READ_MODEL: '组合汇总',
+  LOCAL_FALLBACK_VIEW: '本地备用数据',
+  LOCAL_LEGACY_ANALYTICS: '本地历史分析',
+  LOCAL_PORTFOLIO_FLOW_VIEW: '本地组合数据',
+  LOCAL_LEGACY_ANALYSIS: '本地历史分析',
+  LOCAL_DASHBOARD_HISTORY: '本地历史数据',
+}
+
+const containsChinese = (value: string): boolean => /[\u3400-\u9fff]/.test(value)
+
 export function assertSupportedChartSchema(schema: ChartSchema | null | undefined): boolean {
   if (!schema) return false
   if (schema.schema_version !== 'chart.v1') return false
@@ -81,7 +111,7 @@ export function assertSupportedChartSchema(schema: ChartSchema | null | undefine
 export function getChartSchemaBadge(schema: ChartSchema | null | undefined): string | null {
   if (!schema) return null
   if (!assertSupportedChartSchema(schema)) return null
-  return `${schema.schema_version} · ${schema.chart_type}`
+  return `${schema.schema_version} · ${chartTypeLabels[schema.chart_type]}`
 }
 
 export function getChartFreshnessTone(trust: ChartTrustMeta | null | undefined): WorkbenchTone {
@@ -92,13 +122,33 @@ export function getChartFreshnessTone(trust: ChartTrustMeta | null | undefined):
 }
 
 export function formatChartTrustLabel(trust: ChartTrustMeta | null | undefined): string {
-  if (!trust || (!trust.freshness && !trust.source && !trust.as_of)) return 'local view'
+  if (!trust || (!trust.freshness && !trust.source && !trust.as_of)) return '本地视图'
 
   const pieces: string[] = []
-  if (trust.freshness) pieces.push(trust.freshness.toLowerCase())
-  if (trust.source) pieces.push(trust.source)
-  if (trust.as_of) pieces.push(`as of ${new Date(trust.as_of).toLocaleString('zh-CN')}`)
-  return pieces.length > 0 ? pieces.join(' · ') : 'local view'
+  if (trust.freshness) {
+    pieces.push(chartFreshnessLabels[trust.freshness.toUpperCase()] || '状态未知')
+  }
+  if (trust.source) {
+    const sourceLabel = chartSourceLabels[trust.source.toUpperCase()]
+      || (containsChinese(trust.source) ? trust.source : null)
+      || (/^[A-Z0-9_]+$/.test(trust.source) ? '系统数据' : trust.source)
+    pieces.push(sourceLabel)
+  }
+  if (trust.as_of) pieces.push(`数据时间 ${new Date(trust.as_of).toLocaleString('zh-CN')}`)
+  return pieces.length > 0 ? pieces.join(' · ') : '本地视图'
+}
+
+export function formatChartEmptyStateCopy(emptyState?: ChartEmptyState | null): {
+  title: string
+  detail: string
+} {
+  const message = emptyState?.message?.trim()
+  return {
+    title: '暂无图表数据',
+    detail: message && containsChinese(message)
+      ? message
+      : '当前图表没有可展示的数据。',
+  }
 }
 
 export function buildChartEmptyState(

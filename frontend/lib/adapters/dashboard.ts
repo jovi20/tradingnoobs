@@ -69,7 +69,7 @@ function formatPercentValue(value: number) {
 }
 
 function formatDrawdown(maxDrawdown?: number) {
-    if (maxDrawdown === undefined || maxDrawdown === null) return 'N/A'
+    if (maxDrawdown === undefined || maxDrawdown === null) return '暂无'
     return `-${(maxDrawdown * 100).toFixed(1)}%`
 }
 

@@ -53,10 +53,10 @@ const MARKETS: MarketInfo[] = [
 ]
 
 const freshnessToneClasses: Record<MarketFreshnessTone, string> = {
-    positive: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-300',
-    neutral: 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300',
-    warning: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300',
-    danger: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300',
+    positive: 'border-profit/30 bg-profit/10 text-profit',
+    neutral: 'border-line bg-panel-subtle text-ink-soft',
+    warning: 'border-warning/30 bg-warning/12 text-warning',
+    danger: 'border-loss/30 bg-loss/10 text-loss',
 }
 
 interface MarketStatusProps {
@@ -73,7 +73,7 @@ export default function MarketStatus({ quoteMeta = null }: MarketStatusProps) {
     }, [])
 
     const getMarketStatus = (market: MarketInfo, now: Date): { status: MarketStatusType; label: string; color: string } => {
-        if (market.id === 'CRYPTO') return { status: 'OPEN', label: '交易中', color: 'text-emerald-500' }
+        if (market.id === 'CRYPTO') return { status: 'OPEN', label: '交易中', color: 'text-profit' }
 
         // Convert current time to market timezone
         const options: Intl.DateTimeFormatOptions = {
@@ -107,15 +107,15 @@ export default function MarketStatus({ quoteMeta = null }: MarketStatusProps) {
                 // Check if >= 20:00
                 const overnightStart = 20 * 60
                 if (currentMins >= overnightStart) {
-                    return { status: 'OVERNIGHT', label: '夜盘', color: 'text-indigo-500' }
+                    return { status: 'OVERNIGHT', label: '夜盘', color: 'text-ai' }
                 }
             }
             if (market.id === 'US' && weekday === 'Sat') {
                 // Sat is closed
-                return { status: 'CLOSED', label: '休市', color: 'text-slate-400' }
+                return { status: 'CLOSED', label: '休市', color: 'text-ink-faint' }
             }
             if (market.id === 'CN') {
-                return { status: 'CLOSED', label: '休市', color: 'text-slate-400' }
+                return { status: 'CLOSED', label: '休市', color: 'text-ink-faint' }
             }
             // For simplicity, standard weekend closed unless caught above
         }
@@ -135,23 +135,23 @@ export default function MarketStatus({ quoteMeta = null }: MarketStatusProps) {
         if (market.id === 'CN') {
             const lunchStart = 11 * 60 + 30
             const lunchEnd = 13 * 60
-            if (currentMins >= regStart && currentMins < lunchStart) return { status: 'OPEN', label: '交易中', color: 'text-emerald-500' }
-            if (currentMins >= lunchStart && currentMins < lunchEnd) return { status: 'CLOSED', label: '休市(午间)', color: 'text-slate-400' }
-            if (currentMins >= lunchEnd && currentMins <= regEnd) return { status: 'OPEN', label: '交易中', color: 'text-emerald-500' }
-            return { status: 'CLOSED', label: '休市', color: 'text-slate-400' }
+            if (currentMins >= regStart && currentMins < lunchStart) return { status: 'OPEN', label: '交易中', color: 'text-profit' }
+            if (currentMins >= lunchStart && currentMins < lunchEnd) return { status: 'CLOSED', label: '休市(午间)', color: 'text-ink-faint' }
+            if (currentMins >= lunchEnd && currentMins <= regEnd) return { status: 'OPEN', label: '交易中', color: 'text-profit' }
+            return { status: 'CLOSED', label: '休市', color: 'text-ink-faint' }
         }
 
         // US
         if (currentMins >= regStart && currentMins < regEnd) {
-            return { status: 'OPEN', label: '盘中', color: 'text-emerald-500' }
+            return { status: 'OPEN', label: '盘中', color: 'text-profit' }
         }
 
         if (pre && currentMins >= toMins(pre.start) && currentMins < toMins(pre.end)) {
-            return { status: 'PRE', label: '盘前', color: 'text-amber-500' }
+            return { status: 'PRE', label: '盘前', color: 'text-warning' }
         }
 
         if (post && currentMins >= toMins(post.start) && currentMins < toMins(post.end)) {
-            return { status: 'POST', label: '盘后', color: 'text-amber-500' }
+            return { status: 'POST', label: '盘后', color: 'text-warning' }
         }
 
         if (overnight) {
@@ -163,22 +163,22 @@ export default function MarketStatus({ quoteMeta = null }: MarketStatusProps) {
 
             if (currentMins >= start) {
                 // e.g. 21:00
-                return { status: 'OVERNIGHT', label: '夜盘', color: 'text-indigo-500' }
+                return { status: 'OVERNIGHT', label: '夜盘', color: 'text-ai' }
             }
             if (currentMins < end) {
                 // e.g. 03:00. This is technicall "next day" but belong to session
                 // We need to confirm if it's a weekday for early morning.
                 // If it is Tuesday 03:00, it is Overnight session from Monday.
                 // Mon 03:00 is from Sunday night? Yes.
-                return { status: 'OVERNIGHT', label: '夜盘', color: 'text-indigo-500' }
+                return { status: 'OVERNIGHT', label: '夜盘', color: 'text-ai' }
             }
         }
 
-        return { status: 'CLOSED', label: '休市', color: 'text-slate-400' }
+        return { status: 'CLOSED', label: '休市', color: 'text-ink-faint' }
     }
 
     return (
-        <div className="w-full rounded-xl border border-slate-100 bg-white p-2 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <div className="w-full rounded-md border border-line bg-panel p-2 shadow-panel dark:shadow-none">
             <div className="grid grid-cols-3 gap-2">
                 {MARKETS.map(market => {
                     const { label, color } = getMarketStatus(market, currentTime)
@@ -192,17 +192,17 @@ export default function MarketStatus({ quoteMeta = null }: MarketStatusProps) {
                     }).format(currentTime)
 
                     return (
-                        <div key={market.id} className="flex flex-col items-center justify-center gap-1 px-1 border-r last:border-0 border-slate-100 dark:border-slate-700">
+                        <div key={market.id} className="flex flex-col items-center justify-center gap-1 px-1 border-r last:border-0 border-line">
                             <div className="text-xs text-center">
-                                <div className="flex items-center justify-center gap-1 font-medium text-slate-700 dark:text-slate-300">
+                                <div className="flex items-center justify-center gap-1 font-medium text-ink-soft">
                                     {market.id === 'US' ? <Globe className="w-3 h-3" /> : null}
                                     {market.name}
                                 </div>
-                                <div className="text-slate-400 scale-90 font-mono">
+                                <div className="text-ink-faint scale-90 font-mono tn-nums">
                                     {localTimeStr}
                                 </div>
                             </div>
-                            <div className={`text-xs font-bold ${color} px-1.5 py-0.5 rounded bg-slate-50 dark:bg-slate-700/50`}>
+                            <div className={`text-xs font-bold ${color} px-1.5 py-0.5 rounded bg-panel-subtle`}>
                                 {label}
                             </div>
                         </div>

@@ -2,42 +2,42 @@ import type { AdminJobListResponse, AdminJobRecommendedAction, AdminJobRunSummar
 
 const STATUS_TONES: Record<AdminJobStatus, { label: string; className: string; accent: string }> = {
     QUEUED: {
-        label: 'Queued',
+        label: '排队中',
         className: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200',
         accent: 'bg-slate-400',
     },
     RUNNING: {
-        label: 'Running',
+        label: '运行中',
         className: 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-200',
         accent: 'bg-blue-500',
     },
     SUCCEEDED: {
-        label: 'Succeeded',
+        label: '已成功',
         className: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200',
         accent: 'bg-emerald-500',
     },
     FAILED: {
-        label: 'Failed',
+        label: '已失败',
         className: 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-200',
         accent: 'bg-rose-500',
     },
     RETRYING: {
-        label: 'Retrying',
+        label: '重试中',
         className: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-200',
         accent: 'bg-amber-500',
     },
     CANCELLED: {
-        label: 'Cancelled',
+        label: '已取消',
         className: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300',
         accent: 'bg-zinc-400',
     },
 }
 
 const RECOMMENDED_ACTION_LABELS: Record<AdminJobRecommendedAction, string> = {
-    REQUEUE: 'Requeue',
-    CANCEL: 'Cancel',
-    FORCE_CANCEL: 'Force cancel',
-    WAIT: 'Wait',
+    REQUEUE: '重新入队',
+    CANCEL: '取消',
+    FORCE_CANCEL: '强制取消',
+    WAIT: '等待',
 }
 
 export interface AdminJobViewModel extends AdminJobRunSummary {
@@ -69,7 +69,7 @@ export function getAdminJobActions(status: AdminJobStatus) {
 }
 
 function formatDateTime(value: string | null): string {
-    if (!value) return 'Not scheduled'
+    if (!value) return '未调度'
     return new Date(value).toLocaleString('zh-CN')
 }
 
@@ -84,7 +84,7 @@ function adaptJob(item: AdminJobRunSummary): AdminJobViewModel {
         statusLabel: tone.label,
         statusClassName: tone.className,
         statusAccentClassName: tone.accent,
-        attemptLabel: `${item.attempt_count}/${item.max_attempts} attempts`,
+        attemptLabel: `尝试 ${item.attempt_count}/${item.max_attempts} 次`,
         createdLabel: formatDateTime(item.created_at),
         recoveryHint: item.stale_reason ?? null,
         recommendedActionLabel: formatAdminJobRecommendedAction(item.recommended_action),

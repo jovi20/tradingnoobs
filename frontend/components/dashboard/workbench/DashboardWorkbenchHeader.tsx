@@ -20,9 +20,9 @@ export function DashboardWorkbenchHeader({ riskPosture }: DashboardWorkbenchHead
     return (
         <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-start">
             <SectionHeader
-                eyebrow="Macro Command Center"
+                eyebrow="组合概览"
                 title="整体状态怎么样"
-                description="Dashboard 负责解释组合健康度、结构、风险和数据新鲜度；最近事件继续回到时间线处理。"
+                description="看板汇总组合健康度、资产结构、风险和数据新鲜度；最近事件继续在时间线中处理。"
                 action={<StatusPill tone={riskPosture.tone}>{riskPosture.label}</StatusPill>}
             />
             <div className="flex flex-col gap-3 lg:items-end">
@@ -33,7 +33,7 @@ export function DashboardWorkbenchHeader({ riskPosture }: DashboardWorkbenchHead
                             <Link
                                 key={item.href}
                                 href={item.href}
-                                className="inline-flex shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-white dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-200"
+                                className="inline-flex shrink-0 items-center gap-2 rounded-full border border-line bg-panel px-3 py-2 text-xs font-semibold text-ink-soft transition-colors hover:border-line-strong hover:bg-panel-subtle"
                             >
                                 <Icon className="h-3.5 w-3.5" />
                                 {item.label}

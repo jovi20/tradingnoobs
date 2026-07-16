@@ -12,15 +12,15 @@ export function SectionHeader({ title, eyebrow, description, action }: SectionHe
         <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
                 {eyebrow && (
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-faint">
                         {eyebrow}
                     </p>
                 )}
-                <h2 className="mt-1 text-lg font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+                <h2 className="mt-1 text-lg font-semibold tracking-tight text-ink">
                     {title}
                 </h2>
                 {description && (
-                    <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
+                    <p className="mt-1 text-sm leading-6 text-ink-muted">
                         {description}
                     </p>
                 )}

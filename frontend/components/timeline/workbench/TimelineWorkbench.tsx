@@ -34,7 +34,7 @@ export function TimelineWorkbench({
     const metrics = buildTimelineSummaryMetrics(timelineHome.summaryBar)
 
     return (
-        <PageFrame className="tn-decision-desk rounded-[2rem] p-4 md:p-6">
+        <PageFrame>
             <div className="space-y-6">
                 <TimelineWorkbenchHeader pageMeta={timelineHome.pageMeta} onRefresh={onRefresh} />
 

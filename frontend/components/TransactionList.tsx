@@ -23,7 +23,7 @@ export function TransactionList({ token, transactions, onDelete }: TransactionLi
             onDelete(id)
         } catch (error) {
             console.error('Failed to delete transaction:', error)
-            alert('Failed to delete transaction')
+            alert('删除流水失败，请稍后重试')
         } finally {
             setDeletingId(null)
         }
@@ -31,10 +31,10 @@ export function TransactionList({ token, transactions, onDelete }: TransactionLi
 
     const getTypeLabel = (type: string) => {
         const labels: Record<string, string> = {
-            DEPOSIT: '充值 / 入金',
-            WITHDRAWAL: '提取 / 出金',
-            INTEREST: '利息收益',
-            FEE: '手续费 /税费',
+            DEPOSIT: '入金',
+            WITHDRAWAL: '出金',
+            INTEREST: '利息',
+            FEE: '手续费或税费',
             TRANSFER_IN: '转入',
             TRANSFER_OUT: '转出'
         }
@@ -46,13 +46,13 @@ export function TransactionList({ token, transactions, onDelete }: TransactionLi
             case 'DEPOSIT':
             case 'INTEREST':
             case 'TRANSFER_IN':
-                return <ArrowDownLeft className="h-4 w-4 text-green-500" />
+                return <ArrowDownLeft className="h-4 w-4 text-profit" />
             case 'WITHDRAWAL':
             case 'FEE':
             case 'TRANSFER_OUT':
-                return <ArrowUpRight className="h-4 w-4 text-red-500" />
+                return <ArrowUpRight className="h-4 w-4 text-loss" />
             default:
-                return <ArrowRight className="h-4 w-4 text-gray-500" />
+                return <ArrowRight className="h-4 w-4 text-ink-muted" />
         }
     }
 
@@ -67,7 +67,7 @@ export function TransactionList({ token, transactions, onDelete }: TransactionLi
     }
 
     if (transactions.length === 0) {
-        return <div className="text-center text-gray-500 py-4">No transactions found.</div>
+        return <div className="text-center text-ink-muted py-4">暂无资金流水</div>
     }
 
     return (
@@ -92,13 +92,16 @@ export function TransactionList({ token, transactions, onDelete }: TransactionLi
                     </div>
 
                     <div className="flex items-center gap-4">
-                        <div className={`font-mono font-medium ${tx.amount >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                        <div className={`font-mono font-medium tn-nums ${tx.amount >= 0 ? 'text-profit' : 'text-loss'}`}>
                             {tx.amount > 0 ? '+' : tx.amount < 0 ? '-' : ''}{formatAmount(tx.amount, tx.currency)}
                         </div>
                         <button
+                            type="button"
                             onClick={() => handleDelete(tx.routeId)}
                             disabled={deletingId === tx.routeId}
-                            className="text-muted-foreground hover:text-red-500 transition-colors p-1"
+                            aria-label={`删除${getTypeLabel(tx.type)}流水`}
+                            title="删除流水"
+                            className="text-muted-foreground hover:text-loss transition-colors p-1"
                         >
                             <Trash2 className="h-4 w-4" />
                         </button>

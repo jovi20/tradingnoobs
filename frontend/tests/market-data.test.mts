@@ -27,18 +27,28 @@ test('market provider labels are readable', () => {
   assert.equal(getMarketProviderLabel(undefined), '自动路由')
 })
 
-test('buildMarketDataStatus exposes degraded reason when present', () => {
+test('buildMarketDataStatus replaces raw provider failures with localized user copy', () => {
   const status = buildMarketDataStatus({
     provider: 'yfinance',
     freshness: 'FRESH',
     degraded: true,
     degraded_reason: 'finnhub failed: quota exceeded',
     source_refs: ['provider:finnhub', 'provider:yfinance', 'symbol:MSFT'],
+    as_of: '2026-07-15T10:00:00Z',
   })
 
   assert.equal(status.providerLabel, 'YFinance')
   assert.equal(status.freshnessLabel, '实时')
   assert.equal(status.tone, 'warning')
-  assert.equal(status.degradedReason, 'finnhub failed: quota exceeded')
+  assert.equal(status.degradedReason, '主行情源暂不可用，已自动切换备用数据源。')
   assert.deepEqual(status.sourceRefs, ['provider:finnhub', 'provider:yfinance', 'symbol:MSFT'])
+  assert.equal(status.asOf, '2026-07-15T10:00:00Z')
+
+  const unavailable = buildMarketDataStatus({
+    freshness: 'UNAVAILABLE',
+    degraded: true,
+    degraded_reason: 'all providers failed',
+  })
+  assert.equal(unavailable.degradedReason, '行情源暂不可用，请稍后重试。')
+  assert.equal(unavailable.asOf, null)
 })

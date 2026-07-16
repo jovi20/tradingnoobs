@@ -101,14 +101,14 @@ export function getLegacyBatchMutationState(hasTruthLifecycle: boolean): {
         return {
             canMutate: false,
             label: '迁移只读',
-            reason: '价格、数量和 PnL 已由 TradingPosition / PositionEvent truth path 接管。',
+            reason: '价格、数量和盈亏已由审计生命周期（TradingPosition / PositionEvent）接管。',
         }
     }
 
     return {
         canMutate: true,
         label: '编辑',
-        reason: '尚未解析到 truth lifecycle，保留 legacy batch 迁移编辑入口。',
+        reason: '尚未建立审计生命周期，暂时保留旧批次的迁移编辑入口。',
     }
 }
 
@@ -120,15 +120,15 @@ export function getLegacyPositionDeleteState(hasTruthLifecycle: boolean): {
     if (hasTruthLifecycle) {
         return {
             canDelete: false,
-            label: 'Truth 受保护',
-            reason: 'TradingPosition 已成为审计真相，删除需要走后续 reversal / adjustment 流程。',
+            label: '审计记录受保护',
+            reason: 'TradingPosition 已成为审计依据，修正应通过撤销或调整流程完成。',
         }
     }
 
     return {
         canDelete: true,
         label: '删除',
-        reason: '尚未解析到 truth lifecycle，保留 legacy position 迁移删除入口。',
+        reason: '尚未建立审计生命周期，暂时保留旧版持仓的迁移删除入口。',
     }
 }
 
@@ -145,10 +145,10 @@ export function getLegacyReviewDisplayState(
         return {
             shouldDisplay: hasLegacyReview,
             isMigrationOnly: true,
-            label: 'Legacy review migration',
+            label: '旧版复盘迁移记录',
             reason: hasLegacyReview
-                ? '复盘正文仍来自 legacy Position.trade_review；新的结构化叙事请写入 truth narrative 或 evidence-linked artifact。'
-                : 'truth lifecycle 已接管详情主叙事，且 legacy Position.trade_review 为空。',
+                ? '这段复盘来自旧版 Position.trade_review，仅作为迁移参考；新的结构化叙事请写入审计事件。'
+                : '审计生命周期已接管详情叙事，且旧版 Position.trade_review 为空。',
         }
     }
 
@@ -156,7 +156,7 @@ export function getLegacyReviewDisplayState(
         shouldDisplay: hasLegacyReview,
         isMigrationOnly: false,
         label: '交易复盘',
-        reason: '尚未解析到 truth lifecycle，继续展示 legacy Position.trade_review。',
+        reason: '尚未建立审计生命周期，当前继续展示旧版复盘记录。',
     }
 }
 
@@ -171,23 +171,23 @@ export function getTruthFirstWriteFallbackState(
     if (hasTruthLifecycle) {
         return {
             canWriteLegacyFallback: false,
-            label: 'Truth write path ready',
-            reason: 'TradingPosition / PositionEvent truth path is available; ordinary writes must use the truth event route.',
+            label: '审计事件已就绪',
+            reason: '审计生命周期（TradingPosition / PositionEvent）可用，日常加仓和平仓必须写入审计事件。',
         }
     }
 
     if (migrationFallbackRequested) {
         return {
             canWriteLegacyFallback: true,
-            label: 'Migration fallback enabled',
-            reason: 'Truth lifecycle 暂不可用，本次将显式使用 legacy batch migration fallback；完成后需要重新同步 truth lifecycle。',
+            label: '已启用迁移模式',
+            reason: '审计生命周期暂不可用，本次将明确写入旧版批次；完成后需要重新同步审计生命周期。',
         }
     }
 
     return {
         canWriteLegacyFallback: false,
-        label: 'Truth lifecycle unavailable',
-        reason: '普通加仓/平仓需要 TradingPosition truth lifecycle；legacy batch 写入已降级为 migration fallback，不能静默作为普通路径执行。',
+        label: '审计生命周期不可用',
+        reason: '日常加仓和平仓需要审计生命周期；旧版批次写入仅限明确启用的迁移模式，不能静默执行。',
     }
 }
 

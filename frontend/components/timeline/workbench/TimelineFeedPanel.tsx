@@ -15,7 +15,7 @@ export function TimelineFeedPanel({ timelineHome }: TimelineFeedPanelProps) {
     return (
         <Surface className="p-4 md:p-5">
             <SectionHeader
-                eyebrow="Main feed"
+                eyebrow="事件流"
                 title="主时间线"
                 description="按天分组，优先展示交易、复盘、AI 证据和异常。"
             />
@@ -29,11 +29,10 @@ export function TimelineFeedPanel({ timelineHome }: TimelineFeedPanelProps) {
                     {timelineHome.timeline.groups.map((group) => (
                         <div key={group.group_key} className="space-y-3">
                             <div className="flex items-center gap-3">
-                                <div className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
-                                <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-faint">
                                     {group.group_label}
                                 </span>
-                                <div className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
+                                <div className="h-px flex-1 bg-line" />
                             </div>
                             {group.items.map((event) => (
                                 <TimelineEventCardV2 key={event.event_public_id} event={event} />

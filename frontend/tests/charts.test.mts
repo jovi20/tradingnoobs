@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import {
   assertSupportedChartSchema,
   buildChartEmptyState,
+  formatChartEmptyStateCopy,
   formatChartTrustLabel,
   getChartFreshnessTone,
   getChartSchemaBadge,
@@ -43,7 +44,7 @@ test('chart schema badge is shared by dashboard and insight artifacts', () => {
     schema_version: 'chart.v1',
     chart_type: 'scatter',
     series: [{ field: 'mfe', label: 'MFE' }],
-  }), 'chart.v1 · scatter')
+  }), 'chart.v1 · 散点图')
 
   assert.equal(getChartSchemaBadge(null), null)
 })
@@ -57,13 +58,36 @@ test('chart freshness maps to stable UI tones', () => {
   assert.equal(getChartFreshnessTone({}), 'neutral')
 })
 
-test('chart trust label keeps missing trust visible instead of hiding it', () => {
-  assert.equal(formatChartTrustLabel({}), 'local view')
+test('chart trust label keeps missing trust visible with localized copy', () => {
+  assert.equal(formatChartTrustLabel({}), '本地视图')
   assert.equal(formatChartTrustLabel({
     freshness: 'FRESH',
     source: 'DASHBOARD_DERIVED_READ_MODEL',
     as_of: '2026-06-10T08:00:00Z',
-  }), 'fresh · DASHBOARD_DERIVED_READ_MODEL · as of 2026/6/10 16:00:00')
+  }), '实时 · 组合汇总 · 数据时间 2026/6/10 16:00:00')
+  assert.equal(formatChartTrustLabel({
+    freshness: 'UNKNOWN_VENDOR_STATE',
+    source: 'UNKNOWN_TECHNICAL_SOURCE',
+  }), '状态未知 · 系统数据')
+})
+
+test('chart empty state copy never exposes diagnostic codes or raw English messages', () => {
+  assert.deepEqual(formatChartEmptyStateCopy({
+    is_empty: true,
+    reason: 'NO_ALLOCATION_DATA',
+    message: 'NO_ALLOCATION_DATA',
+  }), {
+    title: '暂无图表数据',
+    detail: '当前图表没有可展示的数据。',
+  })
+  assert.deepEqual(formatChartEmptyStateCopy({
+    is_empty: true,
+    reason: 'NO_SANKEY_LINKS',
+    message: '暂无资金流向数据',
+  }), {
+    title: '暂无图表数据',
+    detail: '暂无资金流向数据',
+  })
 })
 
 test('chart empty state and data presence use payload flags plus actual data', () => {

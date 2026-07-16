@@ -18,11 +18,11 @@ export function TruthLifecycleDetail({ lifecycle }: TruthLifecycleDetailProps) {
     const badge = getLifecyclePreviewBadge(lifecycle.reviewStatus)
 
     return (
-        <section className="card overflow-hidden border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-white shadow-xl dark:border-slate-700">
+        <section className="rounded-lg border border-line bg-panel text-ink shadow-panel dark:shadow-none overflow-hidden">
             <div className="grid gap-0 lg:grid-cols-[1.3fr_0.7fr]">
                 <div className="p-6 md:p-8">
                     <div className="flex flex-wrap items-center gap-2">
-                        <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-200">
+                        <span className="inline-flex items-center gap-2 rounded-full bg-panel-subtle px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-ink-soft">
                             <GitBranch className="h-3.5 w-3.5" />
                             Truth Lifecycle
                         </span>
@@ -33,26 +33,26 @@ export function TruthLifecycleDetail({ lifecycle }: TruthLifecycleDetailProps) {
 
                     <div className="mt-5">
                         <h2 className="text-2xl font-black tracking-tight md:text-4xl">{lifecycle.positionTitle}</h2>
-                        <p className="mt-2 max-w-2xl text-sm text-slate-300 md:text-base">
+                        <p className="mt-2 max-w-2xl text-sm text-ink-soft md:text-base">
                             {lifecycle.summaryBody}
                         </p>
                     </div>
 
                     <div className="mt-6 grid gap-3 sm:grid-cols-3">
                         {lifecycle.keyNumbers.map((item) => (
-                            <div key={item.label} className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
-                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{item.label}</p>
-                                <p className="mt-1 text-xl font-bold">{item.value}</p>
+                            <div key={item.label} className="rounded-lg border border-line bg-panel-subtle p-4">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">{item.label}</p>
+                                <p className="mt-1 text-xl font-bold tn-nums">{item.value}</p>
                             </div>
                         ))}
                     </div>
 
-                    <div className="mt-6 rounded-3xl border border-white/10 bg-white/[0.06] p-5">
-                        <div className="flex items-center gap-2 text-sm font-bold text-slate-100">
-                            <ShieldCheck className="h-4 w-4 text-emerald-300" />
+                    <div className="mt-6 rounded-lg border border-line bg-panel-subtle p-5">
+                        <div className="flex items-center gap-2 text-sm font-bold text-ink">
+                            <ShieldCheck className="h-4 w-4 text-profit" />
                             Thesis and Discipline
                         </div>
-                        <p className="mt-3 text-sm leading-6 text-slate-300">
+                        <p className="mt-3 text-sm leading-6 text-ink-soft">
                             {lifecycle.thesis || '这笔交易还没有结构化 thesis。'}
                         </p>
                         <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -63,13 +63,13 @@ export function TruthLifecycleDetail({ lifecycle }: TruthLifecycleDetailProps) {
                         </div>
                     </div>
 
-                    <div className="mt-6 rounded-3xl border border-cyan-300/20 bg-cyan-300/[0.07] p-5">
+                    <div className="mt-6 rounded-lg border border-ai/25 bg-ai/8 p-5">
                         <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div className="flex items-center gap-2 text-sm font-bold text-slate-100">
-                                <FileText className="h-4 w-4 text-cyan-200" />
+                            <div className="flex items-center gap-2 text-sm font-bold text-ink">
+                                <FileText className="h-4 w-4 text-ai" />
                                 Evidence Board
                             </div>
-                            <span className="rounded-full border border-cyan-200/20 bg-cyan-200/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-100">
+                            <span className="rounded-full border border-ai/25 bg-ai/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-ai">
                                 {getLifecycleEvidenceSummary(lifecycle)}
                             </span>
                         </div>
@@ -86,14 +86,14 @@ export function TruthLifecycleDetail({ lifecycle }: TruthLifecycleDetailProps) {
                                 ))}
                             </div>
                         ) : (
-                            <p className="mt-3 text-sm text-slate-400">
+                            <p className="mt-3 text-sm text-ink-muted">
                                 暂无 evidence ref；后续 truth event、ledger 或 insight artifact 写入后会在这里形成审计链。
                             </p>
                         )}
                     </div>
                 </div>
 
-                <aside className="border-t border-white/10 bg-black/20 p-6 lg:border-l lg:border-t-0">
+                <aside className="border-t border-line bg-panel-subtle p-6 lg:border-l lg:border-t-0">
                     <div className="space-y-5">
                         <TruthSideMetric
                             icon={<Activity className="h-4 w-4" />}
@@ -112,9 +112,9 @@ export function TruthLifecycleDetail({ lifecycle }: TruthLifecycleDetailProps) {
                         />
                     </div>
 
-                    <div className="mt-6 rounded-3xl border border-amber-200/15 bg-amber-200/[0.06] p-5">
-                        <div className="flex items-center gap-2 text-sm font-bold text-slate-100">
-                            <Sparkles className="h-4 w-4 text-amber-200" />
+                    <div className="mt-6 rounded-lg border border-warning/25 bg-warning/8 p-5">
+                        <div className="flex items-center gap-2 text-sm font-bold text-ink">
+                            <Sparkles className="h-4 w-4 text-warning" />
                             AI Evidence Sidecar
                         </div>
 
@@ -123,13 +123,13 @@ export function TruthLifecycleDetail({ lifecycle }: TruthLifecycleDetailProps) {
                                 {lifecycle.aiItems.map((item, index) => (
                                     <div
                                         key={item.insight_artifact_public_id || item.insight_run_public_id || `${item.title}-${index}`}
-                                        className="rounded-2xl border border-white/10 bg-black/20 p-4"
+                                        className="rounded-lg border border-line bg-panel p-4"
                                     >
                                         <div className="flex items-start justify-between gap-3">
                                             <div>
-                                                <p className="text-sm font-bold text-white">{item.title || 'AI conclusion'}</p>
+                                                <p className="text-sm font-bold text-ink">{item.title || 'AI conclusion'}</p>
                                                 {item.confidence_label && (
-                                                    <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-100">
+                                                    <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-warning">
                                                         confidence · {item.confidence_label}
                                                     </p>
                                                 )}
@@ -137,23 +137,23 @@ export function TruthLifecycleDetail({ lifecycle }: TruthLifecycleDetailProps) {
                                             {item.href && (
                                                 <a
                                                     href={item.href}
-                                                    className="rounded-full bg-white/10 p-1.5 text-slate-300 transition-colors hover:bg-white/20 hover:text-white"
+                                                    className="rounded-full bg-panel-subtle p-1.5 text-ink-muted transition-colors hover:bg-panel hover:text-ink"
                                                     aria-label="Open insight artifact"
                                                 >
                                                     <ExternalLink className="h-3.5 w-3.5" />
                                                 </a>
                                             )}
                                         </div>
-                                        <p className="mt-3 text-sm leading-6 text-slate-300">
+                                        <p className="mt-3 text-sm leading-6 text-ink-soft">
                                             {item.conclusion || '这条 AI artifact 暂无 conclusion。'}
                                         </p>
                                         {item.coverage_summary && (
-                                            <p className="mt-2 text-xs leading-5 text-slate-500">
+                                            <p className="mt-2 text-xs leading-5 text-ink-muted">
                                                 {item.coverage_summary}
                                             </p>
                                         )}
                                         {item.recommended_action && (
-                                            <p className="mt-3 rounded-xl border border-amber-200/10 bg-amber-200/10 px-3 py-2 text-xs font-medium text-amber-100">
+                                            <p className="mt-3 rounded-md border border-warning/25 bg-warning/8 px-3 py-2 text-xs font-medium text-warning">
                                                 建议：{item.recommended_action}
                                             </p>
                                         )}
@@ -173,30 +173,30 @@ export function TruthLifecycleDetail({ lifecycle }: TruthLifecycleDetailProps) {
                                 ))}
                             </div>
                         ) : (
-                            <p className="mt-3 text-sm leading-6 text-slate-400">
+                            <p className="mt-3 text-sm leading-6 text-ink-muted">
                                 暂无 AI sidecar artifact。这里会承载 AI 结论、覆盖范围和它引用的 evidence，不替代主生命周期线程。
                             </p>
                         )}
                     </div>
 
                     <div className="mt-6">
-                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Lifecycle Thread</p>
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-ink-muted">Lifecycle Thread</p>
                         <div className="mt-4 space-y-3">
                             {lifecycle.nodes.map((node) => (
-                                <div key={node.node_public_id} className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
+                                <div key={node.node_public_id} className="rounded-lg border border-line bg-panel p-4">
                                     <div className="flex items-center justify-between gap-3">
                                         <span className="text-sm font-bold">{node.node_type}</span>
-                                        <span className="text-[11px] text-slate-500">
+                                        <span className="text-[11px] text-ink-muted tn-nums">
                                             {new Date(node.occurred_at).toLocaleDateString('zh-CN')}
                                         </span>
                                     </div>
-                                    <p className="mt-2 text-sm text-slate-300">{node.summary}</p>
+                                    <p className="mt-2 text-sm text-ink-soft">{node.summary}</p>
                                 </div>
                             ))}
                         </div>
                     </div>
 
-                    <p className="mt-6 text-xs text-slate-500">
+                    <p className="mt-6 text-xs text-ink-muted tn-nums">
                         as of {new Date(lifecycle.trust.as_of).toLocaleString('zh-CN')} · {getLifecyclePreviewTrustSummary(lifecycle.trust)}
                     </p>
                 </aside>
@@ -209,13 +209,13 @@ function TruthEvidenceLink({ label, refType, href }: { label: string; refType: s
     return (
         <a
             href={href}
-            className="group rounded-2xl border border-white/10 bg-black/20 p-4 transition-colors hover:border-cyan-200/30 hover:bg-cyan-200/10"
+            className="group rounded-lg border border-line bg-panel p-4 transition-colors hover:border-ai/40 hover:bg-ai/8"
         >
             <div className="flex items-center justify-between gap-3">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-100">{refType}</span>
-                <ExternalLink className="h-3.5 w-3.5 text-slate-500 transition-colors group-hover:text-cyan-100" />
+                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ai">{refType}</span>
+                <ExternalLink className="h-3.5 w-3.5 text-ink-faint transition-colors group-hover:text-ai" />
             </div>
-            <p className="mt-2 text-sm font-bold text-white">{label}</p>
+            <p className="mt-2 text-sm font-bold text-ink">{label}</p>
         </a>
     )
 }
@@ -224,7 +224,7 @@ function TruthEvidencePill({ label, refType, href }: { label: string; refType: s
     return (
         <a
             href={href}
-            className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-[11px] font-medium text-slate-300 transition-colors hover:border-white/25 hover:text-white"
+            className="rounded-full border border-line bg-panel-subtle px-2.5 py-1 text-[11px] font-medium text-ink-soft transition-colors hover:border-line-strong hover:text-ink"
         >
             {label} · {refType}
         </a>
@@ -233,22 +233,22 @@ function TruthEvidencePill({ label, refType, href }: { label: string; refType: s
 
 function TruthDetailMini({ label, value }: { label: string; value: string }) {
     return (
-        <div className="rounded-2xl bg-black/20 p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-            <p className="mt-1 text-sm text-slate-200">{value}</p>
+        <div className="rounded-lg border border-line bg-panel p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">{label}</p>
+            <p className="mt-1 text-sm text-ink-soft">{value}</p>
         </div>
     )
 }
 
 function TruthSideMetric({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
     return (
-        <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
-            <div className="flex items-center gap-2 text-slate-400">
+        <div className="rounded-lg border border-line bg-panel p-4">
+            <div className="flex items-center gap-2 text-ink-muted">
                 {icon}
                 <span className="text-[11px] font-semibold uppercase tracking-[0.2em]">{label}</span>
             </div>
-            <div className="mt-2 flex items-center gap-2 text-lg font-bold text-white">
-                <CheckCircle2 className="h-4 w-4 text-emerald-300" />
+            <div className="mt-2 flex items-center gap-2 text-lg font-bold text-ink">
+                <CheckCircle2 className="h-4 w-4 text-profit" />
                 {value}
             </div>
         </div>

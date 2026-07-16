@@ -15,9 +15,9 @@ export function LegacyAnalysisChart({ result, compact = false }: LegacyAnalysisC
 
     return (
         <ChartFrame
-            eyebrow="Legacy analysis"
+            eyebrow="旧版分析"
             title="数据可视化"
-            description="旧版 AI analysis response 被转换为统一 chart.v1 视图。"
+            description="旧版 AI 分析结果已转换为统一图表视图，仅供迁移期读取。"
             schema={view.schema}
             trustMeta={view.trustMeta}
             emptyState={view.emptyState}

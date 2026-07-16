@@ -2,16 +2,10 @@
 
 import Link from 'next/link'
 import {
-    Briefcase,
-    Calendar,
-    Clock3,
-    FileText,
-    LayoutDashboard,
-    Layers,
-    Settings,
-    ShieldCheck,
+    Briefcase, Calendar, Clock3, FileText, LayoutDashboard, Layers, Settings,
 } from 'lucide-react'
 
+import { cn } from '@/lib/cn'
 import { isNavigationItemActive, type NavigationItem } from '@/lib/navigation'
 
 const iconMap = {
@@ -22,8 +16,9 @@ const iconMap = {
     daily: Calendar,
     insights: FileText,
     settings: Settings,
-    adminJobs: ShieldCheck,
-}
+    adminJobs: Settings,
+    adminOps: Settings,
+} as const
 
 interface MobileBottomNavProps {
     items: NavigationItem[]
@@ -31,30 +26,35 @@ interface MobileBottomNavProps {
 }
 
 export function MobileBottomNav({ items, pathname }: MobileBottomNavProps) {
+    // Admin ops surfaces are desktop-first; keep the mobile bar to the product + settings.
+    const visible = items.filter((item) => item.section !== 'ops')
+
     return (
-        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200 bg-white/95 pb-safe backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/95 md:hidden">
-            <div className="flex gap-1 overflow-x-auto px-2 py-2">
-                {items.map((item) => {
+        <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-canvas/92 pb-safe backdrop-blur-md md:hidden">
+            <div className="flex gap-1 overflow-x-auto px-2 py-1.5">
+                {visible.map((item) => {
                     const Icon = iconMap[item.icon]
-                    const isActive = isNavigationItemActive(item.href, pathname)
+                    const active = isNavigationItemActive(item.href, pathname)
                     return (
                         <Link
                             key={item.href}
                             href={item.href}
-                            className={`flex min-w-[4.65rem] flex-col items-center rounded-2xl px-2 py-2 text-[11px] font-medium transition ${
-                                isActive
-                                    ? 'bg-slate-950 text-white dark:bg-white dark:text-slate-950'
-                                    : item.section === 'ops'
-                                        ? 'text-amber-700 dark:text-amber-300'
-                                        : 'text-slate-500 dark:text-slate-400'
-                            }`}
+                            className={cn(
+                                'flex min-w-[4.25rem] flex-col items-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors',
+                                active ? 'text-ink' : 'text-ink-faint',
+                            )}
                         >
-                            <Icon className="h-5 w-5" />
-                            <span className="mt-1">{item.label}</span>
+                            <span className={cn(
+                                'flex h-8 w-full items-center justify-center rounded-md transition-colors',
+                                active && 'bg-panel-subtle',
+                            )}>
+                                <Icon className="h-[18px] w-[18px]" />
+                            </span>
+                            <span>{item.label}</span>
                         </Link>
                     )
                 })}
             </div>
-        </div>
+        </nav>
     )
 }

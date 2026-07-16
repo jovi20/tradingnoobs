@@ -4,7 +4,7 @@ export type NavigationSection = 'product' | 'ops' | 'settings'
 export interface NavigationItem {
     href: string
     label: string
-    icon: 'timeline' | 'dashboard' | 'positions' | 'strategies' | 'daily' | 'insights' | 'settings' | 'adminJobs'
+    icon: 'timeline' | 'dashboard' | 'positions' | 'strategies' | 'daily' | 'insights' | 'settings' | 'adminJobs' | 'adminOps'
     section: NavigationSection
 }
 
@@ -18,8 +18,8 @@ const productItems: NavigationItem[] = [
 ]
 
 const adminItems: NavigationItem[] = [
-    { href: '/admin/jobs', label: 'Ops', icon: 'adminJobs', section: 'ops' },
-    { href: '/admin/ops', label: '运维', icon: 'adminJobs', section: 'ops' },
+    { href: '/admin/ops', label: '运维', icon: 'adminOps', section: 'ops' },
+    { href: '/admin/jobs', label: '任务', icon: 'adminJobs', section: 'ops' },
 ]
 
 const settingsItem: NavigationItem = { href: '/settings', label: '设置', icon: 'settings', section: 'settings' }

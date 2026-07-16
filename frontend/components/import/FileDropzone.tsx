@@ -32,32 +32,32 @@ export function FileDropzone({ onFileSelect, isUploading, error }: FileDropzoneP
         <div className="w-full">
             <div
                 {...getRootProps()}
-                className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all
-                    ${isDragActive ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/10' : 'border-slate-300 dark:border-slate-700 hover:border-primary-400 dark:hover:border-primary-600'}
+                className={`border-2 border-dashed rounded-md p-10 text-center cursor-pointer transition-colors
+                    ${isDragActive ? 'border-ink bg-panel-subtle' : 'border-line-strong hover:border-ink-muted'}
                     ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}
-                    ${error ? 'border-red-300 bg-red-50 dark:bg-red-900/10' : ''}
+                    ${error ? 'border-loss/40 bg-loss/10' : ''}
                 `}
             >
-                <input {...getInputProps()} />
+                <input {...getInputProps({ 'aria-label': '选择要导入的交易文件' })} />
 
                 <div className="flex flex-col items-center gap-4">
-                    <div className="p-4 rounded-full bg-slate-100 dark:bg-slate-800 text-primary-600 dark:text-primary-400">
+                    <div className="p-4 rounded-full bg-panel-subtle text-ink-soft">
                         <UploadCloud className="w-8 h-8" />
                     </div>
 
                     <div>
-                        <p className="text-lg font-medium text-slate-700 dark:text-slate-300">
-                            {isDragActive ? 'Drop the file here' : '点击或拖拽文件上传'}
+                        <p className="text-lg font-medium text-ink-soft">
+                            {isDragActive ? '松开即可上传文件' : '点击或拖拽文件上传'}
                         </p>
-                        <p className="text-sm text-slate-500 mt-1">
-                            支持 CSV, Excel (.xlsx, .xls)
+                        <p className="text-sm text-ink-muted mt-1">
+                            支持 CSV 与 Excel（.xlsx、.xls）
                         </p>
                     </div>
                 </div>
             </div>
 
             {error && (
-                <div className="flex items-center gap-2 mt-3 text-sm text-red-600 dark:text-red-400">
+                <div className="flex items-center gap-2 mt-3 text-sm text-loss">
                     <AlertCircle className="w-4 h-4" />
                     <span>{error}</span>
                 </div>

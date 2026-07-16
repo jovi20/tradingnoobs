@@ -27,6 +27,33 @@ export interface TimelineImpactLabel {
 
 export type MobileWorkbenchSection = 'summary' | 'filters' | 'review' | 'timeline' | 'context'
 
+const EVENT_TYPE_LABELS: Record<TimelineEventType, string> = {
+    OPEN: '开仓',
+    ADD: '加仓',
+    REDUCE: '减仓',
+    CLOSE: '平仓',
+    REVIEW_COMPLETED: '已复盘',
+    AI_INSIGHT: 'AI 洞察',
+    CHECKLIST_MISS: '检查项遗漏',
+    LOSING_STREAK_ALERT: '连续亏损提醒',
+    DATA_STALE: '数据延迟',
+    SYNC_EXCEPTION: '同步异常',
+}
+
+function formatPeriodLabel(value: string): string {
+    const normalized = value.trim().toUpperCase().replaceAll(' ', '_')
+    const labels: Record<string, string> = {
+        THIS_WEEK: '本周',
+        TODAY: '今日',
+        LAST_7_DAYS: '近 7 日',
+    }
+    return labels[normalized] ?? value
+}
+
+export function getTimelineEventTypeLabel(eventType: TimelineEventType): string {
+    return EVENT_TYPE_LABELS[eventType]
+}
+
 export function buildTimelineSummaryMetrics(summaryBar: SummaryBar): TimelineSummaryMetric[] {
     const reviewRate = summaryBar.review_completion_rate === null
         ? '-'
@@ -45,7 +72,7 @@ export function buildTimelineSummaryMetrics(summaryBar: SummaryBar): TimelineSum
             key: 'trades',
             label: '交易',
             value: String(summaryBar.trade_count),
-            detail: summaryBar.period_label,
+            detail: formatPeriodLabel(summaryBar.period_label),
             tone: 'neutral',
         },
         {

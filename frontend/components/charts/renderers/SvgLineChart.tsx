@@ -29,7 +29,7 @@ export function SvgLineChart<T>({
     const zeroY = minValue <= 0 && maxValue >= 0 ? yScale(0) : null
 
     return (
-        <svg role="img" aria-label="Line chart" className="h-full w-full" viewBox={`0 0 ${width} ${height}`}>
+        <svg role="img" aria-label="折线图" className="h-full w-full" viewBox={`0 0 ${width} ${height}`}>
             <g transform={`translate(${padding.left},${padding.top})`}>
                 <rect width={innerWidth} height={innerHeight} rx={18} fill="rgba(248,250,252,0.72)" />
                 {zeroY !== null && (
@@ -56,10 +56,10 @@ export function SvgLineChart<T>({
             </g>
             {data.length > 0 && (
                 <>
-                    <text x={padding.left} y={height - 12} className="fill-slate-500 text-[11px]">
+                    <text x={padding.left} y={height - 12} className="fill-ink-muted text-[11px]">
                         {getXLabel(data[0]).slice(5)}
                     </text>
-                    <text x={width - padding.right} y={height - 12} textAnchor="end" className="fill-slate-500 text-[11px]">
+                    <text x={width - padding.right} y={height - 12} textAnchor="end" className="fill-ink-muted text-[11px]">
                         {getXLabel(data[data.length - 1]).slice(5)}
                     </text>
                 </>

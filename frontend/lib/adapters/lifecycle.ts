@@ -18,6 +18,12 @@ export interface LifecycleDetailViewModel {
     realizedPnlNet?: number
     realizedPnlGross?: number
     totalFees?: number
+    quantityOpened: number
+    quantityClosed: number
+    openQuantity: number
+    averageOpenPrice?: number
+    averageClosePrice?: number
+    baseCurrency: string
     holdingPeriodSeconds?: number
     nodeCount: number
     thesis: string | null
@@ -100,7 +106,7 @@ export function adaptLifecycleDetail(response: LifecycleDetailResponse): Lifecyc
         positionTitle: summary.title,
         reviewStatus: response.data.review_status,
         positionStatus: summary.status,
-        positionRouteId: summary.public_id,
+        positionRouteId: summary.route_public_id || summary.public_id,
         truthPositionPublicId: summary.public_id,
         thesisSourceEventPublicId: thesis.source_event_public_id || null,
         side: summary.side,
@@ -114,6 +120,15 @@ export function adaptLifecycleDetail(response: LifecycleDetailResponse): Lifecyc
         realizedPnlNet: summary.realized_pnl_net,
         realizedPnlGross: summary.realized_pnl_gross,
         totalFees: summary.total_fees,
+        quantityOpened: Number(summary.quantity_opened || 0),
+        quantityClosed: Number(summary.quantity_closed || 0),
+        openQuantity: Number(
+            summary.open_quantity
+            ?? Math.max(0, Number(summary.quantity_opened || 0) - Number(summary.quantity_closed || 0))
+        ),
+        averageOpenPrice: summary.average_open_price,
+        averageClosePrice: summary.average_close_price,
+        baseCurrency: summary.base_currency || 'USD',
         holdingPeriodSeconds: summary.holding_period_seconds,
         nodeCount: response.data.lifecycle_thread.nodes.length,
         thesis: thesis.thesis || null,
@@ -137,12 +152,12 @@ export function adaptLifecycleDetail(response: LifecycleDetailResponse): Lifecyc
 
 export function getLifecyclePreviewSummary(input: { reviewStatus: LifecycleDetailViewModel['reviewStatus']; nodeCount: number }) {
     if (input.reviewStatus === 'CLOSED_PENDING_REVIEW') {
-        return `新真相层已同步 ${input.nodeCount} 个生命周期节点，且这笔交易仍待完成复盘。`
+        return `审计生命周期已同步 ${input.nodeCount} 个事件节点，这笔交易仍待完成复盘。`
     }
     if (input.reviewStatus === 'OPEN') {
-        return `新真相层已同步 ${input.nodeCount} 个生命周期节点，这笔交易仍处于进行中。`
+        return `审计生命周期已同步 ${input.nodeCount} 个事件节点，这笔交易仍处于进行中。`
     }
-    return `新真相层已同步 ${input.nodeCount} 个生命周期节点。`
+    return `审计生命周期已同步 ${input.nodeCount} 个事件节点。`
 }
 
 export function getLifecyclePageSections(input: {
@@ -168,22 +183,22 @@ export function getLifecycleReviewTone(reviewStatus: LifecycleDetailViewModel['r
 } {
     if (reviewStatus === 'CLOSED_PENDING_REVIEW') {
         return {
-            label: 'Pending Review',
+            label: '待复盘',
             tone: 'warning',
-            description: 'Position is closed and waiting for review.',
+            description: '持仓已关闭，等待完成复盘。',
         }
     }
     if (reviewStatus === 'REVIEWED') {
         return {
-            label: 'Reviewed',
+            label: '已复盘',
             tone: 'positive',
-            description: 'Review evidence has been recorded.',
+            description: '复盘结论和证据已经记录。',
         }
     }
     return {
-        label: 'Open',
+        label: '持仓中',
         tone: 'neutral',
-        description: 'Position is still open; review remains in progress.',
+        description: '持仓仍在进行，复盘会随事件持续补充。',
     }
 }
 
@@ -195,8 +210,8 @@ export function getLifecycleLegacyPanelState(input: {
         return {
             shouldRender: true,
             mode: 'migration',
-            title: 'Legacy migration tools',
-            description: 'These sections still read from legacy Position / TradeBatch data and are secondary to the truth lifecycle.',
+            title: '旧版数据迁移工具',
+            description: '以下内容仍读取旧版持仓和批次数据（Position / TradeBatch），仅作为审计生命周期的迁移辅助信息。',
         }
     }
 
@@ -204,18 +219,18 @@ export function getLifecycleLegacyPanelState(input: {
         return {
             shouldRender: false,
             mode: 'hidden',
-            title: 'Legacy migration tools',
-            description: 'No legacy Position / TradeBatch data was loaded for this truth lifecycle.',
+            title: '旧版数据迁移工具',
+            description: '当前审计生命周期没有关联的旧版持仓或批次数据。',
         }
     }
 
     return {
         shouldRender: input.hasLegacyPosition,
         mode: input.hasLegacyPosition ? 'fallback' : 'hidden',
-        title: input.hasLegacyPosition ? 'Legacy fallback detail' : 'Legacy migration tools',
+        title: input.hasLegacyPosition ? '旧版持仓详情' : '旧版数据迁移工具',
         description: input.hasLegacyPosition
-            ? 'Truth lifecycle is unavailable, so this page is showing legacy Position / TradeBatch data.'
-            : 'No lifecycle or legacy position data is available.',
+            ? '审计生命周期暂不可用，当前仅展示旧版持仓和批次数据。'
+            : '当前没有可用的审计生命周期或旧版持仓数据。',
     }
 }
 
@@ -235,10 +250,10 @@ export function getLifecyclePrimaryActions(input: {
     return {
         narrative: {
             canRun: input.hasEditableNarrativeEvent,
-            label: '编辑 truth narrative',
+            label: '编辑交易叙事',
             reason: input.hasEditableNarrativeEvent
-                ? 'Write narrative fields back to the source PositionEvent.'
-                : '当前 lifecycle 没有可编辑的 PositionEvent public_id。',
+                ? '将叙事字段写回对应的 PositionEvent。'
+                : '当前生命周期没有可编辑的 PositionEvent 标识。',
         },
         reversal: {
             canRun: input.reversal.canReverse,
@@ -247,16 +262,26 @@ export function getLifecyclePrimaryActions(input: {
         },
         cashAdjustment: {
             canRun: true,
-            label: '记录 cash adjustment',
-            reason: 'Append MANUAL_ADJUSTMENT event and CASH_ADJUSTMENT ledger entry without changing FIFO quantity.',
+            label: '记录现金调整',
+            reason: '追加 MANUAL_ADJUSTMENT 事件和 CASH_ADJUSTMENT 流水，不改变 FIFO 持仓数量。',
         },
     }
 }
 
 export function getLifecycleEventRailItems(input: Pick<LifecycleDetailViewModel, 'nodes'>): LifecycleEventRailItem[] {
+    const typeLabels: Record<string, string> = {
+        OPEN: '开仓',
+        ADD: '加仓',
+        REDUCE: '减仓',
+        CLOSE: '平仓',
+        REVERSAL: '撤销',
+        MANUAL_ADJUSTMENT: '现金调整',
+        DIVIDEND: '股息',
+        AI_CONCLUSION: 'AI 结论',
+    }
     return input.nodes.map((node) => ({
         id: node.node_public_id,
-        type: node.node_type,
+        type: typeLabels[node.node_type] || '其他事件',
         title: node.title,
         summary: node.summary,
         dateLabel: new Date(node.occurred_at).toLocaleDateString('zh-CN'),
@@ -278,50 +303,65 @@ export function getLifecycleEmptyState(input: {
 }): { title: string; description: string } {
     if (!input.hasTruthLifecycle && input.hasLegacyPosition) {
         return {
-            title: 'Truth lifecycle unavailable',
-            description: 'Legacy Position / TradeBatch data is available, but the truth lifecycle read model could not be loaded.',
+            title: '审计生命周期不可用',
+            description: '旧版 Position / TradeBatch 数据仍可读取，但审计生命周期暂时无法加载。',
         }
     }
     if (!input.hasTruthLifecycle) {
         return {
-            title: 'Position not found',
-            description: 'No truth lifecycle or legacy position data was available for this route.',
+            title: '未找到持仓',
+            description: '当前地址没有可用的审计生命周期或旧版持仓数据。',
         }
     }
     return {
-        title: 'Lifecycle ready',
-        description: 'Truth lifecycle data is available.',
+        title: '审计生命周期已就绪',
+        description: '交易生命周期数据可以正常读取。',
     }
 }
 
 export function getLifecyclePreviewBadge(reviewStatus: LifecycleDetailViewModel['reviewStatus']) {
     if (reviewStatus === 'CLOSED_PENDING_REVIEW') {
         return {
-            label: 'Pending Review',
+            label: '待复盘',
             className: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-200',
         }
     }
 
     if (reviewStatus === 'OPEN') {
         return {
-            label: 'Open',
+            label: '持仓中',
             className: 'bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200',
         }
     }
 
     return {
-        label: 'Reviewed',
+        label: '已复盘',
         className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200',
     }
 }
 
 export function getLifecyclePreviewTrustSummary(trust: LifecycleDetailViewModel['trust']) {
-    const pieces = [trust.freshness.toLowerCase(), trust.source.toLowerCase()]
+    const labels: Record<string, string> = {
+        FRESH: '最新',
+        DELAYED: '延迟',
+        STALE: '已过期',
+        DEGRADED: '已降级',
+        DERIVED: '系统计算',
+        SYNCED: '同步数据',
+        USER_INPUT: '用户录入',
+        AI_GENERATED: 'AI 生成',
+        FINAL: '已确认',
+        ESTIMATED: '估算',
+        INSUFFICIENT_SAMPLE: '样本不足',
+        EARLY_SIGNAL: '早期信号',
+        STABLE: '稳定',
+    }
+    const pieces = [labels[trust.freshness] || '状态未知', labels[trust.source] || '来源未知']
     if (trust.value_status) {
-        pieces.push(trust.value_status.toLowerCase())
+        pieces.push(labels[trust.value_status] || '数值状态未知')
     }
     if (trust.maturity) {
-        pieces.push(trust.maturity.toLowerCase())
+        pieces.push(labels[trust.maturity] || '成熟度未知')
     }
     return pieces.join(' · ')
 }
@@ -338,11 +378,11 @@ export function getLifecycleCashEffectSummary(input: Pick<LifecycleDetailViewMod
 
 export function getLifecycleEvidenceSummary(input: Pick<LifecycleDetailViewModel, 'evidenceItems'>) {
     if (input.evidenceItems.length === 0) {
-        return '暂无 evidence'
+        return '暂无证据'
     }
 
     const refTypes = Array.from(new Set(input.evidenceItems.map((item) => item.ref_type)))
-    return `${input.evidenceItems.length} 条 evidence · ${refTypes.join(', ')}`
+    return `${input.evidenceItems.length} 条证据 · ${refTypes.join(', ')}`
 }
 
 export function getLifecycleAiSidecarSummary(input: Pick<LifecycleDetailViewModel, 'aiItems'>) {
@@ -390,7 +430,7 @@ export function getLifecycleReversalAction(input: Pick<LifecycleDetailViewModel,
             canReverse: true,
             eventPublicId: latestReversibleNode.node_public_id,
             nodeType: latestReversibleNode.node_type as 'ADD' | 'REDUCE' | 'CLOSE',
-            label: '撤销最新 truth 事件',
+            label: '撤销最新事件',
             reason: '将追加 REVERSAL 节点并重放 FIFO，不会静默改写历史事件。',
         }
     }
@@ -400,7 +440,7 @@ export function getLifecycleReversalAction(input: Pick<LifecycleDetailViewModel,
             canReverse: false,
             eventPublicId: null,
             label: '暂无可撤销事件',
-            reason: 'OPEN 事件需要 position void/archive 语义，当前不可撤销。',
+            reason: '开仓事件需要完整的作废或归档语义，当前不可撤销。',
         }
     }
 
@@ -408,6 +448,6 @@ export function getLifecycleReversalAction(input: Pick<LifecycleDetailViewModel,
         canReverse: false,
         eventPublicId: null,
         label: '暂无可撤销事件',
-        reason: '当前 lifecycle 还没有可撤销的 truth trade event。',
+        reason: '当前生命周期还没有可撤销的交易事件。',
     }
 }

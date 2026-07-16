@@ -36,7 +36,7 @@ export function SvgScatterChart<T>({
     const yScale = scaleLinear(minY, maxY, innerHeight, 0)
 
     return (
-        <svg role="img" aria-label={`${xLabel} ${yLabel} scatter chart`} className="h-full w-full" viewBox={`0 0 ${width} ${height}`}>
+        <svg role="img" aria-label={`${xLabel} 与 ${yLabel} 散点图`} className="h-full w-full" viewBox={`0 0 ${width} ${height}`}>
             <g transform={`translate(${padding.left},${padding.top})`}>
                 <rect width={innerWidth} height={innerHeight} rx={18} fill="rgba(248,250,252,0.72)" />
                 <line x1={0} x2={innerWidth} y1={yScale(0)} y2={yScale(0)} stroke="#94a3b8" strokeDasharray="4 4" />
@@ -55,10 +55,10 @@ export function SvgScatterChart<T>({
                     </g>
                 ))}
             </g>
-            <text x={width / 2} y={height - 10} textAnchor="middle" className="fill-slate-500 text-[11px]">
+            <text x={width / 2} y={height - 10} textAnchor="middle" className="fill-ink-muted text-[11px]">
                 {xLabel}
             </text>
-            <text x={16} y={height / 2} textAnchor="middle" transform={`rotate(-90 16 ${height / 2})`} className="fill-slate-500 text-[11px]">
+            <text x={16} y={height / 2} textAnchor="middle" transform={`rotate(-90 16 ${height / 2})`} className="fill-ink-muted text-[11px]">
                 {yLabel}
             </text>
         </svg>

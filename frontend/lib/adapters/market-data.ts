@@ -6,6 +6,7 @@ export interface MarketDataFreshnessMeta {
   degraded?: boolean | null
   degraded_reason?: string | null
   source_refs?: string[] | null
+  as_of?: string | null
 }
 
 export interface MarketDataStatusView {
@@ -14,6 +15,7 @@ export interface MarketDataStatusView {
   tone: MarketFreshnessTone
   degradedReason: string | null
   sourceRefs: string[]
+  asOf: string | null
 }
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -63,11 +65,20 @@ export function getMarketFreshnessTone(meta: Pick<MarketDataFreshnessMeta, 'fres
 }
 
 export function buildMarketDataStatus(meta: MarketDataFreshnessMeta): MarketDataStatusView {
+  const isUnavailable = (meta.freshness || '').toUpperCase() === 'UNAVAILABLE'
+  let degradedReason: string | null = null
+  if (meta.degraded_reason) {
+    degradedReason = isUnavailable
+      ? '行情源暂不可用，请稍后重试。'
+      : '主行情源暂不可用，已自动切换备用数据源。'
+  }
+
   return {
     providerLabel: getMarketProviderLabel(meta.provider),
     freshnessLabel: getMarketFreshnessLabel(meta.freshness),
     tone: getMarketFreshnessTone(meta),
-    degradedReason: meta.degraded_reason || null,
+    degradedReason,
     sourceRefs: meta.source_refs || [],
+    asOf: meta.as_of || null,
   }
 }
