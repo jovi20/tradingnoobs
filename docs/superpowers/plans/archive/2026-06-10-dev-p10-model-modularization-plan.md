@@ -2,6 +2,7 @@
 
 **Date:** 2026-06-10
 **Branch:** `dev`
+**Status:** `ARCHIVED_DEFERRED_REFERENCE`; model modularization is not in the current trading-journal release scope.
 **Purpose:** define a safe split strategy for `backend/models.py` without changing runtime behavior in P10.
 
 ## Current State

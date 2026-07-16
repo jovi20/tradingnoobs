@@ -1,0 +1,2154 @@
+{
+  "schema_version": 1,
+  "snapshot": {
+    "captured_at": "2026-07-17T04:57:18+08:00",
+    "repository": "/Users/wsm/Documents/tradingnoobs",
+    "branch": "dev",
+    "head": "b9d564de2279be142fc52cbb4ab1e8e7580109c1",
+    "status_command": "git status --porcelain=v1 -z -uall",
+    "status_semantics": "Two-character porcelain v1 XY code; path is the destination/current path and source_path is present for rename/copy entries.",
+    "entry_count": 295,
+    "rename_or_copy_entry_count": 39,
+    "status_counts": {
+      " D": 10,
+      " M": 158,
+      "??": 87,
+      "D ": 1,
+      "R ": 20,
+      "RM": 19
+    },
+    "category_counts": {
+      "JOURNAL_CORE": 23,
+      "BROKER_MARKET_OPTIONAL": 30,
+      "CROSS_DOMAIN_SPLIT_REQUIRED": 12,
+      "FRONTEND_DOCS": 211,
+      "GENERATED_RUNTIME_HYGIENE": 3,
+      "UNRELATED_USER_WIP": 16
+    },
+    "path_fingerprint_algorithm": "sha256(status + TAB + path + TAB + source_path_or_empty + LF), in porcelain output order",
+    "path_fingerprint_sha256": "890793e1b9c967ba1914a2de763015624f4d673be20d672d13b4cf4ec9d61eb9",
+    "excluded_paths": [
+      "docs/superpowers/plans/2026-07-17-jrn-000-wip-disposition-manifest.json"
+    ],
+    "exclusion_reason": "The manifest is created from this snapshot and is intentionally excluded from its own entry set."
+  },
+  "checkpoint_definitions": {
+    "jrn-000-migration-baseline": "Track the four linear migrations as IN_CHAIN_DISABLED plus reviewed Alembic path configuration; baseline head 9cad10111213.",
+    "jrn-000-hard-off": "Static backend JOURNAL_BASELINE hard-off implementation and focused verification.",
+    "jrn-000-hard-off-frontend": "Frontend capability hard-off; mixed page files require hunk-level staging.",
+    "journal-core-wip": "Existing journal/truth work preserved for its own reviewed checkpoint.",
+    "journal-source-contracts": "Frozen source-bound import contract documentation.",
+    "broker-market-optional": "Real Broker/Market runtime implementation excluded from the launch baseline and retained for an optional branch/checkpoint.",
+    "cross-domain-split-required": "Shared files must be reviewed and staged by hunk; no whole-file staging.",
+    "frontend-wip": "Existing frontend refactor and product UI work preserved as a separate checkpoint.",
+    "docs-governance": "Documentation and plan archival work preserved as a separate checkpoint.",
+    "generated-runtime-hygiene": "Generated/runtime artifacts and ignore rules handled independently.",
+    "unrelated-user-wip": "User work outside JRN-000 preserved unstaged and excluded from JRN checkpoints."
+  },
+  "entries": [
+    {
+      "path": ".github/workflows/deploy.yml",
+      "status": " D",
+      "category": "UNRELATED_USER_WIP",
+      "disposition": "PRESERVE_UNSTAGED_AND_EXCLUDE",
+      "checkpoint": "unrelated-user-wip"
+    },
+    {
+      "path": ".gitignore",
+      "status": " M",
+      "category": "GENERATED_RUNTIME_HYGIENE",
+      "disposition": "INCLUDE_HYGIENE_AFTER_REVIEW",
+      "checkpoint": "generated-runtime-hygiene"
+    },
+    {
+      "path": "backend/README.md",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance"
+    },
+    {
+      "path": "backend/alembic.ini",
+      "status": " M",
+      "category": "JOURNAL_CORE",
+      "disposition": "INCLUDE_WITH_MIGRATION_BASELINE",
+      "checkpoint": "jrn-000-migration-baseline"
+    },
+    {
+      "path": "backend/alembic/env.py",
+      "status": " M",
+      "category": "JOURNAL_CORE",
+      "disposition": "INCLUDE_WITH_MIGRATION_BASELINE",
+      "checkpoint": "jrn-000-migration-baseline"
+    },
+    {
+      "path": "backend/config.py",
+      "status": " M",
+      "category": "JOURNAL_CORE",
+      "disposition": "INCLUDE_AFTER_JRN_000_REVIEW",
+      "checkpoint": "jrn-000-hard-off"
+    },
+    {
+      "path": "backend/main.py",
+      "status": " M",
+      "category": "CROSS_DOMAIN_SPLIT_REQUIRED",
+      "disposition": "SPLIT_BY_HUNK_BEFORE_STAGING",
+      "checkpoint": "cross-domain-split-required"
+    },
+    {
+      "path": "backend/models.py",
+      "status": " M",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "EXCLUDE_FROM_JOURNAL_BASELINE",
+      "checkpoint": "broker-market-optional"
+    },
+    {
+      "path": "backend/observability.py",
+      "status": " M",
+      "category": "CROSS_DOMAIN_SPLIT_REQUIRED",
+      "disposition": "SPLIT_BY_HUNK_BEFORE_STAGING",
+      "checkpoint": "cross-domain-split-required"
+    },
+    {
+      "path": "backend/ops/manage_users.py",
+      "status": " M",
+      "category": "UNRELATED_USER_WIP",
+      "disposition": "PRESERVE_UNSTAGED_AND_EXCLUDE",
+      "checkpoint": "unrelated-user-wip"
+    },
+    {
+      "path": "backend/ops/migrate_db.py",
+      "status": " D",
+      "category": "UNRELATED_USER_WIP",
+      "disposition": "PRESERVE_UNSTAGED_AND_EXCLUDE",
+      "checkpoint": "unrelated-user-wip"
+    },
+    {
+      "path": "backend/requirements.txt",
+      "status": " M",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "EXCLUDE_FROM_JOURNAL_BASELINE",
+      "checkpoint": "broker-market-optional"
+    },
+    {
+      "path": "backend/routers/accounts.py",
+      "status": " M",
+      "category": "CROSS_DOMAIN_SPLIT_REQUIRED",
+      "disposition": "SPLIT_BY_HUNK_BEFORE_STAGING",
+      "checkpoint": "cross-domain-split-required"
+    },
+    {
+      "path": "backend/routers/admin.py",
+      "status": " M",
+      "category": "CROSS_DOMAIN_SPLIT_REQUIRED",
+      "disposition": "SPLIT_BY_HUNK_BEFORE_STAGING",
+      "checkpoint": "cross-domain-split-required"
+    },
+    {
+      "path": "backend/routers/auth.py",
+      "status": " M",
+      "category": "JOURNAL_CORE",
+      "disposition": "PRESERVE_FOR_REVIEWED_CORE_CHECKPOINT",
+      "checkpoint": "journal-core-wip"
+    },
+    {
+      "path": "backend/routers/dashboard.py",
+      "status": " M",
+      "category": "CROSS_DOMAIN_SPLIT_REQUIRED",
+      "disposition": "SPLIT_BY_HUNK_BEFORE_STAGING",
+      "checkpoint": "cross-domain-split-required"
+    },
+    {
+      "path": "backend/routers/market.py",
+      "status": " M",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "EXCLUDE_FROM_JOURNAL_BASELINE",
+      "checkpoint": "broker-market-optional"
+    },
+    {
+      "path": "backend/routers/positions.py",
+      "status": " M",
+      "category": "CROSS_DOMAIN_SPLIT_REQUIRED",
+      "disposition": "SPLIT_BY_HUNK_BEFORE_STAGING",
+      "checkpoint": "cross-domain-split-required"
+    },
+    {
+      "path": "backend/routers/settings.py",
+      "status": " M",
+      "category": "CROSS_DOMAIN_SPLIT_REQUIRED",
+      "disposition": "SPLIT_BY_HUNK_BEFORE_STAGING",
+      "checkpoint": "cross-domain-split-required"
+    },
+    {
+      "path": "backend/routers/timeline.py",
+      "status": " M",
+      "category": "CROSS_DOMAIN_SPLIT_REQUIRED",
+      "disposition": "SPLIT_BY_HUNK_BEFORE_STAGING",
+      "checkpoint": "cross-domain-split-required"
+    },
+    {
+      "path": "backend/routers/trading_positions.py",
+      "status": " M",
+      "category": "JOURNAL_CORE",
+      "disposition": "PRESERVE_FOR_REVIEWED_CORE_CHECKPOINT",
+      "checkpoint": "journal-core-wip"
+    },
+    {
+      "path": "backend/schemas.py",
+      "status": " M",
+      "category": "CROSS_DOMAIN_SPLIT_REQUIRED",
+      "disposition": "SPLIT_BY_HUNK_BEFORE_STAGING",
+      "checkpoint": "cross-domain-split-required"
+    },
+    {
+      "path": "backend/services/admin_user_service.py",
+      "status": " M",
+      "category": "UNRELATED_USER_WIP",
+      "disposition": "PRESERVE_UNSTAGED_AND_EXCLUDE",
+      "checkpoint": "unrelated-user-wip"
+    },
+    {
+      "path": "backend/services/backup_service.py",
+      "status": " M",
+      "category": "UNRELATED_USER_WIP",
+      "disposition": "PRESERVE_UNSTAGED_AND_EXCLUDE",
+      "checkpoint": "unrelated-user-wip"
+    },
+    {
+      "path": "backend/services/derived_refresh_handlers.py",
+      "status": " M",
+      "category": "CROSS_DOMAIN_SPLIT_REQUIRED",
+      "disposition": "SPLIT_BY_HUNK_BEFORE_STAGING",
+      "checkpoint": "cross-domain-split-required"
+    },
+    {
+      "path": "backend/services/exchange_rate_service.py",
+      "status": " M",
+      "category": "CROSS_DOMAIN_SPLIT_REQUIRED",
+      "disposition": "SPLIT_BY_HUNK_BEFORE_STAGING",
+      "checkpoint": "cross-domain-split-required"
+    },
+    {
+      "path": "backend/services/import_service.py",
+      "status": " M",
+      "category": "JOURNAL_CORE",
+      "disposition": "PRESERVE_FOR_REVIEWED_CORE_CHECKPOINT",
+      "checkpoint": "journal-core-wip"
+    },
+    {
+      "path": "backend/services/job_service.py",
+      "status": " M",
+      "category": "UNRELATED_USER_WIP",
+      "disposition": "PRESERVE_UNSTAGED_AND_EXCLUDE",
+      "checkpoint": "unrelated-user-wip"
+    },
+    {
+      "path": "backend/services/market_data_orchestrator.py",
+      "status": " M",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "EXCLUDE_FROM_JOURNAL_BASELINE",
+      "checkpoint": "broker-market-optional"
+    },
+    {
+      "path": "backend/services/market_data_service.py",
+      "status": " M",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "EXCLUDE_FROM_JOURNAL_BASELINE",
+      "checkpoint": "broker-market-optional"
+    },
+    {
+      "path": "backend/services/provider_router.py",
+      "status": " M",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "EXCLUDE_FROM_JOURNAL_BASELINE",
+      "checkpoint": "broker-market-optional"
+    },
+    {
+      "path": "backend/services/providers/__init__.py",
+      "status": " M",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "EXCLUDE_FROM_JOURNAL_BASELINE",
+      "checkpoint": "broker-market-optional"
+    },
+    {
+      "path": "backend/services/providers/finnhub_provider.py",
+      "status": " M",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "EXCLUDE_FROM_JOURNAL_BASELINE",
+      "checkpoint": "broker-market-optional"
+    },
+    {
+      "path": "backend/services/public_id_service.py",
+      "status": " M",
+      "category": "JOURNAL_CORE",
+      "disposition": "PRESERVE_FOR_REVIEWED_CORE_CHECKPOINT",
+      "checkpoint": "journal-core-wip"
+    },
+    {
+      "path": "backend/services/risk_alert_service.py",
+      "status": " M",
+      "category": "JOURNAL_CORE",
+      "disposition": "PRESERVE_FOR_REVIEWED_CORE_CHECKPOINT",
+      "checkpoint": "journal-core-wip"
+    },
+    {
+      "path": "backend/services/trading_position_read_service.py",
+      "status": " M",
+      "category": "JOURNAL_CORE",
+      "disposition": "PRESERVE_FOR_REVIEWED_CORE_CHECKPOINT",
+      "checkpoint": "journal-core-wip"
+    },
+    {
+      "path": "backend/services/trading_position_write_service.py",
+      "status": " M",
+      "category": "JOURNAL_CORE",
+      "disposition": "PRESERVE_FOR_REVIEWED_CORE_CHECKPOINT",
+      "checkpoint": "journal-core-wip"
+    },
+    {
+      "path": "backend/tests/conftest.py",
+      "status": " M",
+      "category": "JOURNAL_CORE",
+      "disposition": "INCLUDE_AFTER_JRN_000_REVIEW",
+      "checkpoint": "jrn-000-hard-off"
+    },
+    {
+      "path": "backend/tests/test_admin_operations_api.py",
+      "status": " M",
+      "category": "UNRELATED_USER_WIP",
+      "disposition": "PRESERVE_UNSTAGED_AND_EXCLUDE",
+      "checkpoint": "unrelated-user-wip"
+    },
+    {
+      "path": "backend/tests/test_alembic_chain.py",
+      "status": " M",
+      "category": "CROSS_DOMAIN_SPLIT_REQUIRED",
+      "disposition": "SPLIT_BY_HUNK_BEFORE_STAGING",
+      "checkpoint": "cross-domain-split-required"
+    },
+    {
+      "path": "backend/tests/test_auth_session_tracking.py",
+      "status": " M",
+      "category": "JOURNAL_CORE",
+      "disposition": "PRESERVE_FOR_REVIEWED_CORE_CHECKPOINT",
+      "checkpoint": "journal-core-wip"
+    },
+    {
+      "path": "backend/tests/test_job_service.py",
+      "status": " M",
+      "category": "UNRELATED_USER_WIP",
+      "disposition": "PRESERVE_UNSTAGED_AND_EXCLUDE",
+      "checkpoint": "unrelated-user-wip"
+    },
+    {
+      "path": "backend/tests/test_market_data_orchestrator.py",
+      "status": " M",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "EXCLUDE_FROM_JOURNAL_BASELINE",
+      "checkpoint": "broker-market-optional"
+    },
+    {
+      "path": "backend/tests/test_position_truth_bridge_router.py",
+      "status": " M",
+      "category": "JOURNAL_CORE",
+      "disposition": "PRESERVE_FOR_REVIEWED_CORE_CHECKPOINT",
+      "checkpoint": "journal-core-wip"
+    },
+    {
+      "path": "backend/tests/test_public_id_routes.py",
+      "status": " M",
+      "category": "JOURNAL_CORE",
+      "disposition": "PRESERVE_FOR_REVIEWED_CORE_CHECKPOINT",
+      "checkpoint": "journal-core-wip"
+    },
+    {
+      "path": "backend/tests/test_risk_alert_service.py",
+      "status": " M",
+      "category": "JOURNAL_CORE",
+      "disposition": "PRESERVE_FOR_REVIEWED_CORE_CHECKPOINT",
+      "checkpoint": "journal-core-wip"
+    },
+    {
+      "path": "backend/tests/test_timeline_home_router.py",
+      "status": " M",
+      "category": "JOURNAL_CORE",
+      "disposition": "PRESERVE_FOR_REVIEWED_CORE_CHECKPOINT",
+      "checkpoint": "journal-core-wip"
+    },
+    {
+      "path": "backend/tests/test_trading_position_lifecycle_router.py",
+      "status": " M",
+      "category": "JOURNAL_CORE",
+      "disposition": "PRESERVE_FOR_REVIEWED_CORE_CHECKPOINT",
+      "checkpoint": "journal-core-wip"
+    },
+    {
+      "path": "backup_db.sh",
+      "status": " D",
+      "category": "UNRELATED_USER_WIP",
+      "disposition": "PRESERVE_UNSTAGED_AND_EXCLUDE",
+      "checkpoint": "unrelated-user-wip"
+    },
+    {
+      "path": "docs/DEVELOPER_GUIDE.md",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance"
+    },
+    {
+      "path": "docs/README.md",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance"
+    },
+    {
+      "path": "docs/TODO.md",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance"
+    },
+    {
+      "path": "docs/architecture_review.md",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance"
+    },
+    {
+      "path": "docs/market_data_sources.md",
+      "status": " M",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "EXCLUDE_FROM_JOURNAL_BASELINE",
+      "checkpoint": "broker-market-optional"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-06-10-dev-p10-legacy-cutover-inventory.md",
+      "status": " D",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-06-10-dev-p10-model-modularization-plan.md",
+      "status": " D",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance"
+    },
+    {
+      "path": "docs/superpowers/plans/archive/2026-04-13-platform-frontend-sequencing-plan.md",
+      "status": "R ",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance",
+      "source_path": "docs/superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md"
+    },
+    {
+      "path": "docs/superpowers/plans/archive/2026-05-02-dev-branch-checkpoint.md",
+      "status": "R ",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance",
+      "source_path": "docs/superpowers/plans/2026-05-02-dev-branch-checkpoint.md"
+    },
+    {
+      "path": "docs/superpowers/plans/archive/2026-06-05-dev-p0-p4-execution-plan.md",
+      "status": "R ",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance",
+      "source_path": "docs/superpowers/plans/2026-06-05-dev-p0-p4-execution-plan.md"
+    },
+    {
+      "path": "docs/superpowers/plans/archive/2026-06-05-dev-p5-p7-execution-plan.md",
+      "status": "R ",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance",
+      "source_path": "docs/superpowers/plans/2026-06-05-dev-p5-p7-execution-plan.md"
+    },
+    {
+      "path": "docs/superpowers/plans/archive/2026-06-06-dev-p8-next16-upgrade-plan.md",
+      "status": "R ",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance",
+      "source_path": "docs/superpowers/plans/2026-06-06-dev-p8-next16-upgrade-plan.md"
+    },
+    {
+      "path": "docs/superpowers/plans/archive/2026-06-09-dev-p9a-frontend-workbench-plan.md",
+      "status": "R ",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance",
+      "source_path": "docs/superpowers/plans/2026-06-09-dev-p9a-frontend-workbench-plan.md"
+    },
+    {
+      "path": "docs/superpowers/plans/archive/2026-06-09-dev-p9b-dashboard-workbench-plan.md",
+      "status": "R ",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance",
+      "source_path": "docs/superpowers/plans/2026-06-09-dev-p9b-dashboard-workbench-plan.md"
+    },
+    {
+      "path": "docs/superpowers/plans/archive/2026-06-09-dev-p9c-lifecycle-detail-workbench-plan.md",
+      "status": "R ",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance",
+      "source_path": "docs/superpowers/plans/2026-06-09-dev-p9c-lifecycle-detail-workbench-plan.md"
+    },
+    {
+      "path": "docs/superpowers/plans/archive/2026-06-10-dev-p10-progress-next-plan.md",
+      "status": "R ",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance",
+      "source_path": "docs/superpowers/plans/2026-06-10-dev-p10-progress-next-plan.md"
+    },
+    {
+      "path": "docs/superpowers/plans/archive/2026-06-10-dev-p11-truth-hard-cutover-plan.md",
+      "status": "RM",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance",
+      "source_path": "docs/superpowers/plans/2026-06-10-dev-p11-truth-hard-cutover-plan.md"
+    },
+    {
+      "path": "docs/superpowers/plans/archive/2026-06-10-dev-p12-platform-contract-hardening-plan.md",
+      "status": "RM",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance",
+      "source_path": "docs/superpowers/plans/2026-06-10-dev-p12-platform-contract-hardening-plan.md"
+    },
+    {
+      "path": "docs/superpowers/plans/archive/2026-06-10-dev-p9d-chart-schema-freshness-migration-plan.md",
+      "status": "R ",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance",
+      "source_path": "docs/superpowers/plans/2026-06-10-dev-p9d-chart-schema-freshness-migration-plan.md"
+    },
+    {
+      "path": "docs/superpowers/plans/archive/2026-06-10-dev-p9e-react19-strict-lint-cleanup-plan.md",
+      "status": "R ",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance",
+      "source_path": "docs/superpowers/plans/2026-06-10-dev-p9e-react19-strict-lint-cleanup-plan.md"
+    },
+    {
+      "path": "docs/superpowers/plans/archive/2026-06-10-dev-p9f-zero-lint-warning-cleanup-plan.md",
+      "status": "R ",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance",
+      "source_path": "docs/superpowers/plans/2026-06-10-dev-p9f-zero-lint-warning-cleanup-plan.md"
+    },
+    {
+      "path": "docs/superpowers/plans/archive/2026-06-11-dev-p12b-observability-error-contract-plan.md",
+      "status": "R ",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance",
+      "source_path": "docs/superpowers/plans/2026-06-11-dev-p12b-observability-error-contract-plan.md"
+    },
+    {
+      "path": "docs/superpowers/plans/archive/2026-06-11-dev-p13-risk-review-product-plan.md",
+      "status": "R ",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance",
+      "source_path": "docs/superpowers/plans/2026-06-11-dev-p13-risk-review-product-plan.md"
+    },
+    {
+      "path": "docs/superpowers/plans/archive/2026-06-11-dev-p14-reporting-export-plan.md",
+      "status": "R ",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance",
+      "source_path": "docs/superpowers/plans/2026-06-11-dev-p14-reporting-export-plan.md"
+    },
+    {
+      "path": "docs/superpowers/plans/archive/2026-06-11-dev-p15-ai-analysis-workflow-plan.md",
+      "status": "R ",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance",
+      "source_path": "docs/superpowers/plans/2026-06-11-dev-p15-ai-analysis-workflow-plan.md"
+    },
+    {
+      "path": "docs/superpowers/plans/archive/2026-06-11-dev-p16-market-data-platform-plan.md",
+      "status": "R ",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance",
+      "source_path": "docs/superpowers/plans/2026-06-11-dev-p16-market-data-platform-plan.md"
+    },
+    {
+      "path": "docs/superpowers/plans/archive/2026-06-11-dev-p17-admin-operations-plan.md",
+      "status": "R ",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance",
+      "source_path": "docs/superpowers/plans/2026-06-11-dev-p17-admin-operations-plan.md"
+    },
+    {
+      "path": "docs/superpowers/plans/archive/2026-06-11-dev-p18-chart-renderer-migration-plan.md",
+      "status": "R ",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance",
+      "source_path": "docs/superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md"
+    },
+    {
+      "path": "docs/superpowers/plans/archive/2026-06-11-dev-p19-release-readiness-plan.md",
+      "status": "R ",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance",
+      "source_path": "docs/superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md"
+    },
+    {
+      "path": "frontend/app/(admin)/admin/jobs/page.tsx",
+      "status": "RM",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip",
+      "source_path": "frontend/app/admin/jobs/page.tsx"
+    },
+    {
+      "path": "frontend/app/(admin)/admin/ops/page.tsx",
+      "status": "RM",
+      "category": "FRONTEND_DOCS",
+      "disposition": "SPLIT_HARD_OFF_HUNKS_BEFORE_STAGING",
+      "checkpoint": "jrn-000-hard-off-frontend",
+      "source_path": "frontend/app/admin/ops/page.tsx"
+    },
+    {
+      "path": "frontend/app/(auth)/login/page.tsx",
+      "status": "RM",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip",
+      "source_path": "frontend/app/login/page.tsx"
+    },
+    {
+      "path": "frontend/app/(auth)/register/page.tsx",
+      "status": "RM",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip",
+      "source_path": "frontend/app/register/page.tsx"
+    },
+    {
+      "path": "frontend/app/(product)/daily/page.tsx",
+      "status": "RM",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip",
+      "source_path": "frontend/app/daily/page.tsx"
+    },
+    {
+      "path": "frontend/app/(product)/dashboard/page.tsx",
+      "status": "RM",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip",
+      "source_path": "frontend/app/dashboard/page.tsx"
+    },
+    {
+      "path": "frontend/app/(product)/insights/[artifactId]/page.tsx",
+      "status": "RM",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip",
+      "source_path": "frontend/app/insights/[artifactId]/page.tsx"
+    },
+    {
+      "path": "frontend/app/(product)/insights/page.tsx",
+      "status": "RM",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip",
+      "source_path": "frontend/app/insights/page.tsx"
+    },
+    {
+      "path": "frontend/app/(product)/positions/[id]/add-batch/page.tsx",
+      "status": "RM",
+      "category": "FRONTEND_DOCS",
+      "disposition": "SPLIT_HARD_OFF_HUNKS_BEFORE_STAGING",
+      "checkpoint": "jrn-000-hard-off-frontend",
+      "source_path": "frontend/app/positions/[id]/add-batch/page.tsx"
+    },
+    {
+      "path": "frontend/app/(product)/positions/[id]/page.tsx",
+      "status": "RM",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip",
+      "source_path": "frontend/app/positions/[id]/page.tsx"
+    },
+    {
+      "path": "frontend/app/(product)/positions/import/page.tsx",
+      "status": "RM",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip",
+      "source_path": "frontend/app/positions/import/page.tsx"
+    },
+    {
+      "path": "frontend/app/(product)/positions/new/page.tsx",
+      "status": "RM",
+      "category": "FRONTEND_DOCS",
+      "disposition": "SPLIT_HARD_OFF_HUNKS_BEFORE_STAGING",
+      "checkpoint": "jrn-000-hard-off-frontend",
+      "source_path": "frontend/app/positions/new/page.tsx"
+    },
+    {
+      "path": "frontend/app/(product)/positions/page.tsx",
+      "status": "RM",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip",
+      "source_path": "frontend/app/positions/page.tsx"
+    },
+    {
+      "path": "frontend/app/(product)/settings/accounts/[id]/page.tsx",
+      "status": "RM",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip",
+      "source_path": "frontend/app/settings/accounts/[id]/page.tsx"
+    },
+    {
+      "path": "frontend/app/(product)/settings/page.tsx",
+      "status": "RM",
+      "category": "FRONTEND_DOCS",
+      "disposition": "SPLIT_HARD_OFF_HUNKS_BEFORE_STAGING",
+      "checkpoint": "jrn-000-hard-off-frontend",
+      "source_path": "frontend/app/settings/page.tsx"
+    },
+    {
+      "path": "frontend/app/(product)/strategies/page.tsx",
+      "status": "RM",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip",
+      "source_path": "frontend/app/strategies/page.tsx"
+    },
+    {
+      "path": "frontend/app/(product)/timeline/page.tsx",
+      "status": "RM",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip",
+      "source_path": "frontend/app/timeline/page.tsx"
+    },
+    {
+      "path": "frontend/app/globals.css",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/app/layout.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/ChecklistModal.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/CustomSelect.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/DateTimePicker.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/MarketStatus.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/Navbar.tsx",
+      "status": " D",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/PortfolioSankey.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/Providers.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/ThemeToggle.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/TransactionForm.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/TransactionList.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/admin/domain/AdminJobsConsole.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/charts/ChartFrame.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/charts/renderers/SvgBarChart.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/charts/renderers/SvgLineChart.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/charts/renderers/SvgPieChart.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/charts/renderers/SvgSankeyChart.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/charts/renderers/SvgScatterChart.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/charts/renderers/chartGeometry.ts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/dashboard/AllocationPieChart.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/dashboard/MaeMfeScatterPlot.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/dashboard/PerformanceMovers.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/dashboard/PositionCard.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/dashboard/RiskMetricsCard.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/dashboard/StatCard.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/dashboard/domain/DashboardAllocationPanel.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/dashboard/domain/DashboardMoversPanel.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/dashboard/domain/DashboardSummaryStrip.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/dashboard/workbench/DashboardEquityHero.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/dashboard/workbench/DashboardEvidenceStack.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/dashboard/workbench/DashboardRiskRail.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/dashboard/workbench/DashboardStructureGrid.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/dashboard/workbench/DashboardWorkbenchHeader.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/import/FileDropzone.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/import/ImportPreviewTable.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/insights/AnalysisAssistant.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/insights/EvidenceLinkedInsightSidecar.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/insights/InsightArtifactDetailCard.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/insights/LegacyAnalysisChart.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/navigation/MobileBottomNav.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/navigation/ProductTopNav.tsx",
+      "status": " D",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/positions/domain/TruthLifecycleDetail.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/positions/domain/TruthLifecyclePreview.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/positions/lifecycle/LifecycleActionPanel.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/positions/lifecycle/LifecycleAiSidecarPanel.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/positions/lifecycle/LifecycleEventRail.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/positions/lifecycle/LifecycleEvidencePanel.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/positions/lifecycle/LifecycleHero.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/positions/lifecycle/LifecycleMigrationPanel.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/positions/lifecycle/LifecycleModals.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/positions/lifecycle/LifecycleWorkbench.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/positions/lifecycle/LifecycleWorkbenchHeader.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/risk/RiskAlertStack.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/settings/domain/SettingsAccountsOverview.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/settings/domain/SettingsAdminPlatformCard.tsx",
+      "status": " D",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/settings/domain/SettingsAppearanceCard.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/settings/domain/SettingsDataExportCard.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/timeline/TimelineContextRail.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/timeline/workbench/ReviewInboxPanel.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/timeline/workbench/TimelineDecisionRail.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/timeline/workbench/TimelineEventCardV2.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/timeline/workbench/TimelineFeedPanel.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/timeline/workbench/TimelineViewTabs.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/timeline/workbench/TimelineWorkbench.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/timeline/workbench/TimelineWorkbenchHeader.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/ui/EmptyStatePanel.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/ui/MetricTile.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/ui/PageFrame.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/ui/SectionHeader.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/ui/StatusPill.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/ui/Surface.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/contexts/AuthContext.tsx",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/hooks/useTrendColor.ts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/lib/adapters/admin-jobs.ts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/lib/adapters/admin-ops.ts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/lib/adapters/dashboard.ts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/lib/adapters/lifecycle.ts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/lib/adapters/market-data.ts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/lib/adapters/risk-alerts.ts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/lib/adapters/settings.ts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/lib/adapters/timeline-workbench.ts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/lib/adapters/timeline.ts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/lib/adapters/trading.ts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/lib/api.ts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/lib/charts.ts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/lib/navigation.ts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/lib/read-models.ts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/lib/symbolUtils.ts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/next-env.d.ts",
+      "status": " M",
+      "category": "GENERATED_RUNTIME_HYGIENE",
+      "disposition": "REGENERATE_AND_VERIFY_BEFORE_STAGING",
+      "checkpoint": "generated-runtime-hygiene"
+    },
+    {
+      "path": "frontend/package-lock.json",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/package.json",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/tailwind.config.js",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/tests/admin-jobs-adapter.test.mts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/tests/admin-ops-adapter.test.mts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/tests/chart-renderers.test.mts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/tests/charts.test.mts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/tests/insight-artifact-presentation.test.mts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/tests/legacy-ui-boundaries.test.mts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/tests/lifecycle-adapter.test.mts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/tests/market-data.test.mts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/tests/navigation.test.mts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/tests/risk-alerts.test.mts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/tests/settings-adapter.test.mts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/tests/timeline-adapter.test.mts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/tests/timeline-workbench.test.mts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/tests/trading-adapter.test.mts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/tests/truth-first-writes.test.mts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/tests/truth-narrative-writes.test.mts",
+      "status": " M",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/tsconfig.tsbuildinfo",
+      "status": "D ",
+      "category": "GENERATED_RUNTIME_HYGIENE",
+      "disposition": "INCLUDE_HYGIENE_AFTER_REVIEW",
+      "checkpoint": "generated-runtime-hygiene"
+    },
+    {
+      "path": "start.ps1",
+      "status": " D",
+      "category": "UNRELATED_USER_WIP",
+      "disposition": "PRESERVE_UNSTAGED_AND_EXCLUDE",
+      "checkpoint": "unrelated-user-wip"
+    },
+    {
+      "path": "start.sh",
+      "status": " M",
+      "category": "UNRELATED_USER_WIP",
+      "disposition": "PRESERVE_UNSTAGED_AND_EXCLUDE",
+      "checkpoint": "unrelated-user-wip"
+    },
+    {
+      "path": "update_libs.sh",
+      "status": " D",
+      "category": "UNRELATED_USER_WIP",
+      "disposition": "PRESERVE_UNSTAGED_AND_EXCLUDE",
+      "checkpoint": "unrelated-user-wip"
+    },
+    {
+      "path": ".claude/launch.json",
+      "status": "??",
+      "category": "UNRELATED_USER_WIP",
+      "disposition": "PRESERVE_UNSTAGED_AND_EXCLUDE",
+      "checkpoint": "unrelated-user-wip"
+    },
+    {
+      "path": "README.md",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance"
+    },
+    {
+      "path": "backend/alembic/versions/6f7a8b9cad10_add_ibkr_flex_settings.py",
+      "status": "??",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "INCLUDE_IN_CHAIN_DISABLED",
+      "checkpoint": "jrn-000-migration-baseline"
+    },
+    {
+      "path": "backend/alembic/versions/7a8b9cad1011_add_trade_sync_setting_parameters.py",
+      "status": "??",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "INCLUDE_IN_CHAIN_DISABLED",
+      "checkpoint": "jrn-000-migration-baseline"
+    },
+    {
+      "path": "backend/alembic/versions/8b9cad101112_add_broker_trade_sync_tables.py",
+      "status": "??",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "INCLUDE_IN_CHAIN_DISABLED",
+      "checkpoint": "jrn-000-migration-baseline"
+    },
+    {
+      "path": "backend/alembic/versions/9cad10111213_add_market_data_persistence.py",
+      "status": "??",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "INCLUDE_IN_CHAIN_DISABLED",
+      "checkpoint": "jrn-000-migration-baseline"
+    },
+    {
+      "path": "backend/release_profile.py",
+      "status": "??",
+      "category": "JOURNAL_CORE",
+      "disposition": "INCLUDE_AFTER_JRN_000_REVIEW",
+      "checkpoint": "jrn-000-hard-off"
+    },
+    {
+      "path": "backend/requirements-dev.txt",
+      "status": "??",
+      "category": "UNRELATED_USER_WIP",
+      "disposition": "PRESERVE_UNSTAGED_AND_EXCLUDE",
+      "checkpoint": "unrelated-user-wip"
+    },
+    {
+      "path": "backend/routers/broker_sync.py",
+      "status": "??",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "EXCLUDE_FROM_JOURNAL_BASELINE",
+      "checkpoint": "broker-market-optional"
+    },
+    {
+      "path": "backend/routers/disabled_capabilities.py",
+      "status": "??",
+      "category": "JOURNAL_CORE",
+      "disposition": "INCLUDE_AFTER_JRN_000_REVIEW",
+      "checkpoint": "jrn-000-hard-off"
+    },
+    {
+      "path": "backend/services/broker_sync/__init__.py",
+      "status": "??",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "EXCLUDE_FROM_JOURNAL_BASELINE",
+      "checkpoint": "broker-market-optional"
+    },
+    {
+      "path": "backend/services/broker_sync/service.py",
+      "status": "??",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "EXCLUDE_FROM_JOURNAL_BASELINE",
+      "checkpoint": "broker-market-optional"
+    },
+    {
+      "path": "backend/services/market_data_access.py",
+      "status": "??",
+      "category": "JOURNAL_CORE",
+      "disposition": "INCLUDE_AFTER_JRN_000_REVIEW",
+      "checkpoint": "jrn-000-hard-off"
+    },
+    {
+      "path": "backend/services/market_data_job_handlers.py",
+      "status": "??",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "EXCLUDE_FROM_JOURNAL_BASELINE",
+      "checkpoint": "broker-market-optional"
+    },
+    {
+      "path": "backend/services/market_data_job_service.py",
+      "status": "??",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "EXCLUDE_FROM_JOURNAL_BASELINE",
+      "checkpoint": "broker-market-optional"
+    },
+    {
+      "path": "backend/services/market_data_repository.py",
+      "status": "??",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "EXCLUDE_FROM_JOURNAL_BASELINE",
+      "checkpoint": "broker-market-optional"
+    },
+    {
+      "path": "backend/services/market_provider_registry.py",
+      "status": "??",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "EXCLUDE_FROM_JOURNAL_BASELINE",
+      "checkpoint": "broker-market-optional"
+    },
+    {
+      "path": "backend/services/market_session_calendar.py",
+      "status": "??",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "EXCLUDE_FROM_JOURNAL_BASELINE",
+      "checkpoint": "broker-market-optional"
+    },
+    {
+      "path": "backend/services/providers/yfinance_provider.py",
+      "status": "??",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "EXCLUDE_FROM_JOURNAL_BASELINE",
+      "checkpoint": "broker-market-optional"
+    },
+    {
+      "path": "backend/services/truth_legacy_projection_service.py",
+      "status": "??",
+      "category": "JOURNAL_CORE",
+      "disposition": "PRESERVE_FOR_REVIEWED_CORE_CHECKPOINT",
+      "checkpoint": "journal-core-wip"
+    },
+    {
+      "path": "backend/tests/test_broker_sync_service.py",
+      "status": "??",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "EXCLUDE_FROM_JOURNAL_BASELINE",
+      "checkpoint": "broker-market-optional"
+    },
+    {
+      "path": "backend/tests/test_journal_baseline_profile.py",
+      "status": "??",
+      "category": "JOURNAL_CORE",
+      "disposition": "INCLUDE_AFTER_JRN_000_REVIEW",
+      "checkpoint": "jrn-000-hard-off"
+    },
+    {
+      "path": "backend/tests/test_localized_user_copy.py",
+      "status": "??",
+      "category": "UNRELATED_USER_WIP",
+      "disposition": "PRESERVE_UNSTAGED_AND_EXCLUDE",
+      "checkpoint": "unrelated-user-wip"
+    },
+    {
+      "path": "backend/tests/test_manage_users_ops.py",
+      "status": "??",
+      "category": "UNRELATED_USER_WIP",
+      "disposition": "PRESERVE_UNSTAGED_AND_EXCLUDE",
+      "checkpoint": "unrelated-user-wip"
+    },
+    {
+      "path": "backend/tests/test_market_data_alembic_adoption.py",
+      "status": "??",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "EXCLUDE_FROM_JOURNAL_BASELINE",
+      "checkpoint": "broker-market-optional"
+    },
+    {
+      "path": "backend/tests/test_market_data_job_handlers.py",
+      "status": "??",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "EXCLUDE_FROM_JOURNAL_BASELINE",
+      "checkpoint": "broker-market-optional"
+    },
+    {
+      "path": "backend/tests/test_market_data_job_service.py",
+      "status": "??",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "EXCLUDE_FROM_JOURNAL_BASELINE",
+      "checkpoint": "broker-market-optional"
+    },
+    {
+      "path": "backend/tests/test_market_data_persistence_integration.py",
+      "status": "??",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "EXCLUDE_FROM_JOURNAL_BASELINE",
+      "checkpoint": "broker-market-optional"
+    },
+    {
+      "path": "backend/tests/test_market_data_repository.py",
+      "status": "??",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "EXCLUDE_FROM_JOURNAL_BASELINE",
+      "checkpoint": "broker-market-optional"
+    },
+    {
+      "path": "backend/tests/test_market_session_calendar.py",
+      "status": "??",
+      "category": "BROKER_MARKET_OPTIONAL",
+      "disposition": "EXCLUDE_FROM_JOURNAL_BASELINE",
+      "checkpoint": "broker-market-optional"
+    },
+    {
+      "path": "docs/design-implementation-gap-plan-2026-07-15.md",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance"
+    },
+    {
+      "path": "docs/frontend-refactor-qa-2026-07-15.md",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance"
+    },
+    {
+      "path": "docs/project-structure-review.md",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance"
+    },
+    {
+      "path": "docs/project-summary-and-roadmap.md",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance"
+    },
+    {
+      "path": "docs/script-inventory.md",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-16-dev-trading-journal-development-plan.md",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance"
+    },
+    {
+      "path": "docs/superpowers/plans/README.md",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance"
+    },
+    {
+      "path": "docs/superpowers/plans/archive/2026-06-10-dev-p10-legacy-cutover-inventory.md",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance"
+    },
+    {
+      "path": "docs/superpowers/plans/archive/2026-06-10-dev-p10-model-modularization-plan.md",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance"
+    },
+    {
+      "path": "docs/superpowers/plans/archive/README.md",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "docs-governance"
+    },
+    {
+      "path": "docs/trade-record-sync-design.md",
+      "status": "??",
+      "category": "JOURNAL_CORE",
+      "disposition": "PRESERVE_AS_FROZEN_SOURCE_CONTRACT",
+      "checkpoint": "journal-source-contracts"
+    },
+    {
+      "path": "frontend/README.md",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/app/(admin)/layout.tsx",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/app/(auth)/layout.tsx",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/app/(product)/layout.tsx",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/app/fonts/PlexMono-400.woff2",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/app/fonts/PlexMono-500.woff2",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/app/fonts/PlexSans-400.woff2",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/app/fonts/PlexSans-500.woff2",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/app/fonts/PlexSans-600.woff2",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/app/fonts/PlexSans-700.woff2",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/app/fonts/index.ts",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/navigation/AdminShell.tsx",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/navigation/AppSidebar.tsx",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/navigation/AppTopBar.tsx",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/navigation/CommandPalette.tsx",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/navigation/ProductShell.tsx",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/timeline/TimelineZeroState.tsx",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/ui/Badge.tsx",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/ui/Button.tsx",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/ui/Callout.tsx",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/ui/Card.tsx",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/ui/Checkbox.tsx",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/ui/Dialog.tsx",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/ui/Drawer.tsx",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/ui/DropdownMenu.tsx",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/ui/Input.tsx",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/ui/Popover.tsx",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/ui/Select.tsx",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/ui/Skeleton.tsx",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/ui/Spinner.tsx",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/ui/Switch.tsx",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/ui/Tabs.tsx",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/ui/Tooltip.tsx",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/ui/index.ts",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/components/ui/tone.ts",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/lib/accountUpdates.ts",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/lib/authErrors.ts",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/lib/cn.ts",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/lib/release-profile.ts",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "INCLUDE_AFTER_JRN_000_REVIEW",
+      "checkpoint": "jrn-000-hard-off-frontend"
+    },
+    {
+      "path": "frontend/tests/account-metadata-update.test.mts",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/tests/auth-errors.test.mts",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/tests/auth-session-errors.test.mts",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/tests/market-data-status-presentation.test.mts",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/tests/peripheral-copy-accessibility.test.mts",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    },
+    {
+      "path": "frontend/tests/release-profile-hardoff.test.mts",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "INCLUDE_AFTER_JRN_000_REVIEW",
+      "checkpoint": "jrn-000-hard-off-frontend"
+    },
+    {
+      "path": "frontend/tests/ui-copy-accessibility.test.mts",
+      "status": "??",
+      "category": "FRONTEND_DOCS",
+      "disposition": "PRESERVE_FOR_SEPARATE_CHECKPOINT",
+      "checkpoint": "frontend-wip"
+    }
+  ]
+}

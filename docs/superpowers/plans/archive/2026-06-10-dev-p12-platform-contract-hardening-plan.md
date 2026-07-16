@@ -36,7 +36,7 @@ Docs:
 - `docs/TODO.md`
 - `docs/DEVELOPER_GUIDE.md`
 - `docs/superpowers/plans/2026-06-10-dev-p12-platform-contract-hardening-plan.md`
-- `docs/superpowers/plans/2026-06-10-dev-p10-legacy-cutover-inventory.md`
+- `docs/superpowers/plans/archive/2026-06-10-dev-p10-legacy-cutover-inventory.md`
 
 ---
 

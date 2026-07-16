@@ -2,6 +2,7 @@
 
 **Date:** 2026-06-10
 **Branch:** `dev`
+**Status:** `ARCHIVED_SUPPORTING_INVENTORY`; current execution is governed by `../2026-07-16-dev-trading-journal-development-plan.md`.
 **Purpose:** label the current legacy and truth ownership boundaries before any deletion or hard cutover work starts.
 
 ## Summary
