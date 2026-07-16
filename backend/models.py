@@ -185,6 +185,26 @@ class AssetMaster(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     instruments = relationship("TradeInstrument", back_populates="asset", cascade="all, delete-orphan")
+    provider_symbol_mappings = relationship(
+        "ProviderSymbolMapping",
+        back_populates="asset",
+        cascade="all, delete-orphan",
+    )
+    latest_market_quotes = relationship(
+        "LatestMarketQuote",
+        back_populates="asset",
+        cascade="all, delete-orphan",
+    )
+    daily_price_bars = relationship(
+        "PriceBarDaily",
+        back_populates="asset",
+        cascade="all, delete-orphan",
+    )
+    market_data_watermarks = relationship(
+        "MarketDataWatermark",
+        back_populates="asset",
+        cascade="all, delete-orphan",
+    )
 
 
 class TradeInstrument(Base):
@@ -207,6 +227,168 @@ class TradeInstrument(Base):
 
     asset = relationship("AssetMaster", back_populates="instruments")
     positions = relationship("TradingPosition", back_populates="instrument")
+    provider_symbol_mappings = relationship(
+        "ProviderSymbolMapping",
+        back_populates="instrument",
+        cascade="all, delete-orphan",
+    )
+
+
+class ProviderSymbolMapping(Base):
+    """Provider-specific symbol for an asset or a concrete trade instrument."""
+
+    __tablename__ = "provider_symbol_mappings"
+
+    id = Column(Integer, primary_key=True)
+    asset_id = Column(Integer, ForeignKey("asset_master.id", ondelete="CASCADE"), nullable=False)
+    instrument_id = Column(Integer, ForeignKey("trade_instruments.id", ondelete="CASCADE"), nullable=True)
+    provider_key = Column(String(50), nullable=False)
+    provider_symbol = Column(String(150), nullable=False)
+    provider_market = Column(String(50), nullable=False)
+    capabilities_json = Column(JSON, nullable=False, default=list)
+    quality_status = Column(String(30), nullable=False, default="ACTIVE")
+    first_seen_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    last_verified_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    asset = relationship("AssetMaster", back_populates="provider_symbol_mappings")
+    instrument = relationship("TradeInstrument", back_populates="provider_symbol_mappings")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "provider_key",
+            "provider_market",
+            "provider_symbol",
+            name="uq_provider_symbol_mappings_provider_symbol",
+        ),
+        Index(
+            "uq_provider_symbol_mappings_asset_provider_market",
+            "asset_id",
+            "provider_key",
+            "provider_market",
+            unique=True,
+            sqlite_where=instrument_id.is_(None),
+            postgresql_where=instrument_id.is_(None),
+        ),
+        Index(
+            "uq_provider_symbol_mappings_instrument_provider_market",
+            "instrument_id",
+            "provider_key",
+            "provider_market",
+            unique=True,
+            sqlite_where=instrument_id.is_not(None),
+            postgresql_where=instrument_id.is_not(None),
+        ),
+        Index(
+            "ix_provider_symbol_mappings_quality_verified",
+            "quality_status",
+            "last_verified_at",
+        ),
+    )
+
+
+class LatestMarketQuote(Base):
+    """Last known good quote per asset and provider, not an unbounded tick history."""
+
+    __tablename__ = "latest_market_quotes"
+    __table_args__ = (
+        UniqueConstraint("asset_id", "provider", name="uq_latest_market_quotes_asset_provider"),
+        Index("ix_latest_market_quotes_asset_received", "asset_id", "received_at"),
+        Index("ix_latest_market_quotes_provider_received", "provider", "received_at"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    asset_id = Column(Integer, ForeignKey("asset_master.id", ondelete="CASCADE"), nullable=False)
+    provider = Column(String(50), nullable=False)
+    price = Column(Numeric(20, 8), nullable=False)
+    previous_close = Column(Numeric(20, 8), nullable=True)
+    open_price = Column(Numeric(20, 8), nullable=True)
+    high_price = Column(Numeric(20, 8), nullable=True)
+    low_price = Column(Numeric(20, 8), nullable=True)
+    volume = Column(Numeric(30, 8), nullable=True)
+    change_amount = Column(Numeric(20, 8), nullable=True)
+    change_percent = Column(Numeric(20, 8), nullable=True)
+    currency = Column(String(10), nullable=True)
+    market_time = Column(DateTime(timezone=True), nullable=True)
+    received_at = Column(DateTime(timezone=True), nullable=False)
+    quality_status = Column(String(30), nullable=False, default="GOOD")
+    raw_payload = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    asset = relationship("AssetMaster", back_populates="latest_market_quotes")
+
+
+class PriceBarDaily(Base):
+    """Durable daily OHLCV bar, versioned by provider and adjustment mode."""
+
+    __tablename__ = "price_bars_daily"
+    __table_args__ = (
+        UniqueConstraint(
+            "asset_id",
+            "trading_date",
+            "provider",
+            "adjustment_mode",
+            name="uq_price_bars_daily_asset_date_provider_adjustment",
+        ),
+        Index("ix_price_bars_daily_asset_date", "asset_id", "trading_date"),
+        Index("ix_price_bars_daily_provider_date", "provider", "trading_date"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    asset_id = Column(Integer, ForeignKey("asset_master.id", ondelete="CASCADE"), nullable=False)
+    trading_date = Column(Date, nullable=False)
+    provider = Column(String(50), nullable=False)
+    adjustment_mode = Column(String(20), nullable=False, default="RAW")
+    open_price = Column(Numeric(20, 8), nullable=False)
+    high_price = Column(Numeric(20, 8), nullable=False)
+    low_price = Column(Numeric(20, 8), nullable=False)
+    close_price = Column(Numeric(20, 8), nullable=False)
+    adjusted_close = Column(Numeric(20, 8), nullable=True)
+    volume = Column(Numeric(30, 8), nullable=True)
+    currency = Column(String(10), nullable=True)
+    received_at = Column(DateTime(timezone=True), nullable=False)
+    quality_status = Column(String(30), nullable=False, default="GOOD")
+    raw_payload = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    asset = relationship("AssetMaster", back_populates="daily_price_bars")
+
+
+class MarketDataWatermark(Base):
+    """Compact coverage boundary for one asset, provider, and data type."""
+
+    __tablename__ = "market_data_watermarks"
+    __table_args__ = (
+        UniqueConstraint(
+            "asset_id",
+            "data_type",
+            "provider",
+            name="uq_market_data_watermarks_asset_type_provider",
+        ),
+        Index(
+            "ix_market_data_watermarks_provider_type_covered",
+            "provider",
+            "data_type",
+            "covered_to",
+        ),
+        Index("ix_market_data_watermarks_last_success", "last_success_at"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    asset_id = Column(Integer, ForeignKey("asset_master.id", ondelete="CASCADE"), nullable=False)
+    data_type = Column(String(40), nullable=False)
+    provider = Column(String(50), nullable=False)
+    covered_from = Column(Date, nullable=True)
+    covered_to = Column(Date, nullable=True)
+    last_success_at = Column(DateTime(timezone=True), nullable=True)
+    last_error = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    asset = relationship("AssetMaster", back_populates="market_data_watermarks")
 
 
 class User(Base):
@@ -405,12 +587,17 @@ class UserSettings(Base):
     up_color = Column(String(20), default="GREEN") # GREEN or RED
     display_currency = Column(String(10), default="USD")  # 显示币种: USD/HKD/CNY/EUR/GBP
     
-    # Exchange API Keys (encrypted in production)
+    # Broker/data source credentials (legacy IBKR TWS fields kept for backward compatibility)
     ibkr_host = Column(String(255), nullable=True)
     ibkr_port = Column(Integer, nullable=True)
     ibkr_client_id = Column(Integer, nullable=True)
+    ibkr_flex_query_id = Column(String(100), nullable=True)
+    ibkr_flex_token = Column(String(255), nullable=True)
+    ibkr_flex_start_date = Column(Date, nullable=True)
     binance_api_key = Column(String(255), nullable=True)
     binance_api_secret = Column(String(255), nullable=True)
+    binance_market_type = Column(String(20), nullable=True)
+    binance_symbols = Column(JSON, nullable=True)
     finnhub_api_key = Column(String(255), nullable=True)
     
     # LLM API
@@ -636,6 +823,72 @@ class AccountLedgerEntry(Base):
     position = relationship("TradingPosition", back_populates="ledger_entries")
     position_event = relationship("PositionEvent", back_populates="ledger_entries")
     transaction = relationship("Transaction", back_populates="ledger_entries")
+
+
+class BrokerSyncRun(Base):
+    __tablename__ = "broker_sync_runs"
+    __table_args__ = (
+        Index("ix_broker_sync_runs_user_provider_created", "user_id", "provider", "created_at"),
+        Index("ix_broker_sync_runs_status_created", "status", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    provider = Column(String(50), nullable=False)
+    market_type = Column(String(50), nullable=True)
+    status = Column(String(30), nullable=False, default="RUNNING")
+    requested_start_date = Column(Date, nullable=True)
+    requested_end_date = Column(Date, nullable=True)
+    records_fetched = Column(Integer, nullable=False, default=0)
+    records_inserted = Column(Integer, nullable=False, default=0)
+    records_skipped = Column(Integer, nullable=False, default=0)
+    error_message = Column(Text, nullable=True)
+    metadata_json = Column("metadata", JSON, nullable=True, default=dict)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User")
+    executions = relationship("BrokerExecution", back_populates="sync_run", order_by="BrokerExecution.trade_time")
+
+
+class BrokerExecution(Base):
+    __tablename__ = "broker_executions"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_broker_executions_idempotency_key"),
+        Index("ix_broker_executions_user_provider_time", "user_id", "provider", "trade_time"),
+        Index("ix_broker_executions_symbol_time", "symbol", "trade_time"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    sync_run_id = Column(Integer, ForeignKey("broker_sync_runs.id"), nullable=True)
+    provider = Column(String(50), nullable=False)
+    market_type = Column(String(50), nullable=True)
+    account_ref = Column(String(100), nullable=True)
+    symbol = Column(String(100), nullable=False)
+    side = Column(String(20), nullable=False)
+    quantity = Column(Numeric(20, 8), nullable=False)
+    price = Column(Numeric(20, 8), nullable=False)
+    trade_time = Column(DateTime(timezone=True), nullable=False)
+    currency = Column(String(10), nullable=True)
+    commission = Column(Numeric(20, 8), nullable=True)
+    commission_currency = Column(String(10), nullable=True)
+    external_trade_id = Column(String(255), nullable=False)
+    external_order_id = Column(String(255), nullable=True)
+    idempotency_key = Column(String(500), nullable=False)
+    raw_payload = Column(JSON, nullable=False, default=dict)
+    import_status = Column(String(30), nullable=False, default="RAW")
+    position_event_id = Column(Integer, ForeignKey("position_events.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User")
+    sync_run = relationship("BrokerSyncRun", back_populates="executions")
+    position_event = relationship("PositionEvent")
 
 
 class JobDefinition(Base):

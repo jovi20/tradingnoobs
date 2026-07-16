@@ -9,7 +9,7 @@ from pathlib import Path
 class AlembicChainTests(unittest.TestCase):
     def test_alembic_upgrade_head_creates_expected_tables(self):
         repo_root = Path(__file__).resolve().parents[2]
-        alembic_bin = Path("/Users/a1/vibecoding/tradingnoobs/backend/venv/bin/alembic")
+        alembic_bin = repo_root / "backend" / "venv" / "bin" / "alembic"
 
         fd, db_path = tempfile.mkstemp(suffix=".db")
         os.close(fd)
@@ -95,6 +95,12 @@ class AlembicChainTests(unittest.TestCase):
                 insight_artifact_columns = conn.execute(
                     "PRAGMA table_info(insight_artifacts)"
                 ).fetchall()
+                broker_sync_run_columns = conn.execute(
+                    "PRAGMA table_info(broker_sync_runs)"
+                ).fetchall()
+                broker_execution_columns = conn.execute(
+                    "PRAGMA table_info(broker_executions)"
+                ).fetchall()
             finally:
                 conn.close()
 
@@ -118,6 +124,8 @@ class AlembicChainTests(unittest.TestCase):
             derived_timeline_snapshot_column_names = {row[1] for row in derived_timeline_snapshot_columns}
             insight_run_column_names = {row[1] for row in insight_run_columns}
             insight_artifact_column_names = {row[1] for row in insight_artifact_columns}
+            broker_sync_run_column_names = {row[1] for row in broker_sync_run_columns}
+            broker_execution_column_names = {row[1] for row in broker_execution_columns}
             expected_tables = {
                 "alembic_version",
                 "users",
@@ -155,6 +163,12 @@ class AlembicChainTests(unittest.TestCase):
                 "derived_timeline_snapshots",
                 "insight_runs",
                 "insight_artifacts",
+                "broker_sync_runs",
+                "broker_executions",
+                "provider_symbol_mappings",
+                "latest_market_quotes",
+                "price_bars_daily",
+                "market_data_watermarks",
                 "system_settings",
             }
 
@@ -232,6 +246,34 @@ class AlembicChainTests(unittest.TestCase):
                     "evidence_refs",
                     "trust_meta",
                 }.issubset(insight_artifact_column_names)
+            )
+            self.assertTrue(
+                {
+                    "public_id",
+                    "user_id",
+                    "provider",
+                    "market_type",
+                    "status",
+                    "records_fetched",
+                    "records_inserted",
+                    "records_skipped",
+                }.issubset(broker_sync_run_column_names)
+            )
+            self.assertTrue(
+                {
+                    "public_id",
+                    "user_id",
+                    "sync_run_id",
+                    "provider",
+                    "symbol",
+                    "side",
+                    "quantity",
+                    "price",
+                    "trade_time",
+                    "external_trade_id",
+                    "idempotency_key",
+                    "raw_payload",
+                }.issubset(broker_execution_column_names)
             )
         finally:
             if os.path.exists(db_path):
