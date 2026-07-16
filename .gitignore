@@ -61,6 +61,7 @@ logs/
 dist/
 .next/
 out/
+*.tsbuildinfo
 
 # Testing
 .coverage
