@@ -1,9 +1,11 @@
 {
   "schema_version": 1,
   "recorded_at": "2026-07-17T05:15:00+08:00",
+  "last_verified_at": "2026-07-17T05:57:50+08:00",
   "branch": "dev",
   "baseline_before_jrn_000": "b9d564de2279be142fc52cbb4ab1e8e7580109c1",
-  "implementation_head_before_record": "65796276e3cbc1b1e33499da23c0ee298b8becc3",
+  "checkpoint_head_before_initial_record": "65796276e3cbc1b1e33499da23c0ee298b8becc3",
+  "checkpoint_head_after_corrections": "36bacc7e981f39965125cedf7c55c7f45611647c",
   "record_commit_resolution": "git log -1 --format=%H -- docs/superpowers/plans/2026-07-17-jrn-000-checkpoint-record.json",
   "decisions": {
     "migration_policy": "IN_CHAIN_DISABLED",
@@ -585,7 +587,7 @@
       "verification": [
         {
           "command": "git status --short -- .gitignore frontend/tsconfig.tsbuildinfo",
-          "result": "PASS before commit: ignore updated and tracked cache deleted"
+          "result": "PARTIAL: ignore was added, but the build regenerated the tracked cache before commit; 51ae249 completed the cached removal"
         }
       ]
     },
@@ -1359,6 +1361,136 @@
       ]
     }
   ],
+  "post_record_corrections": [
+    {
+      "commit": "51ae249ed63d7d34fd903657f71943a51232a066",
+      "subject": "chore: untrack TypeScript build cache",
+      "change_count": 1,
+      "changes": [
+        {
+          "status": "D",
+          "path": "frontend/tsconfig.tsbuildinfo"
+        }
+      ],
+      "verification": [
+        {
+          "command": "git check-ignore -v frontend/tsconfig.tsbuildinfo",
+          "result": "PASS: .gitignore:64:*.tsbuildinfo"
+        },
+        {
+          "command": "test -f frontend/tsconfig.tsbuildinfo",
+          "result": "PASS: local generated file preserved while removed from Git index"
+        }
+      ]
+    },
+    {
+      "commit": "fa7d649c1ff0736e4ab092f4df561373cb0e6354",
+      "subject": "fix: scope disabled capability routes",
+      "change_count": 3,
+      "changes": [
+        {
+          "status": "M",
+          "path": "backend/main.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/routers/disabled_capabilities.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/tests/test_disabled_capability_routes.py"
+        }
+      ],
+      "verification": [
+        {
+          "command": "cd backend && venv/bin/python -m pytest -q tests/test_disabled_capability_routes.py",
+          "result": "6 passed: every known route is 404 FEATURE_DISABLED; unknown roots/subpaths and wrong methods remain ordinary 404/405; real optional handlers stay unimported"
+        }
+      ]
+    },
+    {
+      "commit": "7985b187d194c62da75c2be3fdd512cbf0d64e02",
+      "subject": "fix: prevent baseline secret disclosure",
+      "change_count": 10,
+      "changes": [
+        {
+          "status": "M",
+          "path": "README.md"
+        },
+        {
+          "status": "M",
+          "path": "backend/Dockerfile"
+        },
+        {
+          "status": "M",
+          "path": "backend/README.md"
+        },
+        {
+          "status": "M",
+          "path": "backend/observability.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/routers/admin.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/tests/test_journal_baseline_admin_boundary.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/tests/test_journal_baseline_profile.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/tests/test_observability.py"
+        },
+        {
+          "status": "M",
+          "path": "docs/DEVELOPER_GUIDE.md"
+        },
+        {
+          "status": "M",
+          "path": "start.sh"
+        }
+      ],
+      "verification": [
+        {
+          "command": "Admin boundary, validation sanitization, and launch-command focused tests",
+          "result": "PASS: optional aliases are rejected without persistence; stored optional rows are filtered before decrypt; 422 omits input/ctx; packaged launch commands disable access logs"
+        },
+        {
+          "command": "git show 7985b18^:start.sh and git show 7985b18:start.sh",
+          "result": "PASS: committed start.sh delta is exactly one --no-access-log addition; the unrelated user rewrite remains unstaged and HEAD contains no Market worker"
+        }
+      ]
+    },
+    {
+      "commit": "36bacc7e981f39965125cedf7c55c7f45611647c",
+      "subject": "fix: reapply access log guard after server config",
+      "change_count": 2,
+      "changes": [
+        {
+          "status": "M",
+          "path": "backend/observability.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/tests/test_observability.py"
+        }
+      ],
+      "verification": [
+        {
+          "command": "cd backend && venv/bin/python -m pytest -q tests/test_observability.py",
+          "result": "13 passed, including import-app-before-uvicorn.Config logger reconfiguration"
+        },
+        {
+          "command": "programmatic uvicorn.run(app) HTTP smoke with token/query_id/reference_code query values",
+          "result": "PASS: response was 404 FEATURE_DISABLED and server emitted zero access-log bytes for the request"
+        }
+      ]
+    }
+  ],
   "final_cross_checkpoint_verification": [
     {
       "command": "git diff --check",
@@ -1366,11 +1498,11 @@
     },
     {
       "command": "backend full suite",
-      "result": "304 passed"
+      "result": "320 passed"
     },
     {
       "command": "frontend lint/test/type/build",
-      "result": "PASS / 143 passed / PASS / PASS"
+      "result": "PASS / 143 passed / PASS / PASS: 16/16 static pages"
     },
     {
       "command": "Alembic empty upgrade and 9cad10111213 downgrade/upgrade adoption round-trip",
@@ -1378,7 +1510,15 @@
     },
     {
       "command": "JOURNAL_BASELINE HTTP, no-import, no-provider, secret, job/outbox, and production chunk smoke",
-      "result": "PASS"
+      "result": "PASS: 35 focused tests plus CLI and programmatic Uvicorn query-log smokes"
+    }
+  ],
+  "independent_reviews": [
+    {
+      "reviewer": "jrn000_fix_audit",
+      "reviewed_head": "36bacc7e981f39965125cedf7c55c7f45611647c",
+      "verdict": "APPROVE",
+      "result": "35 focused tests passed; no remaining checkpoint blocker"
     }
   ],
   "excluded_worktree_after_checkpoints": [
