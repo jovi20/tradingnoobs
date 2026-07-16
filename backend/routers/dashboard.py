@@ -8,19 +8,30 @@ from typing import Optional
 from datetime import date, timedelta
 
 from database import get_db
-from models import User, Position, PositionStatus, TradingAccount, TradeBatch, BatchType, UserSettings
+from models import (
+    User,
+    Position,
+    PositionEvent,
+    PositionEventType,
+    PositionStatus,
+    TradingAccount,
+    TradeBatch,
+    BatchType,
+    UserSettings,
+)
 from observability import get_structured_logger, log_event
 from schemas import DashboardStats, AssetAllocation, PositionMover, AccountAllocation, PortfolioFlow, SankeyNode, SankeyLink
 from services.account_ledger_service import calculate_account_cash_balance_read_model
 from services.auth_service import get_current_user
 from services.chart_schema_service import build_dashboard_chart_payloads
-from services.market_data_service import MarketDataService
+from services.market_data_access import MarketDataService
 from services.exchange_rate_service import get_exchange_rate, get_rates_batch
 import asyncio
 from models import DailySnapshot
 from services.metrics_service import MetricsService
 from services.risk_alert_service import build_portfolio_risk_summary
 from services.trading_accounting_service import calculate_mark_to_market_position
+from services.truth_legacy_projection_service import project_user_truth_positions_to_legacy
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 logger = get_structured_logger("dashboard")
@@ -28,6 +39,21 @@ logger = get_structured_logger("dashboard")
 
 def _enum_value(value):
     return value.value if hasattr(value, "value") else str(value)
+
+
+def _sankey_asset_type_label(value: str) -> str:
+    labels = {
+        "STOCK": "股票",
+        "EQUITY": "股票",
+        "BOND": "债券",
+        "FUND": "基金",
+        "COMMODITY": "大宗商品",
+        "FX": "外汇",
+        "DERIVATIVE": "衍生品",
+        "CRYPTO": "加密资产",
+        "CASH": "现金",
+    }
+    return labels.get(value, "其他资产")
 
 
 @router.get("/stats", response_model=DashboardStats)
@@ -38,6 +64,7 @@ async def get_dashboard_stats(
     db: Session = Depends(get_db)
 ):
     """Get dashboard statistics"""
+    truth_by_legacy_id = project_user_truth_positions_to_legacy(db, user_id=current_user.id)
     # === 读取用户显示币种设置 ===
     user_settings = db.query(UserSettings).filter(UserSettings.user_id == current_user.id).first()
     display_currency = (user_settings.display_currency if user_settings and user_settings.display_currency else 'USD').upper()
@@ -50,29 +77,48 @@ async def get_dashboard_stats(
     if end_date:
         query = query.filter(Position.opened_at <= end_date)
     
-    # Calculate stats using TradeBatch for more granular performance metrics
-    # Win Rate and PnL Ratio should reflect every EXIT event (partial or full)
-    batch_stats = db.query(
-        func.count(TradeBatch.id).label("total_exits"),
-        func.count(TradeBatch.id).filter(TradeBatch.pnl > 0).label("winning_exits"),
-        func.sum(TradeBatch.pnl).filter(TradeBatch.pnl > 0).label("total_wins"),
-        func.sum(func.abs(TradeBatch.pnl)).filter(TradeBatch.pnl < 0).label("total_losses")
-    ).join(Position).filter(
+    truth_position_ids = [position.id for position in truth_by_legacy_id.values()]
+    truth_exit_pnls: list[float] = []
+    if truth_position_ids:
+        reversed_event_ids = {
+            row[0]
+            for row in db.query(PositionEvent.reverses_event_id).filter(
+                PositionEvent.position_id.in_(truth_position_ids),
+                PositionEvent.event_type == PositionEventType.REVERSAL,
+                PositionEvent.reverses_event_id.isnot(None),
+            ).all()
+        }
+        truth_exit_query = db.query(PositionEvent).filter(
+            PositionEvent.position_id.in_(truth_position_ids),
+            PositionEvent.event_type.in_({PositionEventType.REDUCE, PositionEventType.CLOSE}),
+        )
+        if reversed_event_ids:
+            truth_exit_query = truth_exit_query.filter(PositionEvent.id.notin_(reversed_event_ids))
+        if start_date:
+            truth_exit_query = truth_exit_query.filter(PositionEvent.event_time >= start_date)
+        if end_date:
+            truth_exit_query = truth_exit_query.filter(PositionEvent.event_time <= end_date)
+        truth_exit_pnls = [
+            float(event.realized_pnl_net or 0)
+            for event in truth_exit_query.all()
+        ]
+
+    legacy_exit_query = db.query(TradeBatch.pnl).join(Position).filter(
         Position.user_id == current_user.id,
         TradeBatch.type == BatchType.EXIT
     )
-    
+    if truth_by_legacy_id:
+        legacy_exit_query = legacy_exit_query.filter(Position.id.notin_(truth_by_legacy_id.keys()))
     if start_date:
-        batch_stats = batch_stats.filter(TradeBatch.time >= start_date)
+        legacy_exit_query = legacy_exit_query.filter(TradeBatch.time >= start_date)
     if end_date:
-        batch_stats = batch_stats.filter(TradeBatch.time <= end_date)
-        
-    bs = batch_stats.one()
-    
-    total_exits = bs.total_exits or 0
-    winning_exits = bs.winning_exits or 0
-    total_wins = float(bs.total_wins or 0)
-    total_losses = float(bs.total_losses or 0)
+        legacy_exit_query = legacy_exit_query.filter(TradeBatch.time <= end_date)
+
+    exit_pnls = truth_exit_pnls + [float(row[0] or 0) for row in legacy_exit_query.all()]
+    total_exits = len(exit_pnls)
+    winning_exits = sum(1 for pnl in exit_pnls if pnl > 0)
+    total_wins = sum(pnl for pnl in exit_pnls if pnl > 0)
+    total_losses = sum(abs(pnl) for pnl in exit_pnls if pnl < 0)
     
     # Position counts for context
     pos_stats = db.query(
@@ -323,9 +369,9 @@ async def get_dashboard_stats(
         return node_indices[name]
 
     # Names
-    SRC_EQUITY = "Net Equity" # Unused now but kept for ref
-    SRC_LIABS = "Liabilities"
-    CENTER_NODE = "Total Assets" # Gross
+    SRC_EQUITY = "净资产" # Unused now but kept for ref
+    SRC_LIABS = "负债"
+    CENTER_NODE = "总资产" # Gross
 
     # Containers
     flows_l0 = {} # Sources -> Accounts
@@ -359,7 +405,7 @@ async def get_dashboard_stats(
                 metadata = metadata_results[i]
                 if isinstance(metadata, Exception): metadata = None
                 asset_type = metadata.core_type.value if (metadata and metadata.core_type) else "EQUITY"
-                asset_cat_name = f"{asset_type}"
+                asset_cat_name = _sankey_asset_type_label(asset_type)
                 asset_cur = (metadata.currency.value if (metadata and metadata.currency) else stats['currency'])
                 pos_fx = fx_rates.get(asset_cur, 1.0)
                 mark = calculate_mark_to_market_position(
@@ -375,13 +421,13 @@ async def get_dashboard_stats(
                     val = mkt_val_display
                     acc_longs += val
                     if asset_cat_name not in cat_holdings: cat_holdings[asset_cat_name] = {}
-                    sym_name = f"{pos.symbol} (Long)"
+                    sym_name = f"{pos.symbol}（多头）"
                     cat_holdings[asset_cat_name][sym_name] = cat_holdings[asset_cat_name].get(sym_name, 0.0) + val
                 else:
                     val = abs(mkt_val_display)
                     acc_shorts += val
                     if asset_cat_name not in cat_holdings: cat_holdings[asset_cat_name] = {}
-                    sym_name = f"{pos.symbol} (Short)"
+                    sym_name = f"{pos.symbol}（空头）"
                     cat_holdings[asset_cat_name][sym_name] = cat_holdings[asset_cat_name].get(sym_name, 0.0) + val
 
         # Cash & Margin (换算到显示币种)
@@ -393,9 +439,9 @@ async def get_dashboard_stats(
         
         if derived_cash >= 0:
             acc_cash_asset = derived_cash
-            cash_cat = "Cash (Asset)"
+            cash_cat = "现金资产"
             if cash_cat not in cat_holdings: cat_holdings[cash_cat] = {}
-            cat_holdings[cash_cat]["Cash"] = cat_holdings[cash_cat].get("Cash", 0.0) + acc_cash_asset
+            cat_holdings[cash_cat]["现金"] = cat_holdings[cash_cat].get("现金", 0.0) + acc_cash_asset
         else:
             acc_margin_liab = abs(derived_cash)
             
@@ -476,14 +522,14 @@ async def get_dashboard_stats(
         for sym, val in sorted_symbols:
             if val < 1: continue
             
-            # Keep massive positions or Cash separate
-            if (val >= threshold) or (sym == "Cash"):
+            # Keep massive positions or cash separate
+            if (val >= threshold) or (sym == "现金"):
                 flows_l3[(cat, sym)] = val
             else:
                 others += val
                 
         if others > 0:
-            flows_l3[(cat, "Others")] = others
+            flows_l3[(cat, "其他")] = others
 
     # Combine
     all_flows = {**flows_l0, **flows_l1, **flows_l2, **flows_l3}

@@ -20,11 +20,13 @@ def _market_quote_payload(symbol: str, asset_type: str | None, quote: dict) -> d
     freshness = quote.get("freshness") or "FRESH"
     degraded = bool(quote.get("degraded", False))
     source_refs = quote.get("source_refs") or [f"symbol:{symbol.upper()}"]
+    as_of = quote.get("as_of")
     trust = {
         "freshness": freshness,
         "degraded": degraded,
         "degraded_reason": quote.get("degraded_reason"),
         "source_refs": source_refs,
+        "as_of": as_of,
     }
     if quote.get("error"):
         return {
@@ -35,6 +37,7 @@ def _market_quote_payload(symbol: str, asset_type: str | None, quote: dict) -> d
             "degraded": degraded,
             "degraded_reason": quote.get("degraded_reason"),
             "source_refs": source_refs,
+            "as_of": as_of,
             "error": quote.get("error"),
             "trust": trust,
         }
@@ -47,6 +50,7 @@ def _market_quote_payload(symbol: str, asset_type: str | None, quote: dict) -> d
         "degraded": degraded,
         "degraded_reason": quote.get("degraded_reason"),
         "source_refs": source_refs,
+        "as_of": as_of,
         "trust": trust,
     }
 

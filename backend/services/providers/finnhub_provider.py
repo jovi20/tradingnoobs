@@ -13,7 +13,7 @@ def _to_utc_timestamp(value: datetime) -> int:
 def get_quote(symbol: str, client: Any) -> dict[str, Any]:
     symbol_upper = symbol.upper()
     raw = client.quote(symbol_upper)
-    if not raw:
+    if not raw or (raw.get("c") in (None, 0) and raw.get("pc") in (None, 0)):
         raise ValueError(f"Finnhub returned empty quote for {symbol_upper}")
 
     return {

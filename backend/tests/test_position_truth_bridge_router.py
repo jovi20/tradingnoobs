@@ -203,6 +203,107 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         node_types = [node["node_type"] for node in payload["data"]["lifecycle_thread"]["nodes"]]
         self.assertEqual(node_types, ["OPEN", "CLOSE"])
 
+    def test_truth_public_id_resolves_to_the_canonical_legacy_position_route(self):
+        legacy_position = self._seed_open_legacy_position()
+        lifecycle_response = self.client.get(
+            f"/api/positions/{legacy_position.public_id}/truth-lifecycle"
+        )
+        self.assertEqual(lifecycle_response.status_code, 200)
+        truth_public_id = lifecycle_response.json()["data"]["position_summary"]["public_id"]
+
+        response = self.client.get(f"/api/positions/{truth_public_id}")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["public_id"], legacy_position.public_id)
+        self.assertEqual(payload["truth_position_public_id"], truth_public_id)
+
+    def test_bridge_read_preserves_manual_truth_events_and_canonical_accounting(self):
+        legacy_position = self._seed_open_legacy_position()
+        initial_response = self.client.get(
+            f"/api/positions/{legacy_position.public_id}/truth-lifecycle"
+        )
+        self.assertEqual(initial_response.status_code, 200)
+        truth_public_id = initial_response.json()["data"]["position_summary"]["public_id"]
+
+        add_response = self.client.post(
+            f"/api/trading-positions/{truth_public_id}/events",
+            json={
+                "event_type": "ADD",
+                "quantity": "1",
+                "price": "190",
+                "currency": "USD",
+                "occurred_at": "2026-04-03T15:30:00+00:00",
+            },
+        )
+        self.assertEqual(add_response.status_code, 201)
+
+        response = self.client.get(
+            f"/api/positions/{legacy_position.public_id}/truth-lifecycle"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        summary = payload["data"]["position_summary"]
+        self.assertEqual(Decimal(str(summary["quantity_opened"])), Decimal("6"))
+        self.assertEqual(Decimal(str(summary["open_quantity"])), Decimal("6"))
+        self.assertEqual(summary["route_public_id"], legacy_position.public_id)
+        node_types = [node["node_type"] for node in payload["data"]["lifecycle_thread"]["nodes"]]
+        self.assertEqual(node_types, ["OPEN", "ADD"])
+
+    def test_positions_list_uses_truth_accounting_projection_after_manual_event(self):
+        legacy_position = self._seed_open_legacy_position()
+        initial_response = self.client.get(
+            f"/api/positions/{legacy_position.public_id}/truth-lifecycle"
+        )
+        truth_public_id = initial_response.json()["data"]["position_summary"]["public_id"]
+        add_response = self.client.post(
+            f"/api/trading-positions/{truth_public_id}/events",
+            json={
+                "event_type": "ADD",
+                "quantity": "1",
+                "price": "190",
+                "currency": "USD",
+                "occurred_at": "2026-04-03T15:30:00+00:00",
+            },
+        )
+        self.assertEqual(add_response.status_code, 201)
+
+        response = self.client.get("/api/positions")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        projected = next(item for item in payload if item["public_id"] == legacy_position.public_id)
+        self.assertEqual(projected["truth_position_public_id"], truth_public_id)
+        self.assertEqual(Decimal(str(projected["total_quantity"])), Decimal("6"))
+        self.assertEqual(
+            Decimal(str(projected["average_entry_price"])).quantize(Decimal("0.0001")),
+            Decimal("181.6667"),
+        )
+
+    def test_dashboard_win_rate_uses_truth_exit_events_instead_of_stale_legacy_batches(self):
+        legacy_position = self._seed_open_legacy_position()
+        initial_response = self.client.get(
+            f"/api/positions/{legacy_position.public_id}/truth-lifecycle"
+        )
+        truth_public_id = initial_response.json()["data"]["position_summary"]["public_id"]
+        reduce_response = self.client.post(
+            f"/api/trading-positions/{truth_public_id}/events",
+            json={
+                "event_type": "REDUCE",
+                "quantity": "2",
+                "price": "210",
+                "currency": "USD",
+                "occurred_at": "2026-04-03T15:30:00+00:00",
+            },
+        )
+        self.assertEqual(reduce_response.status_code, 201)
+
+        response = self.client.get("/api/dashboard/stats")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["win_rate"], 100.0)
+
     def test_legacy_batch_write_is_rejected_when_truth_lifecycle_exists_without_migration_header(self):
         legacy_position = self._seed_open_legacy_position()
         sync_response = self.client.get(f"/api/positions/{legacy_position.public_id}/truth-lifecycle")

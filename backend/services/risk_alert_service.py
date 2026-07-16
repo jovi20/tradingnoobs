@@ -230,7 +230,10 @@ def _build_daily_loss_alert(
         "kind": "DAILY_LOSS_LIMIT",
         "severity": severity,
         "summary": f"今日亏损已达到 {percent_label}",
-        "reason": f"Daily equity change crossed the -{threshold_label} {'critical' if severity == 'CRITICAL' else 'warning'} threshold.",
+        "reason": (
+            f"当日权益变动已跌破 -{threshold_label} 的"
+            f"{'严重风险' if severity == 'CRITICAL' else '风险预警'}阈值。"
+        ),
         "recommended_action": {
             "kind": "OPEN_DASHBOARD",
             "label": "查看组合风险",
@@ -254,7 +257,7 @@ def _build_concentration_alert(
         "kind": "CONCENTRATION",
         "severity": severity,
         "summary": f"{symbol} 持仓集中度达到 {concentration_percent}%",
-        "reason": f"{symbol} exposure is {_to_float(exposure)} and exceeds the portfolio concentration threshold.",
+        "reason": f"{symbol} 敞口为 {_to_float(exposure)}，已超过组合集中度阈值。",
         "recommended_action": {
             "kind": "OPEN_DASHBOARD",
             "label": "查看组合结构",
@@ -272,7 +275,7 @@ def _build_drawdown_alert(*, severity: RiskAlertSeverity, max_drawdown: Decimal)
         "kind": "DRAWDOWN",
         "severity": severity,
         "summary": f"最大回撤达到 {drawdown_percent}%",
-        "reason": "Portfolio drawdown crossed the configured risk threshold.",
+        "reason": "组合回撤已超过设定的风险阈值。",
         "recommended_action": {
             "kind": "OPEN_DASHBOARD",
             "label": "查看回撤",

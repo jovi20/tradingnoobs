@@ -10,6 +10,8 @@ from datetime import datetime
 from typing import Dict, Optional
 from fastapi.concurrency import run_in_threadpool
 
+from release_profile import RuntimeCapability, is_capability_enabled
+
 # 汇率缓存 TTL (10 分钟)
 FX_CACHE_TTL_SECONDS = 600
 
@@ -35,6 +37,9 @@ async def get_exchange_rate(from_currency: str, to_currency: str) -> float:
 
     if from_c == to_c:
         return 1.0
+
+    if not is_capability_enabled(RuntimeCapability.MARKET):
+        return _get_fallback_rate(from_c, to_c)
 
     # 统一路径: from_c -> USD -> to_c
     # 1) from_c -> USD

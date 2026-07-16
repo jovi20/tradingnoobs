@@ -6,18 +6,24 @@ Routes requests to appropriate providers based on asset type:
 - Crypto → Binance
 """
 import re
-from datetime import datetime, timedelta
+from contextlib import contextmanager
+from datetime import date, datetime, timedelta, timezone
 import finnhub
 from sqlalchemy.orm import Session
 from typing import Dict, Any, Optional, List
 import asyncio
 from fastapi.concurrency import run_in_threadpool
 
-from models import AssetMetadata, AssetCoreType, AssetMarket, AssetCurrency, AssetRiskLevel
+from models import AssetMaster, AssetMetadata, AssetCoreType, AssetMarket, AssetCurrency, AssetRiskLevel
 from observability import get_structured_logger, log_event
-from services.market_data_orchestrator import get_quote_with_metadata
+from services.market_data_job_service import enqueue_daily_backfill
+from services.market_data_orchestrator import get_daily_bars_with_metadata, get_quote_with_metadata
+from services.market_data_repository import MarketDataRepository
 from services.market_data_types import MarketDataRequest
-from services.providers import akshare_provider, binance_provider
+from services.market_provider_registry import MarketDataCapability
+from services.market_session_calendar import expected_daily_sessions
+from services.provider_router import detect_asset_route
+from services.providers import yfinance_provider
 from services.llm_service import classify_asset, classify_asset_rich
 from services.platform_config_service import get_finnhub_api_key
 
@@ -59,9 +65,373 @@ class MarketDataService:
             raise e
     _asset_type_cache: Dict[str, str] = {}
     
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, *, persistence_db: Session | None = None):
         self.db = db
+        self._shared_persistence_db = persistence_db
         self._finnhub_client = None
+
+    @contextmanager
+    def _persistence_unit(self):
+        if self._shared_persistence_db is not None:
+            yield self._shared_persistence_db
+            self._shared_persistence_db.flush()
+            return
+
+        persistence_db = Session(bind=self.db.get_bind())
+        try:
+            yield persistence_db
+            persistence_db.commit()
+        except Exception:
+            persistence_db.rollback()
+            raise
+        finally:
+            persistence_db.close()
+
+    @staticmethod
+    def _quote_currency(market: str, symbol: str) -> str | None:
+        normalized_market = (market or "").upper()
+        if normalized_market == "US":
+            return "USD"
+        if normalized_market == "A_SHARE":
+            return "CNY"
+        if normalized_market == "HK":
+            return "HKD"
+        if normalized_market == "CRYPTO":
+            for suffix in ("USDT", "USDC", "BUSD", "BTC", "ETH", "BNB"):
+                if symbol.upper().endswith(suffix):
+                    return suffix
+        if normalized_market == "FOREX" and len(symbol) == 6:
+            return symbol.upper()[3:]
+        return None
+
+    @staticmethod
+    def _find_asset(db: Session, *, symbol: str, market: str) -> AssetMaster | None:
+        normalized_symbol = symbol.upper()
+        exact_codes = [normalized_symbol, f"{market.upper()}:{normalized_symbol}"]
+        asset = (
+            db.query(AssetMaster)
+            .filter(AssetMaster.canonical_code.in_(exact_codes))
+            .order_by(AssetMaster.id)
+            .first()
+        )
+        if asset is not None:
+            return asset
+        candidates = (
+            db.query(AssetMaster)
+            .filter(AssetMaster.display_symbol == normalized_symbol)
+            .order_by(AssetMaster.id)
+            .all()
+        )
+        for candidate in candidates:
+            if (candidate.metadata_json or {}).get("market") == market.upper():
+                return candidate
+        return candidates[0] if len(candidates) == 1 else None
+
+    def _persist_quote_payload(
+        self,
+        payload: Dict[str, Any],
+        *,
+        exchange: str | None,
+    ) -> None:
+        quote = payload.get("quote") or {}
+        provider = payload.get("provider") or quote.get("provider")
+        if not provider or quote.get("c") is None:
+            return
+
+        try:
+            with self._persistence_unit() as persistence_db:
+                repository = MarketDataRepository(persistence_db)
+                asset = repository.resolve_or_create_asset(
+                    symbol=payload["symbol"],
+                    market=payload.get("market") or "UNKNOWN",
+                    asset_type=payload.get("asset_type") or "UNKNOWN",
+                    quote_currency=self._quote_currency(
+                        payload.get("market") or "",
+                        payload["symbol"],
+                    ),
+                    name=quote.get("name") or payload["symbol"],
+                )
+                repository.upsert_provider_symbol_mapping(
+                    asset_id=asset.id,
+                    provider_key=provider,
+                    provider_symbol=payload["symbol"],
+                    provider_market=payload.get("market") or "UNKNOWN",
+                    capabilities=["LATEST_QUOTE"],
+                )
+                received_at = datetime.now(timezone.utc)
+                stored = repository.upsert_latest_quote(
+                    asset_id=asset.id,
+                    provider=provider,
+                    price=quote.get("c"),
+                    previous_close=quote.get("pc"),
+                    open_price=quote.get("o"),
+                    high_price=quote.get("h"),
+                    low_price=quote.get("l"),
+                    volume=quote.get("volume"),
+                    change_amount=quote.get("d"),
+                    change_percent=quote.get("dp"),
+                    currency=asset.quote_currency,
+                    market_time=quote.get("as_of"),
+                    received_at=received_at,
+                    raw_payload={
+                        "source_refs": quote.get("source_refs") or payload.get("source_refs") or [],
+                        "freshness": quote.get("freshness") or payload.get("freshness"),
+                    },
+                )
+                coverage_date = (stored.market_time or stored.received_at).date()
+                repository.upsert_watermark(
+                    asset_id=asset.id,
+                    data_type="LATEST_QUOTE",
+                    provider=provider,
+                    covered_from=coverage_date,
+                    covered_to=coverage_date,
+                    last_success_at=received_at,
+                )
+
+                warmup_end = received_at.replace(hour=0, minute=0, second=0, microsecond=0)
+                warmup_start = warmup_end - timedelta(days=365)
+                daily_route = detect_asset_route(
+                    payload["symbol"],
+                    exchange=exchange,
+                    core_type=payload.get("asset_type"),
+                    market=payload.get("market"),
+                    capability=MarketDataCapability.DAILY_BAR,
+                )
+                has_daily_coverage = False
+                for daily_provider in daily_route.provider_order:
+                    daily_watermark = repository.get_watermark(
+                        asset_id=asset.id,
+                        data_type="DAILY_BAR",
+                        provider=daily_provider,
+                    )
+                    if (
+                        daily_watermark is not None
+                        and daily_watermark.covered_from is not None
+                        and daily_watermark.covered_to is not None
+                        and daily_watermark.covered_from <= warmup_start.date()
+                        and daily_watermark.covered_to >= warmup_end.date() - timedelta(days=7)
+                    ):
+                        has_daily_coverage = True
+                        break
+
+                if not has_daily_coverage:
+                    enqueue_daily_backfill(
+                        persistence_db,
+                        symbol=payload["symbol"],
+                        exchange=exchange,
+                        start=warmup_start,
+                        end=warmup_end,
+                    )
+        except Exception as error:
+            log_event(
+                logger,
+                "warning",
+                "market_quote_persistence_failed",
+                symbol=payload.get("symbol"),
+                error=str(error),
+            )
+            if self._shared_persistence_db is not None:
+                raise
+
+    def _load_last_known_quote(self, payload: Dict[str, Any]) -> Dict[str, Any] | None:
+        try:
+            with self._persistence_unit() as persistence_db:
+                asset = self._find_asset(
+                    persistence_db,
+                    symbol=payload.get("symbol") or "",
+                    market=payload.get("market") or "UNKNOWN",
+                )
+                if asset is None:
+                    return None
+                stored = MarketDataRepository(persistence_db).get_latest_quote(
+                    asset_id=asset.id,
+                    quality_statuses=["GOOD"],
+                )
+                if stored is None:
+                    return None
+                as_of = stored.market_time or stored.received_at
+                refs = [
+                    f"provider:{stored.provider}",
+                    f"symbol:{payload.get('symbol')}",
+                    "storage:latest_market_quotes",
+                ]
+                return {
+                    "c": float(stored.price),
+                    "pc": float(stored.previous_close) if stored.previous_close is not None else None,
+                    "h": float(stored.high_price) if stored.high_price is not None else None,
+                    "l": float(stored.low_price) if stored.low_price is not None else None,
+                    "o": float(stored.open_price) if stored.open_price is not None else None,
+                    "d": float(stored.change_amount) if stored.change_amount is not None else None,
+                    "dp": float(stored.change_percent) if stored.change_percent is not None else None,
+                    "volume": float(stored.volume) if stored.volume is not None else None,
+                    "name": asset.name,
+                    "provider": stored.provider,
+                    "as_of": as_of.isoformat(),
+                    "freshness": "STALE",
+                    "degraded": True,
+                    "degraded_reason": payload.get("degraded_reason") or "Live providers unavailable",
+                    "source_refs": refs,
+                }
+        except Exception as error:
+            log_event(
+                logger,
+                "warning",
+                "market_quote_persisted_fallback_failed",
+                symbol=payload.get("symbol"),
+                error=str(error),
+            )
+            return None
+
+    @staticmethod
+    def _daily_row_payload(row) -> Dict[str, Any]:
+        return {
+            "date": row.trading_date.isoformat(),
+            "open": float(row.open_price),
+            "high": float(row.high_price),
+            "low": float(row.low_price),
+            "close": float(row.close_price),
+            "volume": float(row.volume) if row.volume is not None else None,
+        }
+
+    @staticmethod
+    def _has_complete_local_daily_coverage(
+        rows,
+        *,
+        market: str,
+        start: date,
+        end: date,
+    ) -> bool:
+        if not rows:
+            return False
+        expected_sessions = expected_daily_sessions(market, start, end)
+        if expected_sessions is None:
+            return False
+        stored_dates = {row.trading_date for row in rows}
+        return expected_sessions.issubset(stored_dates)
+
+    def _load_persisted_daily_bars(
+        self,
+        request: MarketDataRequest,
+        start: datetime,
+        end: datetime,
+        *,
+        require_coverage: bool,
+    ) -> List[Dict[str, Any]]:
+        route = detect_asset_route(
+            request.symbol,
+            exchange=request.exchange,
+            core_type=request.core_type,
+            market=request.market,
+            instrument=request.instrument,
+            capability=MarketDataCapability.DAILY_BAR,
+            credential_availability={"finnhub_api_key": bool(get_finnhub_api_key(self.db))},
+        )
+        try:
+            with self._persistence_unit() as persistence_db:
+                asset = self._find_asset(
+                    persistence_db,
+                    symbol=route.normalized_symbol,
+                    market=route.market,
+                )
+                if asset is None:
+                    return []
+                repository = MarketDataRepository(persistence_db)
+                for provider in route.provider_order:
+                    adjustment_mode = "QFQ" if provider == "akshare" else "RAW"
+                    watermark = repository.get_watermark(
+                        asset_id=asset.id,
+                        data_type="DAILY_BAR",
+                        provider=provider,
+                    )
+                    if require_coverage:
+                        if watermark is None or watermark.covered_from is None or watermark.covered_to is None:
+                            continue
+                        requested_end = min(end.date(), date.today())
+                        if watermark.covered_from > start.date():
+                            continue
+                        if watermark.covered_to < requested_end - timedelta(days=7):
+                            continue
+                    rows = repository.get_daily_bars(
+                        asset_id=asset.id,
+                        start_date=start,
+                        end_date=end,
+                        provider=provider,
+                        adjustment_mode=adjustment_mode,
+                        quality_statuses=["GOOD"],
+                    )
+                    if rows and (
+                        not require_coverage
+                        or self._has_complete_local_daily_coverage(
+                            rows,
+                            market=route.market,
+                            start=start.date(),
+                            end=min(requested_end, watermark.covered_to),
+                        )
+                    ):
+                        return [self._daily_row_payload(row) for row in rows]
+                return []
+        except Exception as error:
+            log_event(
+                logger,
+                "warning",
+                "market_daily_persisted_read_failed",
+                symbol=request.symbol,
+                error=str(error),
+            )
+            return []
+
+    def _persist_daily_payload(self, payload: Dict[str, Any]) -> None:
+        rows = payload.get("rows") or []
+        provider = payload.get("provider")
+        if not provider or not rows:
+            return
+        try:
+            with self._persistence_unit() as persistence_db:
+                repository = MarketDataRepository(persistence_db)
+                asset = repository.resolve_or_create_asset(
+                    symbol=payload["symbol"],
+                    market=payload.get("market") or "UNKNOWN",
+                    asset_type=payload.get("asset_type") or "UNKNOWN",
+                    quote_currency=self._quote_currency(
+                        payload.get("market") or "",
+                        payload["symbol"],
+                    ),
+                )
+                repository.upsert_provider_symbol_mapping(
+                    asset_id=asset.id,
+                    provider_key=provider,
+                    provider_symbol=payload["symbol"],
+                    provider_market=payload.get("market") or "UNKNOWN",
+                    capabilities=["DAILY_BAR"],
+                )
+                stored_rows = repository.upsert_daily_bars(
+                    asset_id=asset.id,
+                    provider=provider,
+                    bars=rows,
+                    adjustment_mode=payload.get("adjustment_mode") or "RAW",
+                    currency=asset.quote_currency,
+                )
+                covered_dates = [row.trading_date for row in stored_rows]
+                if covered_dates:
+                    repository.upsert_watermark(
+                        asset_id=asset.id,
+                        data_type="DAILY_BAR",
+                        provider=provider,
+                        covered_from=min(covered_dates),
+                        covered_to=max(covered_dates),
+                        last_success_at=datetime.now(timezone.utc),
+                    )
+        except Exception as error:
+            log_event(
+                logger,
+                "warning",
+                "market_daily_persistence_failed",
+                symbol=payload.get("symbol"),
+                provider=provider,
+                error=str(error),
+            )
+            if self._shared_persistence_db is not None:
+                raise
 
     async def _fetch_with_timeout(self, coro, timeout=5):
         try:
@@ -239,7 +609,12 @@ class MarketDataService:
             self.db,
         )
         if payload.get("quote") is not None:
+            self._persist_quote_payload(payload, exchange=exchange)
             return payload["quote"]
+
+        stored_quote = self._load_last_known_quote(payload)
+        if stored_quote is not None:
+            return stored_quote
 
         return {
             "error": payload.get("error"),
@@ -354,7 +729,14 @@ class MarketDataService:
                     'risk_level': metadata.risk_level.value if metadata.risk_level else None,
                     'instrument': metadata.instrument
                 },
-                'provider': self._get_provider_name(metadata.core_type.value if metadata.core_type else "EQUITY")
+                'provider': quote.get('provider') or self._get_provider_name(
+                    metadata.core_type.value if metadata.core_type else "EQUITY"
+                ),
+                'as_of': quote.get('as_of'),
+                'freshness': quote.get('freshness'),
+                'degraded': bool(quote.get('degraded', False)),
+                'degraded_reason': quote.get('degraded_reason'),
+                'source_refs': quote.get('source_refs') or [],
             }
         except Exception as e:
             # Generate candidates on failure
@@ -418,35 +800,71 @@ class MarketDataService:
         Get historical price data (K-lines)
         Returns: [{'date': 'YYYY-MM-DD', 'open': 10, 'high': 12, 'low': 9, 'close': 11, 'volume': 100}, ...]
         """
-        # Detect Asset Type
         asset_type = self.detect_asset_type(symbol, exchange)
-        
-        start_str = start.strftime('%Y%m%d')
-        end_str = end.strftime('%Y%m%d')
-        
-        start_ts = int(start.timestamp() * 1000)
-        end_ts = int(end.timestamp() * 1000)
-        
-        try:
-            if asset_type == 'A_STOCK' or asset_type == 'HK_STOCK':
-                return await run_in_threadpool(akshare_provider.get_history_k_data, symbol, start_str, end_str)
-                
-            elif asset_type == 'CRYPTO':
-                # Daily interval default
-                return await run_in_threadpool(binance_provider.get_klines, symbol, '1d', start_ts, end_ts)
-                
-            elif asset_type == 'US_STOCK':
-                # Use YFinance for history (Finnhub free tier limits history)
-                # Or use Finnhub stock_candles if available
-                return await run_in_threadpool(self._get_us_history, symbol, start, end)
-                
-            else:
-                # Fallback to generic YFinance
-                return await run_in_threadpool(self._get_yfinance_history, symbol, start, end)
-                
-        except Exception as e:
-            log_event(logger, "warning", "history_fetch_failed", symbol=symbol, error=str(e))
-            return []
+        route_hints = {
+            "A_STOCK": {"core_type": "STOCK", "market": "A_SHARE"},
+            "HK_STOCK": {"core_type": "STOCK", "market": "HK"},
+            "CRYPTO": {"core_type": "CRYPTO", "market": "CRYPTO"},
+            "US_STOCK": {"core_type": "STOCK", "market": "US"},
+        }
+        hints = route_hints.get(asset_type)
+        if hints is None:
+            try:
+                return await run_in_threadpool(yfinance_provider.get_history, symbol, start, end)
+            except Exception as error:
+                log_event(logger, "warning", "history_fetch_failed", symbol=symbol, error=str(error))
+                return []
+
+        request = MarketDataRequest(
+            symbol=symbol,
+            exchange=exchange,
+            core_type=hints["core_type"],
+            market=hints["market"],
+        )
+        persisted = self._load_persisted_daily_bars(
+            request,
+            start,
+            end,
+            require_coverage=True,
+        )
+        if persisted:
+            return persisted
+
+        payload = await run_in_threadpool(
+            get_daily_bars_with_metadata,
+            request,
+            start,
+            end,
+            self.db,
+        )
+        rows = payload.get("rows") or []
+        if rows:
+            self._persist_daily_payload(payload)
+            return rows
+
+        stored_rows = self._load_persisted_daily_bars(
+            request,
+            start,
+            end,
+            require_coverage=False,
+        )
+        if stored_rows:
+            log_event(
+                logger,
+                "warning",
+                "market_daily_persisted_fallback_used",
+                symbol=symbol,
+                provider_failures=payload.get("degraded_reason"),
+            )
+            return stored_rows
+        log_event(
+            logger,
+            "warning",
+            "history_fetch_failed",
+            symbol=symbol,
+            error=payload.get("degraded_reason") or payload.get("error"),
+        )
+        return []
 
     def _get_us_history(self, symbol: str, start: datetime, end: datetime) -> List[Dict[str, Any]]:
         try:
@@ -473,39 +891,7 @@ class MarketDataService:
         return self._get_yfinance_history(symbol, start, end)
 
     def _get_yfinance_history(self, symbol: str, start: datetime, end: datetime) -> List[Dict[str, Any]]:
-        import yfinance as yf
-        import pandas as pd
-        # Ticker adjustment usually needed if using YFinance directly
-        # But let's assume standard format or rely on yF's smarts
-        # Need to map suffixes if A-share/HK fell through to here (unlikely)
-        
-        hist = yf.download(symbol.upper(), start=start, end=end, progress=False, ignore_tz=True)
-        if hist.empty:
-            return []
-            
-        # Flatten MultiIndex columns if present (yfinance >= 0.2.x)
-        # This handles the case where columns are (Price, Ticker)
-        if isinstance(hist.columns, pd.MultiIndex):
-             # Depending on structure, usually level 0 is Price (Open, Close, etc)
-             # But sometimes it might be swapped. usually it is (Price, Ticker)
-             # If we have only 1 ticker, we can just drop the ticker level
-             try:
-                 hist.columns = hist.columns.droplevel(1)
-             except:
-                 # Fallback: just use get_level_values if droplevel fails or unseen structure
-                 hist.columns = hist.columns.get_level_values(0)
-            
-        result = []
-        for index, row in hist.iterrows():
-            result.append({
-                'date': index.strftime('%Y-%m-%d'),
-                'open': float(row['Open']),
-                'high': float(row['High']),
-                'low': float(row['Low']),
-                'close': float(row['Close']),
-                'volume': float(row['Volume'])
-            })
-        return result
+        return yfinance_provider.get_history(symbol, start, end)
 
     async def validate_api_key(self):
         """Test if the Finnhub API key works"""

@@ -100,7 +100,7 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.assertEqual(payload["data"]["timeline"]["active_view"], "ALL")
         self.assertEqual(payload["meta"]["freshness"], "FRESH")
         self.assertEqual(payload["meta"]["source"], "DERIVED")
-        self.assertEqual(payload["meta"]["note"], "Snapshot-first truth/snapshot read model")
+        self.assertEqual(payload["meta"]["note"], "审计快照视图")
 
     def test_timeline_home_returns_small_data_when_user_has_account_and_position(self):
         account = TradingAccount(
@@ -215,7 +215,7 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.assertEqual(snapshot_items[0]["event_type"], "REDUCE")
         self.assertEqual(snapshot_items[0]["occurred_at"], "2026-05-02T15:30:00Z")
         self.assertEqual(snapshot_items[0]["headline"], "AAPL 减仓")
-        self.assertEqual(snapshot_items[0]["summary"], "Truth lifecycle snapshot refreshed with 2 nodes.")
+        self.assertEqual(snapshot_items[0]["summary"], "生命周期快照已更新，共 2 个事件节点。")
         self.assertEqual(snapshot_items[0]["trust"]["source"], "DERIVED")
 
     def test_timeline_home_defaults_to_snapshot_only_without_feature_flag(self):
@@ -567,7 +567,7 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.assertEqual(len(items), 2)
         self.assertTrue(any(item["event_public_id"].startswith("derived-timeline:") for item in items))
         self.assertTrue(any(item["event_public_id"].startswith("pos-targeted-visible:") for item in items))
-        self.assertEqual(response.json()["meta"]["note"], "Legacy mixed fallback enabled")
+        self.assertEqual(response.json()["meta"]["note"], "已启用旧版混合回退")
 
     def test_timeline_home_defaults_review_inbox_to_truth_snapshots_not_legacy_positions(self):
         account = TradingAccount(

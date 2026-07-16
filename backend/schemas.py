@@ -1,7 +1,7 @@
 """
 Trading Noobs Backend - Pydantic Schemas
 """
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 from typing import Any, Dict, Generic, List, Optional, TypeVar
 from datetime import datetime, date
 from decimal import Decimal
@@ -418,6 +418,21 @@ class UserResponse(UserBase):
         from_attributes = True
 
 
+class UserProfileUpdate(BaseModel):
+    locale: Optional[str] = Field(None, max_length=20)
+    timezone: Optional[str] = Field(None, max_length=50)
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=8)
+
+
+class PasswordChangeResponse(BaseModel):
+    message: str
+    active_sessions_revoked: bool
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -540,11 +555,13 @@ class UserSettingsUpdate(BaseModel):
     theme: Optional[str] = Field(None, pattern="^(light|dark|system)$")
     up_color: Optional[str] = Field(None, pattern="^(GREEN|RED)$")
     display_currency: Optional[str] = Field(None, pattern="^(USD|HKD|CNY|EUR|GBP)$")
-    ibkr_host: Optional[str] = None
-    ibkr_port: Optional[int] = None
-    ibkr_client_id: Optional[int] = None
+    ibkr_flex_query_id: Optional[str] = None
+    ibkr_flex_token: Optional[str] = None
+    ibkr_flex_start_date: Optional[date] = None
     binance_api_key: Optional[str] = None
     binance_api_secret: Optional[str] = None
+    binance_market_type: Optional[str] = Field(None, pattern="^(SPOT|USD_M_FUTURES)$")
+    binance_symbols: Optional[List[str]] = None
     finnhub_api_key: Optional[str] = None
     llm_api_url: Optional[str] = None
     llm_api_key: Optional[str] = None
@@ -557,14 +574,71 @@ class UserSettingsResponse(BaseModel):
     theme: str
     up_color: str = "GREEN"
     display_currency: str = "USD"
-    ibkr_host: Optional[str]
-    ibkr_port: Optional[int]
-    ibkr_client_id: Optional[int]
+    ibkr_flex_query_id: Optional[str]
+    ibkr_flex_token: Optional[str]  # Will be masked in response
+    ibkr_flex_start_date: Optional[date]
     binance_api_key: Optional[str]  # Will be masked in response
+    binance_api_secret_configured: bool = False
+    binance_market_type: Optional[str]
+    binance_symbols: Optional[List[str]]
     finnhub_api_key: Optional[str]  # Will be masked
     llm_api_url: Optional[str]
     llm_model: Optional[str]
     
+    class Config:
+        from_attributes = True
+
+
+class BrokerSyncRequest(BaseModel):
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+
+
+class BrokerConnectionTestResponse(BaseModel):
+    ok: bool
+    provider: str
+    message: str
+    reference_code: Optional[str] = None
+
+
+class BrokerSyncRunResponse(BaseModel):
+    public_id: str
+    provider: str
+    market_type: Optional[str]
+    status: str
+    requested_start_date: Optional[date]
+    requested_end_date: Optional[date]
+    records_fetched: int
+    records_inserted: int
+    records_skipped: int
+    error_message: Optional[str]
+    metadata_json: Optional[Dict[str, Any]] = None
+    started_at: Optional[datetime]
+    finished_at: Optional[datetime]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class BrokerExecutionResponse(BaseModel):
+    public_id: str
+    provider: str
+    market_type: Optional[str]
+    account_ref: Optional[str]
+    symbol: str
+    side: str
+    quantity: Decimal
+    price: Decimal
+    trade_time: datetime
+    currency: Optional[str]
+    commission: Optional[Decimal]
+    commission_currency: Optional[str]
+    external_trade_id: str
+    external_order_id: Optional[str]
+    import_status: str
+    created_at: datetime
+
     class Config:
         from_attributes = True
 
@@ -612,6 +686,7 @@ class MarketQuoteTrustMeta(BaseModel):
     degraded: bool = False
     degraded_reason: Optional[str] = None
     source_refs: List[str] = Field(default_factory=list)
+    as_of: Optional[datetime] = None
 
 
 class MarketQuoteResponse(BaseModel):
@@ -623,6 +698,7 @@ class MarketQuoteResponse(BaseModel):
     degraded: bool = False
     degraded_reason: Optional[str] = None
     source_refs: List[str] = Field(default_factory=list)
+    as_of: Optional[datetime] = None
     error: Optional[str] = None
     trust: MarketQuoteTrustMeta
 
@@ -635,6 +711,11 @@ class MarketValidationResponse(BaseModel):
     name: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
     provider: Optional[str] = None
+    freshness: Optional[str] = None
+    degraded: Optional[bool] = None
+    degraded_reason: Optional[str] = None
+    source_refs: Optional[List[str]] = None
+    as_of: Optional[datetime] = None
     error: Optional[str] = None
     candidates: Optional[List[Dict[str, Any]]] = None
     raw_error: Optional[str] = None
@@ -770,17 +851,13 @@ class TradingAccountCreate(BaseModel):
 
 
 class TradingAccountUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: Optional[str] = Field(None, max_length=100)
     broker: Optional[str] = Field(None, max_length=50)
     account_type: Optional[str] = Field(None, max_length=50)
     currency: Optional[str] = Field(None, max_length=10)
-    initial_balance: Optional[Decimal] = None
-    cash_balance: Optional[Decimal] = None
-    current_balance: Optional[Decimal] = None
-    total_assets: Optional[Decimal] = None
-    total_liabilities: Optional[Decimal] = None
     description: Optional[str] = None
-    is_active: Optional[bool] = None
 
 
 class TradingAccountResponse(BaseModel):
@@ -873,6 +950,10 @@ class IntegrationCredentialUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
+class IntegrationCredentialActiveUpdate(BaseModel):
+    is_active: bool
+
+
 class IntegrationCredentialResponse(BaseModel):
     id: int
     provider_key: str
@@ -927,11 +1008,59 @@ class AdminBackupResponse(BaseModel):
     message: str
 
 
+class AdminBackupSummaryResponse(BaseModel):
+    backup_id: str
+    path: str
+    database_backend: str
+    created_at: datetime
+    size_bytes: int
+
+
+class AdminOpsSummaryResponse(BaseModel):
+    database_backend: str
+    backup_provider_configured: bool
+    backup_count: int
+    latest_backup_at: Optional[datetime] = None
+    user_count: int
+    active_user_count: int
+    admin_count: int
+    job_counts: Dict[str, int]
+    stale_running_job_count: int
+    platform_setting_count: int
+    configured_integration_count: int
+    active_integration_count: int
+    enabled_feature_flag_count: int
+    expired_feature_flag_count: int
+    active_business_lock_count: int
+    expired_business_lock_count: int
+
+
 class AdminUserOperationResponse(BaseModel):
     status: AdminOperationStatus
     user_public_id: str
     role: str
     message: str
+
+
+class AdminUserRoleUpdate(BaseModel):
+    role: str
+
+
+class AdminUserActiveUpdate(BaseModel):
+    is_active: bool
+
+
+class AdminUserSummaryResponse(BaseModel):
+    public_id: str
+    email: EmailStr
+    status: str
+    is_active: bool
+    role: str
+    last_login_at: Optional[datetime] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 class AdminPasswordResetResponse(BaseModel):

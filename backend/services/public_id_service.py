@@ -3,7 +3,8 @@ Trading Noobs Backend - Public ID Resolution Helpers
 """
 from sqlalchemy.orm import Session
 
-from models import Position, TradeBatch, TradingAccount, Transaction
+from models import Position, TradeBatch, TradingAccount, TradingPosition, Transaction
+from services.truth_legacy_projection_service import resolve_legacy_position_for_truth
 
 
 def resolve_trading_account(db: Session, user_id: int, identifier: str):
@@ -29,10 +30,19 @@ def resolve_position(db: Session, user_id: int, identifier: str):
     if position:
         return position
     if identifier.isdigit():
-        return db.query(Position).filter(
+        position = db.query(Position).filter(
             Position.id == int(identifier),
             Position.user_id == user_id,
         ).first()
+        if position:
+            return position
+
+    truth_position = db.query(TradingPosition).filter(
+        TradingPosition.public_id == identifier,
+        TradingPosition.user_id == user_id,
+    ).first()
+    if truth_position:
+        return resolve_legacy_position_for_truth(db, truth_position=truth_position)
     return None
 
 

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from models import AccountLedgerEntry, AccountLedgerEntryType, PositionEventType, TradeInstrument, TradingPosition, TradingPositionStatus
 from services.insight_artifact_service import InsightArtifactService
+from services.truth_legacy_projection_service import resolve_legacy_position_for_truth
 
 
 def resolve_truth_position_by_public_id(db: Session, user_id: int, public_id: str) -> TradingPosition | None:
@@ -35,6 +36,18 @@ def _node_type(event_type: PositionEventType) -> str:
     if event_type == PositionEventType.CLOSE:
         return "CLOSE"
     return event_type.value
+
+
+def _node_label(event_type: PositionEventType) -> str:
+    return {
+        PositionEventType.OPEN: "开仓",
+        PositionEventType.ADD: "加仓",
+        PositionEventType.REDUCE: "减仓",
+        PositionEventType.CLOSE: "平仓",
+        PositionEventType.REVERSAL: "撤销",
+        PositionEventType.MANUAL_ADJUSTMENT: "手工调整",
+        PositionEventType.DIVIDEND: "股息",
+    }.get(event_type, event_type.value)
 
 
 def _ledger_cash_effects(truth_position: TradingPosition) -> list[dict]:
@@ -103,6 +116,10 @@ def build_trading_position_lifecycle_payload(db: Session, truth_position: Tradin
     checklist_snapshot = opening_event.checklist_snapshot or {} if opening_event else {}
     cash_effects = _ledger_cash_effects(truth_position)
     event_public_ids_by_id = {event.id: event.public_id for event in truth_position.events}
+    legacy_position = resolve_legacy_position_for_truth(db, truth_position=truth_position)
+    route_public_id = legacy_position.public_id if legacy_position else truth_position.public_id
+    quantity_opened = truth_position.quantity_opened or Decimal("0")
+    quantity_closed = truth_position.quantity_closed or Decimal("0")
 
     lifecycle_thread = []
     for event in truth_position.events:
@@ -111,8 +128,8 @@ def build_trading_position_lifecycle_payload(db: Session, truth_position: Tradin
                 "node_public_id": event.public_id,
                 "node_type": _node_type(event.event_type),
                 "occurred_at": event.event_time,
-                "title": f"{truth_position.instrument.contract_symbol} {event.event_type.value}",
-                "summary": event.reason or event.note or event.event_type.value,
+                "title": f"{truth_position.instrument.contract_symbol} {_node_label(event.event_type)}",
+                "summary": event.reason or event.note or _node_label(event.event_type),
                 "related_event_public_id": event.public_id,
                 "reverses_event_public_id": (
                     event_public_ids_by_id.get(event.reverses_event_id)
@@ -136,10 +153,10 @@ def build_trading_position_lifecycle_payload(db: Session, truth_position: Tradin
                         "ref_type": "POSITION_EVENT",
                         "public_id": event.public_id,
                         "label": event.event_type.value,
-                        "href": f"/positions/{truth_position.public_id}",
+                        "href": f"/positions/{route_public_id}",
                     }
                 ],
-                "href": f"/positions/{truth_position.public_id}",
+                "href": f"/positions/{route_public_id}",
             }
         )
 
@@ -151,6 +168,7 @@ def build_trading_position_lifecycle_payload(db: Session, truth_position: Tradin
         ),
         "position_summary": {
             "public_id": truth_position.public_id,
+            "route_public_id": route_public_id,
             "title": truth_position.instrument.contract_symbol,
             "status": truth_position.status.value,
             "side": truth_position.side.value,
@@ -168,6 +186,12 @@ def build_trading_position_lifecycle_payload(db: Session, truth_position: Tradin
             "realized_pnl_gross": truth_position.realized_pnl_gross,
             "realized_pnl_net": truth_position.realized_pnl_net,
             "total_fees": truth_position.total_fees,
+            "quantity_opened": quantity_opened,
+            "quantity_closed": quantity_closed,
+            "open_quantity": max(Decimal("0"), quantity_opened - quantity_closed),
+            "average_open_price": truth_position.avg_open_price,
+            "average_close_price": truth_position.avg_close_price,
+            "base_currency": truth_position.base_currency,
             "holding_period_seconds": truth_position.holding_period_seconds,
             "pnl_basis": {
                 "cost_basis_method": truth_position.cost_basis_method,
@@ -193,12 +217,12 @@ def build_trading_position_lifecycle_payload(db: Session, truth_position: Tradin
             "nodes": lifecycle_thread,
         },
         "result_summary": {
-            "headline": f"{truth_position.instrument.contract_symbol} lifecycle",
+            "headline": f"{truth_position.instrument.contract_symbol} 交易生命周期",
             "summary": f"包含 {len(lifecycle_thread)} 个事件节点。",
             "key_numbers": [
-                {"label": "Opened", "value": str(truth_position.quantity_opened or 0)},
-                {"label": "Closed", "value": str(truth_position.quantity_closed or 0)},
-                {"label": "Realized Net", "value": str(truth_position.realized_pnl_net or 0)},
+                {"label": "累计开仓", "value": str(truth_position.quantity_opened or 0)},
+                {"label": "累计平仓", "value": str(truth_position.quantity_closed or 0)},
+                {"label": "已实现净盈亏", "value": str(truth_position.realized_pnl_net or 0)},
             ],
         },
         "execution_quality": {
@@ -231,7 +255,7 @@ def build_trading_position_lifecycle_payload(db: Session, truth_position: Tradin
                     "ref_type": "POSITION_EVENT",
                     "public_id": event.public_id,
                     "label": event.event_type.value,
-                    "href": f"/positions/{truth_position.public_id}",
+                    "href": f"/positions/{route_public_id}",
                 }
                 for event in truth_position.events
             ]

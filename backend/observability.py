@@ -75,6 +75,15 @@ def _detail_message(detail) -> str:
     return "Request failed"
 
 
+def _explicit_error_code(detail) -> str | None:
+    if not isinstance(detail, dict):
+        return None
+    code = detail.get("code")
+    if isinstance(code, str) and re.fullmatch(r"[A-Z][A-Z0-9_]{0,99}", code):
+        return code
+    return None
+
+
 def build_error_response_payload(
     *,
     code: str,
@@ -117,8 +126,11 @@ def add_error_handlers(app: FastAPI) -> None:
     async def http_exception_handler(request: Request, exc: StarletteHTTPException):
         request_id = _request_id_from_state_or_headers(request)
         namespace = infer_error_namespace(request.url.path)
-        code = make_error_code(namespace, _status_error_name(exc.status_code))
         detail = exc.detail
+        code = _explicit_error_code(detail) or make_error_code(
+            namespace,
+            _status_error_name(exc.status_code),
+        )
         message = _detail_message(detail)
         payload = build_error_response_payload(
             code=code,

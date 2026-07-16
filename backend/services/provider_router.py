@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Mapping
 
 from services.market_data_types import ProviderRoute
+from services.market_provider_registry import (
+    DEFAULT_MARKET_PROVIDER_REGISTRY,
+    MarketDataCapability,
+    MarketProviderRegistry,
+)
 
 
 _CRYPTO_SUFFIXES = ("USDT", "BUSD", "USDC", "BTC", "ETH", "BNB")
@@ -34,10 +39,17 @@ def _build_route(
     symbol: str,
     market: str,
     asset_type: str,
-    provider_order: tuple[str, ...],
     normalized_symbol: str | None = None,
     reason: str,
+    capability: MarketDataCapability = MarketDataCapability.LATEST_QUOTE,
+    credential_availability: Mapping[str, bool] | None = None,
+    registry: MarketProviderRegistry = DEFAULT_MARKET_PROVIDER_REGISTRY,
 ) -> ProviderRoute:
+    provider_order = registry.provider_order(
+        market=market,
+        capability=capability,
+        credential_availability=credential_availability,
+    )
     refs = [f"symbol:{symbol}"]
     if market != "UNKNOWN":
         refs.append(f"market:{market}")
@@ -87,6 +99,10 @@ def detect_asset_route(
     core_type: str | None = None,
     market: str | None = None,
     instrument: str | None = None,
+    *,
+    capability: MarketDataCapability = MarketDataCapability.LATEST_QUOTE,
+    credential_availability: Mapping[str, bool] | None = None,
+    registry: MarketProviderRegistry = DEFAULT_MARKET_PROVIDER_REGISTRY,
 ) -> ProviderRoute:
     """Return deterministic provider routing for market data requests."""
     del instrument
@@ -100,8 +116,10 @@ def detect_asset_route(
             symbol=symbol_upper,
             market="CRYPTO",
             asset_type="CRYPTO",
-            provider_order=("binance",),
             reason="crypto_hint",
+            capability=capability,
+            credential_availability=credential_availability,
+            registry=registry,
         )
 
     if market_upper == "A_SHARE":
@@ -109,8 +127,10 @@ def detect_asset_route(
             symbol=symbol_upper,
             market="A_SHARE",
             asset_type="FUND" if core_type_upper == "FUND" else "STOCK",
-            provider_order=("akshare",),
             reason="market_hint",
+            capability=capability,
+            credential_availability=credential_availability,
+            registry=registry,
         )
 
     if market_upper == "HK" or exchange_upper in {"HK", "HKEX", "HONG KONG"}:
@@ -118,8 +138,10 @@ def detect_asset_route(
             symbol=symbol_upper,
             market="HK",
             asset_type="STOCK",
-            provider_order=("akshare",),
             reason="hk_hint",
+            capability=capability,
+            credential_availability=credential_availability,
+            registry=registry,
         )
 
     if core_type_upper == "FX" or market_upper == "FOREX":
@@ -127,8 +149,10 @@ def detect_asset_route(
             symbol=symbol_upper,
             market="FOREX",
             asset_type="FX",
-            provider_order=("akshare",),
             reason="forex_hint",
+            capability=capability,
+            credential_availability=credential_availability,
+            registry=registry,
         )
 
     if symbol_upper.endswith(_CRYPTO_SUFFIXES):
@@ -136,8 +160,10 @@ def detect_asset_route(
             symbol=symbol_upper,
             market="CRYPTO",
             asset_type="CRYPTO",
-            provider_order=("binance",),
             reason="crypto_symbol_suffix",
+            capability=capability,
+            credential_availability=credential_availability,
+            registry=registry,
         )
 
     if _is_a_share(symbol_upper):
@@ -145,8 +171,10 @@ def detect_asset_route(
             symbol=symbol_upper,
             market="A_SHARE",
             asset_type="STOCK",
-            provider_order=("akshare",),
             reason="a_share_symbol_rule",
+            capability=capability,
+            credential_availability=credential_availability,
+            registry=registry,
         )
 
     if _is_cn_fund(symbol_upper) or core_type_upper == "FUND":
@@ -154,8 +182,10 @@ def detect_asset_route(
             symbol=symbol_upper,
             market="A_SHARE",
             asset_type="FUND",
-            provider_order=("akshare",),
             reason="fund_symbol_rule",
+            capability=capability,
+            credential_availability=credential_availability,
+            registry=registry,
         )
 
     if symbol_upper.endswith(".HK") or re.match(r"^\d{5}$", symbol_upper):
@@ -163,8 +193,10 @@ def detect_asset_route(
             symbol=symbol_upper,
             market="HK",
             asset_type="STOCK",
-            provider_order=("akshare",),
             reason="hk_symbol_rule",
+            capability=capability,
+            credential_availability=credential_availability,
+            registry=registry,
         )
 
     if _is_forex_pair(symbol_upper):
@@ -172,8 +204,10 @@ def detect_asset_route(
             symbol=symbol_upper,
             market="FOREX",
             asset_type="FX",
-            provider_order=("akshare",),
             reason="forex_pair_rule",
+            capability=capability,
+            credential_availability=credential_availability,
+            registry=registry,
         )
 
     if re.match(r"^[A-Z][A-Z.\-]{0,7}$", symbol_upper):
@@ -181,14 +215,18 @@ def detect_asset_route(
             symbol=symbol_upper,
             market="US",
             asset_type="STOCK",
-            provider_order=("finnhub", "yfinance"),
             reason="us_symbol_rule",
+            capability=capability,
+            credential_availability=credential_availability,
+            registry=registry,
         )
 
     return _build_route(
         symbol=symbol_upper,
         market="UNKNOWN",
         asset_type=core_type_upper or "UNKNOWN",
-        provider_order=(),
         reason="unknown",
+        capability=capability,
+        credential_availability=credential_availability,
+        registry=registry,
     )

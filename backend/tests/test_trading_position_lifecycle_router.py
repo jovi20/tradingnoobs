@@ -766,6 +766,16 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
             0,
         )
 
+        legacy_projection = self.db.query(Position).filter(
+            Position.public_id == "legacy-open-position"
+        ).one()
+        self.assertEqual(legacy_projection.total_quantity, Decimal("8.00000000"))
+        self.assertEqual(
+            legacy_projection.average_entry_price.quantize(Decimal("0.0001")),
+            Decimal("183.7500"),
+        )
+        self.assertEqual(legacy_projection.status, PositionStatus.OPEN)
+
     def test_trade_event_write_replays_completed_idempotency_key_without_duplicate_event(self):
         truth_position = self._seed_open_synced_position()
         request_body = {
@@ -1034,6 +1044,14 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         ).one()
         self.assertEqual(ledger_entry.entry_type, AccountLedgerEntryType.REALIZED_PNL)
         self.assertEqual(ledger_entry.amount, Decimal("149.00000000"))
+
+        legacy_projection = self.db.query(Position).filter(
+            Position.public_id == "legacy-open-position"
+        ).one()
+        self.assertEqual(legacy_projection.total_quantity, Decimal("0E-8"))
+        self.assertEqual(legacy_projection.realized_pnl, Decimal("149.00000000"))
+        self.assertEqual(legacy_projection.status, PositionStatus.CLOSED)
+        self.assertIsNotNone(legacy_projection.closed_at)
 
     def test_trade_event_write_rejects_partial_close_without_mutating_events(self):
         truth_position = self._seed_open_synced_position()

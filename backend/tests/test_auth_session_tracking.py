@@ -124,6 +124,126 @@ class AuthSessionTrackingTests(unittest.TestCase):
         self.assertIsNotNone(session.revoked_at)
         self.assertIsNotNone(auth_token.revoked_at)
 
+    def test_user_can_update_locale_and_timezone(self):
+        self.client.post(
+            "/api/auth/register",
+            json={
+                "email": "Trader@Example.com",
+                "password": "password123",
+                "invite_code": "bigme",
+            },
+        )
+        login_response = self.client.post(
+            "/api/auth/login",
+            data={
+                "username": "trader@example.com",
+                "password": "password123",
+            },
+        )
+        token = login_response.json()["access_token"]
+
+        response = self.client.patch(
+            "/api/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"locale": " zh-CN ", "timezone": " Asia/Shanghai "},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["locale"], "zh-CN")
+        self.assertEqual(payload["timezone"], "Asia/Shanghai")
+
+    def test_change_password_updates_credential_and_revokes_other_sessions(self):
+        self.client.post(
+            "/api/auth/register",
+            json={
+                "email": "Trader@Example.com",
+                "password": "password123",
+                "invite_code": "bigme",
+            },
+        )
+        first_login = self.client.post(
+            "/api/auth/login",
+            data={
+                "username": "trader@example.com",
+                "password": "password123",
+            },
+        )
+        second_login = self.client.post(
+            "/api/auth/login",
+            data={
+                "username": "trader@example.com",
+                "password": "password123",
+            },
+        )
+        first_token = first_login.json()["access_token"]
+        second_token = second_login.json()["access_token"]
+
+        response = self.client.post(
+            "/api/auth/change-password",
+            headers={"Authorization": f"Bearer {first_token}"},
+            json={
+                "current_password": "password123",
+                "new_password": "new-password-123",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["active_sessions_revoked"])
+
+        revoked_me = self.client.get(
+            "/api/auth/me",
+            headers={"Authorization": f"Bearer {second_token}"},
+        )
+        self.assertEqual(revoked_me.status_code, 401)
+
+        old_password_login = self.client.post(
+            "/api/auth/login",
+            data={
+                "username": "trader@example.com",
+                "password": "password123",
+            },
+        )
+        self.assertEqual(old_password_login.status_code, 401)
+
+        new_password_login = self.client.post(
+            "/api/auth/login",
+            data={
+                "username": "trader@example.com",
+                "password": "new-password-123",
+            },
+        )
+        self.assertEqual(new_password_login.status_code, 200)
+
+    def test_change_password_rejects_wrong_current_password(self):
+        self.client.post(
+            "/api/auth/register",
+            json={
+                "email": "Trader@Example.com",
+                "password": "password123",
+                "invite_code": "bigme",
+            },
+        )
+        login_response = self.client.post(
+            "/api/auth/login",
+            data={
+                "username": "trader@example.com",
+                "password": "password123",
+            },
+        )
+        token = login_response.json()["access_token"]
+
+        response = self.client.post(
+            "/api/auth/change-password",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "current_password": "wrong-password",
+                "new_password": "new-password-123",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+
 
 if __name__ == "__main__":
     unittest.main()

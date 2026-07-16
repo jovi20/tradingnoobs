@@ -28,10 +28,16 @@ from schemas import (
 )
 from models import AssetCoreType, AssetMarket, AssetRiskLevel, AssetCurrency
 from models import TradingPosition
-from services.market_data_service import MarketDataService
+from services.market_data_access import MarketDataService
 from services.public_id_service import resolve_position, resolve_trade_batch, resolve_trading_account
 from services.legacy_truth_sync_service import legacy_position_truth_public_id, sync_legacy_position_to_truth
 from services.trading_position_read_service import build_trading_position_lifecycle_payload
+from services.trading_position_read_service import resolve_truth_position_by_public_id
+from services.truth_legacy_projection_service import (
+    project_truth_accounting_to_legacy,
+    project_user_truth_positions_to_legacy,
+    resolve_truth_position_for_legacy,
+)
 from services.trading_accounting_service import (
     AccountingEvent,
     calculate_fifo_position_accounting,
@@ -200,6 +206,7 @@ async def list_positions(
     db: Session = Depends(get_db)
 ):
     """List all positions for the current user"""
+    truth_by_legacy_id = project_user_truth_positions_to_legacy(db, user_id=current_user.id)
     from sqlalchemy.orm import joinedload
     query = db.query(Position).outerjoin(AssetMetadata).options(
         joinedload(Position.batches),
@@ -258,6 +265,11 @@ async def list_positions(
 
             'id': pos.id,
             'public_id': pos.public_id,
+            'truth_position_public_id': (
+                truth_by_legacy_id[pos.id].public_id
+                if pos.id in truth_by_legacy_id
+                else None
+            ),
             'account_id': pos.account_id,
             'symbol': pos.symbol,
             'exchange': pos.exchange,
@@ -362,6 +374,19 @@ async def get_position(
     
     if not position:
         raise HTTPException(status_code=404, detail="Position not found")
+
+    truth_position = resolve_truth_position_for_legacy(
+        db,
+        user_id=current_user.id,
+        legacy_position=position,
+    )
+    if truth_position:
+        project_truth_accounting_to_legacy(
+            db,
+            truth_position=truth_position,
+            legacy_position=position,
+        )
+        db.flush()
     
     # Enrich with market data if open
     if position.status == PositionStatus.OPEN:
@@ -400,6 +425,7 @@ async def get_position(
     response = {
         "id": position.id,
         "public_id": position.public_id,
+        "truth_position_public_id": truth_position.public_id if truth_position else None,
         "user_id": position.user_id,
         "account_id": position.account_id,
         "strategy_id": position.strategy_id,
@@ -448,7 +474,24 @@ async def get_position_truth_lifecycle(
     if not legacy_position:
         raise HTTPException(status_code=404, detail="Position not found")
 
-    truth_position = sync_legacy_position_to_truth(db, legacy_position.id)
+    truth_public_id = legacy_position_truth_public_id(legacy_position)
+    truth_position = resolve_truth_position_by_public_id(
+        db,
+        current_user.id,
+        truth_public_id,
+    )
+    has_truth_native_changes = bool(
+        truth_position
+        and any(event.input_source != "LEGACY_BACKFILL" for event in truth_position.events)
+    )
+    if truth_position is None or not has_truth_native_changes:
+        truth_position = sync_legacy_position_to_truth(db, legacy_position.id)
+    else:
+        project_truth_accounting_to_legacy(
+            db,
+            truth_position=truth_position,
+            legacy_position=legacy_position,
+        )
     data = build_trading_position_lifecycle_payload(db, truth_position)
     return JSONResponse(
         content=jsonable_encoder(
@@ -809,6 +852,7 @@ async def check_open_position(
     db: Session = Depends(get_db)
 ):
     """Check if user has an open position for the given symbol and account"""
+    project_user_truth_positions_to_legacy(db, user_id=current_user.id)
     account = resolve_trading_account(db, current_user.id, account_id)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")

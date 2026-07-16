@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from models import PositionEvent, PositionEventType, TradingPosition, TradingPositionStatus
 from services.account_ledger_service import sync_realized_pnl_event_to_account_ledger
 from services.trading_accounting_service import AccountingEvent, calculate_fifo_position_accounting
+from services.truth_legacy_projection_service import project_truth_accounting_to_legacy
 
 
 TRADE_EVENT_TYPES = {
@@ -113,6 +114,7 @@ def replay_truth_position_accounting(db: Session, *, position: TradingPosition) 
         event.realized_pnl_gross = result.realized_pnl_gross
         event.realized_pnl_net = result.realized_pnl_net
 
+    project_truth_accounting_to_legacy(db, truth_position=position)
     db.flush()
 
     for event in active_events:

@@ -1,7 +1,9 @@
+import os
 import sys
 import types
 
 
+os.environ.setdefault("RELEASE_PROFILE", "DEVELOPMENT_FULL")
 sys.modules.setdefault("finnhub", types.SimpleNamespace(Client=lambda *args, **kwargs: object()))
 sys.modules.setdefault("pandas", types.SimpleNamespace(DataFrame=object))
 sys.modules.setdefault("numpy", types.SimpleNamespace())

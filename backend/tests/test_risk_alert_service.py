@@ -171,7 +171,7 @@ class RiskAlertServiceTests(unittest.TestCase):
 
         daily_alert = next(alert for alert in summary["alerts"] if alert["kind"] == "DAILY_LOSS_LIMIT")
         self.assertEqual(daily_alert["severity"], "CRITICAL")
-        self.assertIn("Daily equity change crossed the -5% critical threshold.", daily_alert["reason"])
+        self.assertEqual(daily_alert["reason"], "当日权益变动已跌破 -5% 的严重风险阈值。")
 
     def test_symbol_concentration_alert_uses_gross_exposure(self):
         self._require_service()

@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     # Environment
     env_name: str = "development"  # development / production
     auto_create_schema: Optional[bool] = None
+    release_profile: str = "JOURNAL_BASELINE"
 
     class Config:
         env_file = ".env"

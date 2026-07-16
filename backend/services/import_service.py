@@ -25,7 +25,7 @@ class ImportService:
         Parse uploaded file (CSV/Excel) and return a token and preview items.
         """
         content = await file.read()
-        filename = file.filename.lower()
+        filename = (file.filename or '').lower()
         
         try:
             if filename.endswith('.csv'):
@@ -33,9 +33,21 @@ class ImportService:
             elif filename.endswith(('.xls', '.xlsx')):
                 df = pd.read_excel(io.BytesIO(content))
             else:
-                raise HTTPException(status_code=400, detail="Unsupported file format. Use CSV or Excel.")
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
+                raise HTTPException(status_code=400, detail="不支持此文件格式，请上传 CSV 或 Excel 文件。")
+        except HTTPException:
+            raise
+        except Exception as exc:
+            log_event(
+                logger,
+                "warning",
+                "import_file_parse_failed",
+                filename=filename,
+                error=str(exc),
+            )
+            raise HTTPException(
+                status_code=400,
+                detail="文件解析失败，请检查文件内容和格式后重试。",
+            ) from exc
             
         # Normalize headers: strip details, lowercase
         df.columns = [str(c).strip().lower() for c in df.columns]
@@ -63,7 +75,10 @@ class ImportService:
             df.rename(columns=column_map, inplace=True)
             missing = required_cols - set(df.columns)
             if missing:
-                raise HTTPException(status_code=400, detail=f"Missing required columns: {', '.join(missing)}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"缺少必填列：{', '.join(sorted(missing))}",
+                )
 
         # Limit preview rows
         preview_rows = []
@@ -99,7 +114,7 @@ class ImportService:
         
         # 1. Symbol
         if pd.isna(row.get('symbol')):
-            errors.append("Symbol is required")
+            errors.append("标的代码不能为空")
         else:
             parsed['symbol'] = str(row['symbol']).upper()
             
@@ -108,20 +123,20 @@ class ImportService:
             date_val = row.get('date')
             parsed['entry_time'] = pd.to_datetime(date_val).to_pydatetime()
         except:
-            errors.append("Invalid Date format")
+            errors.append("日期格式无效")
             
         # 3. Price & Quantity
         try:
             parsed['price'] = float(row['price'])
-            if parsed['price'] < 0: errors.append("Price must be positive")
+            if parsed['price'] <= 0: errors.append("价格必须大于 0")
         except:
-             errors.append("Invalid Price")
+             errors.append("价格格式无效")
              
         try:
             parsed['quantity'] = float(row['quantity'])
-            if parsed['quantity'] <= 0: errors.append("Quantity must be positive")
+            if parsed['quantity'] <= 0: errors.append("数量必须大于 0")
         except:
-             errors.append("Invalid Quantity")
+             errors.append("数量格式无效")
 
         # 4. Direction (Long/Short)
         direction_raw = str(row.get('direction', '')).upper()
@@ -130,7 +145,7 @@ class ImportService:
         elif direction_raw in ['SHORT', 'SELL', 'S']:
             parsed['direction'] = PositionDirectionEnum.SHORT
         else:
-            errors.append("Invalid Direction (LONG/SHORT)")
+            errors.append("方向无效（仅支持 LONG / SHORT）")
 
         # 5. Action (Entry/Exit)
         action_raw = str(row.get('action', '')).upper()
@@ -139,7 +154,7 @@ class ImportService:
         elif action_raw in ['CLOSE', 'EXIT', 'SELL', '减仓', '平仓']:
             parsed['type'] = BatchTypeEnum.EXIT
         else:
-            errors.append("Invalid Action (OPEN/CLOSE)")
+            errors.append("操作无效（仅支持 OPEN / CLOSE）")
             
         # Optional fields
         parsed['reason'] = str(row.get('reason', '')) if pd.notna(row.get('reason')) else None
@@ -195,7 +210,7 @@ class ImportService:
         Commit the import to the database.
         """
         if token not in IMPORT_CACHE:
-            raise HTTPException(status_code=400, detail="Import session expired")
+            raise HTTPException(status_code=400, detail="导入会话已过期，请重新上传文件。")
             
         cached_rows = IMPORT_CACHE[token]
         processed_count = 0

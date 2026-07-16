@@ -50,7 +50,7 @@ from schemas import (
 from services.auth_service import get_current_user
 from services.derived_timeline_read_service import list_recent_timeline_snapshots
 from services.insight_artifact_service import InsightArtifactService
-from services.market_data_service import MarketDataService
+from services.market_data_access import MarketDataService
 from services.platform_config_service import get_feature_flag_enabled, get_llm_runtime_config
 from services.risk_alert_service import build_portfolio_risk_summary
 from services.timeline_source_policy import get_timeline_source_mode
@@ -235,11 +235,11 @@ def _build_snapshot_review_inbox(snapshots: list[DerivedTimelineSnapshot], as_of
                 public_id=f"inbox:{snapshot.trading_position_public_id}:missing_review",
                 kind=ReviewInboxKindEnum.MISSING_REVIEW,
                 severity=InboxSeverityEnum.WARNING,
-                summary=f"{position_title} 已平仓，但 truth review 仍待完成",
-                reason="Truth lifecycle snapshot is closed and pending review artifact",
+                summary=f"{position_title} 已平仓，但复盘尚未完成",
+                reason="生命周期快照显示该持仓已平仓，仍缺少复盘记录",
                 recommended_action=ReviewInboxAction(
                     kind=RecommendedActionKindEnum.START_REVIEW,
-                    label="开始 truth 复盘",
+                    label="开始复盘",
                     href=href,
                 ),
                 linked_object=LinkedObjectRef(
@@ -553,10 +553,10 @@ def _build_materialized_timeline_events(
                 event_type=event_type,
                 occurred_at=occurred_at_iso,
                 headline=f"{position_title} {action_labels.get(event_type, '生命周期更新')}",
-                summary=f"Truth lifecycle snapshot refreshed with {lifecycle_node_count or 0} nodes.",
+                summary=f"生命周期快照已更新，共 {lifecycle_node_count or 0} 个事件节点。",
                 instrument=TimelineInstrumentRef(
                     asset_label=position_title,
-                    instrument_label="Truth Lifecycle",
+                    instrument_label="交易生命周期",
                     symbol=position_title,
                     href=f"/positions/{snapshot.trading_position_public_id}",
                 ),
@@ -930,9 +930,9 @@ def get_timeline_home(
     source_mode = get_timeline_source_mode(legacy_mixed_feed_enabled=legacy_mixed_feed_enabled)
     snapshot_only_enabled = source_mode == "SNAPSHOT_ONLY"
     source_mode_note = (
-        "Snapshot-first truth/snapshot read model"
+        "审计快照视图"
         if snapshot_only_enabled
-        else "Legacy mixed fallback enabled"
+        else "已启用旧版混合回退"
     )
     meta = _trust_meta(
         as_of=as_of,

@@ -196,7 +196,7 @@ class PublicIdRouteTests(unittest.TestCase):
         self.assertEqual(ledger_entry.amount, Decimal("1000"))
         self.assertEqual(Decimal(str(payload["cash_balance"])), Decimal("1000"))
 
-    def test_account_cash_balance_update_writes_cash_adjustment_ledger_entry(self):
+    def test_account_metadata_update_rejects_cash_balance_mutation(self):
         create_response = self.client.post(
             "/api/accounts",
             json={
@@ -211,18 +211,21 @@ class PublicIdRouteTests(unittest.TestCase):
 
         update_response = self.client.patch(
             f"/api/accounts/{account_public_id}",
-            json={"cash_balance": "1200"},
+            json={"name": "Renamed Account", "cash_balance": "1200"},
         )
 
-        self.assertEqual(update_response.status_code, 200)
-        payload = update_response.json()
-        ledger_entry = self.db.query(AccountLedgerEntry).filter(
-            AccountLedgerEntry.account_id == payload["id"],
+        self.assertEqual(update_response.status_code, 422)
+        account_id = create_response.json()["id"]
+        ledger_entry_count = self.db.query(AccountLedgerEntry).filter(
+            AccountLedgerEntry.account_id == account_id,
             AccountLedgerEntry.source == "MANUAL_CASH_ADJUSTMENT",
-        ).one()
-        self.assertEqual(ledger_entry.entry_type, AccountLedgerEntryType.CASH_ADJUSTMENT)
-        self.assertEqual(ledger_entry.amount, Decimal("200"))
-        self.assertEqual(Decimal(str(payload["cash_balance"])), Decimal("1200"))
+        ).count()
+        self.assertEqual(ledger_entry_count, 0)
+
+        get_response = self.client.get(f"/api/accounts/{account_public_id}")
+        self.assertEqual(get_response.status_code, 200)
+        self.assertEqual(get_response.json()["name"], "Cash Adjustment")
+        self.assertEqual(Decimal(str(get_response.json()["cash_balance"])), Decimal("1000"))
 
     def test_positions_list_and_get_include_and_accept_public_id(self):
         list_response = self.client.get("/api/positions")

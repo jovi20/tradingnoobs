@@ -3,13 +3,29 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from database import get_db
-from models import BusinessLock, FeatureFlag, IntegrationCredential, JobRun, JobRunStatus, PlatformSetting, SystemSetting, User
+from models import (
+    BusinessLock,
+    BusinessLockStatus,
+    FeatureFlag,
+    IntegrationCredential,
+    JobRun,
+    JobRunStatus,
+    PlatformSetting,
+    SystemSetting,
+    User,
+)
 from schemas import (
     AdminBackupResponse,
+    AdminBackupSummaryResponse,
+    AdminOpsSummaryResponse,
     AdminPasswordResetResponse,
+    AdminUserActiveUpdate,
     AdminUserOperationResponse,
+    AdminUserRoleUpdate,
+    AdminUserSummaryResponse,
     FeatureFlagResponse,
     FeatureFlagUpdate,
+    IntegrationCredentialActiveUpdate,
     IntegrationCredentialResponse,
     IntegrationCredentialUpdate,
     PlatformSettingResponse,
@@ -18,10 +34,19 @@ from schemas import (
     SystemSettingUpdate,
 )
 from routers.auth import get_current_user
+from release_profile import RuntimeCapability, is_capability_enabled
+from routers.disabled_capabilities import raise_feature_disabled
 import httpx
 from observability import get_structured_logger, log_event
-from services.admin_user_service import AdminUserNotFound, promote_user_to_admin, reset_user_password
-from services.backup_service import BackupProviderNotConfigured, trigger_database_backup
+from services.admin_user_service import (
+    AdminUserNotFound,
+    AdminUserOperationBlocked,
+    promote_user_to_admin,
+    reset_user_password,
+    set_user_active_state,
+    update_user_role,
+)
+from services.backup_service import BackupProviderNotConfigured, detect_database_backend, list_database_backups, trigger_database_backup
 from services.credential_service import decrypt_secret, encrypt_secret, mask_secret
 from services.job_service import cancel_job_run, force_cancel_running_job_run, requeue_job_run
 from services.platform_config_service import get_llm_runtime_config
@@ -35,10 +60,56 @@ logger = get_structured_logger("admin")
 ADMIN_BACKUP_DIR = "backend/backups"
 DEFAULT_JOB_STALE_TIMEOUT_SECONDS = 30 * 60
 FORCE_CANCEL_WARNING = "Force-cancel releases active business locks owned by this job and may leave partial work behind."
+_BROKER_PROVIDER_KEYS = {"ibkr", "binance", "broker", "broker_sync"}
+_MARKET_PROVIDER_KEYS = {"finnhub", "market", "market_data", "yfinance", "akshare"}
+_BROKER_SETTING_KEYS = {
+    "ibkr_flex_query_id",
+    "ibkr_flex_token",
+    "ibkr_flex_start_date",
+    "binance_api_key",
+    "binance_api_secret",
+    "binance_market_type",
+    "binance_symbols",
+}
+_MARKET_SETTING_KEYS = {"finnhub_api_key"}
 
 
 def _enum_value(value):
     return value.value if hasattr(value, "value") else value
+
+
+def _require_provider_capability(provider_key: str) -> None:
+    normalized = provider_key.strip().lower()
+    if normalized in _BROKER_PROVIDER_KEYS and not is_capability_enabled(
+        RuntimeCapability.BROKER_SYNC
+    ):
+        raise_feature_disabled(RuntimeCapability.BROKER_SYNC.value)
+    if normalized in _MARKET_PROVIDER_KEYS and not is_capability_enabled(
+        RuntimeCapability.MARKET
+    ):
+        raise_feature_disabled(RuntimeCapability.MARKET.value)
+
+
+def _require_setting_capability(key: str) -> None:
+    normalized = key.strip().lower()
+    if normalized in _BROKER_SETTING_KEYS and not is_capability_enabled(
+        RuntimeCapability.BROKER_SYNC
+    ):
+        raise_feature_disabled(RuntimeCapability.BROKER_SYNC.value)
+    if normalized in _MARKET_SETTING_KEYS and not is_capability_enabled(
+        RuntimeCapability.MARKET
+    ):
+        raise_feature_disabled(RuntimeCapability.MARKET.value)
+
+
+def _require_job_capability(job_run: JobRun) -> None:
+    job_key = (job_run.definition.key if job_run.definition else "").lower()
+    if job_key.startswith("market.") and not is_capability_enabled(RuntimeCapability.MARKET):
+        raise_feature_disabled(RuntimeCapability.MARKET.value)
+    if job_key.startswith("broker.") and not is_capability_enabled(
+        RuntimeCapability.BROKER_SYNC
+    ):
+        raise_feature_disabled(RuntimeCapability.BROKER_SYNC.value)
 
 
 def _business_lock_detail(business_lock: BusinessLock) -> dict:
@@ -195,6 +266,68 @@ def resolve_database_url_for_backup(db: Session) -> str:
     return str(db.get_bind().url)
 
 
+def _is_backup_provider_configured(database_backend: str) -> bool:
+    return database_backend == "sqlite"
+
+
+def _is_integration_configured(credential: IntegrationCredential) -> bool:
+    try:
+        return bool(decrypt_secret(credential.secret_ciphertext))
+    except Exception:
+        return False
+
+
+@router.get("/ops/summary", response_model=AdminOpsSummaryResponse)
+async def get_admin_ops_summary(
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    database_backend = detect_database_backend(resolve_database_url_for_backup(db))
+    backup_items = list_database_backups(backup_dir=ADMIN_BACKUP_DIR, limit=100)
+    integration_credentials = db.query(IntegrationCredential).all()
+    now = datetime.now(timezone.utc)
+    job_counts = {
+        status_item.value: db.query(JobRun).filter(JobRun.status == status_item).count()
+        for status_item in JobRunStatus
+    }
+    running_job_runs = (
+        db.query(JobRun)
+        .filter(JobRun.status == JobRunStatus.RUNNING, JobRun.locked_at.is_not(None))
+        .all()
+    )
+    return AdminOpsSummaryResponse(
+        database_backend=database_backend,
+        backup_provider_configured=_is_backup_provider_configured(database_backend),
+        backup_count=len(backup_items),
+        latest_backup_at=backup_items[0]["created_at"] if backup_items else None,
+        user_count=db.query(User).count(),
+        active_user_count=db.query(User).filter(User.is_active == True).count(),
+        admin_count=db.query(User).filter(User.role == "admin").count(),
+        job_counts=job_counts,
+        stale_running_job_count=sum(1 for job_run in running_job_runs if _job_stale_reason(job_run)),
+        platform_setting_count=db.query(PlatformSetting).count(),
+        configured_integration_count=sum(1 for credential in integration_credentials if _is_integration_configured(credential)),
+        active_integration_count=sum(1 for credential in integration_credentials if credential.is_active),
+        enabled_feature_flag_count=db.query(FeatureFlag).filter(FeatureFlag.enabled == True).count(),
+        expired_feature_flag_count=(
+            db.query(FeatureFlag)
+            .filter(FeatureFlag.expires_at.is_not(None), FeatureFlag.expires_at < now)
+            .count()
+        ),
+        active_business_lock_count=db.query(BusinessLock).filter(BusinessLock.status == BusinessLockStatus.ACTIVE).count(),
+        expired_business_lock_count=db.query(BusinessLock).filter(BusinessLock.status == BusinessLockStatus.EXPIRED).count(),
+    )
+
+
+@router.get("/ops/backups", response_model=List[AdminBackupSummaryResponse])
+async def list_database_backups_endpoint(
+    limit: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    return list_database_backups(backup_dir=ADMIN_BACKUP_DIR, limit=limit)
+
+
 @router.post("/ops/backups", response_model=AdminBackupResponse)
 async def trigger_database_backup_endpoint(
     db: Session = Depends(get_db),
@@ -227,6 +360,20 @@ async def trigger_database_backup_endpoint(
     return AdminBackupResponse(**backup_result)
 
 
+@router.get("/users", response_model=List[AdminUserSummaryResponse])
+async def list_admin_users(
+    limit: int = Query(default=100, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    return (
+        db.query(User)
+        .order_by(User.created_at.desc(), User.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+
 @router.post("/users/{user_public_id}/promote", response_model=AdminUserOperationResponse)
 async def promote_admin_user_endpoint(
     user_public_id: str,
@@ -245,6 +392,65 @@ async def promote_admin_user_endpoint(
         "admin_user_promoted",
         actor_user_public_id=current_admin.public_id,
         target_user_public_id=user_public_id,
+    )
+    return AdminUserOperationResponse(**result)
+
+
+@router.patch("/users/{user_public_id}/role", response_model=AdminUserOperationResponse)
+async def update_admin_user_role_endpoint(
+    user_public_id: str,
+    role_in: AdminUserRoleUpdate,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    try:
+        result = update_user_role(db, user_public_id=user_public_id, role=role_in.role, actor_user=current_admin)
+    except AdminUserNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="USER_NOT_FOUND") from exc
+    except AdminUserOperationBlocked as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    db.commit()
+    log_event(
+        logger,
+        "info",
+        "admin_user_role_updated",
+        actor_user_public_id=current_admin.public_id,
+        target_user_public_id=user_public_id,
+        role=result["role"],
+    )
+    return AdminUserOperationResponse(**result)
+
+
+@router.patch("/users/{user_public_id}/active", response_model=AdminUserOperationResponse)
+async def update_admin_user_active_state_endpoint(
+    user_public_id: str,
+    active_in: AdminUserActiveUpdate,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    try:
+        result = set_user_active_state(
+            db,
+            user_public_id=user_public_id,
+            is_active=active_in.is_active,
+            actor_user=current_admin,
+        )
+    except AdminUserNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="USER_NOT_FOUND") from exc
+    except AdminUserOperationBlocked as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    db.commit()
+    log_event(
+        logger,
+        "info",
+        "admin_user_active_state_updated",
+        actor_user_public_id=current_admin.public_id,
+        target_user_public_id=user_public_id,
+        is_active=active_in.is_active,
     )
     return AdminUserOperationResponse(**result)
 
@@ -294,6 +500,7 @@ async def requeue_job_run_endpoint(
     job_run = db.query(JobRun).filter(JobRun.public_id == job_public_id).first()
     if not job_run:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job run not found")
+    _require_job_capability(job_run)
     try:
         requeued = requeue_job_run(db, job_run=job_run)
     except ValueError as exc:
@@ -390,6 +597,7 @@ async def upsert_platform_setting(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin)
 ):
+    _require_setting_capability(key)
     setting = db.query(PlatformSetting).filter(PlatformSetting.key == key).first()
     if not setting:
         setting = PlatformSetting(key=key)
@@ -417,6 +625,15 @@ async def list_integration_credentials(
 
     result = []
     for credential in credentials:
+        normalized_provider = credential.provider_key.strip().lower()
+        if normalized_provider in _BROKER_PROVIDER_KEYS and not is_capability_enabled(
+            RuntimeCapability.BROKER_SYNC
+        ):
+            continue
+        if normalized_provider in _MARKET_PROVIDER_KEYS and not is_capability_enabled(
+            RuntimeCapability.MARKET
+        ):
+            continue
         secret_value = decrypt_secret(credential.secret_ciphertext)
         result.append(
             IntegrationCredentialResponse(
@@ -442,6 +659,7 @@ async def upsert_integration_credential(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin)
 ):
+    _require_provider_capability(provider_key)
     credential = db.query(IntegrationCredential).filter(
         IntegrationCredential.provider_key == provider_key,
         IntegrationCredential.credential_key == credential_key,
@@ -462,6 +680,39 @@ async def upsert_integration_credential(
     if credential_in.is_active is not None:
         credential.is_active = credential_in.is_active
 
+    db.commit()
+    db.refresh(credential)
+    secret_value = decrypt_secret(credential.secret_ciphertext)
+    return IntegrationCredentialResponse(
+        id=credential.id,
+        provider_key=credential.provider_key,
+        credential_key=credential.credential_key,
+        masked_value=mask_secret(secret_value),
+        description=credential.description,
+        is_active=credential.is_active,
+        is_configured=bool(secret_value),
+        created_at=credential.created_at,
+        updated_at=credential.updated_at,
+    )
+
+
+@router.patch("/platform/integrations/{provider_key}/{credential_key}/active", response_model=IntegrationCredentialResponse)
+async def update_integration_credential_active_state(
+    provider_key: str,
+    credential_key: str,
+    credential_in: IntegrationCredentialActiveUpdate,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    _require_provider_capability(provider_key)
+    credential = db.query(IntegrationCredential).filter(
+        IntegrationCredential.provider_key == provider_key,
+        IntegrationCredential.credential_key == credential_key,
+    ).first()
+    if not credential:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="INTEGRATION_CREDENTIAL_NOT_FOUND")
+
+    credential.is_active = credential_in.is_active
     db.commit()
     db.refresh(credential)
     secret_value = decrypt_secret(credential.secret_ciphertext)
@@ -516,6 +767,7 @@ async def update_system_setting(
     current_admin: User = Depends(get_current_admin)
 ):
     """Update or create a system setting"""
+    _require_setting_capability(key)
     setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()
     
     if not setting:

@@ -145,6 +145,7 @@ def update_trading_position_event_narrative(
     update_data = payload.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(event, key, value)
+    event.input_source = "MANUAL"
 
     db.commit()
 
