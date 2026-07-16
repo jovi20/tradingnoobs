@@ -4,14 +4,16 @@ Usage:
   python manage_users.py promote-admin <email>
   python manage_users.py reset-password <email> <new_password>
 """
-import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import sys
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from sqlalchemy.orm import Session
+
 from database import SessionLocal
-from models import User
-from services.auth_service import get_password_hash, normalize_email
+from models import AuthToken, User, UserCredential, UserSession
+from services.auth_service import get_password_hash, normalize_email, utc_now
 
 def promote_admin(email: str):
     db: Session = SessionLocal()
@@ -37,10 +39,40 @@ def reset_password(email: str, new_password: str):
         if not user:
             print(f"Error: User with email {email} not found.")
             return
-        
-        user.hashed_password = get_password_hash(new_password)
+
+        password_hash = get_password_hash(new_password)
+        now = utc_now()
+        user.hashed_password = password_hash
+        credential = db.query(UserCredential).filter(UserCredential.user_id == user.id).first()
+        if credential is None:
+            credential = UserCredential(user_id=user.id, password_hash=password_hash, password_updated_at=now)
+        else:
+            credential.password_hash = password_hash
+            credential.password_updated_at = now
+        db.add(credential)
+
+        active_sessions = db.query(UserSession).filter(
+            UserSession.user_id == user.id,
+            UserSession.status == "ACTIVE",
+            UserSession.revoked_at.is_(None),
+        ).all()
+        for session in active_sessions:
+            session.status = "REVOKED"
+            session.revoked_at = now
+            session.last_seen_at = now
+
+        active_tokens = db.query(AuthToken).filter(
+            AuthToken.user_id == user.id,
+            AuthToken.revoked_at.is_(None),
+        ).all()
+        for auth_token in active_tokens:
+            auth_token.revoked_at = now
+
         db.commit()
-        print(f"Success: Password for {email} has been updated.")
+        print(
+            f"Success: Password for {email} has been updated and "
+            f"{len(active_sessions)} active session(s) revoked."
+        )
     except Exception as e:
         print(f"Error: {str(e)}")
         db.rollback()
@@ -79,6 +111,8 @@ def create_user(email: str, password: str, role: str = "user"):
             is_active=True
         )
         db.add(user)
+        db.flush()
+        db.add(UserCredential(user_id=user.id, password_hash=user.hashed_password, password_updated_at=utc_now()))
         db.commit()
         print(f"Success: User {email} created with role '{role}'.")
     except Exception as e:

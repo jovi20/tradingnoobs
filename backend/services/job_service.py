@@ -21,6 +21,45 @@ def _as_utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
+def _claim_candidate_cas(
+    db: Session,
+    *,
+    candidate: JobRun,
+    queue_name: str,
+    worker_id: str,
+    now: datetime,
+) -> tuple[int, JobRunStatus, int] | None:
+    job_run_id = candidate.id
+    previous_status = candidate.status
+    previous_attempt_count = candidate.attempt_count or 0
+    updated = (
+        db.query(JobRun)
+        .filter(
+            JobRun.id == job_run_id,
+            JobRun.status == previous_status,
+            JobRun.attempt_count == previous_attempt_count,
+            JobRun.queue_name == queue_name,
+            or_(JobRun.next_run_at.is_(None), JobRun.next_run_at <= now),
+        )
+        .update(
+            {
+                JobRun.status: JobRunStatus.RUNNING,
+                JobRun.locked_by: worker_id,
+                JobRun.locked_at: now,
+                JobRun.started_at: now,
+                JobRun.next_run_at: None,
+                JobRun.attempt_count: previous_attempt_count + 1,
+            },
+            synchronize_session=False,
+        )
+    )
+    if updated != 1:
+        db.expire_all()
+        return None
+    db.expire_all()
+    return job_run_id, previous_status, previous_attempt_count
+
+
 def claim_next_due_job(
     db: Session,
     *,
@@ -29,7 +68,7 @@ def claim_next_due_job(
     now: datetime | None = None,
 ) -> JobRun | None:
     now = _as_utc(now or datetime.now(timezone.utc))
-    job_run = (
+    candidate_query = (
         db.query(JobRun)
         .filter(
             JobRun.status.in_([JobRunStatus.QUEUED, JobRunStatus.RETRYING]),
@@ -37,18 +76,27 @@ def claim_next_due_job(
             or_(JobRun.next_run_at.is_(None), JobRun.next_run_at <= now),
         )
         .order_by(JobRun.priority.desc(), JobRun.created_at.asc(), JobRun.id.asc())
-        .first()
     )
-    if not job_run:
-        return None
+    if db.get_bind().dialect.name == "postgresql":
+        candidate_query = candidate_query.with_for_update(skip_locked=True)
 
-    previous_status = job_run.status
-    job_run.status = JobRunStatus.RUNNING
-    job_run.locked_by = worker_id
-    job_run.locked_at = now
-    job_run.started_at = now
-    job_run.next_run_at = None
-    job_run.attempt_count = (job_run.attempt_count or 0) + 1
+    while True:
+        candidate = candidate_query.first()
+        if candidate is None:
+            return None
+
+        claimed = _claim_candidate_cas(
+            db,
+            candidate=candidate,
+            queue_name=queue_name,
+            worker_id=worker_id,
+            now=now,
+        )
+        if claimed is not None:
+            job_run_id, previous_status, previous_attempt_count = claimed
+            job_run = db.get(JobRun, job_run_id)
+            break
+
     db.add(
         JobRunEvent(
             job_run_id=job_run.id,
@@ -65,8 +113,8 @@ def claim_next_due_job(
             event_type=JobRunEventType.ATTEMPT_STARTED,
             from_status=None,
             to_status=JobRunStatus.RUNNING,
-            message=f"Attempt {job_run.attempt_count} started.",
-            metadata_json={"worker_id": worker_id, "attempt": job_run.attempt_count},
+            message=f"Attempt {previous_attempt_count + 1} started.",
+            metadata_json={"worker_id": worker_id, "attempt": previous_attempt_count + 1},
         )
     )
     db.flush()
@@ -298,7 +346,10 @@ def run_next_due_job(
         return failed
 
     try:
-        result = handler(job_run)
+        # A SAVEPOINT keeps a handler flush failure from poisoning the outer
+        # transaction that owns claim state, attempt events, and business locks.
+        with db.begin_nested():
+            result = handler(job_run)
     except Exception as exc:
         failed = fail_job_run(
             db,

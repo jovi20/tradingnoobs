@@ -2,6 +2,7 @@ import os
 import tempfile
 import unittest
 from datetime import datetime, timezone
+from unittest.mock import Mock
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -9,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from database import Base
 from models import BusinessLock, BusinessLockStatus, JobDefinition, JobRun, JobRunEvent, JobRunEventType, JobRunStatus
 from services.job_service import (
+    _claim_candidate_cas,
     cancel_job_run,
     claim_next_due_job,
     complete_job_run,
@@ -114,6 +116,72 @@ class JobServiceTests(unittest.TestCase):
         self.assertEqual(events[0].from_status, JobRunStatus.QUEUED)
         self.assertEqual(events[0].to_status, JobRunStatus.RUNNING)
         self.assertEqual(events[1].metadata_json["worker_id"], "worker-a")
+
+    def test_postgres_claim_query_uses_skip_locked(self):
+        db = Mock()
+        query = Mock()
+        locked_query = Mock()
+        db.query.return_value = query
+        query.filter.return_value = query
+        query.order_by.return_value = query
+        query.with_for_update.return_value = locked_query
+        locked_query.first.return_value = None
+        db.get_bind.return_value.dialect.name = "postgresql"
+
+        claimed = claim_next_due_job(
+            db,
+            queue_name="market",
+            worker_id="worker-a",
+            now=datetime(2026, 5, 3, 10, 1, tzinfo=timezone.utc),
+        )
+
+        self.assertIsNone(claimed)
+        query.with_for_update.assert_called_once_with(skip_locked=True)
+
+    def test_stale_second_session_cannot_claim_job_after_cas_wins(self):
+        definition = self._definition()
+        run = JobRun(
+            job_definition_id=definition.id,
+            status=JobRunStatus.QUEUED,
+            priority=1,
+            payload={},
+            max_attempts=3,
+            queue_name="derived",
+            next_run_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+        )
+        self.db.add(run)
+        self.db.commit()
+
+        second_db = self.SessionLocal()
+        try:
+            first_candidate = self.db.get(JobRun, run.id)
+            stale_second_candidate = second_db.get(JobRun, run.id)
+            first_claim = _claim_candidate_cas(
+                self.db,
+                candidate=first_candidate,
+                queue_name="derived",
+                worker_id="worker-a",
+                now=datetime(2026, 5, 3, 10, 1, tzinfo=timezone.utc),
+            )
+            self.db.commit()
+            second_claim = _claim_candidate_cas(
+                second_db,
+                candidate=stale_second_candidate,
+                queue_name="derived",
+                worker_id="worker-b",
+                now=datetime(2026, 5, 3, 10, 1, tzinfo=timezone.utc),
+            )
+
+            self.assertEqual(first_claim[0], run.id)
+            self.assertIsNone(second_claim)
+            second_db.expire_all()
+            stored = second_db.get(JobRun, run.id)
+            self.assertEqual(stored.status, JobRunStatus.RUNNING)
+            self.assertEqual(stored.locked_by, "worker-a")
+            self.assertEqual(stored.attempt_count, 1)
+        finally:
+            second_db.rollback()
+            second_db.close()
 
     def test_complete_job_run_marks_running_job_succeeded_and_clears_lock(self):
         definition = self._definition()
@@ -267,6 +335,78 @@ class JobServiceTests(unittest.TestCase):
         self.assertEqual(processed.status, JobRunStatus.SUCCEEDED)
         self.assertEqual(processed.result, {"timeline_refreshed": True})
         self.assertEqual(processed.attempt_count, 1)
+
+    def test_handler_integrity_error_records_retry_then_final_failure(self):
+        definition = self._definition()
+        run = JobRun(
+            job_definition_id=definition.id,
+            status=JobRunStatus.QUEUED,
+            priority=1,
+            payload={},
+            max_attempts=2,
+            queue_name="derived",
+            next_run_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+        )
+        self.db.add(run)
+        self.db.commit()
+
+        def duplicate_definition(_job_run):
+            self.db.add(
+                JobDefinition(
+                    key=definition.key,
+                    display_name="Duplicate",
+                    queue_name="derived",
+                    retry_policy={},
+                    is_active=True,
+                )
+            )
+            self.db.flush()
+
+        processed = run_next_due_job(
+            self.db,
+            queue_name="derived",
+            worker_id="worker-a",
+            handlers={"derived.timeline.refresh": duplicate_definition},
+            now=datetime(2026, 5, 3, 10, 1, tzinfo=timezone.utc),
+        )
+        self.db.commit()
+
+        self.assertEqual(processed.status, JobRunStatus.RETRYING)
+        self.assertEqual(processed.attempt_count, 1)
+        self.assertIn("UNIQUE constraint failed", processed.error_message)
+        self.assertIsNone(processed.locked_by)
+        self.assertEqual(self.db.query(JobDefinition).count(), 1)
+        event_types = [
+            event.event_type
+            for event in self.db.query(JobRunEvent)
+            .filter(JobRunEvent.job_run_id == run.id)
+            .order_by(JobRunEvent.id)
+            .all()
+        ]
+        self.assertEqual(
+            event_types,
+            [
+                JobRunEventType.STATUS_CHANGED,
+                JobRunEventType.ATTEMPT_STARTED,
+                JobRunEventType.ATTEMPT_FAILED,
+                JobRunEventType.RETRY_SCHEDULED,
+            ],
+        )
+
+        failed = run_next_due_job(
+            self.db,
+            queue_name="derived",
+            worker_id="worker-b",
+            handlers={"derived.timeline.refresh": duplicate_definition},
+            now=datetime(2026, 5, 3, 10, 3, tzinfo=timezone.utc),
+        )
+        self.db.commit()
+
+        self.assertEqual(failed.status, JobRunStatus.FAILED)
+        self.assertEqual(failed.attempt_count, 2)
+        self.assertIn("UNIQUE constraint failed", failed.error_message)
+        self.assertIsNotNone(failed.finished_at)
+        self.assertEqual(self.db.query(JobDefinition).count(), 1)
 
     def test_run_next_due_job_fails_unknown_handler_without_retry_when_exhausted(self):
         definition = self._definition()

@@ -11,11 +11,23 @@ class AdminUserNotFound(Exception):
     pass
 
 
+class AdminUserOperationBlocked(Exception):
+    pass
+
+
 def _find_user_by_public_id(db: Session, user_public_id: str) -> User:
     user = db.query(User).filter(User.public_id == user_public_id).first()
     if not user:
         raise AdminUserNotFound(user_public_id)
     return user
+
+
+def _active_admin_count(db: Session) -> int:
+    return (
+        db.query(User)
+        .filter(User.role == "admin", User.is_active == True)
+        .count()
+    )
 
 
 def promote_user_to_admin(db: Session, user_public_id: str, actor_user: User) -> dict:
@@ -27,6 +39,39 @@ def promote_user_to_admin(db: Session, user_public_id: str, actor_user: User) ->
         "user_public_id": user.public_id,
         "role": user.role,
         "message": f"User {user.public_id} promoted to admin.",
+    }
+
+
+def update_user_role(db: Session, user_public_id: str, role: str, actor_user: User) -> dict:
+    if role not in {"user", "admin"}:
+        raise ValueError("Unsupported role")
+    user = _find_user_by_public_id(db, user_public_id)
+    if user.role == "admin" and user.is_active and role != "admin" and _active_admin_count(db) <= 1:
+        raise AdminUserOperationBlocked("LAST_ACTIVE_ADMIN")
+    user.role = role
+    db.add(user)
+    return {
+        "status": "SUCCESS",
+        "user_public_id": user.public_id,
+        "role": user.role,
+        "message": f"User {user.public_id} role updated to {role}.",
+    }
+
+
+def set_user_active_state(db: Session, user_public_id: str, is_active: bool, actor_user: User) -> dict:
+    user = _find_user_by_public_id(db, user_public_id)
+    if user.public_id == actor_user.public_id and not is_active:
+        raise AdminUserOperationBlocked("CANNOT_DISABLE_SELF")
+    if user.role == "admin" and user.is_active and not is_active and _active_admin_count(db) <= 1:
+        raise AdminUserOperationBlocked("LAST_ACTIVE_ADMIN")
+    user.is_active = is_active
+    user.status = "ACTIVE" if is_active else "DISABLED"
+    db.add(user)
+    return {
+        "status": "SUCCESS",
+        "user_public_id": user.public_id,
+        "role": user.role,
+        "message": f"User {user.public_id} {'activated' if is_active else 'disabled'}.",
     }
 
 

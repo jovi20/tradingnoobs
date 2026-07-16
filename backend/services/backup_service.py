@@ -53,3 +53,28 @@ def trigger_database_backup(database_url: str, backup_dir: str = "backend/backup
     if database_backend == "postgresql":
         raise BackupProviderNotConfigured("PostgreSQL backup provider is not configured")
     raise BackupProviderNotConfigured(f"{database_backend} backup provider is not configured")
+
+
+def list_database_backups(backup_dir: str = "backend/backups", limit: int = 20) -> list[dict]:
+    backup_path = Path(backup_dir)
+    if not backup_path.exists():
+        return []
+
+    items = []
+    for path in backup_path.iterdir():
+        if not path.is_file():
+            continue
+        stat = path.stat()
+        backup_id = path.stem
+        database_backend = backup_id.split("-", 1)[0] if "-" in backup_id else "unknown"
+        items.append(
+            {
+                "backup_id": backup_id,
+                "path": str(path),
+                "database_backend": database_backend,
+                "created_at": datetime.fromtimestamp(stat.st_mtime, timezone.utc),
+                "size_bytes": stat.st_size,
+            }
+        )
+
+    return sorted(items, key=lambda item: item["created_at"], reverse=True)[:limit]
