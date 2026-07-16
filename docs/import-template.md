@@ -1,8 +1,17 @@
 # 交易导入模板说明
 
-更新时间：2026-06-11
+原记录时间：2026-06-11
 
-本文档说明 `/api/positions/import/template` 当前下载的 CSV 模板，以及 `/api/positions/import` 预览导入时的字段要求。该模板适用于批量导入历史交易记录，导入确认后会写入目标账户下的持仓与交易批次。
+Release boundary 更新：2026-07-17
+
+本文档说明 legacy 通用 CSV/Excel 模板代码及其字段要求。文中路径和行为是实现参考，不单独构成 JOURNAL Beta release approval；最终通用 bootstrap 仍须通过 active plan 的 `JRN-011` 与 release gate。
+
+## Release boundary
+
+- 本模板只描述用户本地上传的通用 CSV/Excel，不访问 Broker 网络，也不读取或保存 Broker、Market 或 LLM 凭据。
+- `IBKR_FLEX_XML_V1` source-bound 本地文件 adapter 由 `JRN-013/JRN-014` 计划实现，截至 2026-07-17 尚未实现。它将使用稳定 execution identity 支持重复、重叠和增量文件，不使用本模板的逐行选择合同。
+- 在线 Broker Sync 当前 `DISABLED / DEFERRED`。不要把本地文件导入说明理解为 IBKR Token/Query ID 配置或网络同步入口。
+- AI/Insights、PDF 导出和 risk cards 当前同样关闭；导入字段不承诺触发这些 optional capability。
 
 ---
 
@@ -64,5 +73,5 @@
 
 - `Planned Entry` 和 `Planned SL` 用于记录计划价格，不建议用实际成交价替代计划价。
 - `Strategy` 建议使用系统中已经存在的策略名称，这样导入后可以自动关联；不存在时系统不会自动创建策略。
-- `Emotion`、`Confidence` 和 `Reason` 建议尽量填写，它们会提高后续复盘、AI 分析和周报质量。
-- `Commission` 当前建议填写单行交易对应手续费；未来成本和报告导出会继续复用该字段。
+- `Emotion`、`Confidence` 和 `Reason` 建议尽量填写，用于人工复盘和日志上下文；当前不承诺 AI 分析或周报生成。
+- `Commission` 当前建议填写单行交易对应手续费；未来 canonical 成本口径须按 active plan 的会计合同重新验收，PDF 导出仍为 `DEFERRED`。

@@ -5,6 +5,12 @@
 
 `docs/` 现在按“当前事实 + 后续计划 + 运维 runbook + 历史归档”组织。P0-P19 阶段切片计划已归档到 `docs/superpowers/plans/archive/`；归档只表示该切片收口，不表示上位规格或生产闭环全部完成。
 
+## 当前 release boundary
+
+JOURNAL Beta 当前关闭 Broker network sync、Market、AI/Insights、PDF export、risk cards 和 open registration。历史 runbook、旧路由、页面或 service 代码仍可能存在，但不能据此判断能力已启用，也不能作为当前凭据配置或可用接口说明。
+
+`IBKR_FLEX_XML_V1` 是 active plan 中 `JRN-013/JRN-014` 计划实现的本地文件 adapter，目前尚未实现；它不等同于在线 Broker Sync，不访问网络或读取 Broker 凭据。
+
 ## 推荐阅读顺序
 
 1. [project-summary-and-roadmap.md](./project-summary-and-roadmap.md)
@@ -45,9 +51,9 @@
 | 文档 | 用途 |
 |------|------|
 | [admin-operations-runbook.md](./admin-operations-runbook.md) | 管理员备份、用户操作、stale job、force-cancel 与恢复演练。 |
-| [import-template.md](./import-template.md) | 交易 CSV/Excel 导入模板说明。 |
-| [market_data_sources.md](./market_data_sources.md) | 市场数据 provider、路由、配置、限制和排障。 |
-| [report-export.md](./report-export.md) | 周报 PDF 导出 runbook。 |
+| [import-template.md](./import-template.md) | 通用 CSV/Excel 历史模板说明；IBKR source-bound adapter 尚未实现。 |
+| [market_data_sources.md](./market_data_sources.md) | 历史/延期市场数据实现参考；Market 在 JOURNAL Beta 关闭，不作为当前配置指南。 |
+| [report-export.md](./report-export.md) | 历史 P14 PDF 实现证据；PDF export 在 JOURNAL Beta 关闭。 |
 | [script-inventory.md](./script-inventory.md) | 项目脚本清单、保留/删除判断和维护规则。 |
 | [trading-fields-design.md](./trading-fields-design.md) | 当前 / 实施中字段边界。 |
 | [trading-metrics.md](./trading-metrics.md) | 指标算法与实现状态。 |
@@ -61,7 +67,7 @@
 | [superpowers/specs/2026-04-13-user-trust-metadata-contract.md](./superpowers/specs/2026-04-13-user-trust-metadata-contract.md) | 用户可见 trust metadata 契约。 |
 | [superpowers/specs/2026-04-13-timeline-review-inbox-contract.md](./superpowers/specs/2026-04-13-timeline-review-inbox-contract.md) | Timeline / Review Inbox 契约。 |
 | [superpowers/specs/2026-04-13-lifecycle-detail-contract.md](./superpowers/specs/2026-04-13-lifecycle-detail-contract.md) | Lifecycle Detail 契约。 |
-| [trade-record-sync-design.md](./trade-record-sync-design.md) | 通用 bootstrap、IBKR Flex source-bound 文件增量导入与在线 sync 延期边界。 |
+| [trade-record-sync-design.md](./trade-record-sync-design.md) | 未来通用 bootstrap、IBKR Flex source-bound 文件增量导入设计；`JRN-013/JRN-014` 尚未实现，在线 sync 延期。 |
 | [superpowers/specs/platform-foundation-spec-v1.1-patched.md](./superpowers/specs/platform-foundation-spec-v1.1-patched.md) | 平台底座补丁版规格。 |
 | [superpowers/specs/frontend-experience-redesign-spec-v1.1-patched.md](./superpowers/specs/frontend-experience-redesign-spec-v1.1-patched.md) | 前端体验补丁版规格。 |
 
@@ -81,4 +87,5 @@
 - 产品方向和中期阶段维护在 [project-summary-and-roadmap.md](./project-summary-and-roadmap.md)；任务顺序与验收维护在 active implementation plan。
 - 已完成阶段计划保留在 `docs/superpowers/plans/archive/`，不要再作为当前 active lane。
 - 目标架构和契约维护在 `docs/superpowers/specs/`。
-- 如果文档与代码不一致，以代码和最新 checkpoint 为准，再同步文档。
+- Release availability 以 active plan、机器可读 release contract 和最新 checkpoint 为准；源码存在不能单独证明能力已启用。
+- 如果实现事实与文档不一致，先按 fail-closed release boundary 处理，再同步文档。

@@ -1,6 +1,8 @@
 # 当前项目基线（2026-04-05 历史快照）
 
 > 用途：这是 2026-04-05 在架构收敛前记录的历史审计快照，用于回看当时仓库的实现边界、优点与短板。当前目标架构请以 `docs/superpowers/specs/2026-04-06-platform-foundation-design.md` 为准。
+>
+> **SUPERSEDED（2026-07-17）**：本快照中的“已实现”“可用”和路由/配置描述只代表 2026-04-05 当时看到的代码，不代表当前 JOURNAL Beta release availability。当前 Beta 明确关闭 Broker network sync、Market、AI/Insights、PDF export、risk cards 和 open registration；`IBKR_FLEX_XML_V1` 本地文件 adapter 仍待 `JRN-013/JRN-014` 实现。当前边界以 [active trading-journal plan](./superpowers/plans/2026-07-16-dev-trading-journal-development-plan.md) 和 [DEVELOPER_GUIDE.md](./DEVELOPER_GUIDE.md) 为准。以下历史内容不重写。
 
 ---
 

@@ -1,8 +1,18 @@
 # Trading Noobs Backend
 
-FastAPI 后端，负责认证、账户、交易 truth model、Timeline read model、Insights、市场数据、异步任务和管理员运维 API。
+FastAPI 后端，负责认证、账户、交易 truth model、Timeline read model、交易日志异步任务和管理员运维 API。
 
-更新时间：2026-07-06
+更新时间：2026-07-17
+
+## JOURNAL Beta 边界
+
+当前 Beta 默认关闭 `BROKER_SYNC`、`MARKET`、`AI_INSIGHTS`、`PDF_EXPORT`、`RISK_CARDS` 和 `OPEN_REGISTRATION`。仓库中可能保留相应 router、service、schema 和测试，但代码存在不表示路由已注册或功能可用；这些能力不得出现在 Beta OpenAPI、导航、设置或 job/outbox producer 中。
+
+这里的 `OPEN_REGISTRATION` 指无邀请码自助注册；invite-only `/api/auth/register` 仍是核心 onboarding 路径，并必须拒绝缺失或无效邀请码。
+
+- Broker 网络同步以及 Broker/行情/LLM 凭据读取和写入均为 `DISABLED`。
+- 缺失 `DEPLOYMENT_CAPABILITY_ALLOWLIST` 时 deployment ceiling 为空，数据库 FeatureFlag 不能越过该 ceiling。
+- `IBKR_FLEX_XML_V1` 是 `JRN-013/JRN-014` 计划中的本地文件 adapter，目前尚未实现；它不访问网络，也不使用 Flex Token 或 Query ID。
 
 ## 目录结构
 
@@ -14,8 +24,8 @@ FastAPI 后端，负责认证、账户、交易 truth model、Timeline read mode
 | `models.py` | 当前 SQLAlchemy 模型集中定义处；后续计划拆分。 |
 | `schemas.py` | Pydantic 请求和响应模型。 |
 | `routers/` | API 路由层。 |
-| `services/` | 业务逻辑、read model、任务、市场数据和导出服务。 |
-| `services/providers/` | 市场数据 provider adapter。 |
+| `services/` | 业务逻辑、read model 和任务；provider、AI、risk、PDF 等 optional service 代码当前为 `DISABLED / DEFERRED`。 |
+| `services/providers/` | 保留的市场数据 provider adapter；不属于 JOURNAL Beta 运行依赖。 |
 | `alembic/` | Alembic 迁移脚本和版本链。 |
 | `ops/` | 迁移、回填和管理员脚本。 |
 | `tests/` | 后端测试。 |
@@ -52,14 +62,11 @@ uvicorn main:app --reload --no-access-log
 | `CORS_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | 允许访问 API 的前端来源。 |
 | `UPLOAD_DIR` | `./uploads` | 上传目录。 |
 | `MAX_UPLOAD_SIZE` | `10485760` | 上传大小限制，单位 byte。 |
-| `LLM_API_URL` | `https://api.openai.com/v1` | OpenAI 兼容 LLM 接口地址。 |
-| `LLM_API_KEY` | 空 | LLM API key。 |
-| `LLM_MODEL` | `gpt-4-turbo` | LLM 模型名。 |
-| `FINNHUB_API_KEY` | 空 | Finnhub 行情 key。 |
-| `BINANCE_API_KEY` | 空 | Binance key。 |
-| `BINANCE_API_SECRET` | 空 | Binance secret。 |
 | `ENV_NAME` | `development` | `development` 或 `production`。 |
 | `AUTO_CREATE_SCHEMA` | 空 | 控制受保护 schema bootstrap；生产默认关闭。 |
+| `DEPLOYMENT_CAPABILITY_ALLOWLIST` | 空 | 部署拥有的 optional capability ceiling；JOURNAL Beta 保持为空，不能用数据库配置扩大。 |
+
+历史 Broker、Market 和 LLM 环境变量可能仍被 deferred 代码识别，但它们不属于 JOURNAL Beta 配置合同。不要在当前 profile 的 `.env`、部署清单或普通设置中配置、保存或分发相关凭据。
 
 ## 数据库迁移
 

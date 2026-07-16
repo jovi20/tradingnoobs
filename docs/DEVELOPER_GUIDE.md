@@ -1,10 +1,20 @@
 # Trading Noobs 当前代码库指南
 
-更新时间：2026-07-16
+更新时间：2026-07-17
 当前执行分支：`dev`
 当前 HEAD：以当前 `dev` 最新提交为准；阶段状态见 [TODO.md](./TODO.md)。
 
 本文档描述当前代码库的真实实现、运行入口、模块边界与开发注意事项。目标架构和未来设计仍以 `docs/superpowers/specs/` 为准；当前任务状态以 [TODO.md](./TODO.md) 为准。
+
+## JOURNAL Beta release boundary
+
+> 当前 release availability 以 [active trading-journal plan](./superpowers/plans/2026-07-16-dev-trading-journal-development-plan.md) 和机器可读 release contract 为准，不能根据源码、旧路由或历史阶段完成记录推断。代码存在不等于 Beta 已启用。
+
+- `BROKER_SYNC`、`MARKET`、`AI_INSIGHTS`、`PDF_EXPORT`、`RISK_CARDS` 和 `OPEN_REGISTRATION` 当前均为 `DISABLED / DEFERRED`。对应 API、导航、设置、凭据写入和 job/outbox producer 不属于 JOURNAL Beta 可用面。
+- 可选能力必须同时满足外部 deployment allowlist 和数据库 runtime rollout；缺失部署 allowlist 时 ceiling 为空。数据库配置不能扩大 ceiling。
+- JOURNAL Beta 不执行 Broker 网络同步，不读取或要求 Broker、行情或 LLM 凭据。
+- `IBKR_FLEX_XML_V1` 是 `JRN-013/JRN-014` 计划实现的本地文件 adapter，不是在线 Broker Sync；截至本次更新尚未实现或开放。
+- 无邀请码的公开自助注册关闭；`/register` 保留给 invite-only onboarding，缺失或无效邀请码必须拒绝。邀请码存储、兑换与审计仍由 `JRN-003` 完成发布闭环。
 
 ---
 
@@ -35,7 +45,7 @@
 | 数据库 | 开发默认 SQLite，部署默认 PostgreSQL |
 | 迁移 | Alembic revision chain 是主迁移路径；开发启动仍有受保护的 schema bootstrap |
 | 异步与派生 | 本地 DB job worker、outbox relay、idempotency、business lock、derived timeline snapshot |
-| 外部服务 | Finnhub, AKShare, Binance, 可配置 OpenAI 兼容 LLM 接口 |
+| 外部服务 | Provider/LLM adapter 代码仍存在，但 JOURNAL Beta 不调用外部 Broker、行情或 LLM 服务，也不要求其凭据 |
 | 部署 | Docker Compose + Caddy；同机 main/dev 并行部署见 [vps-dev-parallel-deployment.md](./vps-dev-parallel-deployment.md) |
 | 可观测性 | `X-Request-ID`、`X-Response-Time-Ms`、统一错误 `error.code/message/request_id/status_code` envelope、`tradingnoobs.*` 结构化日志 helper |
 
@@ -47,8 +57,8 @@
 |------|------|
 | `backend/main.py` | 后端入口，注册 FastAPI router，并在 lifespan 中执行受控 schema bootstrap |
 | `backend/alembic/` | Alembic 配置与迁移链 |
-| `backend/routers/` | API 路由层，包含 legacy 路由、truth 路由、timeline、admin jobs、insight artifacts |
-| `backend/services/` | 业务逻辑层，包含 truth sync/accounting、job/outbox/idempotency、chart schema、market data |
+| `backend/routers/` | API 路由层；部分 Broker/Market/Insights 等 optional router 代码为 `DISABLED / DEFERRED`，不能据此判断 Beta 可达性 |
+| `backend/services/` | 业务逻辑层，包含 truth sync/accounting、job/outbox/idempotency、chart schema；provider、AI、risk、PDF 代码不属于当前 Beta 可用面 |
 | `backend/models.py` | 当前仍是单文件 SQLAlchemy 模型；拆分在 active journal plan 中标记为 `DEFERRED_BY_SCOPE` |
 | `backend/schemas.py` | Pydantic 请求/响应模型 |
 | `frontend/app/` | Next.js App Router 页面入口 |
@@ -63,28 +73,24 @@
 
 ## 4. 当前运行时结构
 
-后端当前主要 API：
+后端 JOURNAL Beta 核心 API 面：
 - `/api/auth`
 - `/api/accounts`
 - `/api/accounts/{account_id}/transactions`
 - `/api/positions`：legacy 持仓/批次路径，当前保留为迁移与 fallback 路径；新建仓位会立即同步 `TradingPosition` 并返回 `truth_position_public_id`，当 legacy position 已有 truth lifecycle 时，普通 legacy batch create 默认拒绝，只有显式 `X-Migration-Fallback: legacy-batch-write` 才允许迁移回退写入；legacy review 字段写入默认拒绝，只有显式 `X-Migration-Fallback: legacy-review-write` 才允许迁移修正；legacy position hard delete 默认拒绝，只有显式 `X-Migration-Fallback: legacy-position-delete` 才允许迁移清理；legacy batch edit/delete 默认拒绝，只有显式 `X-Migration-Fallback: legacy-batch-edit` 才允许迁移修正。
-- `/api/trading-positions`：truth lifecycle、truth event write、dividend、manual adjustment、latest-event reversal。
-- `/api/timeline/home`：Timeline 首页 read model，默认 `SNAPSHOT_ONLY`，由 `DerivedTimelineSnapshot` 与 auditable insight artifacts 驱动；`timeline_legacy_mixed_feed_enabled` 可作为 rollback flag 恢复 legacy mixed feed。
+- `/api/trading-positions`：truth lifecycle、允许的 truth trade event write、同币种 dividend 和 latest-event reversal；`manual adjustment` 兼容路径在 Beta 稳定拒绝且不写事实。
+- `/api/timeline/home`：Timeline 首页 read model，默认 `SNAPSHOT_ONLY`，由 `DerivedTimelineSnapshot` 驱动；optional AI artifact feed 不属于当前 Beta 可用面。
 - `/api/dashboard`
-- `/api/insights`
-- `/api/insights/analyze/history`
-- `/api/v1/insights/runs`
-- `/api/v1/insights/artifacts`
 - `/api/admin/jobs`
 - `/api/admin/ops/backups`
 - `/api/admin/users/{user_public_id}/promote`
 - `/api/admin/users/{user_public_id}/reset-password`
-- `/api/admin/platform/*`
-- `/api/market`
 - `/api/strategies`
 - `/api/daily`
 - `/api/journal`
 - `/api/settings`
+
+源码中仍可见 Broker Sync、Market、Insights/AI、PDF export、risk cards、open registration 和 provider credential 路径；它们都是 `DISABLED / DEFERRED` optional surfaces，不是可调用 API 清单，也不得出现在 JOURNAL Beta OpenAPI、导航或普通设置中。
 
 前端当前主要页面：
 - `/`：默认入口，已转向 timeline-first，而不是旧 Dashboard-first。
@@ -95,8 +101,6 @@
 - `/positions/import`
 - `/positions/[id]`
 - `/positions/[id]/add-batch`
-- `/insights`
-- `/insights/[artifactId]`
 - `/admin/jobs`
 - `/admin/ops`
 - `/settings`
@@ -104,7 +108,8 @@
 - `/strategies`
 - `/daily`
 - `/login`
-- `/register`
+
+`/insights`、风险卡和 PDF 导出页面代码可能仍留在仓库中，但当前必须隐藏或不可达。`/register` 是例外：它只承载 invite-only onboarding，不得提供无邀请码注册或“立即注册”宣传。
 
 前端 legacy DTO 边界：
 - 新功能不应直接从 `frontend/lib/api.ts` 引入 legacy `Position` / `TradeBatch` / `BatchCreate` / `Transaction`。
@@ -121,22 +126,25 @@
 
 | 模块 | 状态 | 当前说明 |
 |------|------|----------|
-| 认证与用户基础 | `已实现` | 注册、登录、JWT、session/token 跟踪、public_id 支持已落地。 |
-| 平台配置 | `已实现 / 继续扩展` | Platform settings、integration credentials、feature flags、admin API 已落地。 |
+| 认证与用户基础 | `部分实现 / invite-only 收敛中` | 登录、JWT、session/token 跟踪和 public_id 代码已落地；公开注册为 `DISABLED`，invite-only 与 recovery 发布闭环由 `JRN-003` 完成。 |
+| 平台配置 | `核心存在 / optional secret hard-off` | FeatureFlag 等基础代码存在；Broker、Market、LLM 的普通设置、凭据写入与测试入口在 JOURNAL Beta 关闭。 |
 | 交易账户与资金记录 | `桥接完成 / 继续收敛` | `AccountLedgerEntry` 已落地，账户现金读模型已优先使用 ledger；legacy transaction 路径仍存在。 |
 | Trading truth model | `桥接完成 / 硬切推进中` | `TradingPosition / PositionEvent / AccountLedgerEntry`、FIFO、truth lifecycle、truth-first add/reduce/close、truth narrative、latest active event reversal 已落地；新建仓位会 create-and-sync 到 truth lifecycle，已有仓位的普通加仓/减仓/平仓/复盘/叙事不再静默写 legacy 字段。 |
 | Legacy 持仓路径 | `迁移期保留 / 写入受保护` | `Position / TradeBatch / Transaction / AssetMetadata / DailySnapshot` 仍被部分路由、导入、Dashboard、Timeline fallback 使用；truth lifecycle 存在时 legacy batch create、review write、position hard delete、batch edit/delete 都需要显式 migration fallback header。 |
-| Timeline 首页 | `truth/snapshot 默认` | Timeline / Review Inbox 已是产品中心；Timeline events 与 Review Inbox 默认使用 `DerivedTimelineSnapshot` / auditable insight artifacts，legacy mixed feed 只作为 rollback。 |
-| Lifecycle Detail | `truth-first 已落地` | 单笔详情已展示 truth lifecycle、evidence、ledger cash effects、AI sidecar；canonical review lives in `PositionEvent` narrative，legacy review 只作为 migration context 展示；latest active event reversal 会追加 `REVERSAL`，非最新 reversal 和 `OPEN` reversal 暂拒绝，直到补偿事件或 void/archive UX 明确。 |
+| Timeline 首页 | `truth/snapshot 默认` | Timeline / Review Inbox 已是产品中心，核心事件使用 `DerivedTimelineSnapshot`；AI artifact feed 代码当前 hard-off，legacy mixed feed 只作为 rollback。 |
+| Lifecycle Detail | `truth-first 已落地` | 单笔详情展示 truth lifecycle、evidence 和 ledger cash effects；AI sidecar 代码在 JOURNAL Beta 隐藏。canonical review lives in `PositionEvent` narrative，legacy review 只作为 migration context 展示；latest active event reversal 会追加 `REVERSAL`，非最新 reversal 和 `OPEN` reversal 暂拒绝，直到补偿事件或 void/archive UX 明确。 |
 | Dashboard | `宏观视图已重构` | 已从默认首页退到宏观视图；chart schema/freshness/trust 包装已接入。 |
-| Insights / AI | `artifact-first 已落地` | `InsightRun / InsightArtifact`、artifact detail、证据链接展示已落地；AI 分析请求支持成对日期范围、366 天上限校验，artifact payload/source refs/evidence refs 会写入 `date-range:<start>:<end>`，`/api/insights/analyze/history` 支持复访近期分析。 |
+| Insights / AI | `代码存在 / Beta hard-off` | 历史 artifact-first、LLM 和页面代码保留为 deferred implementation evidence；API、UI、凭据和 job producer 当前关闭，不能描述为 Beta 已落地能力。 |
 | 异步任务 | `基础已落地` | Job model、outbox relay、worker CLI、business lock、idempotency、admin jobs UI/API 已落地。 |
 | 管理员运维 | `P17 已落地` | `/api/admin/ops/backups`、管理员晋升、密码重置、stale/failed job recovery metadata、force-cancel typed confirmation 和 `/admin/ops` 控制台已完成；PostgreSQL backup provider 未配置时返回 `409 BACKUP_PROVIDER_NOT_CONFIGURED`。 |
 | 市场数据 | `大型 WIP / Beta hard-off` | 类型化 provider registry、报价/日线、mapping、水位、job handlers 与前端 freshness 代码存在于当前未冻结 WIP，但尚未形成 JRN-000 checkpoint；交易日志 Beta 必须由 deny stub 关闭 route/secret/job/UI，不能描述为已发布能力。 |
-| 风控预警 | `P13 已落地` | 组合风险、单日亏损上限、风险提醒、Dashboard 风险栏与 Timeline/Review Inbox 风险行动卡已完成 V1；不含 SSE/WebSocket。 |
-| PDF 导出 | `P14 已落地` | 导入模板说明、周报 PDF 渲染服务、Insights PDF 导出接口、前端导出按钮和导出 runbook 已完成。 |
+| Broker 同步 | `Beta hard-off` | 在线同步、网络访问、Token/credential 保存和后台 sync job 均关闭。`IBKR_FLEX_XML_V1` 仅是 `JRN-013/JRN-014` 计划中的本地文件 adapter，目前未实现。 |
+| 风控预警 | `代码存在 / Beta hard-off` | 历史 P13 risk card 代码不属于 JOURNAL Beta 可用面；相关 API、Dashboard/Timeline 卡片和后台 producer 必须关闭。 |
+| PDF 导出 | `代码存在 / Beta hard-off` | 历史 P14 renderer、接口、按钮和 runbook 仅作为 deferred evidence；JOURNAL Beta 不开放 PDF 下载。 |
 
-### 5.1 Insights AI 日期范围与复访契约
+### 5.1 Insights AI 历史代码契约（DISABLED）
+
+> 本节只记录保留代码的历史契约，供未来重新评审；当前端点和页面不得注册、展示或作为可用功能宣传。
 
 - `POST /api/insights/analyze` 的 `start_date` 与 `end_date` 必须同时提供或同时省略。
 - 日期范围是 inclusive；`start_date > end_date` 或超过 366 天会返回 P12B 标准错误 envelope。
@@ -160,7 +168,7 @@
 | `AssetMaster` | 新资产主数据。 |
 | `TradeInstrument` | 新交易标的 / instrument 层。 |
 | `DerivedTimelineSnapshot` | 派生 Timeline 事件快照。 |
-| `InsightRun` / `InsightArtifact` | 可审计 AI 产物与展示单元。 |
+| `InsightRun` / `InsightArtifact` | 保留的可审计 AI 产物模型；AI capability 当前 `DISABLED / DEFERRED`。 |
 | `JobDefinition` / `JobRun` / `JobRunEvent` | 本地异步任务模型。 |
 | `OutboxEvent` | 事务性 outbox 事件。 |
 | `IdempotencyKey` | 请求与 outbox relay 幂等记录。 |
@@ -232,14 +240,11 @@ npm run dev
 - `DATABASE_URL`
 - `SECRET_KEY`
 - `CORS_ORIGINS`
-- `LLM_API_URL`
-- `LLM_API_KEY`
-- `LLM_MODEL`
-- `FINNHUB_API_KEY`
-- `BINANCE_API_KEY`
-- `BINANCE_API_SECRET`
 - `ENV_NAME`
 - `AUTO_CREATE_SCHEMA`
+- `DEPLOYMENT_CAPABILITY_ALLOWLIST`：JOURNAL Beta 缺失或保持为空；它是部署 ceiling，不得写入业务数据库。
+
+Broker、Market 和 LLM provider 的历史环境变量仍可能被代码识别，但不属于 JOURNAL Beta 配置合同；不要为当前 profile 配置或分发这些凭据。
 
 ---
 
