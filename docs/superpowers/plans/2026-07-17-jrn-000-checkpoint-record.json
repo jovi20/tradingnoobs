@@ -1,0 +1,1431 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-07-17T05:15:00+08:00",
+  "branch": "dev",
+  "baseline_before_jrn_000": "b9d564de2279be142fc52cbb4ab1e8e7580109c1",
+  "implementation_head_before_record": "65796276e3cbc1b1e33499da23c0ee298b8becc3",
+  "record_commit_resolution": "git log -1 --format=%H -- docs/superpowers/plans/2026-07-17-jrn-000-checkpoint-record.json",
+  "decisions": {
+    "migration_policy": "IN_CHAIN_DISABLED",
+    "alembic_head": "9cad10111213",
+    "backend_default_profile": "JOURNAL_BASELINE",
+    "frontend_profile": "source-level literal JOURNAL_BASELINE with Broker/Market flags false",
+    "optional_runtime_rule": "Tracked development WIP is unreachable in JOURNAL_BASELINE; known paths use side-effect-free 404 FEATURE_DISABLED stubs."
+  },
+  "source_manifest": {
+    "path": "docs/superpowers/plans/2026-07-17-jrn-000-wip-disposition-manifest.json",
+    "commit": "3658628",
+    "captured_entry_count": 295,
+    "path_fingerprint_sha256": "890793e1b9c967ba1914a2de763015624f4d673be20d672d13b4cf4ec9d61eb9"
+  },
+  "checkpoints": [
+    {
+      "commit": "3658628714a7cd3f6b34b0a5c1e98a1b0c031f3a",
+      "subject": "docs: freeze journal development baseline",
+      "change_count": 28,
+      "changes": [
+        {
+          "status": "A",
+          "path": "docs/superpowers/plans/2026-07-16-dev-trading-journal-development-plan.md"
+        },
+        {
+          "status": "A",
+          "path": "docs/superpowers/plans/2026-07-17-jrn-000-wip-disposition-manifest.json"
+        },
+        {
+          "status": "A",
+          "path": "docs/superpowers/plans/README.md"
+        },
+        {
+          "status": "R100",
+          "source_path": "docs/superpowers/plans/2026-04-13-platform-frontend-sequencing-plan.md",
+          "path": "docs/superpowers/plans/archive/2026-04-13-platform-frontend-sequencing-plan.md"
+        },
+        {
+          "status": "R100",
+          "source_path": "docs/superpowers/plans/2026-05-02-dev-branch-checkpoint.md",
+          "path": "docs/superpowers/plans/archive/2026-05-02-dev-branch-checkpoint.md"
+        },
+        {
+          "status": "R100",
+          "source_path": "docs/superpowers/plans/2026-06-05-dev-p0-p4-execution-plan.md",
+          "path": "docs/superpowers/plans/archive/2026-06-05-dev-p0-p4-execution-plan.md"
+        },
+        {
+          "status": "R100",
+          "source_path": "docs/superpowers/plans/2026-06-05-dev-p5-p7-execution-plan.md",
+          "path": "docs/superpowers/plans/archive/2026-06-05-dev-p5-p7-execution-plan.md"
+        },
+        {
+          "status": "R100",
+          "source_path": "docs/superpowers/plans/2026-06-06-dev-p8-next16-upgrade-plan.md",
+          "path": "docs/superpowers/plans/archive/2026-06-06-dev-p8-next16-upgrade-plan.md"
+        },
+        {
+          "status": "R100",
+          "source_path": "docs/superpowers/plans/2026-06-09-dev-p9a-frontend-workbench-plan.md",
+          "path": "docs/superpowers/plans/archive/2026-06-09-dev-p9a-frontend-workbench-plan.md"
+        },
+        {
+          "status": "R100",
+          "source_path": "docs/superpowers/plans/2026-06-09-dev-p9b-dashboard-workbench-plan.md",
+          "path": "docs/superpowers/plans/archive/2026-06-09-dev-p9b-dashboard-workbench-plan.md"
+        },
+        {
+          "status": "R100",
+          "source_path": "docs/superpowers/plans/2026-06-09-dev-p9c-lifecycle-detail-workbench-plan.md",
+          "path": "docs/superpowers/plans/archive/2026-06-09-dev-p9c-lifecycle-detail-workbench-plan.md"
+        },
+        {
+          "status": "R098",
+          "source_path": "docs/superpowers/plans/2026-06-10-dev-p10-legacy-cutover-inventory.md",
+          "path": "docs/superpowers/plans/archive/2026-06-10-dev-p10-legacy-cutover-inventory.md"
+        },
+        {
+          "status": "R097",
+          "source_path": "docs/superpowers/plans/2026-06-10-dev-p10-model-modularization-plan.md",
+          "path": "docs/superpowers/plans/archive/2026-06-10-dev-p10-model-modularization-plan.md"
+        },
+        {
+          "status": "R100",
+          "source_path": "docs/superpowers/plans/2026-06-10-dev-p10-progress-next-plan.md",
+          "path": "docs/superpowers/plans/archive/2026-06-10-dev-p10-progress-next-plan.md"
+        },
+        {
+          "status": "R099",
+          "source_path": "docs/superpowers/plans/2026-06-10-dev-p11-truth-hard-cutover-plan.md",
+          "path": "docs/superpowers/plans/archive/2026-06-10-dev-p11-truth-hard-cutover-plan.md"
+        },
+        {
+          "status": "R099",
+          "source_path": "docs/superpowers/plans/2026-06-10-dev-p12-platform-contract-hardening-plan.md",
+          "path": "docs/superpowers/plans/archive/2026-06-10-dev-p12-platform-contract-hardening-plan.md"
+        },
+        {
+          "status": "R100",
+          "source_path": "docs/superpowers/plans/2026-06-10-dev-p9d-chart-schema-freshness-migration-plan.md",
+          "path": "docs/superpowers/plans/archive/2026-06-10-dev-p9d-chart-schema-freshness-migration-plan.md"
+        },
+        {
+          "status": "R100",
+          "source_path": "docs/superpowers/plans/2026-06-10-dev-p9e-react19-strict-lint-cleanup-plan.md",
+          "path": "docs/superpowers/plans/archive/2026-06-10-dev-p9e-react19-strict-lint-cleanup-plan.md"
+        },
+        {
+          "status": "R100",
+          "source_path": "docs/superpowers/plans/2026-06-10-dev-p9f-zero-lint-warning-cleanup-plan.md",
+          "path": "docs/superpowers/plans/archive/2026-06-10-dev-p9f-zero-lint-warning-cleanup-plan.md"
+        },
+        {
+          "status": "R100",
+          "source_path": "docs/superpowers/plans/2026-06-11-dev-p12b-observability-error-contract-plan.md",
+          "path": "docs/superpowers/plans/archive/2026-06-11-dev-p12b-observability-error-contract-plan.md"
+        },
+        {
+          "status": "R100",
+          "source_path": "docs/superpowers/plans/2026-06-11-dev-p13-risk-review-product-plan.md",
+          "path": "docs/superpowers/plans/archive/2026-06-11-dev-p13-risk-review-product-plan.md"
+        },
+        {
+          "status": "R100",
+          "source_path": "docs/superpowers/plans/2026-06-11-dev-p14-reporting-export-plan.md",
+          "path": "docs/superpowers/plans/archive/2026-06-11-dev-p14-reporting-export-plan.md"
+        },
+        {
+          "status": "R100",
+          "source_path": "docs/superpowers/plans/2026-06-11-dev-p15-ai-analysis-workflow-plan.md",
+          "path": "docs/superpowers/plans/archive/2026-06-11-dev-p15-ai-analysis-workflow-plan.md"
+        },
+        {
+          "status": "R100",
+          "source_path": "docs/superpowers/plans/2026-06-11-dev-p16-market-data-platform-plan.md",
+          "path": "docs/superpowers/plans/archive/2026-06-11-dev-p16-market-data-platform-plan.md"
+        },
+        {
+          "status": "R100",
+          "source_path": "docs/superpowers/plans/2026-06-11-dev-p17-admin-operations-plan.md",
+          "path": "docs/superpowers/plans/archive/2026-06-11-dev-p17-admin-operations-plan.md"
+        },
+        {
+          "status": "R100",
+          "source_path": "docs/superpowers/plans/2026-06-11-dev-p18-chart-renderer-migration-plan.md",
+          "path": "docs/superpowers/plans/archive/2026-06-11-dev-p18-chart-renderer-migration-plan.md"
+        },
+        {
+          "status": "R100",
+          "source_path": "docs/superpowers/plans/2026-06-11-dev-p19-release-readiness-plan.md",
+          "path": "docs/superpowers/plans/archive/2026-06-11-dev-p19-release-readiness-plan.md"
+        },
+        {
+          "status": "A",
+          "path": "docs/superpowers/plans/archive/README.md"
+        }
+      ],
+      "verification": [
+        {
+          "command": "jq empty docs/superpowers/plans/2026-07-17-jrn-000-wip-disposition-manifest.json",
+          "result": "PASS"
+        },
+        {
+          "command": "git diff --cached --check -- docs/superpowers/plans",
+          "result": "PASS before commit"
+        }
+      ]
+    },
+    {
+      "commit": "19e5f195e7542be8f7030195b6efb0c6a7181e3e",
+      "subject": "docs: record journal gaps and source contract",
+      "change_count": 12,
+      "changes": [
+        {
+          "status": "A",
+          "path": "README.md"
+        },
+        {
+          "status": "M",
+          "path": "backend/README.md"
+        },
+        {
+          "status": "M",
+          "path": "docs/DEVELOPER_GUIDE.md"
+        },
+        {
+          "status": "M",
+          "path": "docs/README.md"
+        },
+        {
+          "status": "M",
+          "path": "docs/TODO.md"
+        },
+        {
+          "status": "M",
+          "path": "docs/architecture_review.md"
+        },
+        {
+          "status": "A",
+          "path": "docs/design-implementation-gap-plan-2026-07-15.md"
+        },
+        {
+          "status": "A",
+          "path": "docs/frontend-refactor-qa-2026-07-15.md"
+        },
+        {
+          "status": "A",
+          "path": "docs/project-structure-review.md"
+        },
+        {
+          "status": "A",
+          "path": "docs/project-summary-and-roadmap.md"
+        },
+        {
+          "status": "A",
+          "path": "docs/script-inventory.md"
+        },
+        {
+          "status": "A",
+          "path": "docs/trade-record-sync-design.md"
+        }
+      ],
+      "verification": [
+        {
+          "command": "git diff --cached --check -- journal contract documentation paths",
+          "result": "PASS"
+        }
+      ]
+    },
+    {
+      "commit": "2822a3613346bd209bbc5c222be5a40ca11c15b8",
+      "subject": "db: adopt broker and market migration chain",
+      "change_count": 9,
+      "changes": [
+        {
+          "status": "M",
+          "path": "backend/alembic.ini"
+        },
+        {
+          "status": "M",
+          "path": "backend/alembic/env.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/alembic/versions/6f7a8b9cad10_add_ibkr_flex_settings.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/alembic/versions/7a8b9cad1011_add_trade_sync_setting_parameters.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/alembic/versions/8b9cad101112_add_broker_trade_sync_tables.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/alembic/versions/9cad10111213_add_market_data_persistence.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/models.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/tests/test_alembic_chain.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/tests/test_market_data_alembic_adoption.py"
+        }
+      ],
+      "verification": [
+        {
+          "command": "cd backend && venv/bin/python -m pytest -q tests/test_alembic_chain.py tests/test_market_data_alembic_adoption.py",
+          "result": "8 passed"
+        },
+        {
+          "command": "cd backend && venv/bin/alembic -c alembic.ini heads",
+          "result": "9cad10111213 (head)"
+        }
+      ]
+    },
+    {
+      "commit": "f081d915dbf0c19b89ef0ec990dc30004895e9ea",
+      "subject": "chore: checkpoint backend operations WIP",
+      "change_count": 7,
+      "changes": [
+        {
+          "status": "M",
+          "path": "backend/ops/manage_users.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/services/admin_user_service.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/services/backup_service.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/services/job_service.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/tests/test_admin_operations_api.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/tests/test_job_service.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/tests/test_manage_users_ops.py"
+        }
+      ],
+      "verification": [
+        {
+          "command": "cd backend && venv/bin/python -m pytest -q tests/test_admin_operations_api.py tests/test_job_service.py tests/test_manage_users_ops.py tests/test_localized_user_copy.py",
+          "result": "40 passed (localized test committed separately in 6579627)"
+        }
+      ]
+    },
+    {
+      "commit": "5c2ff45bb8103da419902e4bb5a81d9400638723",
+      "subject": "feat: freeze backend behind journal baseline",
+      "change_count": 54,
+      "changes": [
+        {
+          "status": "M",
+          "path": "backend/config.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/main.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/observability.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/release_profile.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/requirements.txt"
+        },
+        {
+          "status": "M",
+          "path": "backend/routers/accounts.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/routers/admin.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/routers/auth.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/routers/broker_sync.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/routers/dashboard.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/routers/disabled_capabilities.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/routers/market.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/routers/positions.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/routers/settings.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/routers/timeline.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/routers/trading_positions.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/schemas.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/services/broker_sync/__init__.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/services/broker_sync/service.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/services/derived_refresh_handlers.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/services/exchange_rate_service.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/services/import_service.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/services/market_data_access.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/services/market_data_job_handlers.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/services/market_data_job_service.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/services/market_data_orchestrator.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/services/market_data_repository.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/services/market_data_service.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/services/market_provider_registry.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/services/market_session_calendar.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/services/provider_router.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/services/providers/__init__.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/services/providers/finnhub_provider.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/services/providers/yfinance_provider.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/services/public_id_service.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/services/risk_alert_service.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/services/trading_position_read_service.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/services/trading_position_write_service.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/services/truth_legacy_projection_service.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/tests/conftest.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/tests/test_auth_session_tracking.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/tests/test_broker_sync_service.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/tests/test_journal_baseline_profile.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/tests/test_market_data_job_handlers.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/tests/test_market_data_job_service.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/tests/test_market_data_orchestrator.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/tests/test_market_data_persistence_integration.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/tests/test_market_data_repository.py"
+        },
+        {
+          "status": "A",
+          "path": "backend/tests/test_market_session_calendar.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/tests/test_position_truth_bridge_router.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/tests/test_public_id_routes.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/tests/test_risk_alert_service.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/tests/test_timeline_home_router.py"
+        },
+        {
+          "status": "M",
+          "path": "backend/tests/test_trading_position_lifecycle_router.py"
+        }
+      ],
+      "verification": [
+        {
+          "command": "cd backend && venv/bin/python -m pytest -q",
+          "result": "304 passed"
+        },
+        {
+          "command": "baseline clean-process no-import/worker registry smoke",
+          "result": "PASS: no real Broker/Market handler import; only derived.timeline.refresh"
+        },
+        {
+          "command": "cd backend && venv/bin/python -m pytest -q tests/test_journal_baseline_profile.py",
+          "result": "10 passed"
+        },
+        {
+          "command": "secret pattern and error-echo scans",
+          "result": "PASS: no non-test high-confidence credential match; disabled responses did not echo short secret/query/reference values"
+        }
+      ]
+    },
+    {
+      "commit": "73ba63b63bc2797c611feb8b7a723eee5e50b472",
+      "subject": "chore: stop tracking TypeScript build cache",
+      "change_count": 2,
+      "changes": [
+        {
+          "status": "M",
+          "path": ".gitignore"
+        },
+        {
+          "status": "M",
+          "path": "frontend/tsconfig.tsbuildinfo"
+        }
+      ],
+      "verification": [
+        {
+          "command": "git status --short -- .gitignore frontend/tsconfig.tsbuildinfo",
+          "result": "PASS before commit: ignore updated and tracked cache deleted"
+        }
+      ]
+    },
+    {
+      "commit": "6985a4bce8f09dd0ed289a741d84ff977e652e0b",
+      "subject": "feat: checkpoint frontend workbench baseline",
+      "change_count": 178,
+      "changes": [
+        {
+          "status": "A",
+          "path": "frontend/README.md"
+        },
+        {
+          "status": "R090",
+          "source_path": "frontend/app/admin/jobs/page.tsx",
+          "path": "frontend/app/(admin)/admin/jobs/page.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/app/(admin)/admin/ops/page.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/app/(admin)/layout.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/app/(auth)/layout.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/app/(auth)/login/page.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/app/(auth)/register/page.tsx"
+        },
+        {
+          "status": "R080",
+          "source_path": "frontend/app/daily/page.tsx",
+          "path": "frontend/app/(product)/daily/page.tsx"
+        },
+        {
+          "status": "R086",
+          "source_path": "frontend/app/dashboard/page.tsx",
+          "path": "frontend/app/(product)/dashboard/page.tsx"
+        },
+        {
+          "status": "R073",
+          "source_path": "frontend/app/insights/[artifactId]/page.tsx",
+          "path": "frontend/app/(product)/insights/[artifactId]/page.tsx"
+        },
+        {
+          "status": "R079",
+          "source_path": "frontend/app/insights/page.tsx",
+          "path": "frontend/app/(product)/insights/page.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/app/(product)/layout.tsx"
+        },
+        {
+          "status": "R065",
+          "source_path": "frontend/app/positions/[id]/add-batch/page.tsx",
+          "path": "frontend/app/(product)/positions/[id]/add-batch/page.tsx"
+        },
+        {
+          "status": "R084",
+          "source_path": "frontend/app/positions/[id]/page.tsx",
+          "path": "frontend/app/(product)/positions/[id]/page.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/app/(product)/positions/import/page.tsx"
+        },
+        {
+          "status": "R083",
+          "source_path": "frontend/app/positions/new/page.tsx",
+          "path": "frontend/app/(product)/positions/new/page.tsx"
+        },
+        {
+          "status": "R086",
+          "source_path": "frontend/app/positions/page.tsx",
+          "path": "frontend/app/(product)/positions/page.tsx"
+        },
+        {
+          "status": "R066",
+          "source_path": "frontend/app/settings/accounts/[id]/page.tsx",
+          "path": "frontend/app/(product)/settings/accounts/[id]/page.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/app/(product)/settings/page.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/app/(product)/strategies/page.tsx"
+        },
+        {
+          "status": "R075",
+          "source_path": "frontend/app/timeline/page.tsx",
+          "path": "frontend/app/(product)/timeline/page.tsx"
+        },
+        {
+          "status": "D",
+          "path": "frontend/app/admin/ops/page.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/app/fonts/PlexMono-400.woff2"
+        },
+        {
+          "status": "A",
+          "path": "frontend/app/fonts/PlexMono-500.woff2"
+        },
+        {
+          "status": "A",
+          "path": "frontend/app/fonts/PlexSans-400.woff2"
+        },
+        {
+          "status": "A",
+          "path": "frontend/app/fonts/PlexSans-500.woff2"
+        },
+        {
+          "status": "A",
+          "path": "frontend/app/fonts/PlexSans-600.woff2"
+        },
+        {
+          "status": "A",
+          "path": "frontend/app/fonts/PlexSans-700.woff2"
+        },
+        {
+          "status": "A",
+          "path": "frontend/app/fonts/index.ts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/app/globals.css"
+        },
+        {
+          "status": "M",
+          "path": "frontend/app/layout.tsx"
+        },
+        {
+          "status": "D",
+          "path": "frontend/app/login/page.tsx"
+        },
+        {
+          "status": "D",
+          "path": "frontend/app/positions/import/page.tsx"
+        },
+        {
+          "status": "D",
+          "path": "frontend/app/register/page.tsx"
+        },
+        {
+          "status": "D",
+          "path": "frontend/app/settings/page.tsx"
+        },
+        {
+          "status": "D",
+          "path": "frontend/app/strategies/page.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/ChecklistModal.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/CustomSelect.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/DateTimePicker.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/MarketStatus.tsx"
+        },
+        {
+          "status": "D",
+          "path": "frontend/components/Navbar.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/PortfolioSankey.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/Providers.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/ThemeToggle.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/TransactionForm.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/TransactionList.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/admin/domain/AdminJobsConsole.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/charts/ChartFrame.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/charts/renderers/SvgBarChart.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/charts/renderers/SvgLineChart.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/charts/renderers/SvgPieChart.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/charts/renderers/SvgSankeyChart.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/charts/renderers/SvgScatterChart.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/charts/renderers/chartGeometry.ts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/dashboard/AllocationPieChart.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/dashboard/MaeMfeScatterPlot.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/dashboard/PerformanceMovers.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/dashboard/PositionCard.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/dashboard/RiskMetricsCard.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/dashboard/StatCard.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/dashboard/domain/DashboardAllocationPanel.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/dashboard/domain/DashboardMoversPanel.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/dashboard/domain/DashboardSummaryStrip.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/dashboard/workbench/DashboardEquityHero.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/dashboard/workbench/DashboardEvidenceStack.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/dashboard/workbench/DashboardRiskRail.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/dashboard/workbench/DashboardStructureGrid.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/dashboard/workbench/DashboardWorkbenchHeader.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/import/FileDropzone.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/import/ImportPreviewTable.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/insights/AnalysisAssistant.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/insights/EvidenceLinkedInsightSidecar.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/insights/InsightArtifactDetailCard.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/insights/LegacyAnalysisChart.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/components/navigation/AdminShell.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/components/navigation/AppSidebar.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/components/navigation/AppTopBar.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/components/navigation/CommandPalette.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/navigation/MobileBottomNav.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/components/navigation/ProductShell.tsx"
+        },
+        {
+          "status": "D",
+          "path": "frontend/components/navigation/ProductTopNav.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/positions/domain/TruthLifecycleDetail.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/positions/domain/TruthLifecyclePreview.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/positions/lifecycle/LifecycleActionPanel.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/positions/lifecycle/LifecycleAiSidecarPanel.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/positions/lifecycle/LifecycleEventRail.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/positions/lifecycle/LifecycleEvidencePanel.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/positions/lifecycle/LifecycleHero.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/positions/lifecycle/LifecycleMigrationPanel.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/positions/lifecycle/LifecycleModals.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/positions/lifecycle/LifecycleWorkbench.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/positions/lifecycle/LifecycleWorkbenchHeader.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/risk/RiskAlertStack.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/settings/domain/SettingsAccountsOverview.tsx"
+        },
+        {
+          "status": "D",
+          "path": "frontend/components/settings/domain/SettingsAdminPlatformCard.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/settings/domain/SettingsAppearanceCard.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/settings/domain/SettingsDataExportCard.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/timeline/TimelineContextRail.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/components/timeline/TimelineZeroState.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/timeline/workbench/ReviewInboxPanel.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/timeline/workbench/TimelineDecisionRail.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/timeline/workbench/TimelineEventCardV2.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/timeline/workbench/TimelineFeedPanel.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/timeline/workbench/TimelineViewTabs.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/timeline/workbench/TimelineWorkbench.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/timeline/workbench/TimelineWorkbenchHeader.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/components/ui/Badge.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/components/ui/Button.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/components/ui/Callout.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/components/ui/Card.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/components/ui/Checkbox.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/components/ui/Dialog.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/components/ui/Drawer.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/components/ui/DropdownMenu.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/ui/EmptyStatePanel.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/components/ui/Input.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/ui/MetricTile.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/ui/PageFrame.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/components/ui/Popover.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/ui/SectionHeader.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/components/ui/Select.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/components/ui/Skeleton.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/components/ui/Spinner.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/ui/StatusPill.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/components/ui/Surface.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/components/ui/Switch.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/components/ui/Tabs.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/components/ui/Tooltip.tsx"
+        },
+        {
+          "status": "A",
+          "path": "frontend/components/ui/index.ts"
+        },
+        {
+          "status": "A",
+          "path": "frontend/components/ui/tone.ts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/contexts/AuthContext.tsx"
+        },
+        {
+          "status": "M",
+          "path": "frontend/hooks/useTrendColor.ts"
+        },
+        {
+          "status": "A",
+          "path": "frontend/lib/accountUpdates.ts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/lib/adapters/admin-jobs.ts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/lib/adapters/admin-ops.ts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/lib/adapters/dashboard.ts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/lib/adapters/lifecycle.ts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/lib/adapters/market-data.ts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/lib/adapters/risk-alerts.ts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/lib/adapters/settings.ts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/lib/adapters/timeline-workbench.ts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/lib/adapters/timeline.ts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/lib/adapters/trading.ts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/lib/api.ts"
+        },
+        {
+          "status": "A",
+          "path": "frontend/lib/authErrors.ts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/lib/charts.ts"
+        },
+        {
+          "status": "A",
+          "path": "frontend/lib/cn.ts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/lib/navigation.ts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/lib/read-models.ts"
+        },
+        {
+          "status": "A",
+          "path": "frontend/lib/release-profile.ts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/lib/symbolUtils.ts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/next-env.d.ts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/package-lock.json"
+        },
+        {
+          "status": "M",
+          "path": "frontend/package.json"
+        },
+        {
+          "status": "M",
+          "path": "frontend/tailwind.config.js"
+        },
+        {
+          "status": "A",
+          "path": "frontend/tests/account-metadata-update.test.mts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/tests/admin-jobs-adapter.test.mts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/tests/admin-ops-adapter.test.mts"
+        },
+        {
+          "status": "A",
+          "path": "frontend/tests/auth-errors.test.mts"
+        },
+        {
+          "status": "A",
+          "path": "frontend/tests/auth-session-errors.test.mts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/tests/chart-renderers.test.mts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/tests/charts.test.mts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/tests/insight-artifact-presentation.test.mts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/tests/legacy-ui-boundaries.test.mts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/tests/lifecycle-adapter.test.mts"
+        },
+        {
+          "status": "A",
+          "path": "frontend/tests/market-data-status-presentation.test.mts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/tests/market-data.test.mts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/tests/navigation.test.mts"
+        },
+        {
+          "status": "A",
+          "path": "frontend/tests/peripheral-copy-accessibility.test.mts"
+        },
+        {
+          "status": "A",
+          "path": "frontend/tests/release-profile-hardoff.test.mts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/tests/risk-alerts.test.mts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/tests/settings-adapter.test.mts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/tests/timeline-adapter.test.mts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/tests/timeline-workbench.test.mts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/tests/trading-adapter.test.mts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/tests/truth-first-writes.test.mts"
+        },
+        {
+          "status": "M",
+          "path": "frontend/tests/truth-narrative-writes.test.mts"
+        },
+        {
+          "status": "A",
+          "path": "frontend/tests/ui-copy-accessibility.test.mts"
+        }
+      ],
+      "verification": [
+        {
+          "command": "cd frontend && npm run lint",
+          "result": "PASS"
+        },
+        {
+          "command": "cd frontend && npm test",
+          "result": "143 passed"
+        },
+        {
+          "command": "cd frontend && npx tsc --noEmit",
+          "result": "PASS"
+        },
+        {
+          "command": "cd frontend && npm run build",
+          "result": "PASS: 16/16 static pages"
+        },
+        {
+          "command": "production chunk hard-off audit",
+          "result": "APPROVE: client/SSR capability flags are literal false; no runtime env resolver or reachable optional callsite"
+        }
+      ]
+    },
+    {
+      "commit": "65796276e3cbc1b1e33499da23c0ee298b8becc3",
+      "subject": "test: cover localized user-facing copy",
+      "change_count": 1,
+      "changes": [
+        {
+          "status": "A",
+          "path": "backend/tests/test_localized_user_copy.py"
+        }
+      ],
+      "verification": [
+        {
+          "command": "cd backend && venv/bin/python -m pytest -q tests/test_localized_user_copy.py",
+          "result": "3 passed as part of the 304-test backend run"
+        }
+      ]
+    }
+  ],
+  "final_cross_checkpoint_verification": [
+    {
+      "command": "git diff --check",
+      "result": "PASS"
+    },
+    {
+      "command": "backend full suite",
+      "result": "304 passed"
+    },
+    {
+      "command": "frontend lint/test/type/build",
+      "result": "PASS / 143 passed / PASS / PASS"
+    },
+    {
+      "command": "Alembic empty upgrade and 9cad10111213 downgrade/upgrade adoption round-trip",
+      "result": "PASS"
+    },
+    {
+      "command": "JOURNAL_BASELINE HTTP, no-import, no-provider, secret, job/outbox, and production chunk smoke",
+      "result": "PASS"
+    }
+  ],
+  "excluded_worktree_after_checkpoints": [
+    {
+      "status": " D",
+      "path": ".github/workflows/deploy.yml",
+      "disposition": "PRESERVE_UNSTAGED_AND_EXCLUDE_FROM_JRN_000"
+    },
+    {
+      "status": " D",
+      "path": "backend/ops/migrate_db.py",
+      "disposition": "PRESERVE_UNSTAGED_AND_EXCLUDE_FROM_JRN_000"
+    },
+    {
+      "status": " D",
+      "path": "backup_db.sh",
+      "disposition": "PRESERVE_UNSTAGED_AND_EXCLUDE_FROM_JRN_000"
+    },
+    {
+      "status": " M",
+      "path": "docs/market_data_sources.md",
+      "disposition": "PRESERVE_UNSTAGED_AND_EXCLUDE_FROM_JRN_000"
+    },
+    {
+      "status": " D",
+      "path": "start.ps1",
+      "disposition": "PRESERVE_UNSTAGED_AND_EXCLUDE_FROM_JRN_000"
+    },
+    {
+      "status": " M",
+      "path": "start.sh",
+      "disposition": "PRESERVE_UNSTAGED_AND_EXCLUDE_FROM_JRN_000"
+    },
+    {
+      "status": " D",
+      "path": "update_libs.sh",
+      "disposition": "PRESERVE_UNSTAGED_AND_EXCLUDE_FROM_JRN_000"
+    },
+    {
+      "status": "??",
+      "path": ".claude/launch.json",
+      "disposition": "PRESERVE_UNSTAGED_AND_EXCLUDE_FROM_JRN_000"
+    },
+    {
+      "status": "??",
+      "path": "backend/requirements-dev.txt",
+      "disposition": "DEFER_TO_JRN_002_REPRODUCIBLE_BASELINE"
+    }
+  ]
+}
