@@ -122,7 +122,7 @@ trap cleanup SIGINT SIGTERM
 echo -e "${GREEN}Starting backend (http://localhost:8000)...${NC}"
 cd "$BACKEND_PATH"
 source "$VENV_PATH/bin/activate"
-uvicorn main:app --reload --reload-exclude venv --host 0.0.0.0 --port 8000 &
+uvicorn main:app --reload --reload-exclude venv --host 0.0.0.0 --port 8000 --no-access-log &
 BACKEND_PID=$!
 
 # Wait for backend to start

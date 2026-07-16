@@ -1,19 +1,27 @@
 import unittest
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from pydantic import BaseModel
 
 from observability import (
     add_error_handlers,
     add_observability_middleware,
+    disable_unsafe_server_access_log,
     get_structured_logger,
     log_event,
     make_error_code,
 )
 
 
+class ValidationPayload(BaseModel):
+    secret: str
+
+
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = BACKEND_ROOT.parent
 BUSINESS_LOGGING_FILES = [
     "routers/admin.py",
     "routers/dashboard.py",
@@ -40,6 +48,10 @@ def build_test_client() -> TestClient:
     @app.get("/api/validation/{item_id}")
     async def validation_target(item_id: int):
         return {"item_id": item_id}
+
+    @app.post("/api/validation")
+    async def validation_body_target(payload: ValidationPayload):
+        return payload
 
     return TestClient(app)
 
@@ -104,6 +116,50 @@ class ObservabilityTests(unittest.TestCase):
         self.assertEqual(payload["error"]["code"], "VALIDATION_REQUEST_INVALID")
         self.assertEqual(payload["error"]["request_id"], "req-validation-contract")
         self.assertEqual(payload["error"]["status_code"], 422)
+
+    def test_validation_error_never_echoes_invalid_input(self):
+        client = build_test_client()
+        secret = "short-secret-must-not-echo"
+
+        response = client.post(
+            "/api/validation",
+            json={"secret": {"nested": secret}},
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertNotIn(secret, response.text)
+        error = response.json()["detail"][0]
+        self.assertNotIn("input", error)
+        self.assertNotIn("ctx", error)
+
+    def test_uvicorn_query_string_access_logger_is_disabled(self):
+        logger = logging.getLogger("uvicorn.access")
+        logger.disabled = False
+
+        disable_unsafe_server_access_log()
+
+        self.assertTrue(logger.disabled)
+
+    def test_documented_and_packaged_uvicorn_launches_disable_access_log(self):
+        launch_files = (
+            "backend/Dockerfile",
+            "backend/README.md",
+            "README.md",
+            "docs/DEVELOPER_GUIDE.md",
+            "start.sh",
+        )
+        for relative_path in launch_files:
+            with self.subTest(file=relative_path):
+                uvicorn_lines = [
+                    line
+                    for line in (REPO_ROOT / relative_path).read_text().splitlines()
+                    if "uvicorn" in line and "uvicorn[" not in line
+                ]
+                self.assertTrue(uvicorn_lines)
+                self.assertTrue(
+                    all("--no-access-log" in line for line in uvicorn_lines),
+                    uvicorn_lines,
+                )
 
     def test_structured_logger_uses_project_namespace(self):
         logger = get_structured_logger("market-data")

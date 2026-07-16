@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import re
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -60,46 +61,80 @@ logger = get_structured_logger("admin")
 ADMIN_BACKUP_DIR = "backend/backups"
 DEFAULT_JOB_STALE_TIMEOUT_SECONDS = 30 * 60
 FORCE_CANCEL_WARNING = "Force-cancel releases active business locks owned by this job and may leave partial work behind."
-_BROKER_PROVIDER_KEYS = {"ibkr", "binance", "broker", "broker_sync"}
-_MARKET_PROVIDER_KEYS = {"finnhub", "market", "market_data", "yfinance", "akshare"}
-_BROKER_SETTING_KEYS = {
-    "ibkr_flex_query_id",
-    "ibkr_flex_token",
-    "ibkr_flex_start_date",
-    "binance_api_key",
-    "binance_api_secret",
-    "binance_market_type",
-    "binance_symbols",
-}
-_MARKET_SETTING_KEYS = {"finnhub_api_key"}
+_BROKER_IDENTIFIER_ALIASES = (
+    "ibkr",
+    "interactivebroker",
+    "binance",
+    "brokersync",
+)
+_MARKET_IDENTIFIER_ALIASES = (
+    "finnhub",
+    "yfinance",
+    "yahoofinance",
+    "akshare",
+    "marketdata",
+)
+_BROKER_IDENTIFIER_TOKENS = {"broker", "brokers", "brokerage"}
+_MARKET_IDENTIFIER_TOKENS = {"market", "markets"}
 
 
 def _enum_value(value):
     return value.value if hasattr(value, "value") else value
 
 
-def _require_provider_capability(provider_key: str) -> None:
-    normalized = provider_key.strip().lower()
-    if normalized in _BROKER_PROVIDER_KEYS and not is_capability_enabled(
-        RuntimeCapability.BROKER_SYNC
-    ):
-        raise_feature_disabled(RuntimeCapability.BROKER_SYNC.value)
-    if normalized in _MARKET_PROVIDER_KEYS and not is_capability_enabled(
-        RuntimeCapability.MARKET
-    ):
-        raise_feature_disabled(RuntimeCapability.MARKET.value)
+def _identifier_parts(value: str) -> tuple[set[str], str]:
+    with_word_boundaries = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", value.strip())
+    token_list = [
+        token
+        for token in re.sub(r"[^A-Za-z0-9]+", "_", with_word_boundaries)
+        .lower()
+        .strip("_")
+        .split("_")
+        if token
+    ]
+    return set(token_list), "".join(token_list)
+
+
+def _optional_capability_for_identifiers(
+    *identifiers: str,
+) -> RuntimeCapability | None:
+    parts = [_identifier_parts(identifier) for identifier in identifiers if identifier]
+
+    for tokens, compact in parts:
+        if _BROKER_IDENTIFIER_TOKENS.intersection(tokens) or any(
+            alias in compact for alias in _BROKER_IDENTIFIER_ALIASES
+        ):
+            return RuntimeCapability.BROKER_SYNC
+
+    for tokens, compact in parts:
+        if _MARKET_IDENTIFIER_TOKENS.intersection(tokens) or any(
+            alias in compact for alias in _MARKET_IDENTIFIER_ALIASES
+        ):
+            return RuntimeCapability.MARKET
+
+    return None
+
+
+def _capability_is_visible(capability: RuntimeCapability | None) -> bool:
+    return capability is None or is_capability_enabled(capability)
+
+
+def _require_optional_capability(capability: RuntimeCapability | None) -> None:
+    if capability is not None and not is_capability_enabled(capability):
+        raise_feature_disabled(capability.value)
+
+
+def _require_provider_capability(
+    provider_key: str,
+    credential_key: str | None = None,
+) -> None:
+    _require_optional_capability(
+        _optional_capability_for_identifiers(provider_key, credential_key or "")
+    )
 
 
 def _require_setting_capability(key: str) -> None:
-    normalized = key.strip().lower()
-    if normalized in _BROKER_SETTING_KEYS and not is_capability_enabled(
-        RuntimeCapability.BROKER_SYNC
-    ):
-        raise_feature_disabled(RuntimeCapability.BROKER_SYNC.value)
-    if normalized in _MARKET_SETTING_KEYS and not is_capability_enabled(
-        RuntimeCapability.MARKET
-    ):
-        raise_feature_disabled(RuntimeCapability.MARKET.value)
+    _require_optional_capability(_optional_capability_for_identifiers(key))
 
 
 def _require_job_capability(job_run: JobRun) -> None:
@@ -284,7 +319,21 @@ async def get_admin_ops_summary(
 ):
     database_backend = detect_database_backend(resolve_database_url_for_backup(db))
     backup_items = list_database_backups(backup_dir=ADMIN_BACKUP_DIR, limit=100)
-    integration_credentials = db.query(IntegrationCredential).all()
+    platform_settings = [
+        setting
+        for setting in db.query(PlatformSetting).all()
+        if _capability_is_visible(_optional_capability_for_identifiers(setting.key))
+    ]
+    integration_credentials = [
+        credential
+        for credential in db.query(IntegrationCredential).all()
+        if _capability_is_visible(
+            _optional_capability_for_identifiers(
+                credential.provider_key,
+                credential.credential_key,
+            )
+        )
+    ]
     now = datetime.now(timezone.utc)
     job_counts = {
         status_item.value: db.query(JobRun).filter(JobRun.status == status_item).count()
@@ -305,7 +354,7 @@ async def get_admin_ops_summary(
         admin_count=db.query(User).filter(User.role == "admin").count(),
         job_counts=job_counts,
         stale_running_job_count=sum(1 for job_run in running_job_runs if _job_stale_reason(job_run)),
-        platform_setting_count=db.query(PlatformSetting).count(),
+        platform_setting_count=len(platform_settings),
         configured_integration_count=sum(1 for credential in integration_credentials if _is_integration_configured(credential)),
         active_integration_count=sum(1 for credential in integration_credentials if credential.is_active),
         enabled_feature_flag_count=db.query(FeatureFlag).filter(FeatureFlag.enabled == True).count(),
@@ -579,7 +628,12 @@ async def list_system_settings(
     current_admin: User = Depends(get_current_admin)
 ):
     """Get all system settings"""
-    return db.query(SystemSetting).all()
+    settings = db.query(SystemSetting).order_by(SystemSetting.key.asc()).all()
+    return [
+        setting
+        for setting in settings
+        if _capability_is_visible(_optional_capability_for_identifiers(setting.key))
+    ]
 
 
 @router.get("/platform/settings", response_model=List[PlatformSettingResponse])
@@ -587,7 +641,12 @@ async def list_platform_settings(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin)
 ):
-    return db.query(PlatformSetting).order_by(PlatformSetting.key.asc()).all()
+    settings = db.query(PlatformSetting).order_by(PlatformSetting.key.asc()).all()
+    return [
+        setting
+        for setting in settings
+        if _capability_is_visible(_optional_capability_for_identifiers(setting.key))
+    ]
 
 
 @router.put("/platform/settings/{key}", response_model=PlatformSettingResponse)
@@ -625,14 +684,11 @@ async def list_integration_credentials(
 
     result = []
     for credential in credentials:
-        normalized_provider = credential.provider_key.strip().lower()
-        if normalized_provider in _BROKER_PROVIDER_KEYS and not is_capability_enabled(
-            RuntimeCapability.BROKER_SYNC
-        ):
-            continue
-        if normalized_provider in _MARKET_PROVIDER_KEYS and not is_capability_enabled(
-            RuntimeCapability.MARKET
-        ):
+        capability = _optional_capability_for_identifiers(
+            credential.provider_key,
+            credential.credential_key,
+        )
+        if not _capability_is_visible(capability):
             continue
         secret_value = decrypt_secret(credential.secret_ciphertext)
         result.append(
@@ -659,7 +715,7 @@ async def upsert_integration_credential(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin)
 ):
-    _require_provider_capability(provider_key)
+    _require_provider_capability(provider_key, credential_key)
     credential = db.query(IntegrationCredential).filter(
         IntegrationCredential.provider_key == provider_key,
         IntegrationCredential.credential_key == credential_key,
@@ -704,7 +760,7 @@ async def update_integration_credential_active_state(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin),
 ):
-    _require_provider_capability(provider_key)
+    _require_provider_capability(provider_key, credential_key)
     credential = db.query(IntegrationCredential).filter(
         IntegrationCredential.provider_key == provider_key,
         IntegrationCredential.credential_key == credential_key,

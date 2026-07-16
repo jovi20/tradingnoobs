@@ -29,7 +29,7 @@ source venv/bin/activate
 pip install -r requirements-dev.txt
 cp .env.example .env
 alembic -c alembic.ini upgrade head
-uvicorn main:app --reload
+uvicorn main:app --reload --no-access-log
 ```
 
 默认地址：

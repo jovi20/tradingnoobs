@@ -282,6 +282,19 @@ class JournalBaselineDatabaseBoundaryTests(unittest.TestCase):
                 self.assertNotIn(secret, response.text)
                 self.assertEqual(self._optional_persistence_counts(), baseline_counts)
 
+    def test_invalid_optional_secret_payload_does_not_echo_validation_input(self):
+        secret = "nested-short-secret"
+
+        response = self.client.patch(
+            "/api/settings",
+            json={"ibkr_flex_token": {"secret": secret}},
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["error"]["code"], "VALIDATION_REQUEST_INVALID")
+        self.assertNotIn(secret, response.text)
+        self.assertNotIn('"input"', response.text)
+
     def test_market_job_entrypoints_fail_closed_without_persisting_job_state(self):
         db = self.SessionLocal()
         try:

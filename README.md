@@ -53,7 +53,7 @@ python -m venv venv
 source venv/bin/activate
 pip install -r requirements-dev.txt
 alembic -c alembic.ini upgrade head
-uvicorn main:app --reload
+uvicorn main:app --reload --no-access-log
 ```
 
 手动启动前端：

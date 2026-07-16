@@ -207,7 +207,7 @@ cd backend
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-uvicorn main:app --reload
+uvicorn main:app --reload --no-access-log
 ```
 
 默认后端地址：

@@ -15,6 +15,17 @@ RESPONSE_TIME_HEADER = "X-Response-Time-Ms"
 LOGGER_PREFIX = "tradingnoobs"
 
 
+def disable_unsafe_server_access_log() -> None:
+    """Disable Uvicorn's query-string-bearing default access log."""
+    access_logger = logging.getLogger("uvicorn.access")
+    access_logger.disabled = True
+
+
+# Uvicorn configures logging before importing `main:app`, so this also covers
+# CLI launches that omit the defense-in-depth `--no-access-log` option.
+disable_unsafe_server_access_log()
+
+
 def _normalize_error_part(value: str) -> str:
     normalized = re.sub(r"[^A-Za-z0-9]+", "_", value).strip("_")
     return normalized.upper()
@@ -106,13 +117,21 @@ def build_error_response_payload(
 def _json_safe_validation_errors(errors: list[dict]) -> list[dict]:
     safe_errors: list[dict] = []
     for error in errors:
-        safe_error = dict(error)
-        ctx = safe_error.get("ctx")
-        if isinstance(ctx, dict):
-            safe_error["ctx"] = {
-                key: str(value) if isinstance(value, Exception) else value
-                for key, value in ctx.items()
-            }
+        error_type = str(error.get("type") or "value_error")
+        raw_location = error.get("loc") or ()
+        safe_location = [
+            part
+            if isinstance(part, int)
+            else part
+            if isinstance(part, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,100}", part)
+            else "field"
+            for part in raw_location
+        ]
+        safe_error = {
+            "type": error_type,
+            "loc": safe_location,
+            "msg": "Field required" if error_type == "missing" else "Invalid request value",
+        }
         safe_errors.append(safe_error)
     return safe_errors
 
