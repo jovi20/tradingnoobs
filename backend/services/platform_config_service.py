@@ -48,25 +48,53 @@ def get_integration_credential_secret(
 
 
 def get_feature_flag_enabled(db: Session, key: str, *, actor_key: str | None = None) -> bool:
-    feature_flag = db.query(FeatureFlag).filter(FeatureFlag.key == key).first()
-    if not feature_flag or not feature_flag.enabled:
-        return False
-    if feature_flag.expires_at:
+    try:
+        feature_flag = db.query(FeatureFlag).filter(FeatureFlag.key == key).first()
+        if feature_flag is None or feature_flag.enabled is not True:
+            return False
+
         expires_at = feature_flag.expires_at
-        if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=timezone.utc)
-        if expires_at <= datetime.now(timezone.utc):
+        if expires_at is not None:
+            if not isinstance(expires_at, datetime):
+                return False
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if expires_at <= datetime.now(timezone.utc):
+                return False
+
+        actor_targets = feature_flag.actor_targets
+        if actor_targets is None:
+            actor_targets = []
+        if not isinstance(actor_targets, list) or any(
+            not isinstance(target, str) or not target.strip()
+            for target in actor_targets
+        ):
             return False
-    actor_targets = feature_flag.actor_targets or []
-    if actor_key and actor_key in actor_targets:
+
+        rollout_percentage = feature_flag.rollout_percentage
+        if rollout_percentage is not None and (
+            isinstance(rollout_percentage, bool)
+            or not isinstance(rollout_percentage, int)
+            or not 0 <= rollout_percentage <= 100
+        ):
+            return False
+
+        if actor_key is not None and (
+            not isinstance(actor_key, str) or not actor_key.strip()
+        ):
+            return False
+
+        if actor_key is not None and actor_key in actor_targets:
+            return True
+        if rollout_percentage is not None:
+            if actor_key is None:
+                return False
+            return _stable_rollout_bucket(key, actor_key) < rollout_percentage
+        if actor_targets:
+            return False
         return True
-    if feature_flag.rollout_percentage is not None:
-        if actor_key is None:
-            return False
-        return _stable_rollout_bucket(key, actor_key) < feature_flag.rollout_percentage
-    if actor_targets:
+    except Exception:
         return False
-    return True
 
 
 def get_llm_runtime_config(db: Session) -> dict[str, Optional[str]]:

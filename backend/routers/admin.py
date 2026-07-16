@@ -50,6 +50,10 @@ from services.admin_user_service import (
 from services.backup_service import BackupProviderNotConfigured, detect_database_backend, list_database_backups, trigger_database_backup
 from services.credential_service import decrypt_secret, encrypt_secret, mask_secret
 from services.job_service import cancel_job_run, force_cancel_running_job_run, requeue_job_run
+from services.capability_service import (
+    CAPABILITY_ROLLOUT_FLAG_KEYS,
+    is_effective_capability_enabled,
+)
 from services.platform_config_service import get_llm_runtime_config
 
 router = APIRouter(
@@ -76,6 +80,16 @@ _MARKET_IDENTIFIER_ALIASES = (
 )
 _BROKER_IDENTIFIER_TOKENS = {"broker", "brokers", "brokerage"}
 _MARKET_IDENTIFIER_TOKENS = {"market", "markets"}
+_AI_IDENTIFIER_ALIASES = (
+    "openai",
+    "llm",
+    "aiinsights",
+    "insights",
+)
+_AI_IDENTIFIER_TOKENS = {"ai", "llm", "insight", "insights"}
+_CAPABILITY_BY_ROLLOUT_FLAG_KEY = {
+    key: capability for capability, key in CAPABILITY_ROLLOUT_FLAG_KEYS.items()
+}
 
 
 def _enum_value(value):
@@ -112,6 +126,12 @@ def _optional_capability_for_identifiers(
         ):
             return RuntimeCapability.MARKET
 
+    for tokens, compact in parts:
+        if _AI_IDENTIFIER_TOKENS.intersection(tokens) or any(
+            alias in compact for alias in _AI_IDENTIFIER_ALIASES
+        ):
+            return RuntimeCapability.AI_INSIGHTS
+
     return None
 
 
@@ -121,6 +141,21 @@ def _capability_is_visible(capability: RuntimeCapability | None) -> bool:
 
 def _require_optional_capability(capability: RuntimeCapability | None) -> None:
     if capability is not None and not is_capability_enabled(capability):
+        raise_feature_disabled(capability.value)
+
+
+def _require_effective_optional_capability(
+    db: Session,
+    capability: RuntimeCapability,
+    *,
+    actor_key: str,
+) -> None:
+    _require_optional_capability(capability)
+    if not is_effective_capability_enabled(
+        db,
+        capability,
+        actor_key=actor_key,
+    ):
         raise_feature_disabled(capability.value)
 
 
@@ -145,6 +180,10 @@ def _require_job_capability(job_run: JobRun) -> None:
         RuntimeCapability.BROKER_SYNC
     ):
         raise_feature_disabled(RuntimeCapability.BROKER_SYNC.value)
+    if job_key.startswith(("ai.", "insight.")) and not is_capability_enabled(
+        RuntimeCapability.AI_INSIGHTS
+    ):
+        raise_feature_disabled(RuntimeCapability.AI_INSIGHTS.value)
 
 
 def _business_lock_detail(business_lock: BusinessLock) -> dict:
@@ -800,6 +839,7 @@ async def upsert_feature_flag(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin)
 ):
+    _require_optional_capability(_CAPABILITY_BY_ROLLOUT_FLAG_KEY.get(key))
     feature_flag = db.query(FeatureFlag).filter(FeatureFlag.key == key).first()
     if not feature_flag:
         feature_flag = FeatureFlag(key=key)
@@ -846,6 +886,11 @@ async def test_llm_connection(
     current_admin: User = Depends(get_current_admin)
 ):
     """Test LLM API connection with current system settings"""
+    _require_effective_optional_capability(
+        db,
+        RuntimeCapability.AI_INSIGHTS,
+        actor_key=current_admin.public_id,
+    )
     llm_config = get_llm_runtime_config(db)
 
     if not llm_config["api_url"]:

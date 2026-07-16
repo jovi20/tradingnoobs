@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app_bootstrap import bootstrap_schema_if_enabled, resolve_auto_create_schema_enabled
@@ -67,11 +67,8 @@ def create_app(release_profile: ReleaseProfile | str | None = None) -> FastAPI:
         auth,
         daily,
         dashboard,
-        insight_artifacts,
-        insights,
         journal,
         positions,
-        risk,
         settings as settings_router,
         strategies,
         timeline,
@@ -85,7 +82,6 @@ def create_app(release_profile: ReleaseProfile | str | None = None) -> FastAPI:
         dashboard.router,
         daily.router,
         settings_router.router,
-        insights.router,
         accounts.router,
         admin.router,
         positions.router,
@@ -93,46 +89,120 @@ def create_app(release_profile: ReleaseProfile | str | None = None) -> FastAPI:
         transactions.router,
         timeline.router,
         trading_positions.router,
-        insight_artifacts.router,
-        insight_artifacts.artifact_router,
-        risk.router,
     ):
         application.include_router(router)
+
+    from routers.disabled_capabilities import (
+        AI_INSIGHTS_DISABLED_ROUTES,
+        BROKER_SYNC_DISABLED_ROUTES,
+        INSIGHT_ARTIFACTS_DISABLED_ROUTES,
+        INSIGHT_RUNS_DISABLED_ROUTES,
+        MARKET_DISABLED_ROUTES,
+        PDF_EXPORT_DISABLED_ROUTES,
+        RISK_CARDS_DISABLED_ROUTES,
+        build_disabled_capability_router,
+    )
+
+    def runtime_dependencies(capability: RuntimeCapability):
+        from routers.capability_dependencies import require_runtime_capability
+
+        return [Depends(require_runtime_capability(capability))]
+
+    def include_disabled_routes(
+        *,
+        prefix: str,
+        capability: RuntimeCapability,
+        routes,
+    ) -> None:
+        application.include_router(
+            build_disabled_capability_router(
+                prefix=prefix,
+                capability=capability.value,
+                routes=routes,
+            )
+        )
+
+    if is_capability_enabled(RuntimeCapability.AI_INSIGHTS, profile=profile):
+        from routers import insight_artifacts, insights
+
+        dependencies = runtime_dependencies(RuntimeCapability.AI_INSIGHTS)
+        application.include_router(insights.router, dependencies=dependencies)
+        application.include_router(insight_artifacts.router, dependencies=dependencies)
+        application.include_router(
+            insight_artifacts.artifact_router,
+            dependencies=dependencies,
+        )
+    else:
+        include_disabled_routes(
+            prefix="/api/insights",
+            capability=RuntimeCapability.AI_INSIGHTS,
+            routes=AI_INSIGHTS_DISABLED_ROUTES,
+        )
+        include_disabled_routes(
+            prefix="/api/v1/insights/runs",
+            capability=RuntimeCapability.AI_INSIGHTS,
+            routes=INSIGHT_RUNS_DISABLED_ROUTES,
+        )
+        include_disabled_routes(
+            prefix="/api/v1/insights/artifacts",
+            capability=RuntimeCapability.AI_INSIGHTS,
+            routes=INSIGHT_ARTIFACTS_DISABLED_ROUTES,
+        )
+
+    if is_capability_enabled(RuntimeCapability.PDF_EXPORT, profile=profile):
+        from routers import pdf_export
+
+        application.include_router(
+            pdf_export.router,
+            dependencies=runtime_dependencies(RuntimeCapability.PDF_EXPORT),
+        )
+    else:
+        include_disabled_routes(
+            prefix="/api/insights",
+            capability=RuntimeCapability.PDF_EXPORT,
+            routes=PDF_EXPORT_DISABLED_ROUTES,
+        )
+
+    if is_capability_enabled(RuntimeCapability.RISK_CARDS, profile=profile):
+        from routers import risk
+
+        application.include_router(
+            risk.router,
+            dependencies=runtime_dependencies(RuntimeCapability.RISK_CARDS),
+        )
+    else:
+        include_disabled_routes(
+            prefix="/api/risk",
+            capability=RuntimeCapability.RISK_CARDS,
+            routes=RISK_CARDS_DISABLED_ROUTES,
+        )
 
     if is_capability_enabled(RuntimeCapability.MARKET, profile=profile):
         from routers import market
 
-        application.include_router(market.router)
-    else:
-        from routers.disabled_capabilities import (
-            MARKET_DISABLED_ROUTES,
-            build_disabled_capability_router,
-        )
-
         application.include_router(
-            build_disabled_capability_router(
-                prefix="/api/market",
-                capability="MARKET",
-                routes=MARKET_DISABLED_ROUTES,
-            )
+            market.router,
+            dependencies=runtime_dependencies(RuntimeCapability.MARKET),
+        )
+    else:
+        include_disabled_routes(
+            prefix="/api/market",
+            capability=RuntimeCapability.MARKET,
+            routes=MARKET_DISABLED_ROUTES,
         )
 
     if is_capability_enabled(RuntimeCapability.BROKER_SYNC, profile=profile):
         from routers import broker_sync
 
-        application.include_router(broker_sync.router)
-    else:
-        from routers.disabled_capabilities import (
-            BROKER_SYNC_DISABLED_ROUTES,
-            build_disabled_capability_router,
-        )
-
         application.include_router(
-            build_disabled_capability_router(
-                prefix="/api/broker-sync",
-                capability="BROKER_SYNC",
-                routes=BROKER_SYNC_DISABLED_ROUTES,
-            )
+            broker_sync.router,
+            dependencies=runtime_dependencies(RuntimeCapability.BROKER_SYNC),
+        )
+    else:
+        include_disabled_routes(
+            prefix="/api/broker-sync",
+            capability=RuntimeCapability.BROKER_SYNC,
+            routes=BROKER_SYNC_DISABLED_ROUTES,
         )
 
     @application.get("/")

@@ -10,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from database import Base, get_db
 from main import app
 from models import FeatureFlag, IntegrationCredential, PlatformSetting, User
+from release_profile import DeploymentCapabilityPolicy
 from routers.admin import get_current_admin
 from services.credential_service import decrypt_secret
 
@@ -138,7 +139,51 @@ class AdminPlatformConfigTests(unittest.TestCase):
             db.close()
         self.assertTrue(flag.enabled)
 
+    def test_ceiling_excluded_ai_admin_writes_have_zero_side_effects(self):
+        empty_policy = DeploymentCapabilityPolicy(frozenset())
+        with patch(
+            "release_profile.STATIC_DEPLOYMENT_CAPABILITY_POLICY",
+            empty_policy,
+        ), patch("routers.admin.httpx.AsyncClient") as http_client:
+            flag_response = self.client.put(
+                "/api/admin/platform/feature-flags/capability.ai_insights.v1",
+                json={"enabled": True},
+            )
+            setting_response = self.client.put(
+                "/api/admin/platform/settings/llm_model",
+                json={"value": "gpt-5"},
+            )
+            credential_response = self.client.put(
+                "/api/admin/platform/integrations/openai/api_key",
+                json={"secret_value": "sk-must-not-persist"},
+            )
+            test_response = self.client.post("/api/admin/test-llm")
+
+        for response in (
+            flag_response,
+            setting_response,
+            credential_response,
+            test_response,
+        ):
+            self.assertEqual(response.status_code, 404)
+            self.assertEqual(response.json()["error"]["code"], "FEATURE_DISABLED")
+            self.assertEqual(response.json()["detail"]["capability"], "AI_INSIGHTS")
+
+        http_client.assert_not_called()
+        db = self.SessionLocal()
+        try:
+            self.assertEqual(db.query(FeatureFlag).count(), 0)
+            self.assertEqual(db.query(PlatformSetting).count(), 0)
+            self.assertEqual(db.query(IntegrationCredential).count(), 0)
+        finally:
+            db.close()
+
     def test_test_llm_uses_new_platform_tables(self):
+        flag_response = self.client.put(
+            "/api/admin/platform/feature-flags/capability.ai_insights.v1",
+            json={"enabled": True},
+        )
+        self.assertEqual(flag_response.status_code, 200)
         self.client.put(
             "/api/admin/platform/settings/llm_api_url",
             json={"value": "https://new.example/v1"},

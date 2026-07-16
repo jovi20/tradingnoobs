@@ -27,6 +27,7 @@ from models import (
     UserSettings,
 )
 from release_profile import (
+    DeploymentCapabilityPolicy,
     ReleaseProfile,
     RuntimeCapability,
     bind_release_profile,
@@ -50,8 +51,17 @@ from services.market_data_job_service import (
 
 class JournalBaselineProfileTests(unittest.TestCase):
     def setUp(self):
+        self.ceiling_patch = patch(
+            "release_profile.STATIC_DEPLOYMENT_CAPABILITY_POLICY",
+            DeploymentCapabilityPolicy(frozenset()),
+        )
+        self.ceiling_patch.start()
         self.app = create_app(ReleaseProfile.JOURNAL_BASELINE)
         self.client = TestClient(self.app, raise_server_exceptions=False)
+
+    def tearDown(self):
+        self.client.close()
+        self.ceiling_patch.stop()
 
     def test_unknown_profile_fails_closed(self):
         self.assertEqual(
@@ -143,9 +153,15 @@ class JournalBaselineProfileTests(unittest.TestCase):
                 "forbidden = [",
                 "    'routers.market',",
                 "    'routers.broker_sync',",
+                "    'routers.insights',",
+                "    'routers.insight_artifacts',",
+                "    'routers.pdf_export',",
+                "    'routers.risk',",
                 "    'services.market_data_service',",
                 "    'services.market_data_job_handlers',",
                 "    'services.broker_sync.service',",
+                "    'services.llm_service',",
+                "    'services.report_export_service',",
                 "]",
                 "loaded = [name for name in forbidden if name in sys.modules]",
                 "assert main.app.state.release_profile == 'JOURNAL_BASELINE'",
@@ -155,6 +171,7 @@ class JournalBaselineProfileTests(unittest.TestCase):
         )
         env = os.environ.copy()
         env["RELEASE_PROFILE"] = "JOURNAL_BASELINE"
+        env["DEPLOYMENT_CAPABILITY_ALLOWLIST"] = ""
         env["PYTHONPATH"] = str(backend_dir)
         completed = subprocess.run(
             [sys.executable, "-c", script],
@@ -169,6 +186,11 @@ class JournalBaselineProfileTests(unittest.TestCase):
 
 class JournalBaselineDatabaseBoundaryTests(unittest.TestCase):
     def setUp(self):
+        self.ceiling_patch = patch(
+            "release_profile.STATIC_DEPLOYMENT_CAPABILITY_POLICY",
+            DeploymentCapabilityPolicy(frozenset()),
+        )
+        self.ceiling_patch.start()
         self.temp_dir = tempfile.TemporaryDirectory()
         db_path = os.path.join(self.temp_dir.name, "journal-baseline.db")
         self.engine = create_engine(
@@ -225,6 +247,7 @@ class JournalBaselineDatabaseBoundaryTests(unittest.TestCase):
     def tearDown(self):
         self.client.close()
         self.app.dependency_overrides.clear()
+        self.ceiling_patch.stop()
         self.engine.dispose()
         self.temp_dir.cleanup()
 

@@ -3,16 +3,14 @@ Trading Noobs Backend - Weekly Report Router
 """
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import JSONResponse, StreamingResponse
-from io import BytesIO
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from typing import List, Optional
 from datetime import date, timedelta, datetime, timezone
 import re
 
 from database import get_db
-from models import User, WeeklyReport, AISummary, AIAnalysisResult, Position, PositionStatus, InsightArtifact, InsightRun
+from models import User, WeeklyReport, AISummary, AIAnalysisResult, InsightArtifact, InsightRun
 from schemas import WeeklyReportCreate, WeeklyReportResponse, AISummaryResponse, AnalysisRequest, AnalysisResponse
 from services.auth_service import get_current_user
 from services.chart_schema_service import build_analysis_chart_schema
@@ -21,8 +19,6 @@ from services.llm_service import generate_weekly_report, generate_journal_summar
 from services.analytics_service import AnalyticsService
 from services.idempotency_service import begin_idempotent_request, complete_idempotent_request
 from services.platform_config_service import get_llm_runtime_config
-from services.report_export_service import build_report_filename, build_weekly_report_pdf
-from services.risk_alert_service import build_portfolio_risk_summary
 
 router = APIRouter(prefix="/api/insights", tags=["Insights"])
 
@@ -231,22 +227,6 @@ def _get_owned_weekly_report(db: Session, *, report_id: int, user_id: int) -> We
     return report
 
 
-def _build_report_portfolio_summary(db: Session, user_id: int) -> dict:
-    stats = db.query(
-        func.count(Position.id).label("total_positions"),
-        func.count(Position.id).filter(Position.status == PositionStatus.OPEN).label("open_positions"),
-        func.count(Position.id).filter(Position.status == PositionStatus.CLOSED).label("closed_positions"),
-        func.sum(Position.realized_pnl).label("realized_pnl"),
-    ).filter(Position.user_id == user_id).one()
-
-    return {
-        "total_positions": int(stats.total_positions or 0),
-        "open_positions": int(stats.open_positions or 0),
-        "closed_positions": int(stats.closed_positions or 0),
-        "realized_pnl": float(stats.realized_pnl or 0),
-    }
-
-
 @router.get("", response_model=List[WeeklyReportResponse])
 async def get_weekly_reports(
     current_user: User = Depends(get_current_user),
@@ -266,33 +246,6 @@ async def get_weekly_report(
 ):
     """Get a specific weekly report"""
     return _get_owned_weekly_report(db, report_id=report_id, user_id=current_user.id)
-
-
-@router.get("/{report_id}/export/pdf")
-async def export_weekly_report_pdf(
-    report_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Export a specific weekly report as a PDF attachment."""
-    report = _get_owned_weekly_report(db, report_id=report_id, user_id=current_user.id)
-    portfolio_summary = _build_report_portfolio_summary(db, current_user.id)
-    risk_summary = build_portfolio_risk_summary(db, current_user.id)
-    pdf_bytes = build_weekly_report_pdf(
-        report,
-        portfolio_summary=portfolio_summary,
-        risk_summary=risk_summary,
-    )
-    filename = build_report_filename(report)
-
-    return StreamingResponse(
-        BytesIO(pdf_bytes),
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f"attachment; filename={filename}",
-            "Access-Control-Expose-Headers": "Content-Disposition",
-        },
-    )
 
 
 @router.post("/generate", response_model=WeeklyReportResponse, status_code=status.HTTP_201_CREATED)

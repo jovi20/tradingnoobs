@@ -24,11 +24,41 @@ BROKER_SYNC_DISABLED_ROUTES: tuple[DisabledRoute, ...] = (
     ("GET", "/executions"),
 )
 
+AI_INSIGHTS_DISABLED_ROUTES: tuple[DisabledRoute, ...] = (
+    ("GET", ""),
+    ("GET", "/{report_id:int}"),
+    ("POST", "/generate"),
+    ("POST", "/generate-current-week"),
+    ("DELETE", "/{report_id:int}"),
+    ("GET", "/summary/today"),
+    ("POST", "/summary/generate"),
+    ("POST", "/analyze"),
+    ("GET", "/analyze/history"),
+    ("GET", "/analyze/latest/{analysis_type}"),
+)
+
+INSIGHT_RUNS_DISABLED_ROUTES: tuple[DisabledRoute, ...] = (
+    ("GET", ""),
+    ("GET", "/{run_public_id}"),
+)
+
+INSIGHT_ARTIFACTS_DISABLED_ROUTES: tuple[DisabledRoute, ...] = (
+    ("GET", "/{artifact_public_id}"),
+)
+
+PDF_EXPORT_DISABLED_ROUTES: tuple[DisabledRoute, ...] = (
+    ("GET", "/{report_id:int}/export/pdf"),
+)
+
+RISK_CARDS_DISABLED_ROUTES: tuple[DisabledRoute, ...] = (
+    ("GET", "/summary"),
+)
+
 
 def feature_disabled_detail(capability: str) -> dict[str, str]:
     return {
         "code": "FEATURE_DISABLED",
-        "message": "Capability is disabled by the deployment release profile",
+        "message": "Capability is disabled by deployment or runtime policy",
         "capability": capability,
     }
 
@@ -47,6 +77,7 @@ def build_disabled_capability_router(
     routes: Sequence[DisabledRoute],
 ) -> APIRouter:
     router = APIRouter(prefix=prefix, include_in_schema=False)
+    prefix_key = prefix.strip("/").replace("/", "_").replace("-", "_") or "root"
 
     async def deny_known_capability_route():
         raise_feature_disabled(capability)
@@ -56,6 +87,6 @@ def build_disabled_capability_router(
             path,
             deny_known_capability_route,
             methods=[method],
-            name=f"disabled_{capability.lower()}_{index}",
+            name=f"disabled_{capability.lower()}_{prefix_key}_{index}",
         )
     return router

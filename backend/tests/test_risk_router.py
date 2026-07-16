@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from datetime import date
 from decimal import Decimal
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -50,9 +51,15 @@ class RiskRouterTests(unittest.TestCase):
 
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides[get_current_user] = override_get_current_user
+        self.capability_patch = patch(
+            "services.capability_service.get_feature_flag_enabled",
+            return_value=True,
+        )
+        self.capability_patch.start()
         self.client = TestClient(app)
 
     def tearDown(self):
+        self.capability_patch.stop()
         app.dependency_overrides.clear()
         self.session.close()
         self.engine.dispose()

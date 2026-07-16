@@ -12,7 +12,11 @@ from sqlalchemy.orm import sessionmaker
 from database import Base, get_db
 from main import create_app
 from models import IntegrationCredential, PlatformSetting, SystemSetting, User
-from release_profile import ReleaseProfile
+from release_profile import (
+    DeploymentCapabilityPolicy,
+    OPTIONAL_RUNTIME_CAPABILITIES,
+    ReleaseProfile,
+)
 from routers.admin import get_current_admin
 from services.credential_service import decrypt_secret, encrypt_secret
 
@@ -51,18 +55,28 @@ class JournalBaselineAdminBoundaryTests(unittest.TestCase):
 
         self._clients: list[TestClient] = []
         self._apps = []
+        self._policy_patches = []
 
     def tearDown(self):
         for client in self._clients:
             client.close()
         for app in self._apps:
             app.dependency_overrides.clear()
+        for policy_patch in reversed(self._policy_patches):
+            policy_patch.stop()
         self.engine.dispose()
         if os.path.exists(self.db_path):
             os.remove(self.db_path)
 
-    def _client(self, profile: ReleaseProfile) -> TestClient:
-        app = create_app(profile)
+    def _client(self, *, allow_optional: bool) -> TestClient:
+        allowed = OPTIONAL_RUNTIME_CAPABILITIES if allow_optional else frozenset()
+        policy_patch = patch(
+            "release_profile.STATIC_DEPLOYMENT_CAPABILITY_POLICY",
+            DeploymentCapabilityPolicy(frozenset(allowed)),
+        )
+        policy_patch.start()
+        self._policy_patches.append(policy_patch)
+        app = create_app(ReleaseProfile.JOURNAL_BASELINE)
 
         def override_get_db():
             db = self.SessionLocal()
@@ -130,22 +144,8 @@ class JournalBaselineAdminBoundaryTests(unittest.TestCase):
             db.close()
 
     def test_alias_writes_fail_closed_without_persistence(self):
-        client = self._client(ReleaseProfile.JOURNAL_BASELINE)
+        client = self._client(allow_optional=False)
 
-        self.assertEqual(
-            client.put(
-                "/api/admin/platform/settings/llm_model",
-                json={"value": "gpt-5"},
-            ).status_code,
-            200,
-        )
-        self.assertEqual(
-            client.put(
-                "/api/admin/platform/integrations/openai/api_key",
-                json={"secret_value": "safe-llm-secret"},
-            ).status_code,
-            200,
-        )
         self.assertEqual(
             client.put(
                 "/api/admin/settings/ordinary_retention_days",
@@ -155,6 +155,16 @@ class JournalBaselineAdminBoundaryTests(unittest.TestCase):
         )
         baseline_counts = self._row_counts()
         blocked_requests = (
+            (
+                "/api/admin/platform/settings/llm_model",
+                {"value": "gpt-5"},
+                "AI_INSIGHTS",
+            ),
+            (
+                "/api/admin/platform/integrations/openai/api_key",
+                {"secret_value": "safe-llm-secret"},
+                "AI_INSIGHTS",
+            ),
             (
                 "/api/admin/settings/prefix-IBKR-flex-password-suffix",
                 {"value": "broker-secret"},
@@ -198,7 +208,7 @@ class JournalBaselineAdminBoundaryTests(unittest.TestCase):
 
     def test_baseline_lists_filter_optional_rows_before_decryption(self):
         self._seed_settings_and_credentials(malformed_optional=True)
-        client = self._client(ReleaseProfile.JOURNAL_BASELINE)
+        client = self._client(allow_optional=False)
 
         with patch("routers.admin.decrypt_secret", wraps=decrypt_secret) as decrypt:
             system_response = client.get("/api/admin/settings")
@@ -212,21 +222,15 @@ class JournalBaselineAdminBoundaryTests(unittest.TestCase):
             ["site_name"],
         )
         self.assertEqual(platform_response.status_code, 200)
-        self.assertEqual(
-            [item["key"] for item in platform_response.json()],
-            ["llm_model"],
-        )
+        self.assertEqual(platform_response.json(), [])
         self.assertEqual(integration_response.status_code, 200)
-        self.assertEqual(
-            [item["provider_key"] for item in integration_response.json()],
-            ["openai"],
-        )
+        self.assertEqual(integration_response.json(), [])
         self.assertEqual(summary_response.status_code, 200)
         summary = summary_response.json()
-        self.assertEqual(summary["platform_setting_count"], 1)
-        self.assertEqual(summary["configured_integration_count"], 1)
-        self.assertEqual(summary["active_integration_count"], 1)
-        self.assertEqual(decrypt.call_count, 2)
+        self.assertEqual(summary["platform_setting_count"], 0)
+        self.assertEqual(summary["configured_integration_count"], 0)
+        self.assertEqual(summary["active_integration_count"], 0)
+        self.assertEqual(decrypt.call_count, 0)
 
         serialized = "".join(
             response.text
@@ -244,12 +248,14 @@ class JournalBaselineAdminBoundaryTests(unittest.TestCase):
             "market-secret",
             "IBKR-Flex",
             "finnhub_api_token",
+            "openai",
+            "gpt-5",
         ):
             self.assertNotIn(forbidden, serialized)
 
     def test_alias_active_update_is_blocked_without_mutation(self):
         self._seed_settings_and_credentials()
-        client = self._client(ReleaseProfile.JOURNAL_BASELINE)
+        client = self._client(allow_optional=False)
 
         response = client.patch(
             "/api/admin/platform/integrations/IBKR-Flex/api_key/active",
@@ -272,9 +278,9 @@ class JournalBaselineAdminBoundaryTests(unittest.TestCase):
         finally:
             db.close()
 
-    def test_development_full_preserves_optional_and_ordinary_admin_controls(self):
+    def test_full_deployment_allowlist_preserves_optional_and_ordinary_admin_controls(self):
         self._seed_settings_and_credentials()
-        client = self._client(ReleaseProfile.DEVELOPMENT_FULL)
+        client = self._client(allow_optional=True)
 
         system_response = client.get("/api/admin/settings")
         platform_response = client.get("/api/admin/platform/settings")
@@ -315,7 +321,7 @@ class JournalBaselineAdminBoundaryTests(unittest.TestCase):
         self.assertEqual(system_optional_response.status_code, 200)
 
     def test_invalid_optional_secret_payload_is_sanitized_before_response(self):
-        client = self._client(ReleaseProfile.JOURNAL_BASELINE)
+        client = self._client(allow_optional=False)
         baseline_counts = self._row_counts()
         requests = (
             (
