@@ -7,7 +7,9 @@
         "build": "next build",
         "start": "next start",
         "lint": "eslint .",
-        "test": "node --test tests/*.test.mts"
+        "test": "node --test tests/*.test.mts",
+        "generate:release-contract": "node scripts/generate-release-contract.mjs",
+        "check:release-contract": "node scripts/generate-release-contract.mjs --check"
     },
     "dependencies": {
         "@radix-ui/react-checkbox": "^1.3.7",

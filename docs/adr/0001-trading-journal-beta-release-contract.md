@@ -1,0 +1,59 @@
+# ADR-0001: Trading Journal Beta Release Contract
+
+Status: Accepted and frozen for `TRADING_JOURNAL_BETA_V1`
+
+Date: 2026-07-17
+
+Machine contract: `backend/app_config/journal_beta_v1.json`
+
+## Decision
+
+The first release is an invite-only trading journal, not a brokerage terminal or a quantitative trading platform. The release uses one deployment currency, USD, and accepts only USD-denominated financial facts. `USDT` is not an alias for USD.
+
+The supported instrument combinations are `STOCK/FUND + SPOT + US` and `CRYPTO + SPOT + CRYPTO`, always quoted in USD. Canonical identity includes asset type, market, exchange code, normalized symbol, instrument type, and quote currency. Identity tokens are trimmed, upper-case ASCII; exchange and symbol patterns are frozen in the machine contract. `EQUITY`, `ETF`, and `SPOT_CRYPTO` are input aliases only and normalize to canonical asset types. The release uses FIFO and `HEDGE_BY_DIRECTION`: one long and one short lifecycle may coexist for the same account and instrument, but two financially open lifecycles on the same side may not.
+
+Trade commands are `OPEN`, `ADD`, `REDUCE`, and `CLOSE`. The cash surface is opening balance, deposit, withdrawal, interest, account fee, and same-currency cash dividend. Corrections use linked reversal or void facts. Transfers, stock splits, option events, arbitrary manual cash adjustments, cross-zero executions, ordinary backdating, and separate fee events are outside the release.
+
+Each trade event has at most one aggregated, non-negative fee in USD. The fee posts separately as a negative `TRADE_FEE`; realized PnL remains gross. Monetary persistence is `NUMERIC(20,8)` with `ROUND_HALF_EVEN` at the final posting boundary.
+
+Users must provide an IANA timezone. A naive timestamp is interpreted in that timezone, while ambiguous or nonexistent DST times are rejected with 422. Persistent timestamps are UTC-aware.
+
+Financial and Import idempotency uses `(owner_id, versioned operation_scope, SHA256(raw key))`. Raw keys are not retained. Request payloads use versioned canonical JSON plus SHA-256; the same request replays the original versioned response, while a different payload under the same identity returns 409. Financial and Import audit records have no automatic TTL.
+
+## Existing Currency Data
+
+Existing accounts with a null or non-USD currency are never converted automatically and their historical facts are not rewritten. They remain available for reading, export, and archive, but all new financial mutations and Imports are rejected. A Beta release candidate must have zero nonconforming release-scope accounts. Users who need to continue recording create a USD account and preserve the old account as history.
+
+## Import Boundary
+
+The adapter allowlist contains `GENERIC_BOOTSTRAP` and `IBKR_FLEX_XML_V1`.
+
+- Generic CSV/XLSX is a one-time bootstrap and does not trust arbitrary file trade IDs.
+- IBKR Flex XML is a local-file adapter. It may eventually accept duplicate, overlapping, and incremental statements for one immutable source binding using `ibExecID`; it never reads a Flex token or makes a network request.
+
+Both adapters use a 10 MiB file limit, 5,000 rows/executions, a 24-hour preview TTL, and 30-day retention for terminal normalized preview rows. The IBKR adapter additionally limits each owner to two nonterminal sessions and ten uploads per 600 seconds. These source-specific limits do not silently constrain the generic adapter.
+
+Account trade source state is `CLEAN / MANUAL / SOURCE_BOUND`. Source health is an orthogonal `NOT_APPLICABLE / HEALTHY / RECONCILIATION_REQUIRED / SOURCE_DIVERGED` projection whose persistent truth belongs to the source binding. Source completeness is `CURRENT / PENDING_IMPORT`. The complete ImportSession state graph and legal transitions are frozen in the machine contract; later tasks implement those models without renaming the states.
+
+This ADR freezes names, limits, retention, identity, and source states. It does not claim that either new Import implementation exists yet. Generic Import is implemented in JRN-011/012; the source-bound IBKR parser and binding are implemented in JRN-013, incremental confirmation in JRN-014, and reconciliation in JRN-015.
+
+## Capability Ceiling
+
+The optional capabilities are `BROKER_SYNC`, `MARKET`, `AI_INSIGHTS`, `PDF_EXPORT`, `RISK_CARDS`, and `OPEN_REGISTRATION`. All are disabled in the journal Beta deployment.
+
+The deployment ceiling is read once from `DEPLOYMENT_CAPABILITY_ALLOWLIST`. A missing value means an empty allowlist; an unknown token fails startup. The business database cannot expand the ceiling. A reserved runtime FeatureFlag may only narrow or roll out a capability already present in the deployment allowlist:
+
+```text
+effective_enabled = deployment_allowlist AND runtime_rollout_flag
+```
+
+A missing, expired, malformed, or unreadable flag is disabled. Admin cannot enable a capability outside the ceiling. Expanding the deployment allowlist is a release change requiring staging and manual approval.
+
+## Deferred Implementation
+
+- JRN-003 owns invitation records, authentication rate limits, and plaintext secret removal migrations.
+- JRN-005/006 own posting vectors and the append-only ledger implementation.
+- JRN-007 through JRN-010 own canonical lifecycle writes and corrections.
+- JRN-011 through JRN-015 own Import and source-bound implementation.
+
+The broad legacy SQLAlchemy enums remain a storage compatibility superset. Public commands are constrained by the machine contract; this ADR does not rewrite historical rows or prematurely create later source models.

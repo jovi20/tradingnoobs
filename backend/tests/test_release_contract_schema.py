@@ -1,0 +1,116 @@
+from __future__ import annotations
+
+import json
+import unittest
+
+from pydantic import ValidationError
+
+from app_config.release_contract import (
+    ALLOWED_ASSET_TYPES,
+    ALLOWED_TRANSACTION_TYPES,
+    CONTRACT_PATH,
+    JOURNAL_BETA_CONTRACT,
+    JournalBetaReleaseContract,
+    ReleaseContractViolation,
+    load_release_contract,
+    require_allowed_asset_type,
+    require_allowed_transaction_type,
+    require_release_currency,
+)
+
+
+class JournalBetaReleaseContractTests(unittest.TestCase):
+    def test_contract_round_trips_through_strict_typed_loader(self):
+        raw = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+        loaded = load_release_contract()
+
+        self.assertEqual(loaded.metadata.contract_id, "TRADING_JOURNAL_BETA_V1")
+        self.assertEqual(loaded.model_dump(mode="json"), raw)
+        self.assertEqual(loaded.currency.account_base_currencies, ("USD",))
+        self.assertEqual(loaded.lifecycle.position_mode, "HEDGE_BY_DIRECTION")
+        self.assertEqual(ALLOWED_ASSET_TYPES, {"STOCK", "FUND", "CRYPTO"})
+        self.assertEqual(ALLOWED_TRANSACTION_TYPES, {"DEPOSIT", "WITHDRAWAL", "INTEREST", "FEE"})
+
+    def test_contract_rejects_enum_drift_and_unknown_fields(self):
+        raw = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+        raw["instruments"]["asset_types"] = ["STOCK", "FUND", "CRYPTO", "BOND"]
+        with self.assertRaises(ValidationError):
+            JournalBetaReleaseContract.model_validate(raw)
+
+        raw = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+        raw["currency"]["silent_fx_conversion"] = True
+        with self.assertRaises(ValidationError):
+            JournalBetaReleaseContract.model_validate(raw)
+
+    def test_currency_is_exact_usd_and_never_aliases_usdt(self):
+        self.assertEqual(require_release_currency(" usd "), "USD")
+        for rejected in (None, "", "USDT", "HKD", "CNY"):
+            with self.subTest(value=rejected):
+                with self.assertRaises(ReleaseContractViolation) as raised:
+                    require_release_currency(rejected)
+                self.assertEqual(raised.exception.code, "UNSUPPORTED_RELEASE_CURRENCY")
+
+    def test_public_write_allowlists_reject_deferred_types(self):
+        self.assertEqual(require_allowed_asset_type("ETF"), "FUND")
+        self.assertEqual(require_allowed_asset_type("spot_crypto"), "CRYPTO")
+        self.assertEqual(require_allowed_transaction_type("FEE"), "FEE")
+
+        for asset_type in ("BOND", "FX", "DERIVATIVE", "OPTION"):
+            with self.subTest(asset_type=asset_type):
+                with self.assertRaises(ReleaseContractViolation):
+                    require_allowed_asset_type(asset_type)
+
+        for transaction_type in ("TRANSFER_IN", "TRANSFER_OUT", "CASH_ADJUSTMENT"):
+            with self.subTest(transaction_type=transaction_type):
+                with self.assertRaises(ReleaseContractViolation):
+                    require_allowed_transaction_type(transaction_type)
+
+    def test_import_and_source_names_are_frozen_without_claiming_implementation(self):
+        contract = JOURNAL_BETA_CONTRACT
+        self.assertEqual(
+            contract.imports.adapter_allowlist,
+            ("GENERIC_BOOTSTRAP", "IBKR_FLEX_XML_V1"),
+        )
+        self.assertFalse(contract.imports.ibkr_flex_xml_v1.network_access)
+        self.assertFalse(contract.imports.ibkr_flex_xml_v1.credential_access)
+        self.assertTrue(contract.imports.ibkr_flex_xml_v1.repeat_overlap_incremental)
+        self.assertTrue(contract.imports.ibkr_flex_xml_v1.provider_contract_gate_required)
+        self.assertEqual(contract.imports.common_limits.max_file_bytes, 10 * 1024 * 1024)
+        self.assertEqual(contract.imports.common_limits.max_rows_or_executions, 5000)
+        self.assertEqual(contract.imports.common_limits.preview_ttl_seconds, 24 * 60 * 60)
+        self.assertEqual(
+            contract.imports.ibkr_flex_xml_v1.owner_upload_limits.max_nonterminal_sessions,
+            2,
+        )
+        self.assertEqual(
+            contract.source_states.trade_source_state,
+            ("CLEAN", "MANUAL", "SOURCE_BOUND"),
+        )
+        self.assertEqual(
+            contract.source_states.source_health,
+            ("NOT_APPLICABLE", "HEALTHY", "RECONCILIATION_REQUIRED", "SOURCE_DIVERGED"),
+        )
+        self.assertEqual(contract.source_states.source_health_truth, "IMPORT_SOURCE_BINDING")
+        self.assertEqual(
+            tuple(item.from_state for item in contract.source_states.import_session_transitions),
+            ("UPLOADING", "PREVIEW_READY", "CONFIRMING"),
+        )
+
+    def test_fee_time_idempotency_and_capability_contracts_are_exact(self):
+        contract = JOURNAL_BETA_CONTRACT
+        self.assertEqual(contract.fees.max_aggregated_fees_per_trade_event, 1)
+        self.assertFalse(contract.fees.component_breakdown_enabled)
+        self.assertEqual(contract.time.offset_input_interpretation, "USE_INPUT_OFFSET")
+        self.assertIsNone(contract.time.default_timezone)
+        self.assertEqual(contract.idempotency.identity_fields, ("owner_id", "operation_scope", "key_hash"))
+        self.assertFalse(contract.idempotency.persist_raw_key)
+        self.assertEqual(contract.idempotency.financial_retention, "PERMANENT")
+        self.assertEqual(contract.capabilities.ceiling_storage, "DEPLOYMENT_CONFIGURATION_ONLY")
+        self.assertEqual(
+            contract.capabilities.admin_outside_ceiling_policy,
+            "FEATURE_DISABLED_NO_SIDE_EFFECT",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
