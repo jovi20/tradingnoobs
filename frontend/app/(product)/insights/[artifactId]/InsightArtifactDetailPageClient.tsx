@@ -8,7 +8,7 @@ import { InsightArtifactDetailCard } from '@/components/insights/InsightArtifact
 import { useAuth } from '@/contexts/AuthContext'
 import { useInsightArtifact } from '@/hooks/useInsightArtifact'
 
-export default function InsightArtifactDetailPage() {
+export default function InsightArtifactDetailPageClient() {
     const { token } = useAuth()
     const params = useParams()
     const artifactId = params.artifactId as string

@@ -5,6 +5,7 @@ import {
   getVisibleNavigationItems,
   isNavigationItemActive,
 } from '../lib/navigation.ts'
+import { normalizeEffectiveCapabilities } from '../lib/effective-capabilities.ts'
 
 test('regular users do not see admin navigation as a primary product item', () => {
   const items = getVisibleNavigationItems('user')
@@ -14,9 +15,16 @@ test('regular users do not see admin navigation as a primary product item', () =
     '/positions',
     '/strategies',
     '/daily',
-    '/insights',
     '/settings',
   ])
+})
+
+test('optional navigation consumes explicit effective capabilities only', () => {
+  const enabled = normalizeEffectiveCapabilities({ AI_INSIGHTS: true })
+  const items = getVisibleNavigationItems('user', enabled)
+
+  assert.equal(items.some((item) => item.href === '/insights'), true)
+  assert.equal(getVisibleNavigationItems('user').some((item) => item.href === '/insights'), false)
 })
 
 test('admins receive a separated ops item after product navigation', () => {

@@ -9,6 +9,11 @@ import {
 
 import { cn } from '@/lib/cn'
 import { useAuth } from '@/contexts/AuthContext'
+import { useEffectiveCapabilities } from '@/contexts/EffectiveCapabilitiesContext'
+import {
+    isEffectiveCapabilityEnabled,
+    type EffectiveCapabilityId,
+} from '@/lib/effective-capabilities'
 
 interface Command {
     id: string
@@ -19,6 +24,7 @@ interface Command {
     keywords?: string
     group: '导航' | '快捷动作' | '管理'
     adminOnly?: boolean
+    requiredCapability?: EffectiveCapabilityId
 }
 
 const COMMANDS: Command[] = [
@@ -27,11 +33,11 @@ const COMMANDS: Command[] = [
     { id: 'nav-positions', label: '交易', icon: Briefcase, href: '/positions', keywords: 'positions trades jiaoyi', group: '导航' },
     { id: 'nav-strategies', label: '策略', icon: Layers, href: '/strategies', keywords: 'strategies celue', group: '导航' },
     { id: 'nav-daily', label: '日历', icon: Calendar, href: '/daily', keywords: 'daily calendar rili', group: '导航' },
-    { id: 'nav-insights', label: '洞察', icon: FileText, href: '/insights', keywords: 'insights ai dongcha', group: '导航' },
+    { id: 'nav-insights', label: '洞察', icon: FileText, href: '/insights', keywords: 'insights ai dongcha', group: '导航', requiredCapability: 'AI_INSIGHTS' },
     { id: 'nav-settings', label: '设置', icon: Settings, href: '/settings', keywords: 'settings shezhi', group: '导航' },
     { id: 'act-new', label: '新建交易', hint: '录入一笔新仓位', icon: Plus, href: '/positions/new', keywords: 'new trade create xinjian', group: '快捷动作' },
     { id: 'act-import', label: '导入历史记录', hint: 'CSV / Excel', icon: Upload, href: '/positions/import', keywords: 'import daoru csv excel', group: '快捷动作' },
-    { id: 'act-ai', label: '运行 AI 分析', hint: '洞察助手', icon: Sparkles, href: '/insights', keywords: 'ai analyze fenxi', group: '快捷动作' },
+    { id: 'act-ai', label: '运行 AI 分析', hint: '洞察助手', icon: Sparkles, href: '/insights', keywords: 'ai analyze fenxi', group: '快捷动作', requiredCapability: 'AI_INSIGHTS' },
     { id: 'admin-ops', label: '运维控制台', icon: Gauge, href: '/admin/ops', keywords: 'admin ops yunwei', group: '管理', adminOnly: true },
     { id: 'admin-jobs', label: '任务队列', icon: ShieldCheck, href: '/admin/jobs', keywords: 'admin jobs renwu', group: '管理', adminOnly: true },
 ]
@@ -45,6 +51,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
 function CommandPaletteContent({ onOpenChange }: { onOpenChange: (v: boolean) => void }) {
     const router = useRouter()
     const { user } = useAuth()
+    const effectiveCapabilities = useEffectiveCapabilities()
     const [query, setQuery] = useState('')
     const [active, setActive] = useState(0)
     const inputRef = useRef<HTMLInputElement>(null)
@@ -54,8 +61,12 @@ function CommandPaletteContent({ onOpenChange }: { onOpenChange: (v: boolean) =>
         const isAdmin = user?.role === 'admin'
         const q = query.trim().toLowerCase()
         return COMMANDS.filter((c) => (!c.adminOnly || isAdmin))
+            .filter((c) => (
+                !c.requiredCapability
+                || isEffectiveCapabilityEnabled(effectiveCapabilities, c.requiredCapability)
+            ))
             .filter((c) => !q || c.label.toLowerCase().includes(q) || c.keywords?.includes(q) || c.hint?.toLowerCase().includes(q))
-    }, [query, user?.role])
+    }, [effectiveCapabilities, query, user?.role])
 
     useEffect(() => {
         // Focus the input on mount — a DOM side effect, not React state.

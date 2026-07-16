@@ -29,11 +29,13 @@ test('unknown or missing frontend profile fails closed to JOURNAL_BASELINE', () 
 
 test('launch profile cannot be changed through browser process env', () => {
   const profileSource = readSource('lib/release-profile.ts')
+  const generatedContractSource = readSource('lib/generated/release-contract.ts')
 
   assert.match(profileSource, /RELEASE_PROFILE: ReleaseProfile = 'JOURNAL_BASELINE'/)
-  assert.match(profileSource, /MARKET_RUNTIME_ENABLED = false/)
-  assert.match(profileSource, /BROKER_SYNC_RUNTIME_ENABLED = false/)
   assert.doesNotMatch(profileSource, /process\.env/)
+  assert.match(profileSource, /from '\.\/generated\/release-contract\.ts'/)
+  assert.match(generatedContractSource, /MARKET_RUNTIME_ENABLED = false as const/)
+  assert.match(generatedContractSource, /BROKER_SYNC_RUNTIME_ENABLED = false as const/)
 })
 
 test('optional UI calls are guarded by the build-time release profile', () => {

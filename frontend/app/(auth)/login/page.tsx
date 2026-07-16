@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useTheme } from '@/components/ThemeProvider'
 import Link from 'next/link'
 import Image from 'next/image'
-import { AlertCircle, Clock3, ClipboardCheck, Sparkles } from 'lucide-react'
+import { AlertCircle, BookOpen, Clock3, ClipboardCheck } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
 import { Button } from '@/components/ui/Button'
@@ -52,14 +52,14 @@ export default function LoginPage() {
                         提升为可复盘的决策工作台。
                     </h2>
                     <p className="mt-4 text-sm leading-6 text-ink-muted">
-                        时间线优先、复盘为中心、AI 作为副驾。理解你最近做了什么，以及下一步该重复什么、避免什么。
+                        时间线优先、复盘为中心。理解你最近做了什么，以及下一步该重复什么、避免什么。
                     </p>
 
                     <div className="mt-8 space-y-3">
                         {[
                             { icon: Clock3, text: '决策事件流：开仓到复盘一条线程' },
                             { icon: ClipboardCheck, text: '纪律与计划偏移和盈亏同级' },
-                            { icon: Sparkles, text: 'AI 洞察辅助反思，不霸屏' },
+                            { icon: BookOpen, text: '策略、检查清单和随笔形成完整记录' },
                         ].map(({ icon: Icon, text }) => (
                             <div key={text} className="flex items-center gap-3 text-sm text-ink-soft">
                                 <span className="flex h-8 w-8 items-center justify-center rounded-md border border-line bg-panel text-ink-muted">
@@ -71,7 +71,7 @@ export default function LoginPage() {
                     </div>
                 </div>
 
-                <p className="text-xs text-ink-faint">量化系统前奏 · 决策复盘工作台</p>
+                <p className="text-xs text-ink-faint">邀请制交易日志 · 决策复盘工作台</p>
             </aside>
 
             {/* Form panel */}
@@ -133,7 +133,7 @@ export default function LoginPage() {
                     <p className="mt-6 text-center text-sm text-ink-muted">
                         还没有账户？{' '}
                         <Link href="/register" className="font-medium text-ai transition-opacity hover:opacity-80">
-                            立即注册
+                            凭邀请注册
                         </Link>
                     </p>
                 </div>

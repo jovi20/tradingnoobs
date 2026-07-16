@@ -1,3 +1,10 @@
+import {
+    DISABLED_EFFECTIVE_CAPABILITIES,
+    isEffectiveCapabilityEnabled,
+    type EffectiveCapabilities,
+    type EffectiveCapabilityId,
+} from './effective-capabilities.ts'
+
 export type UserRole = string | null | undefined
 export type NavigationSection = 'product' | 'ops' | 'settings'
 
@@ -6,6 +13,7 @@ export interface NavigationItem {
     label: string
     icon: 'timeline' | 'dashboard' | 'positions' | 'strategies' | 'daily' | 'insights' | 'settings' | 'adminJobs' | 'adminOps'
     section: NavigationSection
+    requiredCapability?: EffectiveCapabilityId
 }
 
 const productItems: NavigationItem[] = [
@@ -14,7 +22,7 @@ const productItems: NavigationItem[] = [
     { href: '/positions', label: '交易', icon: 'positions', section: 'product' },
     { href: '/strategies', label: '策略', icon: 'strategies', section: 'product' },
     { href: '/daily', label: '日历', icon: 'daily', section: 'product' },
-    { href: '/insights', label: '洞察', icon: 'insights', section: 'product' },
+    { href: '/insights', label: '洞察', icon: 'insights', section: 'product', requiredCapability: 'AI_INSIGHTS' },
 ]
 
 const adminItems: NavigationItem[] = [
@@ -24,11 +32,19 @@ const adminItems: NavigationItem[] = [
 
 const settingsItem: NavigationItem = { href: '/settings', label: '设置', icon: 'settings', section: 'settings' }
 
-export function getVisibleNavigationItems(role: UserRole): NavigationItem[] {
+export function getVisibleNavigationItems(
+    role: UserRole,
+    effectiveCapabilities: EffectiveCapabilities = DISABLED_EFFECTIVE_CAPABILITIES,
+): NavigationItem[] {
+    const visibleProductItems = productItems.filter((item) => (
+        !item.requiredCapability
+        || isEffectiveCapabilityEnabled(effectiveCapabilities, item.requiredCapability)
+    ))
+
     if (role === 'admin') {
-        return [...productItems, ...adminItems, settingsItem]
+        return [...visibleProductItems, ...adminItems, settingsItem]
     }
-    return [...productItems, settingsItem]
+    return [...visibleProductItems, settingsItem]
 }
 
 export function isNavigationItemActive(href: string, pathname: string): boolean {

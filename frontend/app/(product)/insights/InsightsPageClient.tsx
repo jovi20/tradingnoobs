@@ -22,11 +22,13 @@ import {
 import { EvidenceLinkedInsightSidecar } from '@/components/insights/EvidenceLinkedInsightSidecar'
 import { LegacyAnalysisChart } from '@/components/insights/LegacyAnalysisChart'
 import { useAuth } from '@/contexts/AuthContext'
+import { useEffectiveCapabilities } from '@/contexts/EffectiveCapabilitiesContext'
 import ReactMarkdown from 'react-markdown'
 import { useInsightRuns } from '@/hooks/useInsightRuns'
 import { insightsAPI, WeeklyReport, AISummary, AnalysisType, AnalysisResponse, AnalysisHistoryItem } from '@/lib/api'
 import { formatAnalysisDateRangeLabel, getDefaultAnalysisDateRange, validateAnalysisDateRange } from '@/lib/adapters/analysis'
 import { downloadBlob } from '@/lib/download'
+import { isEffectiveCapabilityEnabled } from '@/lib/effective-capabilities'
 import { useTrendColor } from '@/hooks/useTrendColor'
 
 // ============== 分析维度定义 ==============
@@ -38,8 +40,10 @@ const ANALYSIS_OPTIONS: { type: AnalysisType; label: string; icon: any; desc: st
     { type: 'strategy_health', label: '策略诊断', icon: Target, desc: '评估各策略的胜率与盈亏比' }
 ]
 
-export default function InsightsPage() {
+export default function InsightsPageClient() {
     const { token } = useAuth()
+    const effectiveCapabilities = useEffectiveCapabilities()
+    const canExportPdf = isEffectiveCapabilityEnabled(effectiveCapabilities, 'PDF_EXPORT')
     const trendColor = useTrendColor()
     const insightRunsQuery = useInsightRuns(token)
 
@@ -615,17 +619,19 @@ export default function InsightsPage() {
                                                     </div>
                                                 </button>
                                                 <div className="flex items-center gap-2">
-                                                    <button
-                                                        onClick={() => handleExportReport(report.id)}
-                                                        disabled={isExporting}
-                                                        className="inline-flex items-center gap-1.5 rounded-full border border-line bg-panel px-2.5 py-1.5 text-[11px] font-semibold text-ink-soft transition-colors hover:border-line-strong hover:text-ai disabled:cursor-not-allowed disabled:opacity-60"
-                                                    >
-                                                        {isExporting
-                                                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                                            : <Download className="w-3.5 h-3.5" />
-                                                        }
-                                                        <span>PDF</span>
-                                                    </button>
+                                                    {canExportPdf && (
+                                                        <button
+                                                            onClick={() => handleExportReport(report.id)}
+                                                            disabled={isExporting}
+                                                            className="inline-flex items-center gap-1.5 rounded-full border border-line bg-panel px-2.5 py-1.5 text-[11px] font-semibold text-ink-soft transition-colors hover:border-line-strong hover:text-ai disabled:cursor-not-allowed disabled:opacity-60"
+                                                        >
+                                                            {isExporting
+                                                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                                : <Download className="w-3.5 h-3.5" />
+                                                            }
+                                                            <span>PDF</span>
+                                                        </button>
+                                                    )}
                                                     <button
                                                         onClick={() => setExpandedReport(isExpanded ? null : report.id)}
                                                         className="rounded-full p-1.5 text-ink-faint transition-colors hover:bg-panel-subtle hover:text-ink-soft"

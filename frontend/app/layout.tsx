@@ -4,8 +4,8 @@ import { plexSans, plexMono } from './fonts'
 import { Providers } from '@/components/Providers'
 
 export const metadata: Metadata = {
-    title: 'Trading Noobs | 交易日志与洞察',
-    description: '专业级交易日志记录、分析与 AI 深度复盘系统',
+    title: 'Trading Noobs | 交易日志与复盘',
+    description: '记录交易决策、执行过程与复盘结论的邀请制交易日志',
     icons: {
         icon: '/logo.png',
         shortcut: '/logo.png',

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 
 import { useAuth } from '@/contexts/AuthContext'
+import { useEffectiveCapabilities } from '@/contexts/EffectiveCapabilitiesContext'
 import { getVisibleNavigationItems } from '@/lib/navigation'
 import { AppSidebar } from '@/components/navigation/AppSidebar'
 import { AppTopBar } from '@/components/navigation/AppTopBar'
@@ -17,6 +18,7 @@ import { CommandPalette } from '@/components/navigation/CommandPalette'
 export function ProductShell({ children }: { children: React.ReactNode }) {
     const pathname = usePathname()
     const { isAuthenticated, user } = useAuth()
+    const effectiveCapabilities = useEffectiveCapabilities()
     const [commandOpen, setCommandOpen] = useState(false)
 
     const openCommand = useCallback(() => setCommandOpen(true), [])
@@ -34,7 +36,7 @@ export function ProductShell({ children }: { children: React.ReactNode }) {
         return () => window.removeEventListener('keydown', onKey)
     }, [])
 
-    const items = getVisibleNavigationItems(user?.role)
+    const items = getVisibleNavigationItems(user?.role, effectiveCapabilities)
 
     // Unauthenticated users are redirected by AuthContext; render bare to avoid flashing the shell.
     if (!isAuthenticated) {

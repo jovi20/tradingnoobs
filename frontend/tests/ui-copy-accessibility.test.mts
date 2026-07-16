@@ -57,7 +57,7 @@ test('auth errors are announced and primary product headings do not mix English 
   const sidebar = readSource('components/navigation/AppSidebar.tsx')
   const timeline = readSource('components/timeline/workbench/ReviewInboxPanel.tsx')
   const dashboard = readSource('components/dashboard/workbench/DashboardWorkbenchHeader.tsx')
-  const insights = readSource('app/(product)/insights/page.tsx')
+  const insights = readSource('app/(product)/insights/InsightsPageClient.tsx')
   const admin = readSource('app/(admin)/admin/ops/page.tsx')
 
   assert.match(login, /role="alert"/)

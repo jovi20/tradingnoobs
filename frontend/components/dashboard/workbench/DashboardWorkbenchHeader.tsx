@@ -1,15 +1,27 @@
+'use client'
+
 import Link from 'next/link'
 import { BarChart3, Calendar, FileText, TrendingUp } from 'lucide-react'
 import MarketStatus from '@/components/MarketStatus'
+import { useEffectiveCapabilities } from '@/contexts/EffectiveCapabilitiesContext'
+import {
+    isEffectiveCapabilityEnabled,
+    type EffectiveCapabilityId,
+} from '@/lib/effective-capabilities'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { StatusPill } from '@/components/ui/StatusPill'
 import type { DashboardRiskPosture } from '@/lib/adapters/dashboard'
 
-const quickLinks = [
+const quickLinks: Array<{
+    href: string
+    label: string
+    icon: typeof TrendingUp
+    requiredCapability?: EffectiveCapabilityId
+}> = [
     { href: '/positions/new', label: '新增交易', icon: TrendingUp },
     { href: '/strategies', label: '策略', icon: BarChart3 },
     { href: '/daily', label: '日历', icon: Calendar },
-    { href: '/insights', label: '洞察', icon: FileText },
+    { href: '/insights', label: '洞察', icon: FileText, requiredCapability: 'AI_INSIGHTS' },
 ]
 
 interface DashboardWorkbenchHeaderProps {
@@ -17,6 +29,12 @@ interface DashboardWorkbenchHeaderProps {
 }
 
 export function DashboardWorkbenchHeader({ riskPosture }: DashboardWorkbenchHeaderProps) {
+    const effectiveCapabilities = useEffectiveCapabilities()
+    const visibleQuickLinks = quickLinks.filter((item) => (
+        !item.requiredCapability
+        || isEffectiveCapabilityEnabled(effectiveCapabilities, item.requiredCapability)
+    ))
+
     return (
         <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-start">
             <SectionHeader
@@ -27,7 +45,7 @@ export function DashboardWorkbenchHeader({ riskPosture }: DashboardWorkbenchHead
             />
             <div className="flex flex-col gap-3 lg:items-end">
                 <div className="flex max-w-full gap-2 overflow-x-auto pb-1">
-                    {quickLinks.map((item) => {
+                    {visibleQuickLinks.map((item) => {
                         const Icon = item.icon
                         return (
                             <Link

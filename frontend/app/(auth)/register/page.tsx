@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useTheme } from '@/components/ThemeProvider'
 import Link from 'next/link'
 import Image from 'next/image'
-import { AlertCircle, Clock3, ClipboardCheck, Sparkles } from 'lucide-react'
+import { AlertCircle, BookOpen, Clock3, ClipboardCheck } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
 import { Button } from '@/components/ui/Button'
@@ -68,14 +68,14 @@ export default function RegisterPage() {
                         让每一笔交易都能被读懂。
                     </h2>
                     <p className="mt-4 text-sm leading-6 text-ink-muted">
-                        注册后即可记录交易、复盘偏差、追踪风险，并让 AI 从你的历史里发现模式。
+                        凭邀请加入后即可记录交易、复盘偏差，并沉淀策略、检查清单与每日随笔。
                     </p>
 
                     <div className="mt-8 space-y-3">
                         {[
                             { icon: Clock3, text: '时间线优先，先看最近发生了什么' },
                             { icon: ClipboardCheck, text: '复盘完成度与纪律画像一目了然' },
-                            { icon: Sparkles, text: '可审计的 AI 洞察与证据链' },
+                            { icon: BookOpen, text: '策略、检查清单与复盘记录相互关联' },
                         ].map(({ icon: Icon, text }) => (
                             <div key={text} className="flex items-center gap-3 text-sm text-ink-soft">
                                 <span className="flex h-8 w-8 items-center justify-center rounded-md border border-line bg-panel text-ink-muted">
@@ -87,7 +87,7 @@ export default function RegisterPage() {
                     </div>
                 </div>
 
-                <p className="text-xs text-ink-faint">量化系统前奏 · 决策复盘工作台</p>
+                <p className="text-xs text-ink-faint">邀请制交易日志 · 决策复盘工作台</p>
             </aside>
 
             {/* Form panel */}
@@ -104,8 +104,8 @@ export default function RegisterPage() {
                         />
                     </div>
 
-                    <h1 className="text-2xl font-semibold tracking-tight text-ink">创建账户</h1>
-                    <p className="mt-1.5 text-sm text-ink-muted">加入 Trading Noobs，开始记录你的第一笔决策。</p>
+                    <h1 className="text-2xl font-semibold tracking-tight text-ink">凭邀请创建账户</h1>
+                    <p className="mt-1.5 text-sm text-ink-muted">使用有效邀请码加入 Trading Noobs。</p>
 
                     {error && (
                         <div role="alert" aria-live="assertive">
@@ -130,7 +130,7 @@ export default function RegisterPage() {
                         </Field>
 
                         <Button type="submit" loading={isLoading} className="w-full" size="lg">
-                            {isLoading ? '注册中…' : '注册'}
+                            {isLoading ? '注册中…' : '凭邀请注册'}
                         </Button>
                     </form>
 
