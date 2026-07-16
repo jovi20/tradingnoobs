@@ -3,7 +3,6 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from decimal import Decimal
-from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -108,7 +107,7 @@ class PublicIdRouteTests(unittest.TestCase):
         self.assertEqual(get_response.json()["id"], self.account.id)
         self.assertEqual(get_response.json()["public_id"], "acct-public-id")
 
-    def test_account_market_value_uses_signed_mark_to_market_for_short_positions(self):
+    def test_account_read_does_not_call_market_data_or_claim_nav(self):
         self.account.cash_balance = Decimal("1000")
         self.db.add_all(
             [
@@ -140,15 +139,12 @@ class PublicIdRouteTests(unittest.TestCase):
         )
         self.db.commit()
 
-        async def fake_get_quote(self, symbol, exchange):
-            return {"c": 120 if symbol == "LONGX" else 40}
+        get_response = self.client.get("/api/accounts/acct-public-id")
 
-        with patch("routers.accounts.MarketDataService.get_quote", new=fake_get_quote):
-            get_response = self.client.get("/api/accounts/acct-public-id")
-            self.assertEqual(get_response.status_code, 200)
-            payload = get_response.json()
-            self.assertEqual(Decimal(str(payload["market_value"])), Decimal("120"))
-            self.assertEqual(Decimal(str(payload["total_equity"])), Decimal("1120"))
+        self.assertEqual(get_response.status_code, 200)
+        payload = get_response.json()
+        self.assertIsNone(payload["market_value"])
+        self.assertIsNone(payload["total_equity"])
 
     def test_account_cash_balance_prefers_ledger_derived_read_model(self):
         self.account.initial_balance = Decimal("1000")
@@ -173,7 +169,37 @@ class PublicIdRouteTests(unittest.TestCase):
         self.assertEqual(get_response.status_code, 200)
         payload = get_response.json()
         self.assertEqual(Decimal(str(payload["cash_balance"])), Decimal("975"))
-        self.assertEqual(Decimal(str(payload["total_equity"])), Decimal("975"))
+        self.assertIsNone(payload["total_equity"])
+
+    def test_account_create_and_update_reject_non_usd_currency(self):
+        create_response = self.client.post(
+            "/api/accounts",
+            json={
+                "name": "Unsupported Currency",
+                "broker": "IBKR",
+                "currency": "USDT",
+            },
+        )
+
+        self.assertEqual(create_response.status_code, 422)
+        self.assertEqual(
+            create_response.json()["detail"]["code"],
+            "UNSUPPORTED_RELEASE_CURRENCY",
+        )
+        self.assertEqual(
+            self.db.query(TradingAccount).filter(
+                TradingAccount.name == "Unsupported Currency"
+            ).count(),
+            0,
+        )
+
+        update_response = self.client.patch(
+            "/api/accounts/acct-public-id",
+            json={"currency": "HKD"},
+        )
+
+        self.assertEqual(update_response.status_code, 422)
+        self.assertEqual(self.account.currency, "USD")
 
     def test_account_create_writes_opening_balance_ledger_entry(self):
         create_response = self.client.post(

@@ -441,6 +441,65 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         node_types = [node["node_type"] for node in lifecycle_payload["data"]["lifecycle_thread"]["nodes"]]
         self.assertEqual(node_types, ["OPEN"])
 
+    def test_position_create_requires_release_asset_type_and_usd_account(self):
+        usd_account = TradingAccount(
+            user_id=self.user.id,
+            public_id="acct-release-guard-usd",
+            name="Release Guard USD",
+            broker="IBKR",
+            currency="USD",
+            is_active=True,
+        )
+        non_usd_account = TradingAccount(
+            user_id=self.user.id,
+            public_id="acct-release-guard-hkd",
+            name="Release Guard HKD",
+            broker="IBKR",
+            currency="HKD",
+            is_active=True,
+        )
+        self.db.add_all([usd_account, non_usd_account])
+        self.db.commit()
+
+        def request(account_id, asset_type_marker):
+            payload = {
+                "account_id": account_id,
+                "symbol": "NVDA",
+                "direction": "LONG",
+                "entry_price": "900",
+                "quantity": "2",
+                "entry_time": "2026-04-03T15:30:00+00:00",
+            }
+            if asset_type_marker is not None:
+                payload["asset_type"] = asset_type_marker
+            return self.client.post("/api/positions", json=payload)
+
+        missing_response = request(usd_account.id, None)
+        unsupported_response = request(usd_account.id, "BOND")
+        currency_response = request(non_usd_account.id, "STOCK")
+
+        self.assertEqual(missing_response.status_code, 422)
+        self.assertEqual(
+            missing_response.json()["detail"]["code"],
+            "UNSUPPORTED_ASSET_TYPE",
+        )
+        self.assertEqual(unsupported_response.status_code, 422)
+        self.assertEqual(
+            unsupported_response.json()["detail"]["code"],
+            "UNSUPPORTED_ASSET_TYPE",
+        )
+        self.assertEqual(currency_response.status_code, 422)
+        self.assertEqual(
+            currency_response.json()["detail"]["code"],
+            "UNSUPPORTED_RELEASE_CURRENCY",
+        )
+        self.assertEqual(
+            self.db.query(Position).filter(
+                Position.account_id.in_([usd_account.id, non_usd_account.id])
+            ).count(),
+            0,
+        )
+
     def test_legacy_review_write_is_rejected_when_truth_lifecycle_exists_without_migration_header(self):
         legacy_position = self._seed_legacy_position()
         sync_response = self.client.get(f"/api/positions/{legacy_position.public_id}/truth-lifecycle")

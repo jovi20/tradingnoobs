@@ -13,6 +13,12 @@ import csv
 import io
 from datetime import datetime
 
+from app_config.release_contract import (
+    ReleaseContractViolation,
+    release_violation_detail,
+    require_allowed_asset_type,
+    require_release_currency,
+)
 from database import get_db
 from observability import get_structured_logger, log_event
 from routers.auth import get_current_user
@@ -64,6 +70,16 @@ LEGACY_BATCH_EDIT_FALLBACK_DESCRIPTION = (
     "Migration fallback only. Use X-Migration-Fallback: legacy-batch-edit to allow legacy batch "
     "edit/delete after a TradingPosition truth lifecycle exists."
 )
+
+
+def _release_contract_value(callable_, *args, **kwargs):
+    try:
+        return callable_(*args, **kwargs)
+    except ReleaseContractViolation as violation:
+        raise HTTPException(
+            status_code=422,
+            detail=release_violation_detail(violation),
+        ) from violation
 
 
 def _enum_value(value):
@@ -526,11 +542,15 @@ async def create_position(
     if not account:
         raise HTTPException(status_code=400, detail="Invalid account_id")
     
-    # Detect Asset Type
-    market_service = MarketDataService(db)
-    detected_type = position_data.asset_type
-    if not detected_type:
-        detected_type = await market_service.detect_asset_type_enhanced(position_data.symbol, account.broker)
+    _release_contract_value(
+        require_release_currency,
+        account.currency,
+        field="account.currency",
+    )
+    detected_type = _release_contract_value(
+        require_allowed_asset_type,
+        position_data.asset_type,
+    )
 
     # Ensure AssetMetadata exists for this symbol
     symbol_upper = position_data.symbol.upper()

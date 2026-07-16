@@ -158,6 +158,42 @@ class PublicIdNestedRouteTests(unittest.TestCase):
             0,
         )
 
+    def test_transaction_create_rejects_transfer_and_non_usd_without_side_effects(self):
+        before_transactions = self.db.query(Transaction).count()
+        before_ledger = self.db.query(AccountLedgerEntry).count()
+
+        transfer_response = self.client.post(
+            f"/api/accounts/{self.account.public_id}/transactions",
+            json={
+                "type": "TRANSFER_IN",
+                "amount": 50,
+                "currency": "USD",
+                "date": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+        currency_response = self.client.post(
+            f"/api/accounts/{self.account.public_id}/transactions",
+            json={
+                "type": "DEPOSIT",
+                "amount": 50,
+                "currency": "USDT",
+                "date": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+
+        self.assertEqual(transfer_response.status_code, 422)
+        self.assertEqual(
+            transfer_response.json()["detail"]["code"],
+            "UNSUPPORTED_TRANSACTION_TYPE",
+        )
+        self.assertEqual(currency_response.status_code, 422)
+        self.assertEqual(
+            currency_response.json()["detail"]["code"],
+            "UNSUPPORTED_RELEASE_CURRENCY",
+        )
+        self.assertEqual(self.db.query(Transaction).count(), before_transactions)
+        self.assertEqual(self.db.query(AccountLedgerEntry).count(), before_ledger)
+
     def test_positions_check_open_accepts_account_public_id(self):
         response = self.client.get(
             f"/api/positions/check/NVDA?account_id={self.account.public_id}"

@@ -1,8 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from typing import List, Optional
 from datetime import datetime
+
+from app_config.release_contract import (
+    ReleaseContractViolation,
+    release_violation_detail,
+    require_allowed_transaction_type,
+    require_release_currency,
+)
 from database import get_db
 from models import Transaction, TradingAccount, TransactionType, User
 from schemas import TransactionCreate, TransactionResponse
@@ -14,6 +21,16 @@ router = APIRouter(
     prefix="/api",
     tags=["transactions"]
 )
+
+
+def _release_contract_value(callable_, *args, **kwargs):
+    try:
+        return callable_(*args, **kwargs)
+    except ReleaseContractViolation as violation:
+        raise HTTPException(
+            status_code=422,
+            detail=release_violation_detail(violation),
+        ) from violation
 
 @router.post("/accounts/{account_id}/transactions", response_model=TransactionResponse)
 def create_transaction(
@@ -31,12 +48,27 @@ def create_transaction(
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 
+    transaction_type = _release_contract_value(
+        require_allowed_transaction_type,
+        transaction.type,
+    )
+    _release_contract_value(
+        require_release_currency,
+        account.currency,
+        field="account.currency",
+    )
+    currency = _release_contract_value(
+        require_release_currency,
+        transaction.currency,
+        field="currency",
+    )
+
     # 2. Create Transaction Record
     db_transaction = Transaction(
         account_id=account.id,
-        type=transaction.type,
+        type=TransactionType(transaction_type),
         amount=transaction.amount,
-        currency=transaction.currency,
+        currency=currency,
         date=transaction.date,
         description=transaction.description
     )

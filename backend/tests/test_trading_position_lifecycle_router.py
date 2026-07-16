@@ -391,7 +391,7 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         self.assertEqual(ledger_entry.amount, Decimal("12.50000000"))
         self.assertEqual(ledger_entry.currency, "USD")
 
-    def test_dividend_event_write_uses_account_currency_amount(self):
+    def test_dividend_event_write_rejects_foreign_currency_without_side_effects(self):
         truth_position = self._seed_synced_position()
 
         response = self.client.post(
@@ -405,21 +405,18 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(response.status_code, 201)
-        payload = response.json()
-        self.assertEqual(payload["data"]["ledger_summary"]["account_currency"], "USD")
-        self.assertEqual(Decimal(str(payload["data"]["ledger_summary"]["total_dividends"])), Decimal("12.8"))
-
-        dividend_event = self.db.query(PositionEvent).filter(
-            PositionEvent.position_id == truth_position.id,
-            PositionEvent.event_type == PositionEventType.DIVIDEND,
-        ).one()
-        ledger_entry = self.db.query(AccountLedgerEntry).filter(
-            AccountLedgerEntry.position_event_id == dividend_event.id,
-        ).one()
-        self.assertEqual(ledger_entry.amount, Decimal("100.00000000"))
-        self.assertEqual(ledger_entry.amount_account_ccy, Decimal("12.80000000"))
-        self.assertEqual(ledger_entry.currency, "HKD")
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(
+            response.json()["detail"]["code"],
+            "UNSUPPORTED_RELEASE_CURRENCY",
+        )
+        self.assertEqual(
+            self.db.query(PositionEvent).filter(
+                PositionEvent.position_id == truth_position.id,
+                PositionEvent.event_type == PositionEventType.DIVIDEND,
+            ).count(),
+            0,
+        )
 
     def test_dividend_write_replays_completed_idempotency_key_without_duplicate_ledger(self):
         truth_position = self._seed_synced_position()
@@ -499,10 +496,10 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
             1,
         )
 
-    def test_manual_adjustment_event_write_creates_adjustment_event_and_ledger_entry(self):
+    def test_manual_adjustment_endpoint_is_disabled_without_side_effects(self):
         truth_position = self._seed_open_synced_position()
 
-        response = self.client.post(
+        first_response = self.client.post(
             f"/api/trading-positions/{truth_position.public_id}/adjustments",
             json={
                 "amount": "-7.25",
@@ -510,169 +507,76 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
                 "occurred_at": "2026-04-04T12:00:00+00:00",
                 "note": "Broker cash correction",
             },
-        )
-
-        self.assertEqual(response.status_code, 201)
-        payload = response.json()
-        self.assertEqual(payload["meta"]["source"], "MANUAL")
-        self.assertEqual(Decimal(str(payload["data"]["ledger_summary"]["total_adjustments"])), Decimal("-7.25"))
-        self.assertEqual(Decimal(str(payload["data"]["position_summary"]["realized_pnl_net"])), Decimal("0"))
-        node_types = [node["node_type"] for node in payload["data"]["lifecycle_thread"]["nodes"]]
-        self.assertEqual(node_types, ["OPEN", "MANUAL_ADJUSTMENT"])
-
-        adjustment_event = self.db.query(PositionEvent).filter(
-            PositionEvent.position_id == truth_position.id,
-            PositionEvent.event_type == PositionEventType.MANUAL_ADJUSTMENT,
-        ).one()
-        self.assertTrue(adjustment_event.is_adjustment)
-        self.assertEqual(adjustment_event.gross_amount, Decimal("-7.25000000"))
-        self.assertEqual(adjustment_event.note, "Broker cash correction")
-
-        ledger_entry = self.db.query(AccountLedgerEntry).filter(
-            AccountLedgerEntry.position_event_id == adjustment_event.id,
-        ).one()
-        self.assertEqual(ledger_entry.entry_type, AccountLedgerEntryType.CASH_ADJUSTMENT)
-        self.assertEqual(ledger_entry.amount, Decimal("-7.25000000"))
-        self.assertEqual(ledger_entry.currency, "USD")
-
-    def test_manual_adjustment_write_replays_completed_idempotency_key_without_duplicate_ledger(self):
-        truth_position = self._seed_open_synced_position()
-        request_body = {
-            "amount": "-7.25",
-            "currency": "USD",
-            "occurred_at": "2026-04-04T12:00:00+00:00",
-            "note": "Broker cash correction",
-        }
-        headers = {"Idempotency-Key": "adjustment-retry-1"}
-
-        first_response = self.client.post(
-            f"/api/trading-positions/{truth_position.public_id}/adjustments",
-            json=request_body,
-            headers=headers,
+            headers={"Idempotency-Key": "disabled-adjustment"},
         )
         second_response = self.client.post(
-            f"/api/trading-positions/{truth_position.public_id}/adjustments",
-            json=request_body,
-            headers=headers,
-        )
-
-        self.assertEqual(first_response.status_code, 201)
-        self.assertEqual(second_response.status_code, 201)
-        self.assertEqual(second_response.json(), first_response.json())
-
-        self.db.expire_all()
-        adjustment_events = self.db.query(PositionEvent).filter(
-            PositionEvent.position_id == truth_position.id,
-            PositionEvent.event_type == PositionEventType.MANUAL_ADJUSTMENT,
-        ).all()
-        self.assertEqual(len(adjustment_events), 1)
-        self.assertEqual(
-            self.db.query(AccountLedgerEntry).filter(
-                AccountLedgerEntry.position_id == truth_position.id,
-                AccountLedgerEntry.entry_type == AccountLedgerEntryType.CASH_ADJUSTMENT,
-            ).count(),
-            1,
-        )
-        idempotency_record = self.db.query(IdempotencyKey).filter(
-            IdempotencyKey.scope == "trading_position.manual_adjustment.create",
-        ).one()
-        self.assertEqual(idempotency_record.status, "COMPLETED")
-
-    def test_manual_adjustment_write_rejects_idempotency_key_reuse_with_different_payload(self):
-        truth_position = self._seed_open_synced_position()
-        headers = {"Idempotency-Key": "adjustment-conflict-1"}
-
-        first_response = self.client.post(
-            f"/api/trading-positions/{truth_position.public_id}/adjustments",
-            json={
-                "amount": "-7.25",
-                "currency": "USD",
-                "occurred_at": "2026-04-04T12:00:00+00:00",
-            },
-            headers=headers,
-        )
-        conflict_response = self.client.post(
-            f"/api/trading-positions/{truth_position.public_id}/adjustments",
-            json={
-                "amount": "-8.00",
-                "currency": "USD",
-                "occurred_at": "2026-04-04T12:00:00+00:00",
-            },
-            headers=headers,
-        )
-
-        self.assertEqual(first_response.status_code, 201)
-        self.assertEqual(conflict_response.status_code, 409)
-        self.assertEqual(conflict_response.json()["detail"], "Idempotency key reuse with a different request payload.")
-        self.db.expire_all()
-        self.assertEqual(
-            self.db.query(PositionEvent).filter(
-                PositionEvent.position_id == truth_position.id,
-                PositionEvent.event_type == PositionEventType.MANUAL_ADJUSTMENT,
-            ).count(),
-            1,
-        )
-
-    def test_manual_adjustment_event_write_rejects_zero_without_mutating_events(self):
-        truth_position = self._seed_open_synced_position()
-
-        response = self.client.post(
-            f"/api/trading-positions/{truth_position.public_id}/adjustments",
-            json={
-                "amount": "0",
-                "currency": "USD",
-                "occurred_at": "2026-04-04T12:00:00+00:00",
-                "note": "No-op adjustment should not be recorded",
-            },
-        )
-
-        self.assertEqual(response.status_code, 422)
-        self.assertIn("Manual adjustment amount cannot be zero", response.json()["detail"])
-        self.db.expire_all()
-        self.assertEqual(
-            self.db.query(PositionEvent).filter(
-                PositionEvent.position_id == truth_position.id,
-                PositionEvent.event_type == PositionEventType.MANUAL_ADJUSTMENT,
-            ).count(),
-            0,
-        )
-        self.assertEqual(
-            self.db.query(AccountLedgerEntry).filter(
-                AccountLedgerEntry.position_id == truth_position.id,
-                AccountLedgerEntry.entry_type == AccountLedgerEntryType.CASH_ADJUSTMENT,
-            ).count(),
-            0,
-        )
-
-    def test_manual_adjustment_summary_uses_account_currency_amount(self):
-        truth_position = self._seed_open_synced_position()
-
-        response = self.client.post(
             f"/api/trading-positions/{truth_position.public_id}/adjustments",
             json={
                 "amount": "100",
                 "currency": "HKD",
                 "fx_rate_to_account_ccy": "0.128",
                 "occurred_at": "2026-04-04T12:00:00+00:00",
-                "note": "HKD broker cash correction",
             },
         )
 
-        self.assertEqual(response.status_code, 201)
-        payload = response.json()
-        self.assertEqual(payload["data"]["ledger_summary"]["account_currency"], "USD")
-        self.assertEqual(Decimal(str(payload["data"]["ledger_summary"]["total_adjustments"])), Decimal("12.8"))
+        self.assertEqual(first_response.status_code, 422)
+        self.assertEqual(second_response.status_code, 422)
+        self.assertEqual(
+            first_response.json()["detail"]["code"],
+            "UNSUPPORTED_EVENT_TYPE",
+        )
+        self.assertEqual(
+            self.db.query(PositionEvent).filter(
+                PositionEvent.position_id == truth_position.id,
+                PositionEvent.event_type == PositionEventType.MANUAL_ADJUSTMENT,
+            ).count(),
+            0,
+        )
+        self.assertEqual(self.db.query(AccountLedgerEntry).filter(
+            AccountLedgerEntry.position_id == truth_position.id,
+            AccountLedgerEntry.entry_type == AccountLedgerEntryType.CASH_ADJUSTMENT,
+        ).count(), 0)
+        self.assertEqual(self.db.query(IdempotencyKey).filter(
+            IdempotencyKey.scope == "trading_position.manual_adjustment.create",
+        ).count(), 0)
 
-        adjustment_event = self.db.query(PositionEvent).filter(
-            PositionEvent.position_id == truth_position.id,
-            PositionEvent.event_type == PositionEventType.MANUAL_ADJUSTMENT,
-        ).one()
-        ledger_entry = self.db.query(AccountLedgerEntry).filter(
-            AccountLedgerEntry.position_event_id == adjustment_event.id,
-        ).one()
-        self.assertEqual(ledger_entry.amount, Decimal("100.00000000"))
-        self.assertEqual(ledger_entry.amount_account_ccy, Decimal("12.80000000"))
-        self.assertEqual(ledger_entry.currency, "HKD")
+    def test_trade_event_rejects_foreign_currency_before_idempotency_or_outbox(self):
+        truth_position = self._seed_open_synced_position()
+        before_outbox = self.db.query(OutboxEvent).count()
+
+        response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events",
+            json={
+                "event_type": "REDUCE",
+                "quantity": "1",
+                "price": "210",
+                "currency": "USD",
+                "fee_amount": "1",
+                "fee_currency": "USDT",
+                "occurred_at": "2026-04-03T15:30:00+00:00",
+            },
+            headers={"Idempotency-Key": "foreign-fee"},
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(
+            response.json()["detail"]["code"],
+            "UNSUPPORTED_RELEASE_CURRENCY",
+        )
+        self.assertEqual(
+            self.db.query(PositionEvent).filter(
+                PositionEvent.position_id == truth_position.id,
+                PositionEvent.event_type == PositionEventType.REDUCE,
+            ).count(),
+            0,
+        )
+        self.assertEqual(self.db.query(OutboxEvent).count(), before_outbox)
+        self.assertEqual(
+            self.db.query(IdempotencyKey).filter(
+                IdempotencyKey.scope == "trading_position.trade_event.create",
+            ).count(),
+            0,
+        )
 
     def test_trade_event_write_replays_fifo_and_creates_realized_pnl_ledger_entry(self):
         truth_position = self._seed_open_synced_position()

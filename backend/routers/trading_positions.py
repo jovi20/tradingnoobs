@@ -8,6 +8,11 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from app_config.release_contract import (
+    ReleaseContractViolation,
+    release_violation_detail,
+    require_release_currency,
+)
 from database import get_db
 from models import PositionEvent, PositionEventType, User
 from schemas import (
@@ -20,7 +25,6 @@ from schemas import (
 )
 from services.account_ledger_service import (
     sync_dividend_event_to_account_ledger,
-    sync_manual_adjustment_event_to_account_ledger,
 )
 from services.auth_service import get_current_user
 from services.idempotency_service import begin_idempotent_request, complete_idempotent_request
@@ -29,6 +33,43 @@ from services.trading_position_read_service import build_trading_position_lifecy
 from services.trading_position_write_service import append_truth_trade_event, reverse_latest_truth_trade_event
 
 router = APIRouter(prefix="/api/trading-positions", tags=["Trading Positions"])
+
+
+def _require_release_currency(value: object, *, field: str) -> str:
+    try:
+        return require_release_currency(value, field=field)
+    except ReleaseContractViolation as violation:
+        raise HTTPException(
+            status_code=422,
+            detail=release_violation_detail(violation),
+        ) from violation
+
+
+def _require_same_currency_financial_fact(
+    truth_position,
+    *,
+    currency: object,
+    fee_currency: object | None = None,
+    fx_rate_to_account_ccy: object = 1,
+) -> tuple[str, str | None]:
+    _require_release_currency(truth_position.base_currency, field="account.currency")
+    normalized_currency = _require_release_currency(currency, field="currency")
+    normalized_fee_currency = None
+    if fee_currency is not None:
+        normalized_fee_currency = _require_release_currency(
+            fee_currency,
+            field="fee_currency",
+        )
+    if fx_rate_to_account_ccy != 1:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "UNSUPPORTED_RELEASE_FX_RATE",
+                "message": "Journal Beta financial facts must already be in account currency",
+                "field": "fx_rate_to_account_ccy",
+            },
+        )
+    return normalized_currency, normalized_fee_currency
 
 
 def _lifecycle_response_content(db: Session, truth_position, source: str = "DERIVED") -> dict:
@@ -169,6 +210,13 @@ def create_trading_position_trade_event(
     if not truth_position:
         raise HTTPException(status_code=404, detail="Trading position not found")
 
+    currency, fee_currency = _require_same_currency_financial_fact(
+        truth_position,
+        currency=payload.currency,
+        fee_currency=payload.fee_currency,
+        fx_rate_to_account_ccy=payload.fx_rate_to_account_ccy,
+    )
+
     idempotency_record, replay_response = _begin_idempotent_lifecycle_write(
         db,
         scope="trading_position.trade_event.create",
@@ -187,10 +235,10 @@ def create_trading_position_trade_event(
             event_type=PositionEventType(payload.event_type.value),
             quantity=payload.quantity,
             price=payload.price,
-            currency=payload.currency,
+            currency=currency,
             occurred_at=payload.occurred_at,
             fee_amount=payload.fee_amount,
-            fee_currency=payload.fee_currency,
+            fee_currency=fee_currency,
             fx_rate_to_account_ccy=payload.fx_rate_to_account_ccy,
             reason=payload.reason,
             emotion=payload.emotion,
@@ -261,6 +309,12 @@ def create_trading_position_dividend(
     if not truth_position:
         raise HTTPException(status_code=404, detail="Trading position not found")
 
+    currency, _ = _require_same_currency_financial_fact(
+        truth_position,
+        currency=payload.currency,
+        fx_rate_to_account_ccy=payload.fx_rate_to_account_ccy,
+    )
+
     idempotency_record, replay_response = _begin_idempotent_lifecycle_write(
         db,
         scope="trading_position.dividend.create",
@@ -279,7 +333,7 @@ def create_trading_position_dividend(
         instrument_id=truth_position.instrument_id,
         event_type=PositionEventType.DIVIDEND,
         event_time=payload.occurred_at,
-        currency=payload.currency,
+        currency=currency,
         gross_amount=payload.amount,
         fx_rate_to_account_ccy=payload.fx_rate_to_account_ccy,
         input_source="MANUAL",
@@ -311,43 +365,11 @@ def create_trading_position_manual_adjustment(
     if not truth_position:
         raise HTTPException(status_code=404, detail="Trading position not found")
 
-    if payload.amount == 0:
-        raise HTTPException(status_code=422, detail="Manual adjustment amount cannot be zero")
-
-    idempotency_record, replay_response = _begin_idempotent_lifecycle_write(
-        db,
-        scope="trading_position.manual_adjustment.create",
-        idempotency_key=idempotency_key,
-        current_user=current_user,
-        position_public_id=position_public_id,
-        payload=payload,
+    raise HTTPException(
+        status_code=422,
+        detail={
+            "code": "UNSUPPORTED_EVENT_TYPE",
+            "message": "Manual adjustments are outside the trading-journal Beta contract",
+            "field": "event_type",
+        },
     )
-    if replay_response is not None:
-        return replay_response
-
-    event = PositionEvent(
-        user_id=current_user.id,
-        position_id=truth_position.id,
-        account_id=truth_position.account_id,
-        instrument_id=truth_position.instrument_id,
-        event_type=PositionEventType.MANUAL_ADJUSTMENT,
-        event_time=payload.occurred_at,
-        currency=payload.currency,
-        gross_amount=payload.amount,
-        fx_rate_to_account_ccy=payload.fx_rate_to_account_ccy,
-        input_source="MANUAL",
-        note=payload.note,
-        is_adjustment=True,
-    )
-    db.add(event)
-    db.flush()
-    sync_manual_adjustment_event_to_account_ledger(db, event=event)
-    enqueue_position_event_created_outbox(db, position=truth_position, event=event)
-
-    db.flush()
-    db.expire_all()
-    updated_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
-    response_content = _lifecycle_response_content(db, updated_position, source="MANUAL")
-    _complete_idempotent_lifecycle_write(db, record=idempotency_record, response_content=response_content)
-    db.commit()
-    return JSONResponse(status_code=201, content=jsonable_encoder(response_content))
