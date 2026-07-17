@@ -11,7 +11,7 @@
 - 旧 P0-P19 只代表历史阶段切片归档，不代表产品或生产闭环完成。
 - 当前唯一 active lane 是 launch-safe 交易日志；source-bound IBKR statement 文件 Import 属于 M1，在线 Broker Sync、量化、Market Data、AI、PDF 和风险卡不进入首批执行。
 - 当前仍是 `NOT_READY_FOR_PRODUCTION`，不得直接部署真实用户环境。
-- `JRN-000` 已完成 checkpoint；`JRN-001` 的旧 `cf4766de` checkpoint 已因三路 `CHANGES_REQUIRED` supersede，修复后的 replacement checkpoint 正在 final verification/review，尚未完成。
+- `JRN-000` 已完成 checkpoint；`JRN-001` 的 `cf4766de` 与 `7ec29b1` checkpoint 均因三路 `CHANGES_REQUIRED` supersede。新 checkpoint `8b5f37d` 已完成精确归档全量验证与真实 PostgreSQL 16 验证，正在等待同一 SHA 的全新独立评审，尚未完成。
 - `JRN-001` 不新增 Alembic revision，migration head 继续是 `9cad10111213`；其最终证据必须绑定稳定 scoped checkpoint。
 - IBKR 文件的重复、重叠、增量导入与 correction replay 只在 `JRN-013` 至 `JRN-015` 实现，当前合同冻结不代表功能已落地。
 - 本轮不自动 merge 到 `main`、不创建 PR、不打 tag；这些属于后续显式操作。

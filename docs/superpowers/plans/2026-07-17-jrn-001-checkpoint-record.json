@@ -5,12 +5,12 @@
   "branch": "dev",
   "status": "REVIEW_PENDING",
   "release_status": "NOT_READY_FOR_PRODUCTION",
-  "recorded_at": "2026-07-17T14:48:41+08:00",
+  "recorded_at": "2026-07-17T15:56:38+08:00",
   "implementation_base_commit": "430e37ff691ad0064ef71996fe804ec26a65b1d8",
-  "implementation_checkpoint_commit": "7ec29b1ec875aa0f4d98bb656092ba4b8a9a7010",
+  "implementation_checkpoint_commit": "8b5f37d9566618d8e8940e18ed44e7942133d77f",
   "record_commit_resolution": "git log -1 --format=%H -- docs/superpowers/plans/2026-07-17-jrn-001-checkpoint-record.json",
   "review_subject": {
-    "commit": "7ec29b1ec875aa0f4d98bb656092ba4b8a9a7010",
+    "commit": "8b5f37d9566618d8e8940e18ed44e7942133d77f",
     "plan_path": "docs/superpowers/plans/2026-07-16-dev-trading-journal-development-plan.md",
     "plan_blob": "b5ee6c8afd8d6262231223536fc163d4ca825bbc",
     "machine_contract_path": "backend/app_config/journal_beta_v1.json",
@@ -24,10 +24,13 @@
     "Keep the unsafe legacy generic Import deny-only until JRN-011/JRN-012: three API paths return FEATURE_DISABLED, stay out of OpenAPI, do not import the in-memory handler, and have no usable frontend surface.",
     "Enforce deployment ceiling AND runtime rollout for optional capabilities, with committed-state connection SAVEPOINT reads that do not flush or poison caller pending state.",
     "Enforce raw ASCII-before-trim full instrument identity and HEDGE_BY_DIRECTION same-side OPEN rejection from canonical truth even when mutable legacy status, direction, or symbol drifts.",
-    "Keep pre-upgrade identity projection read-only; only canonical or exact identity evidence may authorize check-open or ADD.",
-    "Preserve structured OPEN_POSITION_EXISTS position identity so a frontend submit race can recover into the canonical ADD flow.",
+    "Keep pre-upgrade identity projection read-only across check-open and every direct canonical financial write; only exact journal_identity_v1 evidence may authorize ADD, reversal, or dividend mutation.",
+    "Treat missing canonical quantity as unresolved and therefore slot-occupying; response direction and drift metrics use the same canonical side even when legacy direction drifts.",
+    "Remove client-asserted X-Migration-Fallback authority from every public legacy review/delete/batch mutation, OpenAPI, and product UI; those mutations now fail closed until an audited admin/CLI namespace exists.",
+    "Preserve structured OPEN_POSITION_EXISTS position identity so a frontend submit race can recover into the canonical ADD flow without a legacy batch write.",
     "Keep global AssetMetadata system-owned and project canonical instrument identity/status/side across create, list, detail, filters, and check-open.",
-    "Add real Playwright behavior coverage at 1440x900 and 390x844, plus a versioned exact-SHA added-line secret scanner."
+    "Add real Playwright behavior coverage at 1440x900 and 390x844, including keyboard semantics and the complete 409-to-canonical-ADD recovery, plus a versioned exact-SHA added-line secret scanner.",
+    "Prove connection SAVEPOINT failure recovery and caller pending-state isolation against a disposable real PostgreSQL 16 cluster rather than SQLite alone."
   ],
   "frozen_import_semantics": {
     "generic_csv_xlsx": "ONE_TIME_BOOTSTRAP",
@@ -47,6 +50,7 @@
     {"status": "M", "path": "backend/routers/position_market_analysis.py"},
     {"status": "M", "path": "backend/routers/positions.py"},
     {"status": "M", "path": "backend/routers/timeline.py"},
+    {"status": "M", "path": "backend/routers/trading_positions.py"},
     {"status": "M", "path": "backend/schemas.py"},
     {"status": "M", "path": "backend/services/exchange_rate_service.py"},
     {"status": "M", "path": "backend/services/legacy_truth_sync_service.py"},
@@ -59,11 +63,15 @@
     {"status": "M", "path": "backend/tests/test_legacy_truth_sync.py"},
     {"status": "M", "path": "backend/tests/test_openapi_contracts.py"},
     {"status": "A", "path": "backend/tests/test_optional_service_runtime_guards.py"},
+    {"status": "A", "path": "backend/tests/test_platform_config_postgresql.py"},
     {"status": "M", "path": "backend/tests/test_platform_config_service.py"},
     {"status": "M", "path": "backend/tests/test_position_truth_bridge_router.py"},
+    {"status": "M", "path": "backend/tests/test_public_id_leaf_routes.py"},
     {"status": "M", "path": "backend/tests/test_public_id_nested_routes.py"},
     {"status": "M", "path": "backend/tests/test_release_contract_schema.py"},
+    {"status": "M", "path": "backend/tests/test_release_docs_boundaries.py"},
     {"status": "M", "path": "backend/tests/test_trading_position_lifecycle_router.py"},
+    {"status": "M", "path": "docs/DEVELOPER_GUIDE.md"},
     {"status": "M", "path": "docs/TODO.md"},
     {"status": "M", "path": "docs/adr/0001-trading-journal-beta-release-contract.md"},
     {"status": "M", "path": "docs/project-summary-and-roadmap.md"},
@@ -72,6 +80,7 @@
     {"status": "A", "path": "docs/superpowers/plans/2026-07-17-jrn-001-checkpoint-record.json"},
     {"status": "M", "path": "docs/superpowers/plans/README.md"},
     {"status": "M", "path": "frontend/README.md"},
+    {"status": "M", "path": "frontend/app/(product)/positions/[id]/add-batch/page.tsx"},
     {"status": "M", "path": "frontend/app/(product)/positions/[id]/page.tsx"},
     {"status": "M", "path": "frontend/app/(product)/positions/import/page.tsx"},
     {"status": "M", "path": "frontend/app/(product)/positions/new/page.tsx"},
@@ -89,6 +98,7 @@
     {"status": "M", "path": "frontend/package.json"},
     {"status": "A", "path": "frontend/playwright.config.ts"},
     {"status": "M", "path": "frontend/tests/journal-baseline-product-surfaces.test.mts"},
+    {"status": "M", "path": "frontend/tests/legacy-ui-boundaries.test.mts"},
     {"status": "M", "path": "frontend/tests/market-data-status-presentation.test.mts"},
     {"status": "M", "path": "frontend/tests/positions-api.test.mts"},
     {"status": "M", "path": "frontend/tests/trading-adapter.test.mts"},
@@ -102,23 +112,39 @@
     "npm": "11.16.0",
     "git": "2.39.3 Apple Git-146",
     "alembic": "1.18.5",
+    "postgresql_server": "16.14 (Homebrew)",
+    "psycopg2": "2.9.12",
+    "sqlalchemy": "2.0.51",
     "playwright": "1.61.1",
     "playwright_chromium": "149.0.7827.55"
   },
   "verification_source": {
-    "commit": "7ec29b1ec875aa0f4d98bb656092ba4b8a9a7010",
-    "source_materialization": "git archive of the exact implementation checkpoint into an isolated /private/tmp tree",
-    "dependency_reuse": "Existing verified backend venv and frontend node_modules were reused; source, generated files, tests, build output, and browser server all ran from the exact archived checkpoint.",
-    "first_browser_snapshot_attempt": "INFRASTRUCTURE_ONLY_FAILURE: Turbopack rejected a node_modules symlink outside the snapshot root; rerun with a copied dependency directory passed 4/4."
+    "commit": "8b5f37d9566618d8e8940e18ed44e7942133d77f",
+    "source_materialization": "git archive of the exact implementation checkpoint at /private/tmp/tradingnoobs-jrn001-8b5f37d",
+    "dependency_reuse": "APFS clone copies of the existing verified backend venv and frontend node_modules were placed inside the archive; source, generated files, tests, build output, and browser server all ran from the exact archived checkpoint.",
+    "postgresql_fixture": {
+      "initdb": "/opt/homebrew/opt/postgresql@16/bin/initdb -D /private/tmp/jrn001-pg-8b5f37d.hTZe32/data --encoding=UTF8 --locale=C --username=wsm --auth-local=trust --auth-host=reject",
+      "server": "postgres (PostgreSQL) 16.14 (Homebrew)",
+      "start": "/opt/homebrew/opt/postgresql@16/bin/pg_ctl -D /private/tmp/jrn001-pg-8b5f37d.hTZe32/data -l /private/tmp/jrn001-pg-8b5f37d.hTZe32/postgres.log -o \"-c listen_addresses='' -c unix_socket_directories=/private/tmp/jrn001-pg-8b5f37d.hTZe32/socket -c unix_socket_permissions=0700 -c port=55433\" -w start",
+      "createdb": "/opt/homebrew/opt/postgresql@16/bin/createdb -h /private/tmp/jrn001-pg-8b5f37d.hTZe32/socket -p 55433 -U wsm jrn001",
+      "listen_policy": "listen_addresses='' with a mode-0700 Unix socket at /private/tmp/jrn001-pg-8b5f37d.hTZe32/socket; no TCP listener",
+      "database": "fresh jrn001 database on port 55433; each test used and dropped a unique schema",
+      "cleanup": "/opt/homebrew/opt/postgresql@16/bin/pg_ctl -D /private/tmp/jrn001-pg-8b5f37d.hTZe32/data -m fast -w stop succeeded and the disposable cluster directory was removed"
+    },
+    "sandbox_note": "The ordinary production-build attempt failed only because Turbopack could not bind its internal local port inside the filesystem sandbox; the exact-archive build outside that sandbox passed 14/14 generated pages."
   },
   "verification": [
     {
       "command": "cd backend && venv/bin/python -m pytest -q",
-      "result": "PASS on exact checkpoint archive: 434 passed, 24 pre-existing deprecation warnings"
+      "result": "PASS on exact checkpoint archive: 441 passed, 2 PostgreSQL-env skips, 24 pre-existing deprecation warnings"
     },
     {
-      "command": "cd backend && venv/bin/python -m pytest -q tests/test_journal_baseline_profile.py tests/test_release_contract_schema.py tests/test_optional_route_runtime_guards.py tests/test_optional_service_runtime_guards.py tests/test_platform_config_service.py tests/test_position_truth_bridge_router.py tests/test_trading_position_lifecycle_router.py tests/test_legacy_truth_sync.py tests/test_openapi_contracts.py tests/test_public_id_nested_routes.py tests/test_admin_platform_config.py",
-      "result": "PASS on exact checkpoint archive: 131 passed, 24 pre-existing deprecation warnings"
+      "command": "cd backend && venv/bin/python -m pytest -q tests/test_journal_baseline_profile.py tests/test_release_contract_schema.py tests/test_optional_route_runtime_guards.py tests/test_optional_service_runtime_guards.py tests/test_platform_config_service.py tests/test_position_truth_bridge_router.py tests/test_trading_position_lifecycle_router.py tests/test_legacy_truth_sync.py tests/test_openapi_contracts.py tests/test_public_id_nested_routes.py tests/test_public_id_leaf_routes.py tests/test_admin_platform_config.py tests/test_release_docs_boundaries.py",
+      "result": "PASS on exact checkpoint archive: 145 passed, 24 pre-existing deprecation warnings"
+    },
+    {
+      "command": "cd backend && env 'JRN001_POSTGRES_URL=postgresql+psycopg2://wsm@/jrn001?host=/private/tmp/jrn001-pg-8b5f37d.hTZe32/socket&port=55433' venv/bin/python -m pytest -q tests/test_platform_config_postgresql.py",
+      "result": "PASS on exact checkpoint archive against disposable PostgreSQL 16.14: 2 passed; committed-state reads did not flush pending ORM state and real UndefinedTable abort recovery preserved caller query/commit"
     },
     {
       "command": "cd frontend && npm test",
@@ -138,7 +164,7 @@
     },
     {
       "command": "cd frontend && npm run build",
-      "result": "PASS on exact checkpoint archive outside the filesystem sandbox"
+      "result": "PASS on exact checkpoint archive outside the filesystem sandbox: 14/14 generated pages"
     },
     {
       "command": "cd frontend && npm run check:release-contract",
@@ -153,20 +179,20 @@
       "result": "PASS on exact checkpoint archive: 8 passed"
     },
     {
-      "command": "git diff --name-status 430e37ff691ad0064ef71996fe804ec26a65b1d8 7ec29b1ec875aa0f4d98bb656092ba4b8a9a7010 --",
-      "result": "PASS: exactly the 56 changed_files entries recorded above"
+      "command": "git diff --name-status 430e37ff691ad0064ef71996fe804ec26a65b1d8 8b5f37d9566618d8e8940e18ed44e7942133d77f --",
+      "result": "PASS: exactly the 63 changed_files entries recorded above"
     },
     {
-      "command": "git diff --exit-code 430e37ff691ad0064ef71996fe804ec26a65b1d8 7ec29b1ec875aa0f4d98bb656092ba4b8a9a7010 -- backend/alembic",
+      "command": "git diff --exit-code 430e37ff691ad0064ef71996fe804ec26a65b1d8 8b5f37d9566618d8e8940e18ed44e7942133d77f -- backend/alembic",
       "result": "PASS: JRN-001 adds no Alembic revision"
     },
     {
-      "command": "git diff --check 430e37ff691ad0064ef71996fe804ec26a65b1d8 7ec29b1ec875aa0f4d98bb656092ba4b8a9a7010",
+      "command": "git diff --check 430e37ff691ad0064ef71996fe804ec26a65b1d8 8b5f37d9566618d8e8940e18ed44e7942133d77f",
       "result": "PASS"
     },
     {
-      "command": "python3 scripts/check_added_secrets.py --base 430e37ff691ad0064ef71996fe804ec26a65b1d8 --head 7ec29b1ec875aa0f4d98bb656092ba4b8a9a7010",
-      "result": "PASS: ruleset added-secrets-v1, ruleset SHA-256 c29aa8c108166333adf9a5147a9def42795a5ac0ec1f0e1d37fb87fb4d457bd6, 4189 added lines, 0 findings"
+      "command": "python3 scripts/check_added_secrets.py --base 430e37ff691ad0064ef71996fe804ec26a65b1d8 --head 8b5f37d9566618d8e8940e18ed44e7942133d77f",
+      "result": "PASS: ruleset added-secrets-v1, ruleset SHA-256 c29aa8c108166333adf9a5147a9def42795a5ac0ec1f0e1d37fb87fb4d457bd6, 4852 added lines, 0 findings"
     }
   ],
   "excluded_user_worktree": [
@@ -218,11 +244,46 @@
           ]
         }
       ]
+    },
+    {
+      "implementation_checkpoint_commit": "7ec29b1ec875aa0f4d98bb656092ba4b8a9a7010",
+      "record_commit": "4a936a2d574e151a77b9b6d500626ab9a89d5cef",
+      "plan_blob": "b5ee6c8afd8d6262231223536fc163d4ca825bbc",
+      "machine_contract_blob": "30cca42076aba0cd3521befd09b9b17bf7a00ba0",
+      "status": "CHANGES_REQUIRED",
+      "reviews": [
+        {
+          "reviewer": "jrn001_7ec_backend_review",
+          "verdict": "CHANGES_REQUIRED",
+          "findings": [
+            "Direct canonical ADD/reversal/dividend routes did not require exact journal_identity_v1 provenance, so read-only pre-upgrade truth could still receive financial writes.",
+            "NULL canonical opened/closed quantity was coerced to zero and could incorrectly release the HEDGE_BY_DIRECTION same-side slot.",
+            "Response direction used canonical side while drift risk calculations still used mutable legacy direction.",
+            "Connection SAVEPOINT failure recovery and pending-state isolation had only SQLite evidence despite PostgreSQL-specific aborted-transaction semantics."
+          ]
+        },
+        {
+          "reviewer": "jrn001_7ec_crosslayer_review",
+          "verdict": "CHANGES_REQUIRED",
+          "findings": [
+            "Public legacy review/delete/batch endpoints trusted client-supplied X-Migration-Fallback headers without admin authorization, reason, or immutable audit; the product UI exposed the batch bypass via a query parameter.",
+            "The duplicate-OPEN race browser test stopped after showing the recovery prompt and did not prove the subsequent canonical ADD or zero legacy batch writes.",
+            "New-position identity labels and LONG/SHORT controls lacked complete programmatic and keyboard-accessible semantics."
+          ]
+        },
+        {
+          "reviewer": "jrn001_7ec_evidence_audit",
+          "verdict": "EVIDENCE_CHANGES_REQUIRED",
+          "findings": [
+            "The checkpoint claimed SAVEPOINT failure recovery without any real PostgreSQL command or result; SQLite cannot prove PostgreSQL aborted-transaction recovery."
+          ]
+        }
+      ]
     }
   ],
   "independent_review_gate": {
     "required_approvals": 2,
-    "reviewed_commit_must_equal": "7ec29b1ec875aa0f4d98bb656092ba4b8a9a7010",
+    "reviewed_commit_must_equal": "8b5f37d9566618d8e8940e18ed44e7942133d77f",
     "status": "PENDING",
     "reviews": [],
     "invalidation_rule": "Any implementation or semantic plan change creates a new checkpoint SHA and invalidates every earlier verdict."
