@@ -1,0 +1,151 @@
+{
+  "schema_version": 1,
+  "record_kind": "JRN_TASK_CHECKPOINT",
+  "task_id": "JRN-001",
+  "branch": "dev",
+  "status": "REVIEW_PENDING",
+  "release_status": "NOT_READY_FOR_PRODUCTION",
+  "recorded_at": "2026-07-17T13:38:37+08:00",
+  "implementation_base_commit": "430e37ff691ad0064ef71996fe804ec26a65b1d8",
+  "implementation_checkpoint_commit": "cf4766de0e843b0a58a1882b30b3fe8556e1a23a",
+  "record_commit_resolution": "git log -1 --format=%H -- docs/superpowers/plans/2026-07-17-jrn-001-checkpoint-record.json",
+  "review_subject": {
+    "commit": "cf4766de0e843b0a58a1882b30b3fe8556e1a23a",
+    "plan_path": "docs/superpowers/plans/2026-07-16-dev-trading-journal-development-plan.md",
+    "plan_blob": "4d17554cbca54a4bcb1276adc73eeacbaf934b9f",
+    "machine_contract_path": "backend/app_config/journal_beta_v1.json",
+    "machine_contract_blob": "7b4f0830c4c2414daa5efe3439d10ec01f71cc83",
+    "typed_loader_blob": "25ff1c511c71d9150bb4769d5765dc015237f287",
+    "adr_blob": "138c7c5d5505431728ec2549d2df64de0f9a3d3e",
+    "generated_frontend_contract_blob": "605cb3ad855e2845ff716be5889d06096409bef3"
+  },
+  "scope_summary": [
+    "Freeze the journal Beta machine contract and typed parity checks, including repeat/overlap/incremental IBKR source-bound semantics without claiming the later implementation exists.",
+    "Enforce deployment ceiling AND runtime rollout for optional capabilities, with fail-closed database flag reads and no fabricated FX fallback.",
+    "Enforce raw ASCII-before-trim full instrument identity, HEDGE_BY_DIRECTION same-side OPEN rejection, and structured API errors.",
+    "Keep global AssetMetadata system-owned and project canonical instrument identity read-only across create, list, detail, filters, and check-open.",
+    "Remove ordinary metadata-edit and optional Market/AI/risk UI reachability from journal Beta product surfaces."
+  ],
+  "frozen_import_semantics": {
+    "generic_csv_xlsx": "ONE_TIME_BOOTSTRAP",
+    "ibkr_flex_xml_v1": "SAME_BINDING_DUPLICATE_OVERLAP_INCREMENTAL_ALLOWED",
+    "new_execution_identity": "source_binding_id + ibExecID",
+    "implementation_gate": "JRN-013_THROUGH_JRN-015",
+    "current_implementation_claim": "NOT_IMPLEMENTED; existing BrokerExecution idempotency is RAW-layer deduplication only"
+  },
+  "changed_files": [
+    {"status": "M", "path": "backend/app_config/journal_beta_v1.json"},
+    {"status": "M", "path": "backend/app_config/release_contract.py"},
+    {"status": "M", "path": "backend/routers/position_market_analysis.py"},
+    {"status": "M", "path": "backend/routers/positions.py"},
+    {"status": "M", "path": "backend/routers/timeline.py"},
+    {"status": "M", "path": "backend/schemas.py"},
+    {"status": "M", "path": "backend/services/exchange_rate_service.py"},
+    {"status": "M", "path": "backend/services/legacy_truth_sync_service.py"},
+    {"status": "M", "path": "backend/services/market_data_access.py"},
+    {"status": "M", "path": "backend/services/market_data_service.py"},
+    {"status": "M", "path": "backend/services/platform_config_service.py"},
+    {"status": "A", "path": "backend/services/position_instrument_projection_service.py"},
+    {"status": "M", "path": "backend/tests/test_admin_platform_config.py"},
+    {"status": "M", "path": "backend/tests/test_journal_baseline_profile.py"},
+    {"status": "M", "path": "backend/tests/test_legacy_truth_sync.py"},
+    {"status": "M", "path": "backend/tests/test_openapi_contracts.py"},
+    {"status": "A", "path": "backend/tests/test_optional_service_runtime_guards.py"},
+    {"status": "M", "path": "backend/tests/test_platform_config_service.py"},
+    {"status": "M", "path": "backend/tests/test_position_truth_bridge_router.py"},
+    {"status": "M", "path": "backend/tests/test_public_id_nested_routes.py"},
+    {"status": "M", "path": "backend/tests/test_release_contract_schema.py"},
+    {"status": "M", "path": "backend/tests/test_trading_position_lifecycle_router.py"},
+    {"status": "M", "path": "docs/adr/0001-trading-journal-beta-release-contract.md"},
+    {"status": "M", "path": "docs/superpowers/plans/2026-07-16-dev-trading-journal-development-plan.md"},
+    {"status": "M", "path": "frontend/app/(product)/positions/[id]/page.tsx"},
+    {"status": "M", "path": "frontend/app/(product)/positions/new/page.tsx"},
+    {"status": "M", "path": "frontend/components/positions/lifecycle/LifecycleMigrationPanel.tsx"},
+    {"status": "M", "path": "frontend/components/positions/lifecycle/LifecycleWorkbench.tsx"},
+    {"status": "M", "path": "frontend/lib/adapters/trading.ts"},
+    {"status": "M", "path": "frontend/lib/api.ts"},
+    {"status": "M", "path": "frontend/lib/generated/release-contract.ts"},
+    {"status": "M", "path": "frontend/tests/journal-baseline-product-surfaces.test.mts"},
+    {"status": "M", "path": "frontend/tests/market-data-status-presentation.test.mts"},
+    {"status": "M", "path": "frontend/tests/positions-api.test.mts"},
+    {"status": "M", "path": "frontend/tests/trading-adapter.test.mts"},
+    {"status": "M", "path": "frontend/tests/truth-first-writes.test.mts"},
+    {"status": "M", "path": "frontend/tests/ui-copy-accessibility.test.mts"}
+  ],
+  "verification_environment": {
+    "python": "3.13.5",
+    "node": "v24.18.0",
+    "npm": "11.16.0",
+    "git": "2.39.3 Apple Git-146",
+    "alembic": "1.18.5"
+  },
+  "verification": [
+    {
+      "command": "cd backend && venv/bin/python -m pytest -q",
+      "result": "PASS: 427 passed, 24 pre-existing deprecation warnings"
+    },
+    {
+      "command": "JRN-001 focused backend contract/capability/identity/lifecycle suite",
+      "result": "PASS: 110 passed"
+    },
+    {
+      "command": "cd frontend && npm test",
+      "result": "PASS: 159 passed"
+    },
+    {
+      "command": "cd frontend && npx tsc --noEmit",
+      "result": "PASS"
+    },
+    {
+      "command": "cd frontend && npm run lint",
+      "result": "PASS"
+    },
+    {
+      "command": "cd frontend && npm run build",
+      "result": "PASS outside the filesystem sandbox; the first sandboxed Turbopack attempt was infrastructure-only EPERM while binding a local CSS worker port"
+    },
+    {
+      "command": "cd frontend && npm run check:release-contract",
+      "result": "PASS: generated TypeScript equals the machine contract"
+    },
+    {
+      "command": "cd backend && venv/bin/alembic -c alembic.ini heads",
+      "result": "PASS: single head 9cad10111213"
+    },
+    {
+      "command": "cd backend && venv/bin/python -m pytest -q tests/test_alembic_chain.py tests/test_market_data_alembic_adoption.py",
+      "result": "PASS: 8 passed"
+    },
+    {
+      "command": "git diff --exit-code -- backend/alembic",
+      "result": "PASS: JRN-001 adds no Alembic revision"
+    },
+    {
+      "command": "git diff --check and git diff --cached --check",
+      "result": "PASS"
+    },
+    {
+      "command": "staged added-line credential pattern scan",
+      "result": "PASS: 3048 added lines scanned; no private key, provider token, live credential, credentialed URL, or long secret assignment matched"
+    }
+  ],
+  "excluded_user_worktree": [
+    {"status": "D", "path": ".github/workflows/deploy.yml"},
+    {"status": "D", "path": "backend/ops/migrate_db.py"},
+    {"status": "D", "path": "backup_db.sh"},
+    {"status": "M", "path": "docs/market_data_sources.md"},
+    {"status": "D", "path": "start.ps1"},
+    {"status": "M", "path": "start.sh"},
+    {"status": "D", "path": "update_libs.sh"},
+    {"status": "UNTRACKED", "path": ".claude/"},
+    {"status": "UNTRACKED", "path": "backend/requirements-dev.txt"}
+  ],
+  "independent_review_gate": {
+    "required_approvals": 2,
+    "reviewed_commit_must_equal": "cf4766de0e843b0a58a1882b30b3fe8556e1a23a",
+    "status": "PENDING",
+    "reviews": [],
+    "invalidation_rule": "Any implementation or semantic plan change creates a new checkpoint SHA and invalidates every earlier verdict."
+  },
+  "next_task_gate": "JRN-002 MUST NOT START until this exact checkpoint receives two independent APPROVE verdicts and this record is updated."
+}
