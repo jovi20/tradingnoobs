@@ -1009,7 +1009,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
             1,
         )
 
-    def test_archived_truth_with_remaining_quantity_still_blocks_duplicate_open(self):
+    def test_archived_open_truth_remains_readable_and_blocks_financial_writes(self):
         position = self._seed_open_legacy_position()
         self._sync_truth(position)
         lifecycle = self.client.get(f"/api/positions/{position.public_id}/truth-lifecycle")
@@ -1020,23 +1020,87 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         position.status = PositionStatus.CLOSED
         self.db.commit()
 
+        baseline_counts = {
+            model: self.db.query(model).count()
+            for model in (PositionEvent, AccountLedgerEntry, IdempotencyKey, OutboxEvent)
+        }
+
         duplicate = self.client.post(
             "/api/positions",
             json=self._msft_open_payload(position.account_id),
         )
-        response = self.client.get(f"/api/positions/{position.public_id}")
+        canonical_lifecycle = self.client.get(
+            f"/api/trading-positions/{truth_position.public_id}/lifecycle"
+        )
+        legacy_lifecycle = self.client.get(
+            f"/api/positions/{position.public_id}/truth-lifecycle"
+        )
+        detail = self.client.get(f"/api/positions/{position.public_id}")
+        position_list = self.client.get(
+            "/api/positions",
+            params={"account_id": position.account_id},
+        )
+        open_list = self.client.get(
+            "/api/positions",
+            params={"account_id": position.account_id, "status": "OPEN"},
+        )
+        closed_list = self.client.get(
+            "/api/positions",
+            params={"account_id": position.account_id, "status": "CLOSED"},
+        )
+        archived_add = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events",
+            headers={"Idempotency-Key": "archived-open-add"},
+            json={
+                "event_type": "ADD",
+                "quantity": "1",
+                "price": "190",
+                "currency": "USD",
+                "occurred_at": "2026-04-03T15:30:00+00:00",
+            },
+        )
 
         self.assertEqual(duplicate.status_code, 409, duplicate.text)
         self.assertEqual(duplicate.json()["detail"]["code"], "OPEN_POSITION_EXISTS")
-        self.assertEqual(response.status_code, 409, response.text)
+        self.assertEqual(canonical_lifecycle.status_code, 200, canonical_lifecycle.text)
         self.assertEqual(
-            response.json()["detail"]["code"],
-            "CANONICAL_ACCOUNTING_UNRESOLVED",
+            canonical_lifecycle.json()["data"]["position_summary"]["status"],
+            "ARCHIVED",
+        )
+        self.assertEqual(canonical_lifecycle.json()["data"]["review_status"], "OPEN")
+        self.assertEqual(
+            Decimal(str(canonical_lifecycle.json()["data"]["position_summary"]["open_quantity"])),
+            Decimal("5"),
+        )
+        self.assertEqual(legacy_lifecycle.status_code, 200, legacy_lifecycle.text)
+        self.assertEqual(
+            legacy_lifecycle.json()["data"]["position_summary"]["status"],
+            "ARCHIVED",
+        )
+        self.assertEqual(detail.status_code, 200, detail.text)
+        self.assertEqual(detail.json()["status"], "OPEN")
+        self.assertEqual(Decimal(str(detail.json()["total_quantity"])), Decimal("5"))
+        self.assertEqual(
+            [item["public_id"] for item in position_list.json()],
+            [position.public_id],
+        )
+        self.assertEqual(
+            [item["public_id"] for item in open_list.json()],
+            [position.public_id],
+        )
+        self.assertEqual(closed_list.json(), [])
+        self.assertEqual(archived_add.status_code, 409, archived_add.text)
+        self.assertEqual(archived_add.json()["detail"]["code"], "POSITION_ARCHIVED")
+        self.assertEqual(
+            archived_add.json()["detail"]["position_public_id"],
+            truth_position.public_id,
         )
         self.assertEqual(
             self.db.query(Position).filter(Position.account_id == position.account_id).count(),
             1,
         )
+        for model, baseline_count in baseline_counts.items():
+            self.assertEqual(self.db.query(model).count(), baseline_count)
 
     def test_null_canonical_quantity_cannot_release_same_side_open_slot(self):
         position = self._seed_open_legacy_position()

@@ -67,12 +67,14 @@ def require_resolved_truth_position_quantities(
     if truth_position.status == TradingPositionStatus.OPEN:
         if remaining_quantity <= 0:
             raise CanonicalAccountingUnresolvedError(truth_position.public_id)
-    elif truth_position.status in {
-        TradingPositionStatus.CLOSED,
-        TradingPositionStatus.ARCHIVED,
-    }:
+    elif truth_position.status == TradingPositionStatus.CLOSED:
         if remaining_quantity != 0:
             raise CanonicalAccountingUnresolvedError(truth_position.public_id)
+    elif truth_position.status == TradingPositionStatus.ARCHIVED:
+        # Archive changes visibility and writability, not the lifecycle's
+        # financial open/closed state. The base checks above still reject any
+        # invalid quantity combination.
+        pass
     else:
         raise CanonicalAccountingUnresolvedError(truth_position.public_id)
 
@@ -242,7 +244,7 @@ def build_trading_position_lifecycle_payload(
     return {
         "review_status": (
             "CLOSED_PENDING_REVIEW"
-            if truth_position.status == TradingPositionStatus.CLOSED
+            if quantity_opened == quantity_closed
             else "OPEN"
         ),
         "position_summary": {

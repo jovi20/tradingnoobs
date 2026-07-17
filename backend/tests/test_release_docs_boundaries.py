@@ -243,6 +243,18 @@ class ReleaseDocumentationBoundaryTests(unittest.TestCase):
             )
         )
 
+    def test_active_roadmap_does_not_describe_legacy_import_as_reachable(self):
+        roadmap = (
+            self.repository_root / "docs" / "project-summary-and-roadmap.md"
+        ).read_text(encoding="utf-8")
+        legacy_risk_row = next(
+            line for line in roadmap.splitlines() if "| legacy 路径仍存在 |" in line
+        )
+
+        self.assertIn("未注册 historical Import parser", legacy_risk_row)
+        self.assertIn("不存在可达 Import 路径", legacy_risk_row)
+        self.assertNotRegex(legacy_risk_row, r"仍支撑[^|]*导入")
+
 
 if __name__ == "__main__":
     unittest.main()

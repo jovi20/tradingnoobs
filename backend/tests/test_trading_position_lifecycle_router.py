@@ -391,6 +391,10 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
             canonical_lifecycle.json()["data"]["position_summary"]["status"],
             "ARCHIVED",
         )
+        self.assertEqual(
+            canonical_lifecycle.json()["data"]["review_status"],
+            "CLOSED_PENDING_REVIEW",
+        )
         self.assertEqual(legacy_lifecycle.status_code, 200, legacy_lifecycle.text)
         self.assertEqual(legacy_detail.status_code, 200, legacy_detail.text)
         self.assertEqual(legacy_detail.json()["status"], "CLOSED")
