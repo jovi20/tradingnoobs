@@ -4,6 +4,7 @@ import type {
     LifecycleDetailResponse,
 } from './read-models'
 import { buildBlobDownloadFromResponse, type BlobDownloadPayload } from './download.ts'
+import { JOURNAL_BETA_RELEASE_CONTRACT } from './generated/release-contract.ts'
 
 /**
  * Trading Noobs Frontend - API Client
@@ -363,7 +364,7 @@ export function isAuthenticationApiError(error: unknown): boolean {
 }
 
 const LOCALIZED_API_ERROR_MESSAGES: Readonly<Record<string, string>> = {
-    OPEN_POSITION_EXISTS: '同一账户中已存在相同标的和方向的未平仓仓位，请加仓到已有仓位。',
+    [JOURNAL_BETA_RELEASE_CONTRACT.lifecycle.same_side_open_conflict.code]: '同一账户中已存在相同标的和方向的未平仓仓位，请加仓到已有仓位。',
 }
 
 function resolveApiError(payload: unknown, status: number): {
@@ -380,18 +381,18 @@ function resolveApiError(payload: unknown, status: number): {
         return { message: detail }
     }
     if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
-        const structuredDetail = detail as {
-            code?: unknown
-            message?: unknown
-            position_public_id?: unknown
-        }
+        const structuredDetail = detail as Record<string, unknown>
         const code = typeof structuredDetail.code === 'string' && structuredDetail.code.trim()
             ? structuredDetail.code.trim()
             : undefined
+        const positionReferenceField = (
+            JOURNAL_BETA_RELEASE_CONTRACT.lifecycle.same_side_open_conflict.position_reference_field
+        )
+        const rawPositionPublicId = structuredDetail[positionReferenceField]
         const positionPublicId = (
-            typeof structuredDetail.position_public_id === 'string'
-            && structuredDetail.position_public_id.trim()
-        ) ? structuredDetail.position_public_id.trim() : undefined
+            typeof rawPositionPublicId === 'string'
+            && rawPositionPublicId.trim()
+        ) ? rawPositionPublicId.trim() : undefined
         const localizedMessage = code ? LOCALIZED_API_ERROR_MESSAGES[code] : undefined
         if (localizedMessage) return { message: localizedMessage, code, positionPublicId }
 

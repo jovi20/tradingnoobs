@@ -42,7 +42,12 @@ from services.trading_position_read_service import (
     require_resolved_truth_position_quantities,
     resolve_truth_position_by_public_id,
 )
-from services.trading_position_write_service import append_truth_trade_event, reverse_latest_truth_trade_event
+from services.trading_position_write_service import (
+    ArchivedTradingPositionWriteError,
+    append_truth_trade_event,
+    require_truth_position_financial_write_allowed,
+    reverse_latest_truth_trade_event,
+)
 
 router = APIRouter(prefix="/api/trading-positions", tags=["Trading Positions"])
 
@@ -105,6 +110,20 @@ def _require_resolved_truth_accounting(truth_position) -> None:
         raise HTTPException(
             status_code=409,
             detail=canonical_accounting_unresolved_detail(exc),
+        ) from exc
+
+
+def _require_financial_write_allowed(truth_position) -> None:
+    try:
+        require_truth_position_financial_write_allowed(truth_position)
+    except ArchivedTradingPositionWriteError as exc:
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail={
+                "code": exc.code,
+                "message": str(exc),
+                "position_public_id": exc.position_public_id,
+            },
         ) from exc
 
 
@@ -304,6 +323,7 @@ def create_trading_position_trade_event(
     if not truth_position:
         raise HTTPException(status_code=404, detail="Trading position not found")
 
+    _require_financial_write_allowed(truth_position)
     _require_exact_truth_instrument_provenance(truth_position)
     _require_resolved_truth_accounting(truth_position)
 
@@ -343,6 +363,16 @@ def create_trading_position_trade_event(
             note=payload.note,
         )
         enqueue_position_event_created_outbox(db, position=truth_position, event=event)
+    except ArchivedTradingPositionWriteError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail={
+                "code": exc.code,
+                "message": str(exc),
+                "position_public_id": exc.position_public_id,
+            },
+        ) from exc
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -374,6 +404,7 @@ def reverse_trading_position_trade_event(
     if not truth_position:
         raise HTTPException(status_code=404, detail="Trading position not found")
 
+    _require_financial_write_allowed(truth_position)
     _require_exact_truth_instrument_provenance(truth_position)
     _require_resolved_truth_accounting(truth_position)
 
@@ -394,6 +425,16 @@ def reverse_trading_position_trade_event(
             note=payload.note,
         )
         enqueue_position_event_created_outbox(db, position=truth_position, event=reversal_event)
+    except ArchivedTradingPositionWriteError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail={
+                "code": exc.code,
+                "message": str(exc),
+                "position_public_id": exc.position_public_id,
+            },
+        ) from exc
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -421,6 +462,7 @@ def create_trading_position_dividend(
     if not truth_position:
         raise HTTPException(status_code=404, detail="Trading position not found")
 
+    _require_financial_write_allowed(truth_position)
     _require_exact_truth_instrument_provenance(truth_position)
     _require_resolved_truth_accounting(truth_position)
 

@@ -1028,8 +1028,11 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
 
         self.assertEqual(duplicate.status_code, 409, duplicate.text)
         self.assertEqual(duplicate.json()["detail"]["code"], "OPEN_POSITION_EXISTS")
-        self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(response.json()["status"], "OPEN")
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertEqual(
+            response.json()["detail"]["code"],
+            "CANONICAL_ACCOUNTING_UNRESOLVED",
+        )
         self.assertEqual(
             self.db.query(Position).filter(Position.account_id == position.account_id).count(),
             1,
@@ -1070,14 +1073,10 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
                     duplicate.json()["detail"]["code"],
                     "OPEN_POSITION_EXISTS",
                 )
-                self.assertEqual(detail.status_code, 200, detail.text)
+                self.assertEqual(detail.status_code, 409, detail.text)
                 self.assertEqual(
-                    Decimal(str(detail.json()["total_quantity"])),
-                    Decimal("7"),
-                )
-                self.assertEqual(
-                    Decimal(str(detail.json()["average_entry_price"])),
-                    Decimal("177"),
+                    detail.json()["detail"]["code"],
+                    "CANONICAL_ACCOUNTING_UNRESOLVED",
                 )
                 self.assertEqual(
                     self.db.query(Position)

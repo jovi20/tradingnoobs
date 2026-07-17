@@ -111,6 +111,17 @@ export const JOURNAL_BETA_RELEASE_CONTRACT = {
             "instrument_id",
             "side"
         ],
+        "same_side_open_conflict": {
+            "http_status": 409,
+            "code": "OPEN_POSITION_EXISTS",
+            "position_reference_field": "position_public_id",
+            "recovery_event": "ADD"
+        },
+        "archived_position_mutation": {
+            "http_status": 409,
+            "code": "POSITION_ARCHIVED",
+            "policy": "FINANCIAL_WRITES_FORBIDDEN"
+        },
         "automatic_netting": false,
         "cross_zero_execution": false,
         "ordinary_backdate": false

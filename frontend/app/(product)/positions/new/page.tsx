@@ -27,6 +27,7 @@ import {
 } from '@/lib/adapters/trading'
 import DateTimePicker from '@/components/DateTimePicker'
 import CustomSelect from '@/components/CustomSelect'
+import { JOURNAL_BETA_RELEASE_CONTRACT } from '@/lib/generated/release-contract'
 
 import { Info } from 'lucide-react'
 import ChecklistModal from '@/components/ChecklistModal'
@@ -334,7 +335,7 @@ export default function NewPositionPage() {
         } catch (err: any) {
             if (
                 err instanceof ApiRequestError
-                && err.code === 'OPEN_POSITION_EXISTS'
+                && err.code === JOURNAL_BETA_RELEASE_CONTRACT.lifecycle.same_side_open_conflict.code
                 && err.positionPublicId
             ) {
                 const openIdentity = buildOpenIdentity(finalForm)

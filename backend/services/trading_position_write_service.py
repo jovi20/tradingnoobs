@@ -8,6 +8,7 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
+from app_config.release_contract import JOURNAL_BETA_CONTRACT
 from models import PositionEvent, PositionEventType, TradingPosition, TradingPositionStatus
 from services.account_ledger_service import sync_realized_pnl_event_to_account_ledger
 from services.trading_accounting_service import AccountingEvent, calculate_fifo_position_accounting
@@ -20,6 +21,21 @@ TRADE_EVENT_TYPES = {
     PositionEventType.REDUCE,
     PositionEventType.CLOSE,
 }
+
+
+class ArchivedTradingPositionWriteError(ValueError):
+    http_status = JOURNAL_BETA_CONTRACT.lifecycle.archived_position_mutation.http_status
+    code = JOURNAL_BETA_CONTRACT.lifecycle.archived_position_mutation.code
+    policy = JOURNAL_BETA_CONTRACT.lifecycle.archived_position_mutation.policy
+
+    def __init__(self, position_public_id: str):
+        self.position_public_id = position_public_id
+        super().__init__("Archived trading positions are read-only")
+
+
+def require_truth_position_financial_write_allowed(position: TradingPosition) -> None:
+    if position.status == TradingPositionStatus.ARCHIVED:
+        raise ArchivedTradingPositionWriteError(position.public_id)
 
 
 def _coerce_decimal(value) -> Decimal:
@@ -138,6 +154,7 @@ def append_truth_trade_event(
     confidence: int | None = None,
     note: str | None = None,
 ) -> PositionEvent:
+    require_truth_position_financial_write_allowed(position)
     if position.status == TradingPositionStatus.CLOSED:
         raise ValueError("Cannot append trade events to a closed trading position")
 
@@ -183,6 +200,7 @@ def reverse_latest_truth_trade_event(
     occurred_at: datetime,
     note: str | None = None,
 ) -> PositionEvent:
+    require_truth_position_financial_write_allowed(position)
     if event.event_type not in TRADE_EVENT_TYPES:
         raise ValueError("Only trade events can be reversed")
     if event.event_type == PositionEventType.OPEN:

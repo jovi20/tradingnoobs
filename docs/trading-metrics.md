@@ -227,12 +227,13 @@ Risk\% = \frac{|P_{entry} - P_{stop}|}{P_{entry}} \times 100
 
 ### 2.4 佣金与费用统计
 
-状态：`已部分实现`
+状态：`部分实现 / Import fee 未实现`
 
 说明：
-- 导入流程支持解析 `commission`
+- `GENERIC_BOOTSTRAP` 尚未实现；三条 legacy Import API 当前仅返回 `404 FEATURE_DISABLED` 且不进入 OpenAPI。
+- 未注册 legacy parser 代码中保留的 `commission` 解析分支只是一项 historical reference，不是当前 Import 路径，也不会产生 canonical fee 写入。
 - 交易流水支持费用类 `Transaction`
-- 但系统尚未形成统一的年度费用指标面板
+- `JRN-011`/`JRN-012` 必须按单 event 聚合 fee 与 canonical accounting 合同重新实现通用 Import；系统也尚未形成统一的年度费用指标面板。
 
 ### 2.5 AI 分析助手中的策略/情绪/检查清单分组指标
 

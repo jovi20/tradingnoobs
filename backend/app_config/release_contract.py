@@ -72,11 +72,26 @@ class InstrumentContract(_FrozenModel):
     disabled_instrument_types: tuple[str, ...]
 
 
+class SameSideOpenConflictContract(_FrozenModel):
+    http_status: Literal[409]
+    code: Literal["OPEN_POSITION_EXISTS"]
+    position_reference_field: Literal["position_public_id"]
+    recovery_event: Literal["ADD"]
+
+
+class ArchivedPositionMutationContract(_FrozenModel):
+    http_status: Literal[409]
+    code: Literal["POSITION_ARCHIVED"]
+    policy: Literal["FINANCIAL_WRITES_FORBIDDEN"]
+
+
 class LifecycleContract(_FrozenModel):
     position_mode: Literal["HEDGE_BY_DIRECTION"]
     cost_basis_method: Literal["FIFO"]
     sides: tuple[Literal["LONG", "SHORT"], ...]
     financially_open_unique_key: tuple[str, ...]
+    same_side_open_conflict: SameSideOpenConflictContract
+    archived_position_mutation: ArchivedPositionMutationContract
     automatic_netting: Literal[False]
     cross_zero_execution: Literal[False]
     ordinary_backdate: Literal[False]

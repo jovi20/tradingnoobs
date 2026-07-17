@@ -2,7 +2,7 @@
 Trading Noobs Backend - Pydantic Schemas
 """
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
-from typing import Any, Dict, Generic, List, Literal, Optional, TypeVar
+from typing import Any, Dict, Generic, List, Literal, Optional, TypeVar, Union
 from datetime import datetime, date
 from decimal import Decimal
 from enum import Enum
@@ -1379,6 +1379,29 @@ class PositionCreate(BaseModel):
     # Phase 1: Checklist Responses
     checklist_responses: Optional[dict] = None  # {"1": true, "2": false, ...}
     asset_metadata: PositionInstrumentIdentityCreate
+
+
+class OpenPositionExistsDetail(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: Literal["OPEN_POSITION_EXISTS"]
+    message: str
+    position_public_id: str
+
+
+class AmbiguousOpenPositionDetail(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: Literal["AMBIGUOUS_OPEN_POSITION"]
+    message: str
+
+
+class PositionCreateConflictResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    detail: Union[OpenPositionExistsDetail, AmbiguousOpenPositionDetail] = Field(
+        discriminator="code"
+    )
 
 
 class PositionUpdate(BaseModel):

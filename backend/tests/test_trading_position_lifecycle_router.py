@@ -34,6 +34,7 @@ from models import (
     PositionStatus,
     TradeBatch,
     TradingAccount,
+    TradingPosition,
     TradingPositionStatus,
     InsightArtifact,
     InsightRun,
@@ -43,6 +44,11 @@ from services.auth_service import get_current_user
 from services.legacy_truth_sync_service import (
     sync_legacy_position_to_truth,
     validate_legacy_instrument_identity,
+)
+from services.trading_position_write_service import (
+    ArchivedTradingPositionWriteError,
+    append_truth_trade_event,
+    reverse_latest_truth_trade_event,
 )
 
 
@@ -278,64 +284,220 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         self.assertEqual(float(cash_effects[0]["amount"]), 180.0)
         self.assertEqual(cash_effects[0]["currency"], "USD")
 
-    def test_unresolved_canonical_quantities_fail_closed_across_lifecycle_and_writes(self):
+    def test_invalid_canonical_quantities_fail_closed_across_legacy_reads_lifecycle_and_writes(self):
         truth_position = self._seed_open_synced_position()
-        truth_position.quantity_opened = None
-        truth_position.quantity_closed = Decimal("0")
-        truth_position.status = TradingPositionStatus.CLOSED
+        legacy_position = self.db.query(Position).filter(
+            Position.public_id == "legacy-open-position"
+        ).one()
+        legacy_snapshot = (
+            legacy_position.status,
+            legacy_position.total_quantity,
+            legacy_position.average_entry_price,
+            legacy_position.realized_pnl,
+            legacy_position.closed_at,
+        )
+        baseline_counts = {
+            model: self.db.query(model).count()
+            for model in (PositionEvent, AccountLedgerEntry, IdempotencyKey, OutboxEvent)
+        }
+        invalid_accounting_cases = (
+            ("null-opened", None, Decimal("0"), TradingPositionStatus.CLOSED),
+            ("null-closed", Decimal("5"), None, TradingPositionStatus.OPEN),
+            ("negative-opened", Decimal("-1"), Decimal("0"), TradingPositionStatus.OPEN),
+            ("negative-closed", Decimal("5"), Decimal("-1"), TradingPositionStatus.OPEN),
+            ("nonfinite-opened", Decimal("Infinity"), Decimal("0"), TradingPositionStatus.OPEN),
+            ("nonfinite-closed", Decimal("5"), Decimal("Infinity"), TradingPositionStatus.CLOSED),
+            ("closed-exceeds-opened", Decimal("5"), Decimal("6"), TradingPositionStatus.CLOSED),
+            ("open-with-zero-remaining", Decimal("5"), Decimal("5"), TradingPositionStatus.OPEN),
+            ("closed-with-remaining", Decimal("5"), Decimal("4"), TradingPositionStatus.CLOSED),
+        )
+
+        for case_name, quantity_opened, quantity_closed, position_status in invalid_accounting_cases:
+            with self.subTest(case=case_name):
+                truth_position.quantity_opened = quantity_opened
+                truth_position.quantity_closed = quantity_closed
+                truth_position.status = position_status
+                self.db.commit()
+
+                responses = (
+                    self.client.get("/api/positions"),
+                    self.client.get("/api/positions?status=OPEN"),
+                    self.client.get("/api/positions?status=CLOSED"),
+                    self.client.get("/api/positions/legacy-open-position"),
+                    self.client.get(
+                        f"/api/trading-positions/{truth_position.public_id}/lifecycle"
+                    ),
+                    self.client.get("/api/positions/legacy-open-position/truth-lifecycle"),
+                    self.client.post(
+                        f"/api/trading-positions/{truth_position.public_id}/events",
+                        headers={"Idempotency-Key": f"invalid-canonical-{case_name}"},
+                        json={
+                            "event_type": "ADD",
+                            "quantity": "1",
+                            "price": "190",
+                            "currency": "USD",
+                            "occurred_at": "2026-04-03T15:30:00+00:00",
+                        },
+                    ),
+                )
+
+                for response in responses:
+                    self.assertEqual(response.status_code, 409, response.text)
+                    self.assertEqual(
+                        response.json()["detail"]["code"],
+                        "CANONICAL_ACCOUNTING_UNRESOLVED",
+                    )
+                    self.assertEqual(
+                        response.json()["detail"]["position_public_id"],
+                        truth_position.public_id,
+                    )
+
+                self.db.expire_all()
+                for model, baseline_count in baseline_counts.items():
+                    self.assertEqual(
+                        self.db.query(model).count(),
+                        baseline_count,
+                        f"{case_name} changed {model.__tablename__}",
+                    )
+                persisted_legacy = self.db.query(Position).filter(
+                    Position.public_id == "legacy-open-position"
+                ).one()
+                self.assertEqual(
+                    (
+                        persisted_legacy.status,
+                        persisted_legacy.total_quantity,
+                        persisted_legacy.average_entry_price,
+                        persisted_legacy.realized_pnl,
+                        persisted_legacy.closed_at,
+                    ),
+                    legacy_snapshot,
+                )
+                truth_position = self.db.query(TradingPosition).filter_by(
+                    public_id=truth_position.public_id
+                ).one()
+
+    def test_archived_position_is_readable_but_all_financial_writes_fail_closed(self):
+        truth_position = self._seed_synced_position()
+        truth_position.status = TradingPositionStatus.ARCHIVED
         self.db.commit()
 
-        legacy_detail = self.client.get("/api/positions/legacy-open-position")
         canonical_lifecycle = self.client.get(
             f"/api/trading-positions/{truth_position.public_id}/lifecycle"
         )
-        legacy_lifecycle = self.client.get(
-            "/api/positions/legacy-open-position/truth-lifecycle"
+        legacy_lifecycle = self.client.get("/api/positions/legacy-position/truth-lifecycle")
+        legacy_detail = self.client.get("/api/positions/legacy-position")
+        self.assertEqual(canonical_lifecycle.status_code, 200, canonical_lifecycle.text)
+        self.assertEqual(
+            canonical_lifecycle.json()["data"]["position_summary"]["status"],
+            "ARCHIVED",
+        )
+        self.assertEqual(legacy_lifecycle.status_code, 200, legacy_lifecycle.text)
+        self.assertEqual(legacy_detail.status_code, 200, legacy_detail.text)
+        self.assertEqual(legacy_detail.json()["status"], "CLOSED")
+        self.assertEqual(Decimal(legacy_detail.json()["total_quantity"]), Decimal("0"))
+
+        self.db.expire_all()
+        truth_position = self.db.query(TradingPosition).filter_by(
+            public_id=truth_position.public_id
+        ).one()
+        close_event = self.db.query(PositionEvent).filter(
+            PositionEvent.position_id == truth_position.id,
+            PositionEvent.event_type == PositionEventType.CLOSE,
+        ).one()
+        legacy_position = self.db.query(Position).filter(
+            Position.public_id == "legacy-position"
+        ).one()
+        legacy_snapshot = (
+            legacy_position.status,
+            legacy_position.total_quantity,
+            legacy_position.average_entry_price,
+            legacy_position.realized_pnl,
+            legacy_position.closed_at,
+        )
+        baseline_counts = {
+            model: self.db.query(model).count()
+            for model in (PositionEvent, AccountLedgerEntry, IdempotencyKey, OutboxEvent)
+        }
+
+        financial_write_responses = []
+        for event_type in ("ADD", "REDUCE", "CLOSE"):
+            financial_write_responses.append(
+                self.client.post(
+                    f"/api/trading-positions/{truth_position.public_id}/events",
+                    headers={"Idempotency-Key": f"archived-{event_type.lower()}"},
+                    json={
+                        "event_type": event_type,
+                        "quantity": "1",
+                        "price": "205",
+                        "currency": "USD",
+                        "occurred_at": "2026-04-06T15:30:00+00:00",
+                    },
+                )
+            )
+        financial_write_responses.extend(
+            (
+                self.client.post(
+                    f"/api/trading-positions/{truth_position.public_id}/events/{close_event.public_id}/reverse",
+                    json={"occurred_at": "2026-04-06T16:00:00+00:00"},
+                ),
+                self.client.post(
+                    f"/api/trading-positions/{truth_position.public_id}/dividends",
+                    headers={"Idempotency-Key": "archived-dividend"},
+                    json={
+                        "amount": "25",
+                        "currency": "USD",
+                        "occurred_at": "2026-04-06T16:00:00+00:00",
+                    },
+                ),
+            )
         )
 
-        self.assertEqual(legacy_detail.status_code, 200, legacy_detail.text)
-        self.assertEqual(legacy_detail.json()["status"], "OPEN")
-        self.assertEqual(Decimal(legacy_detail.json()["total_quantity"]), Decimal("5"))
-        for response in (canonical_lifecycle, legacy_lifecycle):
+        for response in financial_write_responses:
             self.assertEqual(response.status_code, 409, response.text)
-            self.assertEqual(
-                response.json()["detail"]["code"],
-                "CANONICAL_ACCOUNTING_UNRESOLVED",
-            )
+            self.assertEqual(response.json()["detail"]["code"], "POSITION_ARCHIVED")
             self.assertEqual(
                 response.json()["detail"]["position_public_id"],
                 truth_position.public_id,
             )
 
-        baseline_counts = {
-            model: self.db.query(model).count()
-            for model in (
-                PositionEvent,
-                AccountLedgerEntry,
-                IdempotencyKey,
-                OutboxEvent,
+        with self.assertRaises(ArchivedTradingPositionWriteError):
+            append_truth_trade_event(
+                self.db,
+                position=truth_position,
+                event_type=PositionEventType.ADD,
+                quantity=Decimal("1"),
+                price=Decimal("205"),
+                currency="USD",
+                occurred_at=datetime(2026, 4, 6, 17, 0, tzinfo=timezone.utc),
             )
-        }
-        add_response = self.client.post(
-            f"/api/trading-positions/{truth_position.public_id}/events",
-            headers={"Idempotency-Key": "unresolved-canonical-add"},
-            json={
-                "event_type": "ADD",
-                "quantity": "1",
-                "price": "190",
-                "currency": "USD",
-                "occurred_at": "2026-04-03T15:30:00+00:00",
-            },
-        )
+        with self.assertRaises(ArchivedTradingPositionWriteError):
+            reverse_latest_truth_trade_event(
+                self.db,
+                position=truth_position,
+                event=close_event,
+                occurred_at=datetime(2026, 4, 6, 17, 0, tzinfo=timezone.utc),
+            )
 
-        self.assertEqual(add_response.status_code, 409, add_response.text)
-        self.assertEqual(
-            add_response.json()["detail"]["code"],
-            "CANONICAL_ACCOUNTING_UNRESOLVED",
-        )
         self.db.expire_all()
         for model, baseline_count in baseline_counts.items():
             self.assertEqual(self.db.query(model).count(), baseline_count)
+        persisted_truth = self.db.query(TradingPosition).filter_by(
+            public_id=truth_position.public_id
+        ).one()
+        self.assertEqual(persisted_truth.status, TradingPositionStatus.ARCHIVED)
+        persisted_legacy = self.db.query(Position).filter(
+            Position.public_id == "legacy-position"
+        ).one()
+        self.assertEqual(
+            (
+                persisted_legacy.status,
+                persisted_legacy.total_quantity,
+                persisted_legacy.average_entry_price,
+                persisted_legacy.realized_pnl,
+                persisted_legacy.closed_at,
+            ),
+            legacy_snapshot,
+        )
 
     def test_lifecycle_route_only_loads_ai_sidecar_with_effective_capability(self):
         truth_position = self._seed_synced_position()

@@ -16,6 +16,7 @@
 - 可选能力必须同时满足外部 deployment allowlist 和数据库 runtime rollout；缺失部署 allowlist 时 ceiling 为空。数据库配置不能扩大 ceiling。
 - JOURNAL Beta 不执行 Broker 网络同步，不读取或要求 Broker、行情或 LLM 凭据。
 - `IBKR_FLEX_XML_V1` 是 `JRN-013` 至 `JRN-015` 计划实现的本地文件 adapter，不是在线 Broker Sync；重复、重叠、增量确认和 correction replay 截至本次更新均未实现或开放。
+- `GENERIC_BOOTSTRAP` 同样尚未实现。`POST /api/positions/import/upload`、`POST /api/positions/import/confirm` 和 `GET /api/positions/import/template` 当前仅由 deny-only stub 返回 `404 FEATURE_DISABLED`，不进入 OpenAPI，也不提供模板、上传、preview 或 confirm；前端没有 Import 入口，直达 `/positions/import` 进入 framework not-found 视图。
 - `/register` 路由模块已删除，`/api/auth/register` 也未注册；硬编码共享邀请码不能作为 invite-only onboarding。一次性哈希邀请码、兑换与审计由 `JRN-003` 完成后，才重新开放受控注册路径。
 
 ---
@@ -79,7 +80,7 @@
 - `/api/auth`
 - `/api/accounts`
 - `/api/accounts/{account_id}/transactions`
-- `/api/positions`：legacy 持仓/批次读取与 create-and-sync 过渡路径；新建仓位会立即同步 `TradingPosition` 并返回 `truth_position_public_id`。已有 legacy 行缺少 canonical truth 时，`GET /api/positions/{id}/truth-lifecycle` 只返回 not-found，不得在读取中触发 backfill、flush 或 commit；迁移必须由后续显式受审计流程执行。普通产品路由上的 legacy review、position hard delete、batch create/edit/delete 全部 fail-closed，`X-Migration-Fallback` 不在 OpenAPI 中且不能授予迁移权限。受审计的 admin/CLI migration namespace 尚未实现，不能用隐藏 query/header 代替。
+- `/api/positions`：legacy 持仓/批次读取与 create-and-sync 过渡路径；新建仓位会立即同步 `TradingPosition` 并返回 `truth_position_public_id`。已有 legacy 行缺少 canonical truth 时，`GET /api/positions/{id}/truth-lifecycle` 只返回 not-found，不得在读取中触发 backfill、flush 或 commit；迁移必须由后续显式受审计流程执行。普通产品面上的 legacy review `PATCH /api/positions/{position_id}`、position hard delete `DELETE /api/positions/{position_id}`、batch create `POST /api/positions/{position_id}/batches` 以及 batch edit/delete `PATCH|DELETE /api/positions/batches/{batch_id}` 全部 fail-closed：对 owner 已验证且资源存在的请求稳定返回 `409`，不因 truth lifecycle 是否存在而改变。任何 `X-Migration-Fallback` header 或历史 token 都不能绕过；`X-Migration-Fallback` 不在 OpenAPI 中且不能授予迁移权限。受审计的 admin/CLI migration namespace 尚未实现，不能用隐藏 query/header 代替。
 - `/api/trading-positions`：truth lifecycle、允许的 truth trade event write、同币种 dividend 和 latest-event reversal；`manual adjustment` 兼容路径在 Beta 稳定拒绝且不写事实。
 - `/api/timeline/home`：Timeline 首页 read model，默认 `SNAPSHOT_ONLY`，由 `DerivedTimelineSnapshot` 驱动；optional AI artifact feed 不属于当前 Beta 可用面。
 - `/api/dashboard`
@@ -100,7 +101,6 @@
 - `/dashboard`：宏观 Dashboard 工作台。
 - `/positions`
 - `/positions/new`
-- `/positions/import`
 - `/positions/[id]`
 - `/positions/[id]/add-batch`
 - `/admin/jobs`
@@ -111,7 +111,7 @@
 - `/daily`
 - `/login`
 
-`/insights`、风险卡和 PDF 导出代码可能仍留在仓库中，但当前必须隐藏或不可达；`/register` 页面路由模块已删除。
+`/positions/import` 只是调用 `notFound()` 的禁用壳，不是当前主要页面或可用 Import UI。`/insights`、风险卡和 PDF 导出代码可能仍留在仓库中，但当前必须隐藏或不可达；`/register` 页面路由模块已删除。
 
 前端 legacy DTO 边界：
 - 新功能不应直接从 `frontend/lib/api.ts` 引入 legacy `Position` / `TradeBatch` / `BatchCreate` / `Transaction`。
@@ -121,6 +121,7 @@
 - `legacy_analytics`：`components/dashboard/MaeMfeScatterPlot.tsx`。其数据适配器只接受 MARKET capability 的独立分析 DTO，不再依赖 journal `Position` DTO。
 - `adapter_boundary`：`lib/adapters/trading.ts`。
 - `frontend/tests/legacy-ui-boundaries.test.mts` 会阻止 raw legacy trading DTO import 继续扩散。
+- 这些 allowlist 只限制 DTO import 位置，不为任何 public legacy mutation 提供 migration fallback 权限。
 
 ---
 
@@ -132,7 +133,7 @@
 | 平台配置 | `核心存在 / optional secret hard-off` | FeatureFlag 等基础代码存在；Broker、Market、LLM 的普通设置、凭据写入与测试入口在 JOURNAL Beta 关闭。 |
 | 交易账户与资金记录 | `桥接完成 / 继续收敛` | `AccountLedgerEntry` 已落地，账户现金读模型已优先使用 ledger；legacy transaction 路径仍存在。 |
 | Trading truth model | `桥接完成 / 硬切推进中` | `TradingPosition / PositionEvent / AccountLedgerEntry`、FIFO、truth lifecycle、truth-first add/reduce/close、truth narrative、latest active event reversal 已落地；新建仓位会 create-and-sync 到 truth lifecycle，已有仓位的普通加仓/减仓/平仓/复盘/叙事不再静默写 legacy 字段。 |
-| Legacy 持仓路径 | `迁移期保留 / 写入受保护` | `Position / TradeBatch / Transaction / AssetMetadata / DailySnapshot` 仍被部分路由、导入、Dashboard、Timeline fallback 使用；truth lifecycle 存在时 legacy batch create、review write、position hard delete、batch edit/delete 都需要显式 migration fallback header。 |
+| Legacy 持仓路径 | `迁移期保留 / public mutation hard-off` | `Position / TradeBatch / Transaction / AssetMetadata / DailySnapshot` 仍被部分读取、create-and-sync bridge、Dashboard 和 Timeline fallback 使用；未注册的历史 Import parser 也仍引用其中部分模型，但不是可达路径。public legacy review、position hard delete 与 batch create/edit/delete 对已有 owner 资源稳定返回 `409`，任何 migration fallback header 都不能解锁。 |
 | Timeline 首页 | `truth/snapshot 默认` | Timeline / Review Inbox 已是产品中心，核心事件使用 `DerivedTimelineSnapshot`；AI artifact feed 代码当前 hard-off，legacy mixed feed 只作为 rollback。 |
 | Lifecycle Detail | `truth-first 已落地` | 单笔详情展示 truth lifecycle、evidence 和 ledger cash effects；AI sidecar 代码在 JOURNAL Beta 隐藏。canonical review lives in `PositionEvent` narrative，legacy review 只作为 migration context 展示；latest active event reversal 会追加 `REVERSAL`，非最新 reversal 和 `OPEN` reversal 暂拒绝，直到补偿事件或 void/archive UX 明确。 |
 | Dashboard | `宏观视图已重构` | 已从默认首页退到宏观视图；chart schema/freshness/trust 包装已接入。 |
@@ -181,13 +182,13 @@
 
 | 实体 | 当前作用 |
 |------|----------|
-| `Position` | 旧持仓汇总，仍被 legacy positions、dashboard、timeline bridge、导入等路径使用；`trade_review`、`lessons`、`rating` 和 hard delete 在 truth lifecycle 存在后只作为 migration/support context。 |
-| `TradeBatch` | 旧建仓/加仓/减仓/平仓批次，仍是部分 migration/fallback 路径的数据源；truth lifecycle 存在后不再作为普通用户加仓/减仓/平仓默认写路径，旧 batch edit/delete 也只允许显式迁移修正。 |
+| `Position` | 旧持仓汇总，仍被 legacy positions 读取、create-and-sync bridge、Dashboard 和 Timeline bridge 使用；未注册的历史 Import parser 也引用该模型。public `PATCH` 的 legacy review/position 字段与 hard delete 对已有 owner 资源稳定返回 `409`，没有 header bypass。 |
+| `TradeBatch` | 旧建仓/加仓/减仓/平仓批次，仍作为部分只读 bridge 的数据源。public batch create/edit/delete 对已有 owner 资源稳定返回 `409`；未来迁移 mutation 必须进入尚未实现的受审计 admin/CLI namespace。 |
 | `Transaction` | 旧账户流水，当前和 `AccountLedgerEntry` 并存。 |
 | `AssetMetadata` | 旧资产元数据，仍被 legacy market/positions 逻辑使用。 |
 | `DailySnapshot` | 旧每日权益快照，仍被部分 dashboard 历史数据路径使用。 |
 
-P10 的关键目标不是马上删除 legacy，而是先把它们标为 `primary path`、`migration-only` 或 `delete candidate`，再安全清理。
+legacy 代码不会在 replacement、migration 和 rollback 明确前直接删除；但“代码保留”不等于 public mutation 可用。当前只能把保留面标为只读 bridge、create-and-sync bridge、unregistered historical reference 或 delete candidate，不能把普通产品路由称为 migration fallback。
 
 ---
 

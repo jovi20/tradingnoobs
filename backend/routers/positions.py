@@ -35,6 +35,7 @@ from models import (
     PositionStatus, PositionDirection, BatchType
 )
 from schemas import (
+    PositionCreateConflictResponse,
     PositionCreate, PositionUpdate, PositionResponse, PositionListResponse,
     TradeBatchCreate, TradeBatchUpdate, TradeBatchResponse,
     PositionStatusEnum,
@@ -56,6 +57,7 @@ from services.trading_position_read_service import (
     CanonicalAccountingUnresolvedError,
     build_trading_position_lifecycle_payload,
     canonical_accounting_unresolved_detail,
+    require_resolved_truth_position_quantities,
 )
 from services.truth_legacy_projection_service import (
     resolve_user_truth_positions_for_legacy,
@@ -81,6 +83,18 @@ def _release_contract_value(callable_, *args, **kwargs):
 
 def _enum_value(value):
     return value.value if hasattr(value, "value") else str(value)
+
+
+def _resolved_truth_position_quantities(
+    truth_position: TradingPosition,
+) -> tuple[Decimal, Decimal]:
+    try:
+        return require_resolved_truth_position_quantities(truth_position)
+    except CanonicalAccountingUnresolvedError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=canonical_accounting_unresolved_detail(exc),
+        ) from exc
 
 
 def _truth_position_is_financially_open(truth_position: TradingPosition) -> bool:
@@ -141,9 +155,10 @@ def _position_response_status(
 ) -> str:
     if truth_position is None:
         return _enum_value(position.status)
+    quantity_opened, quantity_closed = _resolved_truth_position_quantities(truth_position)
     return (
         PositionStatus.OPEN.value
-        if _truth_position_is_financially_open(truth_position)
+        if quantity_opened - quantity_closed > 0
         else PositionStatus.CLOSED.value
     )
 
@@ -178,14 +193,9 @@ def _position_list_response_payload(
         truth_position=truth_position,
     )
     identity = projection.identity if projection else None
-    if (
-        truth_position is not None
-        and truth_position.quantity_opened is not None
-        and truth_position.quantity_closed is not None
-    ):
-        quantity_opened = Decimal(str(truth_position.quantity_opened))
-        quantity_closed = Decimal(str(truth_position.quantity_closed))
-        total_quantity = max(Decimal("0"), quantity_opened - quantity_closed)
+    if truth_position is not None:
+        quantity_opened, quantity_closed = _resolved_truth_position_quantities(truth_position)
+        total_quantity = quantity_opened - quantity_closed
         average_entry_price = truth_position.avg_open_price
         realized_pnl = truth_position.realized_pnl_net or Decimal("0")
         opened_at = truth_position.opened_at
@@ -331,12 +341,16 @@ def _raise_open_position_conflict(matches: list[Position]) -> None:
             },
         )
     if matches:
+        conflict_contract = JOURNAL_BETA_CONTRACT.lifecycle.same_side_open_conflict
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=conflict_contract.http_status,
             detail={
-                "code": "OPEN_POSITION_EXISTS",
-                "message": "Use ADD for an existing same-side lifecycle",
-                "position_public_id": matches[0].public_id,
+                "code": conflict_contract.code,
+                "message": (
+                    f"Use {conflict_contract.recovery_event} for an existing "
+                    "same-side lifecycle"
+                ),
+                conflict_contract.position_reference_field: matches[0].public_id,
             },
         )
 
@@ -638,7 +652,17 @@ async def get_position_truth_lifecycle(
     )
 
 
-@router.post("", response_model=PositionResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=PositionResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        JOURNAL_BETA_CONTRACT.lifecycle.same_side_open_conflict.http_status: {
+            "model": PositionCreateConflictResponse,
+            "description": "A same-side lifecycle already exists; recover with ADD.",
+        }
+    },
+)
 async def create_position(
     position_data: PositionCreate,
     current_user: User = Depends(get_current_user),

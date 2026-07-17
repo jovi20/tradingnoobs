@@ -12,6 +12,7 @@ from main import app
 from models import (
     AccountLedgerEntry,
     AccountLedgerEntryType,
+    BatchType,
     Position,
     PositionDirection,
     PositionStatus,
@@ -116,6 +117,17 @@ class PublicIdNestedRouteTests(unittest.TestCase):
             os.remove(self.db_path)
 
     def _seed_truth_identity(self, position: Position, *, market: str) -> None:
+        self.db.add(
+            TradeBatch(
+                public_id=f"batch-{position.public_id}",
+                position_id=position.id,
+                type=BatchType.ENTRY,
+                price=1,
+                quantity=position.total_quantity,
+                time=position.opened_at,
+            )
+        )
+        self.db.commit()
         identity = validate_legacy_instrument_identity(
             position_asset_type=position.asset_type,
             account_currency=self.account.currency,

@@ -35,16 +35,16 @@
 - 新建仓位仍经过 `POST /api/positions` 的 create-and-sync 过渡合同，并返回 `truth_position_public_id`。
 - 已有仓位的加仓、减仓、平仓走 `POST /api/trading-positions/{position_public_id}/events`。
 - 复盘与叙事写入走 `PATCH /api/trading-positions/{position_public_id}/events/{event_public_id}/narrative`。
-- 前端普通操作不应调用 legacy batch/review 写入，除非明确处于 migration/support fallback。
+- 前端普通操作不得调用 legacy batch/review mutation；public legacy mutation 对已有 owner 资源稳定返回 `409`，不存在 migration/support header 例外。
 
-迁移 fallback：
-- `legacy-batch-write` 只用于 legacy batch create 迁移补录。
-- `legacy-review-write` 只用于 legacy `Position.trade_review / lessons / rating` 迁移修正。
+历史迁移说明（已废止）：
+- P11/P12 曾设计由客户端 header 自报 migration intent；该设计已废止，旧 token 不再列为可操作值，也不能授予权限。
+- 真正的 legacy migration mutation 必须等待 owner-bound、强制 reason、可审计的 admin/CLI namespace；该 namespace 当前尚未实现。
 
 安全回滚顺序：
 - 先确认 `frontend/tests/legacy-ui-boundaries.test.mts` 没有被绕过，避免新页面继续扩张 legacy DTO。
-- 如用户操作被阻塞，优先临时切回迁移/support 操作入口，而不是扩大普通 legacy 写路径。
-- 如必须回滚代码，按最新到最旧逐个回滚 P11 行为提交并逐步验证：`b06f231`、`715816f`、`e9fbafe`、`a7fa1da`、`5a70275`。
+- 用户操作被阻塞时只能改走 canonical truth/narrative route；不得恢复 migration/support UI、query 或 header 绕过。
+- 代码回滚也必须保留 public legacy mutation 的 fail-closed 边界，不能通过回滚旧行为提交重新开放写路径。
 - 每回滚一段后至少运行 truth lifecycle、legacy bridge、frontend boundary 三组回归。
 
 ---
@@ -70,22 +70,20 @@
 
 ## Legacy Mutation Guards
 
-以下 header 只能用于 migration/support，不是普通产品路径：
-- `legacy-batch-write`：允许 legacy batch create 迁移补录。
-- `legacy-review-write`：允许 legacy review 字段迁移修正。
-- `legacy-position-delete`：允许 legacy position hard delete 迁移清理。
-- `legacy-batch-edit`：允许 legacy batch edit/delete 迁移修正。
+当前修正（覆盖本历史章节的旧设计）：
+- public legacy review、position hard delete、batch create/edit/delete 没有可用的 migration fallback token；`X-Migration-Fallback` 的任何客户端值都无效。
+- 旧 token 名称不再作为调用指南保留，不能通过 header、query、runtime flag 或数据库配置恢复。
+- 受审计的 admin/CLI migration namespace 尚未实现；在它完成 owner 校验、强制 reason 和 audit 前，历史数据清理不能绕过 public guard。
 
 默认保护：
-- truth lifecycle 存在时，普通 legacy batch create、legacy review write、position hard delete、batch edit/delete 应返回 `409`。
+- 对 owner 已验证且资源存在的请求，legacy batch create、legacy review/position update、position hard delete、batch edit/delete 均稳定返回 `409`，不因 truth lifecycle 是否存在而改变；非 owner 目标继续返回 `404`。
 - `DELETE /api/positions/{position_id}` 不应成为 audited truth lifecycle 的普通删除方式。
 - legacy batch edit/delete 不应替代 truth event reversal、manual adjustment 或未来 compensating event UX。
 
 安全回滚顺序：
-- 先确认是否只是 migration/support 操作缺少正确 header。
-- 再确认用户是否实际应走 truth route 或 narrative route。
-- 只有历史数据清理确实被阻塞时，才在受控调用里使用对应 `X-Migration-Fallback` 值。
-- 如必须回滚 guard，逐个回滚 `715816f`、`e9fbafe` 或 `5a70275` 的相关保护，并保留 P12 OpenAPI contract tests，避免 header 文档消失。
+- 确认用户是否应走 canonical truth route、narrative route、reversal 或未来 void/archive UX。
+- 不得把缺少 migration 工具解释为可以恢复 public header bypass；需要迁移时先实现并评审独立 admin/CLI namespace。
+- 如必须回滚其他 JRN-001 代码，仍须保留本 guard、OpenAPI 无 fallback header 以及对应回归测试。
 
 ---
 
@@ -108,7 +106,7 @@
 正常路径：
 - Insights 周报 PDF 通过后端 PDF renderer 生成。
 - 前端导出按钮只调用既有 export API，不直接拼装 PDF。
-- 导入模板说明是用户可见操作说明，不承担自动导入校验。
+- 历史导入模板字段文档只是未注册 legacy parser 的参考；当前没有模板下载、upload 或 confirm 用户路径。
 
 安全回滚顺序：
 - 如果 PDF 生成失败，优先返回用户可读错误并保留页面可用性。

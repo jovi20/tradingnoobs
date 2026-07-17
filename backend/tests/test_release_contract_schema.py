@@ -33,6 +33,25 @@ class JournalBetaReleaseContractTests(unittest.TestCase):
         self.assertEqual(loaded.model_dump(mode="json"), raw)
         self.assertEqual(loaded.currency.account_base_currencies, ("USD",))
         self.assertEqual(loaded.lifecycle.position_mode, "HEDGE_BY_DIRECTION")
+        self.assertEqual(loaded.lifecycle.same_side_open_conflict.http_status, 409)
+        self.assertEqual(
+            loaded.lifecycle.same_side_open_conflict.code,
+            "OPEN_POSITION_EXISTS",
+        )
+        self.assertEqual(
+            loaded.lifecycle.same_side_open_conflict.position_reference_field,
+            "position_public_id",
+        )
+        self.assertEqual(loaded.lifecycle.same_side_open_conflict.recovery_event, "ADD")
+        self.assertEqual(loaded.lifecycle.archived_position_mutation.http_status, 409)
+        self.assertEqual(
+            loaded.lifecycle.archived_position_mutation.code,
+            "POSITION_ARCHIVED",
+        )
+        self.assertEqual(
+            loaded.lifecycle.archived_position_mutation.policy,
+            "FINANCIAL_WRITES_FORBIDDEN",
+        )
         self.assertEqual(ALLOWED_ASSET_TYPES, {"STOCK", "FUND", "CRYPTO"})
         self.assertEqual(ALLOWED_TRANSACTION_TYPES, {"DEPOSIT", "WITHDRAWAL", "INTEREST", "FEE"})
 

@@ -2,6 +2,7 @@ import json
 import unittest
 from unittest.mock import patch
 
+from app_config.release_contract import JOURNAL_BETA_CONTRACT
 from main import app, create_app
 from release_profile import (
     DeploymentCapabilityPolicy,
@@ -79,6 +80,27 @@ class OpenAPIContractTests(unittest.TestCase):
                     identity_schema["properties"][field]["x-normalization"],
                     "ASCII_TRIM_UPPER",
                 )
+
+    def test_position_create_publishes_same_side_conflict_recovery_contract(self):
+        operation = self.openapi["paths"]["/api/positions"]["post"]
+        conflict = operation["responses"]["409"]
+
+        self.assertEqual(
+            conflict["content"]["application/json"]["schema"],
+            {"$ref": "#/components/schemas/PositionCreateConflictResponse"},
+        )
+        schemas = self.openapi["components"]["schemas"]
+        self.assertIn("OpenPositionExistsDetail", schemas)
+        self.assertIn("AmbiguousOpenPositionDetail", schemas)
+        self.assertEqual(
+            set(schemas["OpenPositionExistsDetail"]["required"]),
+            {"code", "message", "position_public_id"},
+        )
+        contract = JOURNAL_BETA_CONTRACT.lifecycle.same_side_open_conflict
+        self.assertEqual(contract.http_status, 409)
+        self.assertEqual(contract.code, "OPEN_POSITION_EXISTS")
+        self.assertEqual(contract.position_reference_field, "position_public_id")
+        self.assertEqual(contract.recovery_event, "ADD")
 
     def test_empty_ceiling_publishes_only_core_user_settings_fields(self):
         with patch(
