@@ -192,12 +192,6 @@ export default function PositionDetailPage() {
 
         setIsSavingMetadata(true)
         try {
-            // Using a specialized endpoint or general update endpoint
-            // Currently using generic update which might need to handle nested metadata
-            // Assuming backend supports accepting flat metadata fields in PositionUpdate or we need to call a metadata endpoint
-            // BUT implementation plan says: Enhance `update_position` to allow updating `asset_metadata`.
-            // So we pass metadata in the body.
-
             await positionsAPI.update(token, position.routeId, {
                 asset_metadata: {
                     sector: metadataForm.sector,

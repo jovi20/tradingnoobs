@@ -41,7 +41,7 @@ test('confirmed icon-only controls expose accessible names', () => {
   assert.match(positions, /aria-label=\{`\$\{expandedId === position\.id \? '收起' : '展开'\}/)
   assert.match(positionDetail, /aria-label="返回交易记录"/)
   assert.match(positionDetail, /aria-label="关闭修改交易记录对话框"/)
-  assert.match(positionDetail, /aria-label="关闭编辑资产属性对话框"/)
+  assert.match(positionDetail, /aria-label="关闭编辑行业板块对话框"/)
   assert.match(addBatch, /aria-label="返回持仓详情"/)
   assert.match(newPosition, /aria-label="返回交易记录"/)
   assert.match(lifecycleModals, /aria-label="关闭交易叙事编辑"/)

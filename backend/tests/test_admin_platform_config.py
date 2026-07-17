@@ -83,7 +83,7 @@ class AdminPlatformConfigTests(unittest.TestCase):
         self.assertEqual(setting.value, "https://api.openai.com/v1")
 
     def test_integration_credential_is_encrypted_at_rest_and_masked_in_response(self):
-        raw_secret = "sk-live-1234567890abcdef"
+        raw_secret = "test-openai-secret-1234567890abcdef"
         response = self.client.put(
             "/api/admin/platform/integrations/openai/api_key",
             json={
