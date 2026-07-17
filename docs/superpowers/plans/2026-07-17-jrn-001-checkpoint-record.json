@@ -5,12 +5,12 @@
   "branch": "dev",
   "status": "REVIEW_PENDING",
   "release_status": "NOT_READY_FOR_PRODUCTION",
-  "recorded_at": "2026-07-17T17:27:13+08:00",
+  "recorded_at": "2026-07-17T18:38:17+08:00",
   "implementation_base_commit": "430e37ff691ad0064ef71996fe804ec26a65b1d8",
-  "implementation_checkpoint_commit": "07d4012cd70d5bc5824f95ad2baaab5a9cea1661",
+  "implementation_checkpoint_commit": "43ecefa30a7e944dd102b33e9ec0e3a04bfc3a98",
   "record_commit_resolution": "git log -1 --format=%H -- docs/superpowers/plans/2026-07-17-jrn-001-checkpoint-record.json",
   "review_subject": {
-    "commit": "07d4012cd70d5bc5824f95ad2baaab5a9cea1661",
+    "commit": "43ecefa30a7e944dd102b33e9ec0e3a04bfc3a98",
     "plan_path": "docs/superpowers/plans/2026-07-16-dev-trading-journal-development-plan.md",
     "plan_blob": "b5ee6c8afd8d6262231223536fc163d4ca825bbc",
     "machine_contract_path": "backend/app_config/journal_beta_v1.json",
@@ -60,6 +60,7 @@
     {"status": "M", "path": "backend/services/market_data_service.py"},
     {"status": "M", "path": "backend/services/platform_config_service.py"},
     {"status": "A", "path": "backend/services/position_instrument_projection_service.py"},
+    {"status": "M", "path": "backend/services/public_id_service.py"},
     {"status": "M", "path": "backend/services/trading_position_read_service.py"},
     {"status": "M", "path": "backend/services/truth_legacy_projection_service.py"},
     {"status": "M", "path": "backend/tests/test_admin_platform_config.py"},
@@ -74,6 +75,7 @@
     {"status": "M", "path": "backend/tests/test_public_id_nested_routes.py"},
     {"status": "M", "path": "backend/tests/test_release_contract_schema.py"},
     {"status": "M", "path": "backend/tests/test_release_docs_boundaries.py"},
+    {"status": "M", "path": "backend/tests/test_timeline_home_router.py"},
     {"status": "M", "path": "backend/tests/test_trading_position_lifecycle_router.py"},
     {"status": "M", "path": "docs/DEVELOPER_GUIDE.md"},
     {"status": "M", "path": "docs/TODO.md"},
@@ -123,45 +125,45 @@
     "playwright_chromium": "149.0.7827.55"
   },
   "verification_source": {
-    "commit": "07d4012cd70d5bc5824f95ad2baaab5a9cea1661",
+    "commit": "43ecefa30a7e944dd102b33e9ec0e3a04bfc3a98",
     "source_materialization": {
-      "archive_command": "git archive --format=tar --output=/private/tmp/tradingnoobs-jrn001-07d4012.tar 07d4012cd70d5bc5824f95ad2baaab5a9cea1661",
-      "immutable_archive": "/private/tmp/tradingnoobs-jrn001-07d4012.tar",
-      "archive_sha256": "6cdddbe38a86c98708a64b436c848bb419772b8f706d2ed47510c8c1d8cffe62",
-      "embedded_commit_from_git_get_tar_commit_id": "07d4012cd70d5bc5824f95ad2baaab5a9cea1661",
-      "working_copy": "/private/tmp/tradingnoobs-jrn001-07d4012",
+      "archive_command": "git archive --format=tar --output=/private/tmp/tradingnoobs-jrn001-43ecefa.tar 43ecefa30a7e944dd102b33e9ec0e3a04bfc3a98",
+      "immutable_archive": "/private/tmp/tradingnoobs-jrn001-43ecefa.tar",
+      "archive_sha256": "b15fe8e634040195e7cb1abaf7676dc363050a61687ca7ea76ce5f2a5255e371",
+      "embedded_commit_from_git_get_tar_commit_id": "43ecefa30a7e944dd102b33e9ec0e3a04bfc3a98",
+      "working_copy": "/private/tmp/tradingnoobs-jrn001-43ecefa",
       "post_run_note": "Next dev rewrote tracked frontend/next-env.d.ts to its dev route-types path while Playwright ran; that expected generated-file mutation was restored after the run. The immutable tar, not the mutable working copy, is the exact-source artifact."
     },
-    "dependency_reuse": "APFS clone copies of the existing verified backend venv and frontend node_modules were placed inside the unpacked archive. Backend, frontend, Alembic, build, browser, and PostgreSQL commands began from source materialized by the immutable exact-commit archive. Git range/diff and added-secret checks instead ran in the main repository against immutable base/head objects; the scanner blob at 07d4012 is 7dbb68d6881e03cc38405b2ec1a130d0baf11e36. Dependencies, build output, traces, and other generated files are not part of the archive identity.",
+    "dependency_reuse": "APFS clone copies of the existing verified backend venv and frontend node_modules were placed inside the unpacked archive. Backend, frontend, Alembic, build, browser, and PostgreSQL commands began from source materialized by the immutable exact-commit archive. Git range/diff and added-secret checks instead ran in the main repository against immutable base/head objects; the scanner blob at 43ecefa is 7dbb68d6881e03cc38405b2ec1a130d0baf11e36. Dependencies, build output, traces, and other generated files are not part of the archive identity.",
     "postgresql_fixture": {
-      "initdb": "/opt/homebrew/opt/postgresql@16/bin/initdb -D /private/tmp/jrn001-pg-07d4012/data --encoding=UTF8 --locale=C --username=wsm --auth-local=trust --auth-host=reject",
+      "initdb": "/opt/homebrew/opt/postgresql@16/bin/initdb -D /private/tmp/jrn001-pg-43ecefa/data --encoding=UTF8 --locale=C --username=wsm --auth-local=trust --auth-host=reject",
       "server": "postgres (PostgreSQL) 16.14 (Homebrew)",
-      "start": "/opt/homebrew/opt/postgresql@16/bin/pg_ctl -D /private/tmp/jrn001-pg-07d4012/data -l /private/tmp/jrn001-pg-07d4012/postgres.log -o \"-c listen_addresses='' -c unix_socket_directories=/private/tmp/jrn001-pg-07d4012/socket -c unix_socket_permissions=0700 -c port=55434\" -w start",
-      "createdb": "/opt/homebrew/opt/postgresql@16/bin/createdb -h /private/tmp/jrn001-pg-07d4012/socket -p 55434 -U wsm jrn001",
-      "listen_policy": "listen_addresses='' with a mode-0700 Unix socket at /private/tmp/jrn001-pg-07d4012/socket; pg_isready passed and lsof found no TCP listener on port 55434",
+      "start": "/opt/homebrew/opt/postgresql@16/bin/pg_ctl -D /private/tmp/jrn001-pg-43ecefa/data -l /private/tmp/jrn001-pg-43ecefa/postgres.log -o \"-c listen_addresses='' -c unix_socket_directories=/private/tmp/jrn001-pg-43ecefa/socket -c unix_socket_permissions=0700 -c port=55435\" -w start",
+      "createdb": "/opt/homebrew/opt/postgresql@16/bin/createdb -h /private/tmp/jrn001-pg-43ecefa/socket -p 55435 -U wsm jrn001",
+      "listen_policy": "listen_addresses='' with a mode-0700 Unix socket at /private/tmp/jrn001-pg-43ecefa/socket; pg_isready passed and lsof found no TCP listener on port 55435",
       "database": "fresh jrn001 database on the private Unix socket; each test used and dropped a unique schema",
-      "cleanup": "/opt/homebrew/opt/postgresql@16/bin/pg_ctl -D /private/tmp/jrn001-pg-07d4012/data -m fast -w stop succeeded; no test server remains running"
+      "cleanup": "/opt/homebrew/opt/postgresql@16/bin/pg_ctl -D /private/tmp/jrn001-pg-43ecefa/data -m fast -w stop succeeded; post-stop pg_isready returned no response and no test server remains running"
     },
     "browser_trace_artifacts": [
-      {"project": "desktop-1440x900", "flow": "same-side ADD", "sha256": "bf4bdd29785b1f4e5274c4551ab2c341a2b5bd011b5e98dcfd72a244c58edf4a"},
-      {"project": "mobile-390x844", "flow": "same-side ADD", "sha256": "af80fe1dfb199411c498339993815ccb37af1308e3572346f55869676b4f1030"},
-      {"project": "desktop-1440x900", "flow": "duplicate-OPEN race to ADD", "sha256": "a4f2705616e4393aad1a3571ef0a61527c430a79d2d7e6dbf42c4c31e427b72c"},
-      {"project": "mobile-390x844", "flow": "duplicate-OPEN race to ADD", "sha256": "fe06faa5224667223966bc61cc9c1e1db97956f0f5396193c16cbd14186e777d"}
+      {"project": "desktop-1440x900", "flow": "same-side ADD", "sha256": "5dcc334eb047c6e4769a76b0f09ead09af266b484d5d81bb3f7d7c17a990ecf0"},
+      {"project": "mobile-390x844", "flow": "same-side ADD", "sha256": "3205bed796efca913552acb53cf627d9144486bdccf52c91cc2437e30dd74403"},
+      {"project": "desktop-1440x900", "flow": "duplicate-OPEN race to ADD", "sha256": "e421d63ff4c270cf0175ac0effe96f99c2204d15f85a81042144cb6a8a47e3ad"},
+      {"project": "mobile-390x844", "flow": "duplicate-OPEN race to ADD", "sha256": "c6ace8aeaa397433b31270a9f75717fc1597a699864ecaab384af09c54e7518c"}
     ],
     "output_retention": "The checkpoint record persists commands and summarized results. Playwright traces, Next build/dev artifacts, and PostgreSQL logs remain in the disposable /private/tmp fixtures; other command stdout/stderr was observed in the execution session but was not committed as a separate log artifact. Source tests are independently rerunnable by unpacking the immutable archive and supplying the recorded dependency versions; Git range/diff/secret commands require a repository that contains the recorded immutable base/head objects.",
-    "sandbox_note": "The worktree production-build attempt failed only because Turbopack could not bind its internal local port inside the filesystem sandbox; the exact-archive build outside that sandbox passed 14/14 generated pages. PostgreSQL initdb likewise required the sandbox-external shared-memory environment."
+    "sandbox_note": "The exact-archive production-build attempt inside the filesystem sandbox failed only because Turbopack could not bind its internal local port; the same exact-archive build outside that sandbox passed 14/14 generated pages. PostgreSQL initdb and Unix-socket access likewise required the sandbox-external shared-memory and local-socket environment."
   },
   "verification": [
     {
       "command": "cd backend && venv/bin/python -m pytest -q",
-      "result": "PASS on exact checkpoint archive: 446 passed, 2 PostgreSQL-env skips, 24 pre-existing deprecation warnings"
+      "result": "PASS on exact checkpoint archive: 449 passed, 2 PostgreSQL-env skips, 24 pre-existing deprecation warnings"
     },
     {
-      "command": "cd backend && venv/bin/python -m pytest -q tests/test_journal_baseline_profile.py tests/test_release_contract_schema.py tests/test_optional_route_runtime_guards.py tests/test_optional_service_runtime_guards.py tests/test_platform_config_service.py tests/test_position_truth_bridge_router.py tests/test_trading_position_lifecycle_router.py tests/test_legacy_truth_sync.py tests/test_openapi_contracts.py tests/test_public_id_nested_routes.py tests/test_public_id_leaf_routes.py tests/test_admin_platform_config.py tests/test_release_docs_boundaries.py",
-      "result": "PASS on exact checkpoint archive: 150 passed, 24 pre-existing deprecation warnings"
+      "command": "cd backend && venv/bin/python -m pytest -q tests/test_journal_baseline_profile.py tests/test_release_contract_schema.py tests/test_optional_route_runtime_guards.py tests/test_optional_service_runtime_guards.py tests/test_platform_config_service.py tests/test_position_truth_bridge_router.py tests/test_trading_position_lifecycle_router.py tests/test_legacy_truth_sync.py tests/test_openapi_contracts.py tests/test_public_id_nested_routes.py tests/test_public_id_leaf_routes.py tests/test_admin_platform_config.py tests/test_release_docs_boundaries.py tests/test_timeline_home_router.py",
+      "result": "PASS on exact checkpoint archive: 177 passed, 24 pre-existing deprecation warnings"
     },
     {
-      "command": "cd backend && env 'JRN001_POSTGRES_URL=postgresql+psycopg2://wsm@/jrn001?host=/private/tmp/jrn001-pg-07d4012/socket&port=55434' venv/bin/python -m pytest -q tests/test_platform_config_postgresql.py",
+      "command": "cd backend && env 'JRN001_POSTGRES_URL=postgresql+psycopg2://wsm@/jrn001?host=/private/tmp/jrn001-pg-43ecefa/socket&port=55435' venv/bin/python -m pytest -q tests/test_platform_config_postgresql.py",
       "result": "PASS on exact checkpoint archive against disposable PostgreSQL 16.14: 2 passed; committed-state reads did not flush pending ORM state and real UndefinedTable abort recovery preserved caller query/commit"
     },
     {
@@ -197,20 +199,20 @@
       "result": "PASS on exact checkpoint archive: 8 passed"
     },
     {
-      "command": "git diff --name-status 430e37ff691ad0064ef71996fe804ec26a65b1d8 07d4012cd70d5bc5824f95ad2baaab5a9cea1661 --",
-      "result": "PASS: exactly the 66 changed_files entries recorded above"
+      "command": "git diff --name-status 430e37ff691ad0064ef71996fe804ec26a65b1d8 43ecefa30a7e944dd102b33e9ec0e3a04bfc3a98 --",
+      "result": "PASS: exactly the 68 changed_files entries recorded above"
     },
     {
-      "command": "git diff --exit-code 430e37ff691ad0064ef71996fe804ec26a65b1d8 07d4012cd70d5bc5824f95ad2baaab5a9cea1661 -- backend/alembic",
+      "command": "git diff --exit-code 430e37ff691ad0064ef71996fe804ec26a65b1d8 43ecefa30a7e944dd102b33e9ec0e3a04bfc3a98 -- backend/alembic",
       "result": "PASS: JRN-001 adds no Alembic revision"
     },
     {
-      "command": "git diff --check 430e37ff691ad0064ef71996fe804ec26a65b1d8 07d4012cd70d5bc5824f95ad2baaab5a9cea1661",
+      "command": "git diff --check 430e37ff691ad0064ef71996fe804ec26a65b1d8 43ecefa30a7e944dd102b33e9ec0e3a04bfc3a98",
       "result": "PASS"
     },
     {
-      "command": "python3 scripts/check_added_secrets.py --base 430e37ff691ad0064ef71996fe804ec26a65b1d8 --head 07d4012cd70d5bc5824f95ad2baaab5a9cea1661",
-      "result": "PASS: ruleset added-secrets-v1, ruleset SHA-256 c29aa8c108166333adf9a5147a9def42795a5ac0ec1f0e1d37fb87fb4d457bd6, 5480 added lines, 0 findings"
+      "command": "python3 scripts/check_added_secrets.py --base 430e37ff691ad0064ef71996fe804ec26a65b1d8 --head 43ecefa30a7e944dd102b33e9ec0e3a04bfc3a98",
+      "result": "PASS: ruleset added-secrets-v1, ruleset SHA-256 c29aa8c108166333adf9a5147a9def42795a5ac0ec1f0e1d37fb87fb4d457bd6, 5864 added lines, 0 findings"
     }
   ],
   "excluded_user_worktree": [
@@ -322,11 +324,34 @@
           ]
         }
       ]
+    },
+    {
+      "implementation_checkpoint_commit": "07d4012cd70d5bc5824f95ad2baaab5a9cea1661",
+      "record_commit": "cc38e0d81d8f2f91c48ee360b218de9ece30d329",
+      "plan_blob": "b5ee6c8afd8d6262231223536fc163d4ca825bbc",
+      "machine_contract_blob": "30cca42076aba0cd3521befd09b9b17bf7a00ba0",
+      "status": "CHANGES_REQUIRED",
+      "reviews": [
+        {
+          "reviewer": "jrn001_07d_backend_security_review",
+          "verdict": "CHANGES_REQUIRED",
+          "findings": [
+            "Timeline and shared legacy position/batch resolution validated Position.user_id but not the linked TradingAccount.user_id, allowing inconsistent rows to leak another owner's account metadata or affect trade counts.",
+            "Exact instrument provenance did not require AssetMaster.canonical_code to equal the normalized symbol, so a contradictory canonical graph could still authorize direct financial writes.",
+            "Lifecycle reads coerced missing canonical quantities to zero, while slot and write guards treated the same accounting state as unresolved, producing contradictory status and quantity contracts."
+          ]
+        },
+        {
+          "reviewer": "jrn001_07d_crosslayer_browser_review",
+          "verdict": "APPROVE",
+          "findings": []
+        }
+      ]
     }
   ],
   "independent_review_gate": {
     "required_approvals": 2,
-    "reviewed_commit_must_equal": "07d4012cd70d5bc5824f95ad2baaab5a9cea1661",
+    "reviewed_commit_must_equal": "43ecefa30a7e944dd102b33e9ec0e3a04bfc3a98",
     "status": "PENDING",
     "reviews": [],
     "invalidation_rule": "Any implementation or semantic plan change creates a new checkpoint SHA and invalidates every earlier verdict."
