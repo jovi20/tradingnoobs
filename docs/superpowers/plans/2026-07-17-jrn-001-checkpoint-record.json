@@ -3,39 +3,47 @@
   "record_kind": "JRN_TASK_CHECKPOINT",
   "task_id": "JRN-001",
   "branch": "dev",
-  "status": "SUPERSEDED_CHANGES_REQUIRED",
+  "status": "REVIEW_PENDING",
   "release_status": "NOT_READY_FOR_PRODUCTION",
-  "recorded_at": "2026-07-17T14:23:00+08:00",
+  "recorded_at": "2026-07-17T14:48:41+08:00",
   "implementation_base_commit": "430e37ff691ad0064ef71996fe804ec26a65b1d8",
-  "implementation_checkpoint_commit": "cf4766de0e843b0a58a1882b30b3fe8556e1a23a",
+  "implementation_checkpoint_commit": "7ec29b1ec875aa0f4d98bb656092ba4b8a9a7010",
   "record_commit_resolution": "git log -1 --format=%H -- docs/superpowers/plans/2026-07-17-jrn-001-checkpoint-record.json",
   "review_subject": {
-    "commit": "cf4766de0e843b0a58a1882b30b3fe8556e1a23a",
+    "commit": "7ec29b1ec875aa0f4d98bb656092ba4b8a9a7010",
     "plan_path": "docs/superpowers/plans/2026-07-16-dev-trading-journal-development-plan.md",
-    "plan_blob": "4d17554cbca54a4bcb1276adc73eeacbaf934b9f",
+    "plan_blob": "b5ee6c8afd8d6262231223536fc163d4ca825bbc",
     "machine_contract_path": "backend/app_config/journal_beta_v1.json",
-    "machine_contract_blob": "7b4f0830c4c2414daa5efe3439d10ec01f71cc83",
-    "typed_loader_blob": "25ff1c511c71d9150bb4769d5765dc015237f287",
-    "adr_blob": "138c7c5d5505431728ec2549d2df64de0f9a3d3e",
-    "generated_frontend_contract_blob": "605cb3ad855e2845ff716be5889d06096409bef3"
+    "machine_contract_blob": "30cca42076aba0cd3521befd09b9b17bf7a00ba0",
+    "typed_loader_blob": "7954342d8e15070543d91a2684fb9944a5c6c9bf",
+    "adr_blob": "df72a4e9259eeea040ece1e9bf542eda20a43bc7",
+    "generated_frontend_contract_blob": "0d1b53386713ca84236b1667723a40e99f7c0b87"
   },
   "scope_summary": [
     "Freeze the journal Beta machine contract and typed parity checks, including repeat/overlap/incremental IBKR source-bound semantics without claiming the later implementation exists.",
-    "Enforce deployment ceiling AND runtime rollout for optional capabilities, with fail-closed database flag reads and no fabricated FX fallback.",
-    "Enforce raw ASCII-before-trim full instrument identity, HEDGE_BY_DIRECTION same-side OPEN rejection, and structured API errors.",
-    "Keep global AssetMetadata system-owned and project canonical instrument identity read-only across create, list, detail, filters, and check-open.",
-    "Remove ordinary metadata-edit and optional Market/AI/risk UI reachability from journal Beta product surfaces."
+    "Keep the unsafe legacy generic Import deny-only until JRN-011/JRN-012: three API paths return FEATURE_DISABLED, stay out of OpenAPI, do not import the in-memory handler, and have no usable frontend surface.",
+    "Enforce deployment ceiling AND runtime rollout for optional capabilities, with committed-state connection SAVEPOINT reads that do not flush or poison caller pending state.",
+    "Enforce raw ASCII-before-trim full instrument identity and HEDGE_BY_DIRECTION same-side OPEN rejection from canonical truth even when mutable legacy status, direction, or symbol drifts.",
+    "Keep pre-upgrade identity projection read-only; only canonical or exact identity evidence may authorize check-open or ADD.",
+    "Preserve structured OPEN_POSITION_EXISTS position identity so a frontend submit race can recover into the canonical ADD flow.",
+    "Keep global AssetMetadata system-owned and project canonical instrument identity/status/side across create, list, detail, filters, and check-open.",
+    "Add real Playwright behavior coverage at 1440x900 and 390x844, plus a versioned exact-SHA added-line secret scanner."
   ],
   "frozen_import_semantics": {
     "generic_csv_xlsx": "ONE_TIME_BOOTSTRAP",
+    "generic_implementation_gate": "JRN_011_AND_JRN_012",
+    "generic_preimplementation_policy": "DENY_ONLY_404_FEATURE_DISABLED",
     "ibkr_flex_xml_v1": "SAME_BINDING_DUPLICATE_OVERLAP_INCREMENTAL_ALLOWED",
+    "ibkr_implementation_gate": "JRN_013_THROUGH_JRN_015",
     "new_execution_identity": "source_binding_id + ibExecID",
-    "implementation_gate": "JRN-013_THROUGH_JRN-015",
-    "current_implementation_claim": "NOT_IMPLEMENTED; existing BrokerExecution idempotency is RAW-layer deduplication only"
+    "current_implementation_claim": "NEITHER NEW IMPORT ADAPTER IS IMPLEMENTED; legacy Import is deny-only and existing BrokerExecution idempotency is RAW-layer deduplication only"
   },
   "changed_files": [
+    {"status": "M", "path": ".gitignore"},
     {"status": "M", "path": "backend/app_config/journal_beta_v1.json"},
     {"status": "M", "path": "backend/app_config/release_contract.py"},
+    {"status": "M", "path": "backend/main.py"},
+    {"status": "M", "path": "backend/routers/disabled_capabilities.py"},
     {"status": "M", "path": "backend/routers/position_market_analysis.py"},
     {"status": "M", "path": "backend/routers/positions.py"},
     {"status": "M", "path": "backend/routers/timeline.py"},
@@ -56,77 +64,109 @@
     {"status": "M", "path": "backend/tests/test_public_id_nested_routes.py"},
     {"status": "M", "path": "backend/tests/test_release_contract_schema.py"},
     {"status": "M", "path": "backend/tests/test_trading_position_lifecycle_router.py"},
+    {"status": "M", "path": "docs/TODO.md"},
     {"status": "M", "path": "docs/adr/0001-trading-journal-beta-release-contract.md"},
+    {"status": "M", "path": "docs/project-summary-and-roadmap.md"},
+    {"status": "M", "path": "docs/release-rollback-playbook.md"},
     {"status": "M", "path": "docs/superpowers/plans/2026-07-16-dev-trading-journal-development-plan.md"},
+    {"status": "A", "path": "docs/superpowers/plans/2026-07-17-jrn-001-checkpoint-record.json"},
+    {"status": "M", "path": "docs/superpowers/plans/README.md"},
+    {"status": "M", "path": "frontend/README.md"},
     {"status": "M", "path": "frontend/app/(product)/positions/[id]/page.tsx"},
+    {"status": "M", "path": "frontend/app/(product)/positions/import/page.tsx"},
     {"status": "M", "path": "frontend/app/(product)/positions/new/page.tsx"},
+    {"status": "M", "path": "frontend/app/(product)/positions/page.tsx"},
+    {"status": "M", "path": "frontend/components/CustomSelect.tsx"},
+    {"status": "M", "path": "frontend/components/navigation/CommandPalette.tsx"},
     {"status": "M", "path": "frontend/components/positions/lifecycle/LifecycleMigrationPanel.tsx"},
     {"status": "M", "path": "frontend/components/positions/lifecycle/LifecycleWorkbench.tsx"},
+    {"status": "M", "path": "frontend/components/timeline/TimelineZeroState.tsx"},
+    {"status": "A", "path": "frontend/e2e/jrn-001-new-position.spec.ts"},
     {"status": "M", "path": "frontend/lib/adapters/trading.ts"},
     {"status": "M", "path": "frontend/lib/api.ts"},
     {"status": "M", "path": "frontend/lib/generated/release-contract.ts"},
+    {"status": "M", "path": "frontend/package-lock.json"},
+    {"status": "M", "path": "frontend/package.json"},
+    {"status": "A", "path": "frontend/playwright.config.ts"},
     {"status": "M", "path": "frontend/tests/journal-baseline-product-surfaces.test.mts"},
     {"status": "M", "path": "frontend/tests/market-data-status-presentation.test.mts"},
     {"status": "M", "path": "frontend/tests/positions-api.test.mts"},
     {"status": "M", "path": "frontend/tests/trading-adapter.test.mts"},
     {"status": "M", "path": "frontend/tests/truth-first-writes.test.mts"},
-    {"status": "M", "path": "frontend/tests/ui-copy-accessibility.test.mts"}
+    {"status": "M", "path": "frontend/tests/ui-copy-accessibility.test.mts"},
+    {"status": "A", "path": "scripts/check_added_secrets.py"}
   ],
   "verification_environment": {
     "python": "3.13.5",
     "node": "v24.18.0",
     "npm": "11.16.0",
     "git": "2.39.3 Apple Git-146",
-    "alembic": "1.18.5"
+    "alembic": "1.18.5",
+    "playwright": "1.61.1",
+    "playwright_chromium": "149.0.7827.55"
+  },
+  "verification_source": {
+    "commit": "7ec29b1ec875aa0f4d98bb656092ba4b8a9a7010",
+    "source_materialization": "git archive of the exact implementation checkpoint into an isolated /private/tmp tree",
+    "dependency_reuse": "Existing verified backend venv and frontend node_modules were reused; source, generated files, tests, build output, and browser server all ran from the exact archived checkpoint.",
+    "first_browser_snapshot_attempt": "INFRASTRUCTURE_ONLY_FAILURE: Turbopack rejected a node_modules symlink outside the snapshot root; rerun with a copied dependency directory passed 4/4."
   },
   "verification": [
     {
       "command": "cd backend && venv/bin/python -m pytest -q",
-      "result": "PASS: 427 passed, 24 pre-existing deprecation warnings"
+      "result": "PASS on exact checkpoint archive: 434 passed, 24 pre-existing deprecation warnings"
     },
     {
-      "command": "JRN-001 focused backend contract/capability/identity/lifecycle suite",
-      "result": "PASS: 110 passed"
+      "command": "cd backend && venv/bin/python -m pytest -q tests/test_journal_baseline_profile.py tests/test_release_contract_schema.py tests/test_optional_route_runtime_guards.py tests/test_optional_service_runtime_guards.py tests/test_platform_config_service.py tests/test_position_truth_bridge_router.py tests/test_trading_position_lifecycle_router.py tests/test_legacy_truth_sync.py tests/test_openapi_contracts.py tests/test_public_id_nested_routes.py tests/test_admin_platform_config.py",
+      "result": "PASS on exact checkpoint archive: 131 passed, 24 pre-existing deprecation warnings"
     },
     {
       "command": "cd frontend && npm test",
-      "result": "PASS: 159 passed"
+      "result": "PASS on exact checkpoint archive: 159 passed"
+    },
+    {
+      "command": "cd frontend && npm run test:browser",
+      "result": "PASS on exact checkpoint archive: 4 passed across desktop-1440x900 and mobile-390x844"
     },
     {
       "command": "cd frontend && npx tsc --noEmit",
-      "result": "PASS"
+      "result": "PASS on exact checkpoint archive"
     },
     {
       "command": "cd frontend && npm run lint",
-      "result": "PASS"
+      "result": "PASS on exact checkpoint archive"
     },
     {
       "command": "cd frontend && npm run build",
-      "result": "PASS outside the filesystem sandbox; the first sandboxed Turbopack attempt was infrastructure-only EPERM while binding a local CSS worker port"
+      "result": "PASS on exact checkpoint archive outside the filesystem sandbox"
     },
     {
       "command": "cd frontend && npm run check:release-contract",
-      "result": "PASS: generated TypeScript equals the machine contract"
+      "result": "PASS on exact checkpoint archive: generated TypeScript equals the machine contract"
     },
     {
       "command": "cd backend && venv/bin/alembic -c alembic.ini heads",
-      "result": "PASS: single head 9cad10111213"
+      "result": "PASS on exact checkpoint archive: single head 9cad10111213"
     },
     {
       "command": "cd backend && venv/bin/python -m pytest -q tests/test_alembic_chain.py tests/test_market_data_alembic_adoption.py",
-      "result": "PASS: 8 passed"
+      "result": "PASS on exact checkpoint archive: 8 passed"
     },
     {
-      "command": "git diff --exit-code -- backend/alembic",
+      "command": "git diff --name-status 430e37ff691ad0064ef71996fe804ec26a65b1d8 7ec29b1ec875aa0f4d98bb656092ba4b8a9a7010 --",
+      "result": "PASS: exactly the 56 changed_files entries recorded above"
+    },
+    {
+      "command": "git diff --exit-code 430e37ff691ad0064ef71996fe804ec26a65b1d8 7ec29b1ec875aa0f4d98bb656092ba4b8a9a7010 -- backend/alembic",
       "result": "PASS: JRN-001 adds no Alembic revision"
     },
     {
-      "command": "git diff --check and git diff --cached --check",
+      "command": "git diff --check 430e37ff691ad0064ef71996fe804ec26a65b1d8 7ec29b1ec875aa0f4d98bb656092ba4b8a9a7010",
       "result": "PASS"
     },
     {
-      "command": "staged added-line credential pattern scan",
-      "result": "PASS: 3048 added lines scanned; no private key, provider token, live credential, credentialed URL, or long secret assignment matched"
+      "command": "python3 scripts/check_added_secrets.py --base 430e37ff691ad0064ef71996fe804ec26a65b1d8 --head 7ec29b1ec875aa0f4d98bb656092ba4b8a9a7010",
+      "result": "PASS: ruleset added-secrets-v1, ruleset SHA-256 c29aa8c108166333adf9a5147a9def42795a5ac0ec1f0e1d37fb87fb4d457bd6, 4189 added lines, 0 findings"
     }
   ],
   "excluded_user_worktree": [
@@ -140,46 +180,52 @@
     {"status": "UNTRACKED", "path": ".claude/"},
     {"status": "UNTRACKED", "path": "backend/requirements-dev.txt"}
   ],
+  "superseded_checkpoints": [
+    {
+      "implementation_checkpoint_commit": "cf4766de0e843b0a58a1882b30b3fe8556e1a23a",
+      "record_commit": "a0d405db8e5256f7cf1c24a2e99b87d5d6467bfa",
+      "plan_blob": "4d17554cbca54a4bcb1276adc73eeacbaf934b9f",
+      "machine_contract_blob": "7b4f0830c4c2414daa5efe3439d10ec01f71cc83",
+      "status": "CHANGES_REQUIRED",
+      "reviews": [
+        {
+          "reviewer": "jrn001_checkpoint_backend_review",
+          "verdict": "CHANGES_REQUIRED",
+          "findings": [
+            "Canonical same-side OPEN could be duplicated after mutable legacy status or direction drift.",
+            "Truth-present identity without exact journal_identity_v1 proof was promoted from legacy columns.",
+            "Symbol filtering used raw legacy storage while responses used canonical projection.",
+            "Session.begin_nested flushed unrelated pending state before the runtime-flag SAVEPOINT and could poison the caller session."
+          ]
+        },
+        {
+          "reviewer": "jrn001_checkpoint_crosslayer_review",
+          "verdict": "CHANGES_REQUIRED",
+          "findings": [
+            "Legacy Import could write a user-owned Position against another user's account and bypass canonical identity/atomicity.",
+            "Read-only pre-upgrade identity could enter check-open and subsequent ADD.",
+            "OPEN_POSITION_EXISTS discarded position_public_id in the frontend and could not recover a submit race into ADD.",
+            "Source-regex tests did not satisfy the real component/browser behavior Definition of Done."
+          ]
+        },
+        {
+          "reviewer": "jrn001_checkpoint_evidence_audit",
+          "verdict": "EVIDENCE_CHANGES_REQUIRED",
+          "findings": [
+            "Focused backend suite was a label rather than an executable command.",
+            "Alembic and diff checks were not bound to the recorded base..checkpoint range.",
+            "Credential scan omitted its executable command, rule digest, and exact SHA range."
+          ]
+        }
+      ]
+    }
+  ],
   "independent_review_gate": {
     "required_approvals": 2,
-    "reviewed_commit_must_equal": "cf4766de0e843b0a58a1882b30b3fe8556e1a23a",
-    "status": "CHANGES_REQUIRED",
-    "reviews": [
-      {
-        "reviewer": "jrn001_checkpoint_backend_review",
-        "reviewed_commit": "cf4766de0e843b0a58a1882b30b3fe8556e1a23a",
-        "verdict": "CHANGES_REQUIRED",
-        "findings": [
-          "Canonical same-side OPEN could be duplicated after mutable legacy status or direction drift.",
-          "Truth-present identity without exact journal_identity_v1 proof was promoted from legacy columns.",
-          "Symbol filtering used raw legacy storage while responses used canonical projection.",
-          "Session.begin_nested flushed unrelated pending state before the runtime-flag SAVEPOINT and could poison the caller session."
-        ]
-      },
-      {
-        "reviewer": "jrn001_checkpoint_crosslayer_review",
-        "reviewed_commit": "cf4766de0e843b0a58a1882b30b3fe8556e1a23a",
-        "verdict": "CHANGES_REQUIRED",
-        "findings": [
-          "Legacy Import could write a user-owned Position against another user's account and bypass canonical identity/atomicity.",
-          "Read-only pre-upgrade identity could enter check-open and subsequent ADD.",
-          "OPEN_POSITION_EXISTS discarded position_public_id in the frontend and could not recover a submit race into ADD.",
-          "Source-regex tests did not satisfy the real component/browser behavior Definition of Done."
-        ]
-      },
-      {
-        "reviewer": "jrn001_checkpoint_evidence_audit",
-        "reviewed_commit": "cf4766de0e843b0a58a1882b30b3fe8556e1a23a",
-        "verdict": "EVIDENCE_CHANGES_REQUIRED",
-        "findings": [
-          "Focused backend suite was a label rather than an executable command.",
-          "Alembic and diff checks were not bound to the recorded base..checkpoint range.",
-          "Credential scan omitted its executable command, rule digest, and exact SHA range."
-        ]
-      }
-    ],
+    "reviewed_commit_must_equal": "7ec29b1ec875aa0f4d98bb656092ba4b8a9a7010",
+    "status": "PENDING",
+    "reviews": [],
     "invalidation_rule": "Any implementation or semantic plan change creates a new checkpoint SHA and invalidates every earlier verdict."
   },
-  "superseded_by": "PENDING_NEW_CHECKPOINT",
-  "next_task_gate": "JRN-002 MUST NOT START until a replacement exact checkpoint receives two independent APPROVE verdicts and this record is updated."
+  "next_task_gate": "JRN-002 MUST NOT START until this exact replacement checkpoint receives two independent APPROVE verdicts and this record is updated."
 }
