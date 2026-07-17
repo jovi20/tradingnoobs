@@ -106,6 +106,8 @@ class ReleaseDocumentationBoundaryTests(unittest.TestCase):
         self.assertIn("`X-Migration-Fallback` 不在 OpenAPI 中且不能授予迁移权限", developer_guide)
         self.assertNotIn("只有显式 `X-Migration-Fallback", developer_guide)
         self.assertIn("不得恢复普通 `/api/positions` 路由上的 `X-Migration-Fallback`", rollback_addendum)
+        self.assertIn("不得在读取中触发 backfill、flush 或 commit", developer_guide)
+        self.assertIn("不得恢复 `GET /api/positions/{id}/truth-lifecycle` 的惰性 legacy backfill", rollback_addendum)
 
 
 if __name__ == "__main__":

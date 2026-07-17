@@ -1,5 +1,7 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
 
+import type { LifecycleDetailResponse } from '../lib/read-models'
+
 const user = {
     id: 1,
     public_id: 'user-public-id',
@@ -54,6 +56,103 @@ const existingPosition = {
     },
 }
 
+const lifecycleResponse = {
+    data: {
+        review_status: 'OPEN',
+        position_summary: {
+            public_id: existingPosition.truth_position_public_id,
+            route_public_id: existingPosition.public_id,
+            title: existingPosition.symbol,
+            status: 'OPEN',
+            side: 'LONG',
+            account: {
+                public_id: account.public_id,
+                label: account.name,
+            },
+            asset: {
+                symbol: existingPosition.symbol,
+                asset_label: existingPosition.symbol,
+                instrument_label: 'CRYPTO / SPOT / COINBASE',
+            },
+            opened_at: existingPosition.opened_at,
+            realized_pnl_gross: 0,
+            realized_pnl_net: 0,
+            total_fees: 0,
+            quantity_opened: 2.5,
+            quantity_closed: 0,
+            open_quantity: 2.5,
+            average_open_price: 65200,
+            base_currency: 'USD',
+            pnl_basis: {
+                cost_basis_method: 'FIFO',
+                realized_definition: 'Realized gross PnL less allocated fees',
+                unrealized_definition: 'Unavailable without market data',
+                fee_treatment: 'Included in realized net PnL',
+                fx_treatment: 'Account currency only',
+            },
+        },
+        thesis_block: {
+            source_event_public_id: 'event-open-public-id',
+            thesis: 'Add only through the canonical lifecycle.',
+            invalidation_rule: 'Exit if the setup is invalidated.',
+            planned_exit_rule: 'Review after the next lifecycle event.',
+            sizing_rationale: 'Manual journal entry.',
+            checklist_snapshot: [],
+        },
+        lifecycle_thread: {
+            nodes: [
+                {
+                    node_public_id: 'event-open-public-id',
+                    node_type: 'OPEN',
+                    occurred_at: existingPosition.opened_at,
+                    title: 'Initial open',
+                    summary: 'Opened 2 BTC/USD.',
+                    quantities: { quantity: 2, price: 65000, currency: 'USD' },
+                },
+                {
+                    node_public_id: 'event-add-public-id',
+                    node_type: 'ADD',
+                    occurred_at: '2026-07-17T01:00:00Z',
+                    title: 'Canonical ADD recorded',
+                    summary: 'Added 0.5 BTC/USD through the truth event route.',
+                    quantities: { quantity: 0.5, price: 66000, currency: 'USD' },
+                },
+            ],
+        },
+        result_summary: {
+            headline: 'Canonical ADD recorded',
+            summary: 'The position detail is rendered from the canonical lifecycle after the ADD.',
+            key_numbers: [
+                { label: 'Open quantity', value: '2.5' },
+                { label: 'Average price', value: '$65,200' },
+                { label: 'Realized PnL', value: '$0' },
+            ],
+        },
+        execution_quality: {
+            execution_quality: 'GOOD',
+            checklist_miss_count: 0,
+        },
+        emotion_path: { points: [] },
+        ledger_summary: {
+            account_currency: 'USD',
+            cash_effects: [],
+            total_fees: 0,
+            total_dividends: 0,
+            total_adjustments: 0,
+        },
+        evidence_list: { items: [] },
+        ai_sidecar: { items: [] },
+    },
+    meta: {
+        as_of: '2026-07-17T01:00:00Z',
+        generated_at: '2026-07-17T01:00:00Z',
+        freshness: 'FRESH',
+        source: 'MANUAL',
+        maturity: 'EARLY_SIGNAL',
+        value_status: 'FINAL',
+    },
+} satisfies LifecycleDetailResponse
+
 type ApiHandler = (route: Route, url: URL) => Promise<boolean>
 
 async function fulfillJson(route: Route, body: unknown, status = 200) {
@@ -65,6 +164,7 @@ async function fulfillJson(route: Route, body: unknown, status = 200) {
 }
 
 async function installApi(page: Page, handler: ApiHandler) {
+    const unexpectedRequests: string[] = []
     await page.addInitScript(() => {
         window.localStorage.setItem('tradingnoobs_token', 'browser-test-token')
     })
@@ -87,8 +187,31 @@ async function installApi(page: Page, handler: ApiHandler) {
             await fulfillJson(route, [])
             return
         }
+        if (
+            route.request().method() === 'GET'
+            && url.pathname === `/api/trading-positions/${existingPosition.public_id}/lifecycle`
+        ) {
+            await fulfillJson(route, { detail: 'Trading position not found' }, 404)
+            return
+        }
+        if (
+            route.request().method() === 'GET'
+            && url.pathname === `/api/positions/${existingPosition.public_id}`
+        ) {
+            await fulfillJson(route, existingPosition)
+            return
+        }
+        if (
+            route.request().method() === 'GET'
+            && url.pathname === `/api/positions/${existingPosition.public_id}/truth-lifecycle`
+        ) {
+            await fulfillJson(route, lifecycleResponse)
+            return
+        }
+        unexpectedRequests.push(`${route.request().method()} ${url.pathname}`)
         await fulfillJson(route, { detail: 'Unexpected test API request' }, 500)
     })
+    return unexpectedRequests
 }
 
 async function choose(page: Page, label: string, option: RegExp) {
@@ -118,7 +241,7 @@ test('complete identity preserves hedge-by-direction and ADD writes truth only',
     const truthWrites: unknown[] = []
     const legacyBatchWrites: string[] = []
 
-    await installApi(page, async (route, url) => {
+    const unexpectedRequests = await installApi(page, async (route, url) => {
         if (url.pathname === '/api/positions/check/open') {
             checkRequests.push(url)
             await fulfillJson(
@@ -127,20 +250,16 @@ test('complete identity preserves hedge-by-direction and ADD writes truth only',
             )
             return true
         }
-        if (url.pathname === `/api/positions/${existingPosition.public_id}/truth-lifecycle`) {
-            await fulfillJson(route, {
-                data: { position_summary: { public_id: existingPosition.truth_position_public_id } },
-                meta: {},
-            })
-            return true
-        }
-        if (url.pathname === `/api/trading-positions/${existingPosition.truth_position_public_id}/events`) {
+        if (
+            route.request().method() === 'POST'
+            && url.pathname === `/api/trading-positions/${existingPosition.truth_position_public_id}/events`
+        ) {
             truthWrites.push(route.request().postDataJSON())
-            await fulfillJson(route, { data: {}, meta: {} })
+            await fulfillJson(route, lifecycleResponse, 201)
             return true
         }
-        if (url.pathname.includes('/batches') && route.request().method() === 'POST') {
-            legacyBatchWrites.push(url.pathname)
+        if (url.pathname.includes('/batches') && route.request().method() !== 'GET') {
+            legacyBatchWrites.push(`${route.request().method()} ${url.pathname}`)
             await fulfillJson(route, {}, 500)
             return true
         }
@@ -190,13 +309,19 @@ test('complete identity preserves hedge-by-direction and ADD writes truth only',
     await page.getByRole('button', { name: '加仓到此仓位' }).click()
     await expect.poll(() => checkRequests.length).toBeGreaterThan(beforeAdd)
     await expect.poll(() => truthWrites.length).toBe(1)
+    await expect(page).toHaveURL(`/positions/${existingPosition.public_id}`)
+    await expect(page.getByRole('heading', { name: existingPosition.symbol, exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Canonical ADD recorded', exact: true })).toBeVisible()
+    await expect(page.getByText('Unexpected test API request', { exact: true })).toHaveCount(0)
     expect(truthWrites[0]).toMatchObject({
         event_type: 'ADD',
         quantity: 0.5,
         price: 66000,
         currency: 'USD',
     })
+    expect(truthWrites).toHaveLength(1)
     expect(legacyBatchWrites).toEqual([])
+    expect(unexpectedRequests).toEqual([])
     await expectNoHorizontalOverflow(page)
 })
 
@@ -207,7 +332,7 @@ test('non-ASCII is rejected and a duplicate-OPEN race recovers into ADD', async 
     const legacyBatchWrites: string[] = []
     let duplicateWon = false
 
-    await installApi(page, async (route, url) => {
+    const unexpectedRequests = await installApi(page, async (route, url) => {
         if (url.pathname === '/api/positions/check/open') {
             checkRequests.push(url)
             await fulfillJson(route, duplicateWon ? existingPosition : null)
@@ -225,20 +350,16 @@ test('non-ASCII is rejected and a duplicate-OPEN race recovers into ADD', async 
             }, 409)
             return true
         }
-        if (url.pathname === `/api/positions/${existingPosition.public_id}/truth-lifecycle`) {
-            await fulfillJson(route, {
-                data: { position_summary: { public_id: existingPosition.truth_position_public_id } },
-                meta: {},
-            })
-            return true
-        }
-        if (url.pathname === `/api/trading-positions/${existingPosition.truth_position_public_id}/events`) {
+        if (
+            route.request().method() === 'POST'
+            && url.pathname === `/api/trading-positions/${existingPosition.truth_position_public_id}/events`
+        ) {
             truthWrites.push(route.request().postDataJSON())
-            await fulfillJson(route, { data: {}, meta: {} })
+            await fulfillJson(route, lifecycleResponse, 201)
             return true
         }
-        if (url.pathname.includes('/batches') && route.request().method() === 'POST') {
-            legacyBatchWrites.push(url.pathname)
+        if (url.pathname.includes('/batches') && route.request().method() !== 'GET') {
+            legacyBatchWrites.push(`${route.request().method()} ${url.pathname}`)
             await fulfillJson(route, {}, 500)
             return true
         }
@@ -277,12 +398,18 @@ test('non-ASCII is rejected and a duplicate-OPEN race recovers into ADD', async 
     await page.getByRole('button', { name: '加仓到此仓位' }).focus()
     await page.keyboard.press('Enter')
     await expect.poll(() => truthWrites.length).toBe(1)
+    await expect(page).toHaveURL(`/positions/${existingPosition.public_id}`)
+    await expect(page.getByRole('heading', { name: existingPosition.symbol, exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Canonical ADD recorded', exact: true })).toBeVisible()
+    await expect(page.getByText('Unexpected test API request', { exact: true })).toHaveCount(0)
     expect(truthWrites[0]).toMatchObject({
         event_type: 'ADD',
         quantity: 0.5,
         price: 66000,
         currency: 'USD',
     })
+    expect(truthWrites).toHaveLength(1)
     expect(legacyBatchWrites).toEqual([])
+    expect(unexpectedRequests).toEqual([])
     await expectNoHorizontalOverflow(page)
 })

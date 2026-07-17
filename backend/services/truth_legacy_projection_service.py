@@ -5,7 +5,13 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
-from models import Position, PositionStatus, TradingPosition, TradingPositionStatus
+from models import (
+    Position,
+    PositionStatus,
+    TradingAccount,
+    TradingPosition,
+    TradingPositionStatus,
+)
 from services.legacy_truth_sync_service import legacy_position_truth_public_id
 
 
@@ -15,9 +21,17 @@ def resolve_truth_position_for_legacy(
     user_id: int,
     legacy_position: Position,
 ) -> TradingPosition | None:
-    return db.query(TradingPosition).filter(
+    if legacy_position.user_id != user_id:
+        return None
+
+    return db.query(TradingPosition).join(
+        TradingAccount,
+        TradingPosition.account_id == TradingAccount.id,
+    ).filter(
         TradingPosition.public_id == legacy_position_truth_public_id(legacy_position),
         TradingPosition.user_id == user_id,
+        TradingPosition.account_id == legacy_position.account_id,
+        TradingAccount.user_id == user_id,
     ).first()
 
 
@@ -26,9 +40,13 @@ def resolve_legacy_position_for_truth(
     *,
     truth_position: TradingPosition,
 ) -> Position | None:
-    candidates = db.query(Position).filter(
+    candidates = db.query(Position).join(
+        TradingAccount,
+        Position.account_id == TradingAccount.id,
+    ).filter(
         Position.user_id == truth_position.user_id,
         Position.account_id == truth_position.account_id,
+        TradingAccount.user_id == truth_position.user_id,
     ).all()
     return next(
         (
@@ -46,10 +64,20 @@ def project_truth_accounting_to_legacy(
     truth_position: TradingPosition,
     legacy_position: Position | None = None,
 ) -> Position | None:
-    legacy_position = legacy_position or resolve_legacy_position_for_truth(
-        db,
-        truth_position=truth_position,
-    )
+    if legacy_position is None:
+        legacy_position = resolve_legacy_position_for_truth(
+            db,
+            truth_position=truth_position,
+        )
+    elif (
+        legacy_position.user_id != truth_position.user_id
+        or legacy_position.account_id != truth_position.account_id
+        or db.query(TradingAccount.id).filter(
+            TradingAccount.id == truth_position.account_id,
+            TradingAccount.user_id == truth_position.user_id,
+        ).first() is None
+    ):
+        return None
     if legacy_position is None:
         return None
 
@@ -68,29 +96,60 @@ def project_truth_accounting_to_legacy(
     return legacy_position
 
 
+def resolve_user_truth_positions_for_legacy(
+    db: Session,
+    *,
+    user_id: int,
+) -> dict[int, TradingPosition]:
+    legacy_positions = db.query(Position).join(
+        TradingAccount,
+        Position.account_id == TradingAccount.id,
+    ).filter(
+        Position.user_id == user_id,
+        TradingAccount.user_id == user_id,
+    ).all()
+    legacy_by_truth_public_id = {
+        legacy_position_truth_public_id(position): position
+        for position in legacy_positions
+    }
+    truth_positions = db.query(TradingPosition).join(
+        TradingAccount,
+        TradingPosition.account_id == TradingAccount.id,
+    ).filter(
+        TradingPosition.user_id == user_id,
+        TradingAccount.user_id == user_id,
+    ).all()
+
+    return {
+        legacy_position.id: truth_position
+        for truth_position in truth_positions
+        if (
+            (legacy_position := legacy_by_truth_public_id.get(truth_position.public_id))
+            is not None
+            and legacy_position.account_id == truth_position.account_id
+        )
+    }
+
+
 def project_user_truth_positions_to_legacy(
     db: Session,
     *,
     user_id: int,
 ) -> dict[int, TradingPosition]:
-    legacy_positions = db.query(Position).filter(Position.user_id == user_id).all()
-    legacy_by_truth_public_id = {
-        legacy_position_truth_public_id(position): position
-        for position in legacy_positions
-    }
-    truth_positions = db.query(TradingPosition).filter(TradingPosition.user_id == user_id).all()
-    truth_by_legacy_id: dict[int, TradingPosition] = {}
+    truth_by_legacy_id = resolve_user_truth_positions_for_legacy(
+        db,
+        user_id=user_id,
+    )
 
-    for truth_position in truth_positions:
-        legacy_position = legacy_by_truth_public_id.get(truth_position.public_id)
-        if legacy_position is None:
-            continue
+    for legacy_position_id, truth_position in truth_by_legacy_id.items():
+        legacy_position = db.query(Position).filter(
+            Position.id == legacy_position_id
+        ).one()
         project_truth_accounting_to_legacy(
             db,
             truth_position=truth_position,
             legacy_position=legacy_position,
         )
-        truth_by_legacy_id[legacy_position.id] = truth_position
 
     db.flush()
     return truth_by_legacy_id

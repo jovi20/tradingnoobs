@@ -31,6 +31,7 @@ from models import (
     TradeBatch,
     TradeInstrument,
     TradeInstrumentType,
+    TradingAccount,
     TradingPosition,
     TradingPositionSide,
     TradingPositionStatus,
@@ -452,14 +453,26 @@ def sync_legacy_position_to_truth(
     if not legacy_position:
         raise ValueError(f"Legacy position {legacy_position_id} not found")
 
+    account = (
+        db.query(TradingAccount)
+        .filter(TradingAccount.id == legacy_position.account_id)
+        .first()
+    )
+    if account is None:
+        raise ValueError(
+            f"Trading account {legacy_position.account_id} for legacy position "
+            f"{legacy_position_id} not found"
+        )
+    if legacy_position.user_id != account.user_id:
+        raise ValueError(
+            f"Legacy position {legacy_position_id} and trading account "
+            f"{account.id} have different owners"
+        )
+
     metadata = legacy_position.asset_metadata
     identity = validate_legacy_instrument_identity(
         position_asset_type=legacy_position.asset_type,
-        account_currency=(
-            legacy_position.trading_account.currency
-            if legacy_position.trading_account
-            else None
-        ),
+        account_currency=account.currency,
         symbol=legacy_position.symbol,
         exchange_code=legacy_position.exchange,
         metadata_core_type=metadata.core_type if metadata else None,
@@ -473,11 +486,23 @@ def sync_legacy_position_to_truth(
         identity,
         expected_identity=expected_identity,
     )
+
+    truth_public_id = legacy_position_truth_public_id(legacy_position)
+    truth_position = db.query(TradingPosition).filter(
+        TradingPosition.public_id == truth_public_id
+    ).first()
+    if truth_position is not None and (
+        truth_position.user_id != legacy_position.user_id
+        or truth_position.account_id != account.id
+    ):
+        raise ValueError(
+            f"Trading position {truth_public_id} ownership does not match "
+            f"legacy position {legacy_position_id}"
+        )
+
     asset = _ensure_asset_master(db, legacy_position, identity)
     instrument = _ensure_trade_instrument(db, asset, identity)
 
-    truth_public_id = legacy_position_truth_public_id(legacy_position)
-    truth_position = db.query(TradingPosition).filter(TradingPosition.public_id == truth_public_id).first()
     if not truth_position:
         truth_position = TradingPosition(public_id=truth_public_id)
         db.add(truth_position)

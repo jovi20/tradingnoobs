@@ -27,7 +27,7 @@ from models import (
 from schemas import DashboardAccountBalance, DashboardStats
 from services.account_ledger_service import calculate_account_cash_balance_read_model
 from services.auth_service import get_current_user
-from services.truth_legacy_projection_service import project_user_truth_positions_to_legacy
+from services.truth_legacy_projection_service import resolve_user_truth_positions_for_legacy
 
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
@@ -139,7 +139,7 @@ def get_dashboard_stats(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    truth_by_legacy_id = project_user_truth_positions_to_legacy(
+    truth_by_legacy_id = resolve_user_truth_positions_for_legacy(
         db,
         user_id=current_user.id,
     )
@@ -205,7 +205,7 @@ def get_pnl_history(
         start_date = date.today() - timedelta(days=days)
     end_date = date.today()
 
-    truth_by_legacy_id = project_user_truth_positions_to_legacy(
+    truth_by_legacy_id = resolve_user_truth_positions_for_legacy(
         db,
         user_id=current_user.id,
     )

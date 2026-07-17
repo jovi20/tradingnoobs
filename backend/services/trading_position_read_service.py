@@ -7,7 +7,15 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session, joinedload
 
-from models import AccountLedgerEntry, AccountLedgerEntryType, PositionEventType, TradeInstrument, TradingPosition, TradingPositionStatus
+from models import (
+    AccountLedgerEntry,
+    AccountLedgerEntryType,
+    PositionEventType,
+    TradeInstrument,
+    TradingAccount,
+    TradingPosition,
+    TradingPositionStatus,
+)
 from services.truth_legacy_projection_service import resolve_legacy_position_for_truth
 
 
@@ -19,9 +27,13 @@ def resolve_truth_position_by_public_id(db: Session, user_id: int, public_id: st
         joinedload(TradingPosition.ledger_entries).joinedload(AccountLedgerEntry.position_event),
     )
 
-    return query.filter(
+    return query.join(
+        TradingAccount,
+        TradingPosition.account_id == TradingAccount.id,
+    ).filter(
         TradingPosition.public_id == public_id,
         TradingPosition.user_id == user_id,
+        TradingAccount.user_id == user_id,
     ).first()
 
 

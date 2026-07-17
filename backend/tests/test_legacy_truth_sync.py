@@ -12,6 +12,7 @@ from app_config.release_contract import ReleaseContractViolation
 from models import (
     AccountLedgerEntry,
     AccountLedgerEntryType,
+    AssetMaster,
     AssetMetadata,
     BatchType,
     Position,
@@ -247,6 +248,63 @@ class LegacyTruthSyncTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, "UNSUPPORTED_RELEASE_CURRENCY")
         self.assertEqual(self.db.query(TradingPosition).count(), 0)
         self.assertEqual(self.db.query(TradeInstrument).count(), 0)
+
+    def test_sync_rejects_missing_account_before_any_truth_writes(self):
+        legacy_position = self._seed_legacy_position()
+        legacy_position.account_id = 999999
+        self.db.commit()
+
+        with self.assertRaisesRegex(ValueError, "Trading account 999999.*not found"):
+            sync_legacy_position_to_truth(self.db, legacy_position.id)
+
+        for model in (
+            AssetMaster,
+            TradeInstrument,
+            TradingPosition,
+            PositionEvent,
+            AccountLedgerEntry,
+        ):
+            with self.subTest(model=model.__name__):
+                self.assertEqual(self.db.query(model).count(), 0)
+
+    def test_sync_rejects_foreign_owner_account_before_any_truth_writes(self):
+        legacy_position = self._seed_legacy_position()
+        foreign_user = User(
+            email="foreign-sync-owner@example.com",
+            email_normalized="foreign-sync-owner@example.com",
+            hashed_password="hashed",
+            public_id="foreign-sync-owner",
+            status="ACTIVE",
+            is_active=True,
+            role="user",
+        )
+        self.db.add(foreign_user)
+        self.db.commit()
+        foreign_account = TradingAccount(
+            user_id=foreign_user.id,
+            public_id="foreign-sync-account",
+            name="Foreign account",
+            broker="IBKR",
+            currency="USD",
+            is_active=True,
+        )
+        self.db.add(foreign_account)
+        self.db.commit()
+        legacy_position.account_id = foreign_account.id
+        self.db.commit()
+
+        with self.assertRaisesRegex(ValueError, "have different owners"):
+            sync_legacy_position_to_truth(self.db, legacy_position.id)
+
+        for model in (
+            AssetMaster,
+            TradeInstrument,
+            TradingPosition,
+            PositionEvent,
+            AccountLedgerEntry,
+        ):
+            with self.subTest(model=model.__name__):
+                self.assertEqual(self.db.query(model).count(), 0)
 
     def test_sync_legacy_position_derives_truth_pnl_from_fifo_events(self):
         legacy_position = self._seed_legacy_position(realized_pnl=Decimal("999"))

@@ -15,6 +15,7 @@
 - JRN-001 的机器合同 `backend/app_config/journal_beta_v1.json`、严格 loader、ADR、frontend generator 与 `frontend/lib/generated/release-contract.ts` 必须锁步回退；不得只回退生成文件或只回退后端合同。
 - 回退 JRN-001 不得恢复 legacy in-memory Import handler 或 `/positions/import` UI。`GENERIC_BOOTSTRAP` 在 JRN-011/012 完成前始终保持三条 API deny-only、OpenAPI 隐藏和前端 not-found；否则回退会重新引入跨 owner 写入与非原子入账路径。
 - 回退 JRN-001 不得恢复普通 `/api/positions` 路由上的 `X-Migration-Fallback` 信任式绕过，也不得恢复 `?migrationFallback=1` 前端入口。legacy review、position hard delete 与 batch create/edit/delete 在普通产品面保持 fail-closed；真正的迁移 mutation 必须等待受审计的 admin/CLI namespace，不能以客户端自报 header 代替。
+- 回退 JRN-001 不得恢复 `GET /api/positions/{id}/truth-lifecycle` 的惰性 legacy backfill。缺少 truth 时读取保持 not-found 和零 flush/commit；任何 explicit sync 在写入 asset、event 或 ledger 前都必须复验 legacy Position、TradingPosition 与 TradingAccount 的 owner/account 一致性。
 - capability router/secret/job/outbox 与 journal-only UI/API DTO 也必须按 scoped checkpoint 边界成组回退，避免出现 API、OpenAPI、前端和 producer 半开状态。
 - 回退后至少重跑：已知 optional path 的 `404 FEATURE_DISABLED`、未知 path 普通 404、JOURNAL Beta OpenAPI 不包含 optional route/DTO、Admin 与普通 settings secret 写入拒绝、Market/optional job 不领取且零新增 job/outbox side effect，以及 frontend navigation/settings/dashboard/timeline/lifecycle hard-off smoke。
 - 工作树中 deployment workflow、migration/start/backup 脚本的用户处置不属于 JRN-001 checkpoint，不能在回退记录中宣称为 JRN-001 成果或随 JRN-001 自动还原。

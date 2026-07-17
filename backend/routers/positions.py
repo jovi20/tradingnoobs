@@ -45,7 +45,6 @@ from services.capability_service import is_effective_capability_enabled
 from services.public_id_service import resolve_position, resolve_trade_batch, resolve_trading_account
 from services.legacy_truth_sync_service import (
     LegacyInstrumentIdentity,
-    legacy_position_truth_public_id,
     sync_legacy_position_to_truth,
     validate_legacy_instrument_identity,
 )
@@ -54,10 +53,8 @@ from services.position_instrument_projection_service import (
     project_position_instrument,
 )
 from services.trading_position_read_service import build_trading_position_lifecycle_payload
-from services.trading_position_read_service import resolve_truth_position_by_public_id
 from services.truth_legacy_projection_service import (
-    project_truth_accounting_to_legacy,
-    project_user_truth_positions_to_legacy,
+    resolve_user_truth_positions_for_legacy,
     resolve_truth_position_for_legacy,
 )
 from services.trading_accounting_service import (
@@ -177,6 +174,24 @@ def _position_list_response_payload(
         truth_position=truth_position,
     )
     identity = projection.identity if projection else None
+    if (
+        truth_position is not None
+        and truth_position.quantity_opened is not None
+        and truth_position.quantity_closed is not None
+    ):
+        quantity_opened = Decimal(str(truth_position.quantity_opened))
+        quantity_closed = Decimal(str(truth_position.quantity_closed))
+        total_quantity = max(Decimal("0"), quantity_opened - quantity_closed)
+        average_entry_price = truth_position.avg_open_price
+        realized_pnl = truth_position.realized_pnl_net or Decimal("0")
+        opened_at = truth_position.opened_at
+        closed_at = truth_position.closed_at
+    else:
+        total_quantity = position.total_quantity
+        average_entry_price = position.average_entry_price
+        realized_pnl = position.realized_pnl
+        opened_at = position.opened_at
+        closed_at = position.closed_at
     return {
         "id": position.id,
         "public_id": position.public_id,
@@ -187,11 +202,11 @@ def _position_list_response_payload(
         "asset_type": identity.asset_type if identity else position.asset_type,
         "direction": _enum_value(_position_direction(position, truth_position)),
         "status": _position_response_status(position, truth_position),
-        "total_quantity": position.total_quantity,
-        "average_entry_price": position.average_entry_price,
-        "realized_pnl": position.realized_pnl,
-        "opened_at": position.opened_at,
-        "closed_at": position.closed_at,
+        "total_quantity": total_quantity,
+        "average_entry_price": average_entry_price,
+        "realized_pnl": realized_pnl,
+        "opened_at": opened_at,
+        "closed_at": closed_at,
         "created_at": position.created_at,
         "asset_metadata": projection.response_metadata() if projection else None,
         "batches": [_batch_response_payload(batch) for batch in position.batches],
@@ -454,13 +469,22 @@ async def list_positions(
     db: Session = Depends(get_db)
 ):
     """List all positions for the current user"""
-    truth_by_legacy_id = project_user_truth_positions_to_legacy(db, user_id=current_user.id)
+    truth_by_legacy_id = resolve_user_truth_positions_for_legacy(
+        db,
+        user_id=current_user.id,
+    )
     from sqlalchemy.orm import joinedload
     query = db.query(Position).options(
         joinedload(Position.batches),
         joinedload(Position.asset_metadata),
         joinedload(Position.trading_account),
-    ).filter(Position.user_id == current_user.id)
+    ).join(
+        TradingAccount,
+        Position.account_id == TradingAccount.id,
+    ).filter(
+        Position.user_id == current_user.id,
+        TradingAccount.user_id == current_user.id,
+    )
     
     if account_id:
         query = query.filter(Position.account_id == account_id)
@@ -534,9 +558,13 @@ async def get_position(
             joinedload(Position.batches),
             joinedload(Position.asset_metadata),
             joinedload(Position.trading_account),
+        ).join(
+            TradingAccount,
+            Position.account_id == TradingAccount.id,
         ).filter(
             Position.id == position.id,
-            Position.user_id == current_user.id
+            Position.user_id == current_user.id,
+            TradingAccount.user_id == current_user.id,
         ).first()
     
     if not position:
@@ -547,14 +575,6 @@ async def get_position(
         user_id=current_user.id,
         legacy_position=position,
     )
-    if truth_position:
-        project_truth_accounting_to_legacy(
-            db,
-            truth_position=truth_position,
-            legacy_position=position,
-        )
-        db.flush()
-    
     return _position_response_payload(
         db,
         position,
@@ -572,23 +592,15 @@ async def get_position_truth_lifecycle(
     if not legacy_position:
         raise HTTPException(status_code=404, detail="Position not found")
 
-    truth_public_id = legacy_position_truth_public_id(legacy_position)
-    truth_position = resolve_truth_position_by_public_id(
+    truth_position = resolve_truth_position_for_legacy(
         db,
-        current_user.id,
-        truth_public_id,
+        user_id=current_user.id,
+        legacy_position=legacy_position,
     )
     if truth_position is None:
-        truth_position = _release_contract_value(
-            sync_legacy_position_to_truth,
-            db,
-            legacy_position.id,
-        )
-    else:
-        project_truth_accounting_to_legacy(
-            db,
-            truth_position=truth_position,
-            legacy_position=legacy_position,
+        raise HTTPException(
+            status_code=404,
+            detail="Position truth lifecycle not found",
         )
     data = build_trading_position_lifecycle_payload(
         db,
@@ -922,7 +934,6 @@ async def check_open_position(
     db: Session = Depends(get_db)
 ):
     """Return an open position only when the complete release identity matches."""
-    project_user_truth_positions_to_legacy(db, user_id=current_user.id)
     account = resolve_trading_account(db, current_user.id, account_id)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
@@ -976,8 +987,12 @@ async def export_positions_csv(
         joinedload(Position.batches),
         joinedload(Position.asset_metadata),
         joinedload(Position.trading_account)
+    ).join(
+        TradingAccount,
+        Position.account_id == TradingAccount.id,
     ).filter(
-        Position.user_id == current_user.id
+        Position.user_id == current_user.id,
+        TradingAccount.user_id == current_user.id,
     ).order_by(desc(Position.opened_at)).all()
     
     # Create CSV in memory

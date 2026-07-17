@@ -1,13 +1,15 @@
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
+from app_config.release_contract import ReleaseContractViolation
 from database import Base, get_db
 from main import app
 from models import (
@@ -23,12 +25,14 @@ from models import (
     PositionEventType,
     PositionStatus,
     TradeBatch,
+    TradeInstrument,
     TradingAccount,
     TradingPosition,
     TradingPositionStatus,
     User,
 )
 from services.auth_service import get_current_user
+from services.legacy_truth_sync_service import sync_legacy_position_to_truth
 
 
 class PositionTruthBridgeRouterTests(unittest.TestCase):
@@ -233,6 +237,9 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         self.db.commit()
         return legacy_position
 
+    def _sync_truth(self, legacy_position: Position) -> TradingPosition:
+        return sync_legacy_position_to_truth(self.db, legacy_position.id)
+
     @staticmethod
     def _msft_open_payload(account_id: int) -> dict:
         return {
@@ -265,20 +272,185 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
             "quote_currency": "USD",
         }
 
-    def test_position_truth_bridge_endpoint_syncs_and_returns_truth_lifecycle(self):
+    def test_missing_truth_lifecycle_returns_not_found_without_model_writes(self):
         legacy_position = self._seed_legacy_position()
+        fact_models = (
+            AssetMaster,
+            TradeInstrument,
+            TradingPosition,
+            PositionEvent,
+            AccountLedgerEntry,
+        )
+        baseline_counts = {
+            model: self.db.query(model).count()
+            for model in fact_models
+        }
 
-        response = self.client.get(f"/api/positions/{legacy_position.public_id}/truth-lifecycle")
+        with patch.object(
+            Session,
+            "flush",
+            side_effect=AssertionError("positions GET must not flush"),
+        ):
+            response = self.client.get(
+                f"/api/positions/{legacy_position.public_id}/truth-lifecycle"
+            )
+
+        self.assertEqual(response.status_code, 404, response.text)
+        self.assertEqual(
+            response.json()["detail"],
+            "Position truth lifecycle not found",
+        )
+        self.assertEqual(
+            {model: self.db.query(model).count() for model in fact_models},
+            baseline_counts,
+        )
+
+    def test_truth_lifecycle_reads_existing_truth_without_flush(self):
+        legacy_position = self._seed_legacy_position()
+        truth_position = self._sync_truth(legacy_position)
+        baseline_counts = {
+            model: self.db.query(model).count()
+            for model in (
+                AssetMaster,
+                TradeInstrument,
+                TradingPosition,
+                PositionEvent,
+                AccountLedgerEntry,
+            )
+        }
+
+        with patch.object(
+            Session,
+            "flush",
+            side_effect=AssertionError("positions GET must not flush"),
+        ):
+            response = self.client.get(
+                f"/api/positions/{legacy_position.public_id}/truth-lifecycle"
+            )
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
+        self.assertEqual(
+            payload["data"]["position_summary"]["public_id"],
+            truth_position.public_id,
+        )
         self.assertEqual(payload["data"]["position_summary"]["title"], "AAPL")
         self.assertEqual(payload["data"]["thesis_block"]["thesis"], "Initial breakout entry")
         node_types = [node["node_type"] for node in payload["data"]["lifecycle_thread"]["nodes"]]
         self.assertEqual(node_types, ["OPEN", "CLOSE"])
+        self.assertEqual(
+            {
+                model: self.db.query(model).count()
+                for model in baseline_counts
+            },
+            baseline_counts,
+        )
+
+    def test_foreign_account_legacy_position_returns_not_found_without_truth_writes(self):
+        foreign_user = User(
+            email="foreign-owner@example.com",
+            email_normalized="foreign-owner@example.com",
+            hashed_password="hashed",
+            public_id="foreign-owner-user",
+            status="ACTIVE",
+            is_active=True,
+            role="user",
+        )
+        self.db.add(foreign_user)
+        self.db.commit()
+        foreign_account = TradingAccount(
+            user_id=foreign_user.id,
+            public_id="foreign-owner-account",
+            name="Foreign Owner Account",
+            broker="IBKR",
+            currency="USD",
+            is_active=True,
+        )
+        self.db.add(foreign_account)
+        self.db.commit()
+        legacy_position = Position(
+            user_id=self.user.id,
+            account_id=foreign_account.id,
+            public_id="cross-owner-legacy-position",
+            symbol="AAPL",
+            exchange="NASDAQ",
+            asset_type="EQUITY",
+            direction=PositionDirection.LONG,
+            status=PositionStatus.OPEN,
+            total_quantity=Decimal("1"),
+            average_entry_price=Decimal("100"),
+            opened_at=datetime(2026, 4, 1, 9, 30, tzinfo=timezone.utc),
+        )
+        self.db.add(legacy_position)
+        self.db.commit()
+
+        with patch.object(
+            Session,
+            "flush",
+            side_effect=AssertionError("positions GET must not flush"),
+        ):
+            list_response = self.client.get("/api/positions")
+            detail_response = self.client.get(
+                f"/api/positions/{legacy_position.public_id}"
+            )
+            lifecycle_response = self.client.get(
+                f"/api/positions/{legacy_position.public_id}/truth-lifecycle"
+            )
+
+        self.assertEqual(list_response.status_code, 200, list_response.text)
+        self.assertNotIn(
+            legacy_position.public_id,
+            [item["public_id"] for item in list_response.json()],
+        )
+        self.assertEqual(detail_response.status_code, 404, detail_response.text)
+        self.assertEqual(lifecycle_response.status_code, 404, lifecycle_response.text)
+        for response in (list_response, detail_response, lifecycle_response):
+            self.assertNotIn(foreign_account.public_id, response.text)
+            self.assertNotIn(foreign_account.name, response.text)
+        self.assertEqual(self.db.query(TradingPosition).count(), 0)
+        self.assertEqual(self.db.query(PositionEvent).count(), 0)
+        self.assertEqual(self.db.query(AccountLedgerEntry).count(), 0)
+
+    def test_existing_truth_is_not_readable_after_account_owner_mismatch(self):
+        legacy_position = self._seed_legacy_position()
+        truth_position = self._sync_truth(legacy_position)
+        foreign_user = User(
+            email="foreign-existing-truth@example.com",
+            email_normalized="foreign-existing-truth@example.com",
+            hashed_password="hashed",
+            public_id="foreign-existing-truth-user",
+            status="ACTIVE",
+            is_active=True,
+            role="user",
+        )
+        self.db.add(foreign_user)
+        self.db.commit()
+        account = self.db.query(TradingAccount).filter(
+            TradingAccount.id == legacy_position.account_id
+        ).one()
+        account.user_id = foreign_user.id
+        self.db.commit()
+        baseline_counts = {
+            model: self.db.query(model).count()
+            for model in (TradingPosition, PositionEvent, AccountLedgerEntry)
+        }
+
+        response = self.client.get(
+            f"/api/positions/{legacy_position.public_id}/truth-lifecycle"
+        )
+
+        self.assertEqual(response.status_code, 404, response.text)
+        self.assertNotIn(account.public_id, response.text)
+        self.assertNotIn(account.name, response.text)
+        self.assertEqual(
+            {model: self.db.query(model).count() for model in baseline_counts},
+            baseline_counts,
+        )
+        self.assertEqual(self.db.query(TradingPosition).one().id, truth_position.id)
 
     def test_truth_public_id_resolves_to_the_canonical_legacy_position_route(self):
         legacy_position = self._seed_open_legacy_position()
+        self._sync_truth(legacy_position)
         lifecycle_response = self.client.get(
             f"/api/positions/{legacy_position.public_id}/truth-lifecycle"
         )
@@ -294,6 +466,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
 
     def test_bridge_read_preserves_manual_truth_events_and_canonical_accounting(self):
         legacy_position = self._seed_open_legacy_position()
+        self._sync_truth(legacy_position)
         initial_response = self.client.get(
             f"/api/positions/{legacy_position.public_id}/truth-lifecycle"
         )
@@ -327,6 +500,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
 
     def test_positions_list_uses_truth_accounting_projection_after_manual_event(self):
         legacy_position = self._seed_open_legacy_position()
+        self._sync_truth(legacy_position)
         initial_response = self.client.get(
             f"/api/positions/{legacy_position.public_id}/truth-lifecycle"
         )
@@ -357,6 +531,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
 
     def test_dashboard_win_rate_uses_truth_exit_events_instead_of_stale_legacy_batches(self):
         legacy_position = self._seed_open_legacy_position()
+        self._sync_truth(legacy_position)
         initial_response = self.client.get(
             f"/api/positions/{legacy_position.public_id}/truth-lifecycle"
         )
@@ -373,9 +548,19 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         )
         self.assertEqual(reduce_response.status_code, 201)
 
-        response = self.client.get("/api/dashboard/stats")
+        with patch.object(
+            Session,
+            "flush",
+            side_effect=AssertionError("dashboard GET must not flush"),
+        ):
+            response = self.client.get("/api/dashboard/stats")
+            history_response = self.client.get(
+                "/api/dashboard/pnl-history",
+                params={"days": 1000},
+            )
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(history_response.status_code, 200, history_response.text)
         self.assertEqual(response.json()["win_rate"], 100.0)
 
     def test_public_legacy_mutations_fail_closed_before_truth_sync(self):
@@ -435,6 +620,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
 
     def test_legacy_batch_write_is_rejected_when_truth_lifecycle_exists_without_migration_header(self):
         legacy_position = self._seed_open_legacy_position()
+        self._sync_truth(legacy_position)
         sync_response = self.client.get(f"/api/positions/{legacy_position.public_id}/truth-lifecycle")
         self.assertEqual(sync_response.status_code, 200)
 
@@ -459,6 +645,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
 
     def test_legacy_batch_write_rejects_untrusted_migration_fallback_header(self):
         legacy_position = self._seed_open_legacy_position()
+        self._sync_truth(legacy_position)
         sync_response = self.client.get(f"/api/positions/{legacy_position.public_id}/truth-lifecycle")
         self.assertEqual(sync_response.status_code, 200)
 
@@ -484,6 +671,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
 
     def test_legacy_position_delete_is_rejected_when_truth_lifecycle_exists_without_migration_header(self):
         legacy_position = self._seed_legacy_position()
+        self._sync_truth(legacy_position)
         sync_response = self.client.get(f"/api/positions/{legacy_position.public_id}/truth-lifecycle")
         self.assertEqual(sync_response.status_code, 200)
 
@@ -500,6 +688,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
 
     def test_legacy_position_delete_rejects_untrusted_migration_fallback_header(self):
         legacy_position = self._seed_legacy_position()
+        self._sync_truth(legacy_position)
         sync_response = self.client.get(f"/api/positions/{legacy_position.public_id}/truth-lifecycle")
         self.assertEqual(sync_response.status_code, 200)
 
@@ -519,6 +708,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
 
     def test_legacy_batch_edit_is_rejected_when_truth_lifecycle_exists_without_migration_header(self):
         legacy_position = self._seed_legacy_position()
+        self._sync_truth(legacy_position)
         sync_response = self.client.get(f"/api/positions/{legacy_position.public_id}/truth-lifecycle")
         self.assertEqual(sync_response.status_code, 200)
 
@@ -535,6 +725,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
 
     def test_legacy_batch_edit_rejects_untrusted_migration_fallback_header(self):
         legacy_position = self._seed_legacy_position()
+        self._sync_truth(legacy_position)
         sync_response = self.client.get(f"/api/positions/{legacy_position.public_id}/truth-lifecycle")
         self.assertEqual(sync_response.status_code, 200)
 
@@ -552,6 +743,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
 
     def test_legacy_batch_delete_is_rejected_when_truth_lifecycle_exists_without_migration_header(self):
         legacy_position = self._seed_legacy_position()
+        self._sync_truth(legacy_position)
         sync_response = self.client.get(f"/api/positions/{legacy_position.public_id}/truth-lifecycle")
         self.assertEqual(sync_response.status_code, 200)
 
@@ -568,6 +760,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
 
     def test_legacy_batch_delete_rejects_untrusted_migration_fallback_header(self):
         legacy_position = self._seed_legacy_position()
+        self._sync_truth(legacy_position)
         sync_response = self.client.get(f"/api/positions/{legacy_position.public_id}/truth-lifecycle")
         self.assertEqual(sync_response.status_code, 200)
 
@@ -757,6 +950,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
 
     def test_duplicate_open_uses_truth_when_legacy_status_drifts_closed(self):
         position = self._seed_open_legacy_position()
+        self._sync_truth(position)
         lifecycle = self.client.get(f"/api/positions/{position.public_id}/truth-lifecycle")
         self.assertEqual(lifecycle.status_code, 200, lifecycle.text)
 
@@ -790,6 +984,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
 
     def test_archived_truth_with_remaining_quantity_still_blocks_duplicate_open(self):
         position = self._seed_open_legacy_position()
+        self._sync_truth(position)
         lifecycle = self.client.get(f"/api/positions/{position.public_id}/truth-lifecycle")
         self.assertEqual(lifecycle.status_code, 200, lifecycle.text)
 
@@ -815,12 +1010,15 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
 
     def test_null_canonical_quantity_cannot_release_same_side_open_slot(self):
         position = self._seed_open_legacy_position()
+        self._sync_truth(position)
         lifecycle = self.client.get(f"/api/positions/{position.public_id}/truth-lifecycle")
         self.assertEqual(lifecycle.status_code, 200, lifecycle.text)
 
         truth_position = self.db.query(TradingPosition).one()
         truth_position.status = TradingPositionStatus.CLOSED
         position.status = PositionStatus.CLOSED
+        position.total_quantity = Decimal("7")
+        position.average_entry_price = Decimal("177")
 
         for quantity_opened, quantity_closed in (
             (None, Decimal("0")),
@@ -838,11 +1036,21 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
                     "/api/positions",
                     json=self._msft_open_payload(position.account_id),
                 )
+                detail = self.client.get(f"/api/positions/{position.public_id}")
 
                 self.assertEqual(duplicate.status_code, 409, duplicate.text)
                 self.assertEqual(
                     duplicate.json()["detail"]["code"],
                     "OPEN_POSITION_EXISTS",
+                )
+                self.assertEqual(detail.status_code, 200, detail.text)
+                self.assertEqual(
+                    Decimal(str(detail.json()["total_quantity"])),
+                    Decimal("7"),
+                )
+                self.assertEqual(
+                    Decimal(str(detail.json()["average_entry_price"])),
+                    Decimal("177"),
                 )
                 self.assertEqual(
                     self.db.query(Position)
@@ -853,6 +1061,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
 
     def test_duplicate_open_and_response_use_truth_when_legacy_direction_drifts(self):
         position = self._seed_open_legacy_position()
+        self._sync_truth(position)
         lifecycle = self.client.get(f"/api/positions/{position.public_id}/truth-lifecycle")
         self.assertEqual(lifecycle.status_code, 200, lifecycle.text)
 
@@ -884,6 +1093,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
 
     def test_symbol_filter_uses_canonical_projection_when_legacy_symbol_drifts(self):
         position = self._seed_open_legacy_position()
+        self._sync_truth(position)
         lifecycle = self.client.get(f"/api/positions/{position.public_id}/truth-lifecycle")
         self.assertEqual(lifecycle.status_code, 200, lifecycle.text)
 
@@ -907,6 +1117,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
 
     def test_preupgrade_truth_projection_is_read_only_and_cannot_match_open(self):
         position = self._seed_open_legacy_position()
+        self._sync_truth(position)
         lifecycle = self.client.get(f"/api/positions/{position.public_id}/truth-lifecycle")
         self.assertEqual(lifecycle.status_code, 200, lifecycle.text)
 
@@ -944,6 +1155,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
 
     def test_preupgrade_truth_rejects_direct_add_without_financial_side_effects(self):
         position = self._seed_open_legacy_position()
+        self._sync_truth(position)
         lifecycle = self.client.get(f"/api/positions/{position.public_id}/truth-lifecycle")
         self.assertEqual(lifecycle.status_code, 200, lifecycle.text)
 
@@ -1229,15 +1441,10 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         self.db.add(position)
         self.db.commit()
 
-        response = self.client.get(
-            f"/api/positions/{position.public_id}/truth-lifecycle"
-        )
+        with self.assertRaises(ReleaseContractViolation) as raised:
+            self._sync_truth(position)
 
-        self.assertEqual(response.status_code, 422, response.text)
-        self.assertEqual(
-            response.json()["detail"]["code"],
-            "LEGACY_INSTRUMENT_IDENTITY_UNPROVEN",
-        )
+        self.assertEqual(raised.exception.code, "LEGACY_INSTRUMENT_IDENTITY_UNPROVEN")
         self.assertEqual(
             self.db.query(AssetMaster).filter(AssetMaster.canonical_code == "MSFT").count(),
             0,
@@ -1369,6 +1576,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
 
     def test_existing_legacy_truth_remains_readable_when_preupgrade_asset_lacks_identity_metadata(self):
         legacy_position = self._seed_legacy_position()
+        self._sync_truth(legacy_position)
         first = self.client.get(
             f"/api/positions/{legacy_position.public_id}/truth-lifecycle"
         )
@@ -1635,6 +1843,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
 
     def test_legacy_review_write_is_rejected_when_truth_lifecycle_exists_without_migration_header(self):
         legacy_position = self._seed_legacy_position()
+        self._sync_truth(legacy_position)
         sync_response = self.client.get(f"/api/positions/{legacy_position.public_id}/truth-lifecycle")
         self.assertEqual(sync_response.status_code, 200)
 
@@ -1651,6 +1860,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
 
     def test_legacy_review_write_rejects_untrusted_migration_fallback_header(self):
         legacy_position = self._seed_legacy_position()
+        self._sync_truth(legacy_position)
         sync_response = self.client.get(f"/api/positions/{legacy_position.public_id}/truth-lifecycle")
         self.assertEqual(sync_response.status_code, 200)
 
