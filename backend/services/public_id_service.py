@@ -23,23 +23,35 @@ def resolve_trading_account(db: Session, user_id: int, identifier: str):
 
 
 def resolve_position(db: Session, user_id: int, identifier: str):
-    position = db.query(Position).filter(
+    position = db.query(Position).join(
+        TradingAccount,
+        Position.account_id == TradingAccount.id,
+    ).filter(
         Position.public_id == identifier,
         Position.user_id == user_id,
+        TradingAccount.user_id == user_id,
     ).first()
     if position:
         return position
     if identifier.isdigit():
-        position = db.query(Position).filter(
+        position = db.query(Position).join(
+            TradingAccount,
+            Position.account_id == TradingAccount.id,
+        ).filter(
             Position.id == int(identifier),
             Position.user_id == user_id,
+            TradingAccount.user_id == user_id,
         ).first()
         if position:
             return position
 
-    truth_position = db.query(TradingPosition).filter(
+    truth_position = db.query(TradingPosition).join(
+        TradingAccount,
+        TradingPosition.account_id == TradingAccount.id,
+    ).filter(
         TradingPosition.public_id == identifier,
         TradingPosition.user_id == user_id,
+        TradingAccount.user_id == user_id,
     ).first()
     if truth_position:
         return resolve_legacy_position_for_truth(db, truth_position=truth_position)
@@ -47,16 +59,30 @@ def resolve_position(db: Session, user_id: int, identifier: str):
 
 
 def resolve_trade_batch(db: Session, user_id: int, identifier: str):
-    batch = db.query(TradeBatch).join(Position).filter(
+    batch = db.query(TradeBatch).join(
+        Position,
+        TradeBatch.position_id == Position.id,
+    ).join(
+        TradingAccount,
+        Position.account_id == TradingAccount.id,
+    ).filter(
         TradeBatch.public_id == identifier,
         Position.user_id == user_id,
+        TradingAccount.user_id == user_id,
     ).first()
     if batch:
         return batch
     if identifier.isdigit():
-        return db.query(TradeBatch).join(Position).filter(
+        return db.query(TradeBatch).join(
+            Position,
+            TradeBatch.position_id == Position.id,
+        ).join(
+            TradingAccount,
+            Position.account_id == TradingAccount.id,
+        ).filter(
             TradeBatch.id == int(identifier),
             Position.user_id == user_id,
+            TradingAccount.user_id == user_id,
         ).first()
     return None
 

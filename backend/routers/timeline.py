@@ -954,7 +954,14 @@ def _get_timeline_home(
 
     positions = (
         db.query(Position)
-        .filter(Position.user_id == current_user.id)
+        .join(
+            TradingAccount,
+            Position.account_id == TradingAccount.id,
+        )
+        .filter(
+            Position.user_id == current_user.id,
+            TradingAccount.user_id == current_user.id,
+        )
         .order_by(Position.opened_at.desc())
         .all()
     )

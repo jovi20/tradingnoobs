@@ -34,6 +34,7 @@ from models import (
     PositionStatus,
     TradeBatch,
     TradingAccount,
+    TradingPositionStatus,
     InsightArtifact,
     InsightRun,
     User,
@@ -276,6 +277,65 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         self.assertEqual(cash_effects[0]["entry_type"], "REALIZED_PNL")
         self.assertEqual(float(cash_effects[0]["amount"]), 180.0)
         self.assertEqual(cash_effects[0]["currency"], "USD")
+
+    def test_unresolved_canonical_quantities_fail_closed_across_lifecycle_and_writes(self):
+        truth_position = self._seed_open_synced_position()
+        truth_position.quantity_opened = None
+        truth_position.quantity_closed = Decimal("0")
+        truth_position.status = TradingPositionStatus.CLOSED
+        self.db.commit()
+
+        legacy_detail = self.client.get("/api/positions/legacy-open-position")
+        canonical_lifecycle = self.client.get(
+            f"/api/trading-positions/{truth_position.public_id}/lifecycle"
+        )
+        legacy_lifecycle = self.client.get(
+            "/api/positions/legacy-open-position/truth-lifecycle"
+        )
+
+        self.assertEqual(legacy_detail.status_code, 200, legacy_detail.text)
+        self.assertEqual(legacy_detail.json()["status"], "OPEN")
+        self.assertEqual(Decimal(legacy_detail.json()["total_quantity"]), Decimal("5"))
+        for response in (canonical_lifecycle, legacy_lifecycle):
+            self.assertEqual(response.status_code, 409, response.text)
+            self.assertEqual(
+                response.json()["detail"]["code"],
+                "CANONICAL_ACCOUNTING_UNRESOLVED",
+            )
+            self.assertEqual(
+                response.json()["detail"]["position_public_id"],
+                truth_position.public_id,
+            )
+
+        baseline_counts = {
+            model: self.db.query(model).count()
+            for model in (
+                PositionEvent,
+                AccountLedgerEntry,
+                IdempotencyKey,
+                OutboxEvent,
+            )
+        }
+        add_response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events",
+            headers={"Idempotency-Key": "unresolved-canonical-add"},
+            json={
+                "event_type": "ADD",
+                "quantity": "1",
+                "price": "190",
+                "currency": "USD",
+                "occurred_at": "2026-04-03T15:30:00+00:00",
+            },
+        )
+
+        self.assertEqual(add_response.status_code, 409, add_response.text)
+        self.assertEqual(
+            add_response.json()["detail"]["code"],
+            "CANONICAL_ACCOUNTING_UNRESOLVED",
+        )
+        self.db.expire_all()
+        for model, baseline_count in baseline_counts.items():
+            self.assertEqual(self.db.query(model).count(), baseline_count)
 
     def test_lifecycle_route_only_loads_ai_sidecar_with_effective_capability(self):
         truth_position = self._seed_synced_position()

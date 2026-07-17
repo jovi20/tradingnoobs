@@ -383,6 +383,18 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         )
         self.db.add(legacy_position)
         self.db.commit()
+        self.db.refresh(legacy_position)
+        self.db.add(
+            TradeBatch(
+                public_id="cross-owner-legacy-batch",
+                position_id=legacy_position.id,
+                type=BatchType.ENTRY,
+                price=Decimal("100"),
+                quantity=Decimal("1"),
+                time=datetime(2026, 4, 1, 9, 30, tzinfo=timezone.utc),
+            )
+        )
+        self.db.commit()
 
         with patch.object(
             Session,
@@ -396,6 +408,13 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
             lifecycle_response = self.client.get(
                 f"/api/positions/{legacy_position.public_id}/truth-lifecycle"
             )
+            batches_response = self.client.get(
+                f"/api/positions/{legacy_position.public_id}/batches"
+            )
+            batch_edit_response = self.client.patch(
+                "/api/positions/batches/cross-owner-legacy-batch",
+                json={"price": "101"},
+            )
 
         self.assertEqual(list_response.status_code, 200, list_response.text)
         self.assertNotIn(
@@ -404,7 +423,15 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         )
         self.assertEqual(detail_response.status_code, 404, detail_response.text)
         self.assertEqual(lifecycle_response.status_code, 404, lifecycle_response.text)
-        for response in (list_response, detail_response, lifecycle_response):
+        self.assertEqual(batches_response.status_code, 404, batches_response.text)
+        self.assertEqual(batch_edit_response.status_code, 404, batch_edit_response.text)
+        for response in (
+            list_response,
+            detail_response,
+            lifecycle_response,
+            batches_response,
+            batch_edit_response,
+        ):
             self.assertNotIn(foreign_account.public_id, response.text)
             self.assertNotIn(foreign_account.name, response.text)
         self.assertEqual(self.db.query(TradingPosition).count(), 0)
@@ -1207,6 +1234,51 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
                 PositionEvent.event_type == PositionEventType.ADD,
             ).count(),
             0,
+        )
+
+    def test_canonical_code_drift_rejects_direct_add_without_side_effects(self):
+        position = self._seed_open_legacy_position()
+        self._sync_truth(position)
+        truth_position = self.db.query(TradingPosition).one()
+        asset = self.db.query(AssetMaster).one()
+        self.assertEqual(asset.canonical_code, "MSFT")
+        asset.canonical_code = "DRIFTED-MSFT"
+        self.db.commit()
+
+        baseline_counts = {
+            model: self.db.query(model).count()
+            for model in (
+                PositionEvent,
+                AccountLedgerEntry,
+                IdempotencyKey,
+                OutboxEvent,
+            )
+        }
+        baseline_quantity_opened = truth_position.quantity_opened
+
+        response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events",
+            headers={"Idempotency-Key": "canonical-code-drift-add"},
+            json={
+                "event_type": "ADD",
+                "quantity": "1",
+                "price": "190",
+                "currency": "USD",
+                "occurred_at": "2026-04-03T15:30:00+00:00",
+            },
+        )
+
+        self.assertEqual(response.status_code, 422, response.text)
+        self.assertEqual(
+            response.json()["detail"]["code"],
+            "LEGACY_INSTRUMENT_IDENTITY_UNPROVEN",
+        )
+        self.db.expire_all()
+        for model, baseline_count in baseline_counts.items():
+            self.assertEqual(self.db.query(model).count(), baseline_count)
+        self.assertEqual(
+            self.db.query(TradingPosition).one().quantity_opened,
+            baseline_quantity_opened,
         )
 
     def test_position_create_requires_release_asset_type_and_usd_account(self):

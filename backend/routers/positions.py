@@ -52,7 +52,11 @@ from services.position_instrument_projection_service import (
     PositionInstrumentProjection,
     project_position_instrument,
 )
-from services.trading_position_read_service import build_trading_position_lifecycle_payload
+from services.trading_position_read_service import (
+    CanonicalAccountingUnresolvedError,
+    build_trading_position_lifecycle_payload,
+    canonical_accounting_unresolved_detail,
+)
 from services.truth_legacy_projection_service import (
     resolve_user_truth_positions_for_legacy,
     resolve_truth_position_for_legacy,
@@ -602,15 +606,21 @@ async def get_position_truth_lifecycle(
             status_code=404,
             detail="Position truth lifecycle not found",
         )
-    data = build_trading_position_lifecycle_payload(
-        db,
-        truth_position,
-        include_ai_sidecar=is_effective_capability_enabled(
+    try:
+        data = build_trading_position_lifecycle_payload(
             db,
-            RuntimeCapability.AI_INSIGHTS,
-            actor_key=current_user.public_id,
-        ),
-    )
+            truth_position,
+            include_ai_sidecar=is_effective_capability_enabled(
+                db,
+                RuntimeCapability.AI_INSIGHTS,
+                actor_key=current_user.public_id,
+            ),
+        )
+    except CanonicalAccountingUnresolvedError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=canonical_accounting_unresolved_detail(exc),
+        ) from exc
     return JSONResponse(
         content=jsonable_encoder(
             {

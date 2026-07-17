@@ -220,6 +220,59 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.assertEqual(payload["data"]["summary_bar"]["priority_alert_count"], 0)
         self.assertEqual(payload["meta"]["maturity"], "INSUFFICIENT_SAMPLE")
 
+    def test_timeline_home_excludes_position_linked_to_another_users_account(self):
+        victim = User(
+            email="timeline-victim@example.com",
+            email_normalized="timeline-victim@example.com",
+            hashed_password="hashed",
+            status="ACTIVE",
+            is_active=True,
+            role="user",
+        )
+        self.session.add(victim)
+        self.session.commit()
+        self.session.refresh(victim)
+
+        victim_account = TradingAccount(
+            user_id=victim.id,
+            public_id="acct-timeline-victim",
+            name="VICTIM ACCOUNT SENTINEL",
+            broker="IBKR",
+            currency="USD",
+            is_active=True,
+        )
+        self.session.add(victim_account)
+        self.session.commit()
+        self.session.refresh(victim_account)
+
+        mismatched_position = Position(
+            user_id=self.user.id,
+            account_id=victim_account.id,
+            public_id="pos-cross-owner-account",
+            symbol="LEAK",
+            exchange="NASDAQ",
+            direction=PositionDirection.LONG,
+            status=PositionStatus.OPEN,
+            total_quantity=1,
+            opened_at=datetime.now(timezone.utc),
+        )
+        self.session.add(mismatched_position)
+        self.session.commit()
+
+        response = self.client.get(
+            "/api/timeline/home",
+            params={"selected_object_public_id": mismatched_position.public_id},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["data"]["page_state"], "ZERO")
+        self.assertEqual(payload["data"]["summary_bar"]["trade_count"], 0)
+        self.assertNotIn("selected_object", payload["data"]["context_rail"])
+        self.assertNotIn("VICTIM ACCOUNT SENTINEL", response.text)
+        self.assertNotIn(victim_account.public_id, response.text)
+        self.assertEqual(payload["meta"]["maturity"], "INSUFFICIENT_SAMPLE")
+
     def test_timeline_home_surfaces_materialized_timeline_snapshots(self):
         account = TradingAccount(
             user_id=self.user.id,

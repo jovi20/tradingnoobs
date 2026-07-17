@@ -27,7 +27,8 @@ def _asset_has_exact_identity(
     identity: LegacyInstrumentIdentity,
 ) -> bool:
     return (
-        _enum_value(asset.asset_type) == identity.asset_type
+        asset.canonical_code == identity.normalized_symbol
+        and _enum_value(asset.asset_type) == identity.asset_type
         and _enum_value(asset.quote_currency) == identity.quote_currency
         and isinstance(asset.metadata_json, dict)
         and asset.metadata_json.get(_JOURNAL_IDENTITY_METADATA_KEY) == asdict(identity)

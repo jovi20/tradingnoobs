@@ -35,7 +35,13 @@ from services.capability_service import is_effective_capability_enabled
 from services.idempotency_service import begin_idempotent_request, complete_idempotent_request
 from services.outbox_service import enqueue_position_event_created_outbox
 from services.position_instrument_projection_service import project_exact_truth_instrument
-from services.trading_position_read_service import build_trading_position_lifecycle_payload, resolve_truth_position_by_public_id
+from services.trading_position_read_service import (
+    CanonicalAccountingUnresolvedError,
+    build_trading_position_lifecycle_payload,
+    canonical_accounting_unresolved_detail,
+    require_resolved_truth_position_quantities,
+    resolve_truth_position_by_public_id,
+)
 from services.trading_position_write_service import append_truth_trade_event, reverse_latest_truth_trade_event
 
 router = APIRouter(prefix="/api/trading-positions", tags=["Trading Positions"])
@@ -92,6 +98,16 @@ def _require_exact_truth_instrument_provenance(truth_position) -> None:
     )
 
 
+def _require_resolved_truth_accounting(truth_position) -> None:
+    try:
+        require_resolved_truth_position_quantities(truth_position)
+    except CanonicalAccountingUnresolvedError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=canonical_accounting_unresolved_detail(exc),
+        ) from exc
+
+
 def _lifecycle_response_content(
     db: Session,
     truth_position,
@@ -106,11 +122,17 @@ def _lifecycle_response_content(
             RuntimeCapability.AI_INSIGHTS,
             actor_key=actor_key,
         )
-    data = build_trading_position_lifecycle_payload(
-        db,
-        truth_position,
-        include_ai_sidecar=include_ai_sidecar,
-    )
+    try:
+        data = build_trading_position_lifecycle_payload(
+            db,
+            truth_position,
+            include_ai_sidecar=include_ai_sidecar,
+        )
+    except CanonicalAccountingUnresolvedError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=canonical_accounting_unresolved_detail(exc),
+        ) from exc
     return {
         "data": data,
         "meta": {
@@ -283,6 +305,7 @@ def create_trading_position_trade_event(
         raise HTTPException(status_code=404, detail="Trading position not found")
 
     _require_exact_truth_instrument_provenance(truth_position)
+    _require_resolved_truth_accounting(truth_position)
 
     currency, fee_currency = _require_same_currency_financial_fact(
         truth_position,
@@ -352,6 +375,7 @@ def reverse_trading_position_trade_event(
         raise HTTPException(status_code=404, detail="Trading position not found")
 
     _require_exact_truth_instrument_provenance(truth_position)
+    _require_resolved_truth_accounting(truth_position)
 
     event = db.query(PositionEvent).filter(
         PositionEvent.public_id == event_public_id,
@@ -398,6 +422,7 @@ def create_trading_position_dividend(
         raise HTTPException(status_code=404, detail="Trading position not found")
 
     _require_exact_truth_instrument_provenance(truth_position)
+    _require_resolved_truth_accounting(truth_position)
 
     currency, _ = _require_same_currency_financial_fact(
         truth_position,

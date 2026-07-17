@@ -3,7 +3,7 @@ Trading Noobs Backend - TradingPosition Truth Read Service
 """
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from sqlalchemy.orm import Session, joinedload
 
@@ -17,6 +17,66 @@ from models import (
     TradingPositionStatus,
 )
 from services.truth_legacy_projection_service import resolve_legacy_position_for_truth
+
+
+class CanonicalAccountingUnresolvedError(ValueError):
+    code = "CANONICAL_ACCOUNTING_UNRESOLVED"
+
+    def __init__(self, position_public_id: str):
+        self.position_public_id = position_public_id
+        super().__init__(
+            f"Canonical accounting is incomplete or inconsistent for {position_public_id}"
+        )
+
+
+def canonical_accounting_unresolved_detail(
+    error: CanonicalAccountingUnresolvedError,
+) -> dict[str, str]:
+    return {
+        "code": error.code,
+        "message": "Canonical position accounting is incomplete or inconsistent",
+        "position_public_id": error.position_public_id,
+    }
+
+
+def require_resolved_truth_position_quantities(
+    truth_position: TradingPosition,
+) -> tuple[Decimal, Decimal]:
+    raw_opened = truth_position.quantity_opened
+    raw_closed = truth_position.quantity_closed
+    if raw_opened is None or raw_closed is None:
+        raise CanonicalAccountingUnresolvedError(truth_position.public_id)
+
+    try:
+        quantity_opened = Decimal(str(raw_opened))
+        quantity_closed = Decimal(str(raw_closed))
+        remaining_quantity = quantity_opened - quantity_closed
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise CanonicalAccountingUnresolvedError(truth_position.public_id) from exc
+
+    if (
+        not quantity_opened.is_finite()
+        or not quantity_closed.is_finite()
+        or not remaining_quantity.is_finite()
+        or quantity_opened < 0
+        or quantity_closed < 0
+        or remaining_quantity < 0
+    ):
+        raise CanonicalAccountingUnresolvedError(truth_position.public_id)
+
+    if truth_position.status == TradingPositionStatus.OPEN:
+        if remaining_quantity <= 0:
+            raise CanonicalAccountingUnresolvedError(truth_position.public_id)
+    elif truth_position.status in {
+        TradingPositionStatus.CLOSED,
+        TradingPositionStatus.ARCHIVED,
+    }:
+        if remaining_quantity != 0:
+            raise CanonicalAccountingUnresolvedError(truth_position.public_id)
+    else:
+        raise CanonicalAccountingUnresolvedError(truth_position.public_id)
+
+    return quantity_opened, quantity_closed
 
 
 def resolve_truth_position_by_public_id(db: Session, user_id: int, public_id: str) -> TradingPosition | None:
@@ -136,8 +196,9 @@ def build_trading_position_lifecycle_payload(
     event_public_ids_by_id = {event.id: event.public_id for event in truth_position.events}
     legacy_position = resolve_legacy_position_for_truth(db, truth_position=truth_position)
     route_public_id = legacy_position.public_id if legacy_position else truth_position.public_id
-    quantity_opened = truth_position.quantity_opened or Decimal("0")
-    quantity_closed = truth_position.quantity_closed or Decimal("0")
+    quantity_opened, quantity_closed = require_resolved_truth_position_quantities(
+        truth_position
+    )
 
     lifecycle_thread = []
     for event in truth_position.events:
@@ -238,8 +299,8 @@ def build_trading_position_lifecycle_payload(
             "headline": f"{truth_position.instrument.contract_symbol} 交易生命周期",
             "summary": f"包含 {len(lifecycle_thread)} 个事件节点。",
             "key_numbers": [
-                {"label": "累计开仓", "value": str(truth_position.quantity_opened or 0)},
-                {"label": "累计平仓", "value": str(truth_position.quantity_closed or 0)},
+                {"label": "累计开仓", "value": str(quantity_opened)},
+                {"label": "累计平仓", "value": str(quantity_closed)},
                 {"label": "已实现净盈亏", "value": str(truth_position.realized_pnl_net or 0)},
             ],
         },
