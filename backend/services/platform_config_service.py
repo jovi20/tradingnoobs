@@ -6,6 +6,7 @@ import os
 from datetime import datetime, timezone
 from typing import Optional
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from config import get_ai_provider_settings, get_market_provider_settings
@@ -46,12 +47,24 @@ def get_integration_credential_secret(
 
 def get_feature_flag_enabled(db: Session, key: str, *, actor_key: str | None = None) -> bool:
     try:
-        with db.begin_nested():
-            feature_flag = db.query(FeatureFlag).filter(FeatureFlag.key == key).first()
-            if feature_flag is None or feature_flag.enabled is not True:
+        # Session.begin_nested() flushes all pending ORM state before opening its
+        # SAVEPOINT. A capability read must neither flush nor poison a caller's
+        # journal transaction, so query committed database state through the
+        # enlisted connection and isolate only this statement in a SAVEPOINT.
+        connection = db.connection()
+        with connection.begin_nested():
+            feature_flag = connection.execute(
+                select(
+                    FeatureFlag.enabled,
+                    FeatureFlag.expires_at,
+                    FeatureFlag.actor_targets,
+                    FeatureFlag.rollout_percentage,
+                ).where(FeatureFlag.key == key)
+            ).mappings().first()
+            if feature_flag is None or feature_flag["enabled"] is not True:
                 return False
 
-            expires_at = feature_flag.expires_at
+            expires_at = feature_flag["expires_at"]
             if expires_at is not None:
                 if not isinstance(expires_at, datetime):
                     return False
@@ -60,7 +73,7 @@ def get_feature_flag_enabled(db: Session, key: str, *, actor_key: str | None = N
                 if expires_at <= datetime.now(timezone.utc):
                     return False
 
-            actor_targets = feature_flag.actor_targets
+            actor_targets = feature_flag["actor_targets"]
             if actor_targets is None:
                 actor_targets = []
             if not isinstance(actor_targets, list) or any(
@@ -69,7 +82,7 @@ def get_feature_flag_enabled(db: Session, key: str, *, actor_key: str | None = N
             ):
                 return False
 
-            rollout_percentage = feature_flag.rollout_percentage
+            rollout_percentage = feature_flag["rollout_percentage"]
             if rollout_percentage is not None and (
                 isinstance(rollout_percentage, bool)
                 or not isinstance(rollout_percentage, int)

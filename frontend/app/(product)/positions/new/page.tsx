@@ -13,7 +13,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import {
     positionsAPI, accountsAPI, strategiesAPI,
-    Strategy, PositionCreate, PositionOpenIdentity, BatchCreate,
+    ApiRequestError, Strategy, PositionCreate, PositionOpenIdentity, BatchCreate,
     ReleaseAssetType, ReleaseCurrency, ReleaseInstrumentType, ReleaseMarket
 } from '@/lib/api'
 import {
@@ -333,6 +333,23 @@ export default function NewPositionPage() {
                 router.push('/positions')
             }
         } catch (err: any) {
+            if (
+                err instanceof ApiRequestError
+                && err.code === 'OPEN_POSITION_EXISTS'
+                && err.positionPublicId
+            ) {
+                const openIdentity = buildOpenIdentity(finalForm)
+                const existing = openIdentity
+                    ? await positionsAPI.checkOpen(token, openIdentity).catch(() => null)
+                    : null
+                if (existing?.public_id === err.positionPublicId) {
+                    setExistingPosition(adaptPosition(existing))
+                    setShowExistingPrompt(true)
+                    setError('')
+                    setIsSubmitting(false)
+                    return
+                }
+            }
             setError(err.message || '创建失败')
             setIsSubmitting(false)
         }
@@ -517,6 +534,7 @@ export default function NewPositionPage() {
                         <div>
                             <label className="block text-sm font-medium mb-2">账户 *</label>
                             <CustomSelect
+                                ariaLabel="交易账户"
                                 options={accounts.map(a => ({ value: a.id, label: `${a.name} · ${a.broker}` }))}
                                 value={form.account_id}
                                 onChange={val => setForm({ ...form, account_id: typeof val === 'string' ? parseInt(val) : val })}
@@ -571,6 +589,7 @@ export default function NewPositionPage() {
                         <div>
                             <label className="block text-sm font-medium mb-2">策略（可选）</label>
                             <CustomSelect
+                                ariaLabel="交易策略"
                                 options={[
                                     { value: '', label: '不关联策略' },
                                     ...strategies.map(s => ({ value: s.id, label: s.name }))
@@ -597,6 +616,7 @@ export default function NewPositionPage() {
                             <div>
                                 <label className="block text-[10px] uppercase font-bold text-ink-faint mb-1">核心类型</label>
                                 <CustomSelect
+                                    ariaLabel="核心类型"
                                     size="sm"
                                     options={[
                                         { value: 'STOCK', label: '股票 (STOCK)' },
@@ -617,6 +637,7 @@ export default function NewPositionPage() {
                             <div>
                                 <label className="block text-[10px] uppercase font-bold text-ink-faint mb-1">市场</label>
                                 <CustomSelect
+                                    ariaLabel="市场"
                                     size="sm"
                                     options={[
                                         { value: 'US', label: '美股 (US)' },
@@ -646,6 +667,7 @@ export default function NewPositionPage() {
                             <div>
                                 <label className="block text-[10px] uppercase font-bold text-ink-faint mb-1">计价货币</label>
                                 <CustomSelect
+                                    ariaLabel="计价货币"
                                     size="sm"
                                     options={[
                                         { value: 'USD', label: '美元 (USD)' },
@@ -657,6 +679,7 @@ export default function NewPositionPage() {
                             <div>
                                 <label className="block text-[10px] uppercase font-bold text-ink-faint mb-1">工具类型</label>
                                 <CustomSelect
+                                    ariaLabel="工具类型"
                                     size="sm"
                                     options={[
                                         { value: 'SPOT', label: '现货 (SPOT)' },
@@ -758,6 +781,7 @@ export default function NewPositionPage() {
                         <div>
                             <label className="block text-sm font-medium mb-2">入场情绪</label>
                             <CustomSelect
+                                ariaLabel="入场情绪"
                                 options={[
                                     { value: '', label: '选择情绪' },
                                     { value: 'confident', label: '自信 😎' },
@@ -775,6 +799,7 @@ export default function NewPositionPage() {
                         <div>
                             <label className="block text-sm font-medium mb-2">信心指数</label>
                             <CustomSelect
+                                ariaLabel="信心指数"
                                 options={[
                                     { value: '', label: '选择信心' },
                                     { value: 1, label: '1 - 很低' },

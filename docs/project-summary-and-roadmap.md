@@ -49,7 +49,7 @@ P0-P19 阶段计划已经归档，详见 [superpowers/plans/archive/README.md](.
 
 | 风险 | 说明 | 当前策略 |
 |------|------|----------|
-| JRN-001 尚未关闭 | `JRN-000` 已完成逐路径 disposition、checkpoint 和 `IN_CHAIN_DISABLED` 的 `9cad10111213` migration baseline；JRN-001 实现仍在 final verification/review。 | 只在形成稳定 scoped checkpoint、完成最终验证并通过独立评审后关闭 JRN-001。 |
+| JRN-001 尚未关闭 | `JRN-000` 已完成逐路径 disposition、checkpoint 和 `IN_CHAIN_DISABLED` 的 `9cad10111213` migration baseline；旧 JRN-001 checkpoint 已由三路 `CHANGES_REQUIRED` supersede，修复版仍在 final verification/review。 | 只在 replacement scoped checkpoint 完成完整验证并取得同一 SHA 独立批准后关闭 JRN-001。 |
 | 交易日志仍有发布阻断 | 导入、账务、现金硬删除、凭据、双写和恢复证据尚未闭环。 | 只执行当前 trading-journal active plan，完成后再进入 invite-only Beta 决策。 |
 | legacy 路径仍存在 | `Position / TradeBatch / Transaction / AssetMetadata / DailySnapshot` 仍支撑部分迁移、fallback、Dashboard、导入和账户流水路径。 | 先隔离和标记边界，再逐步删除。 |
 | `backend/models.py` 仍集中 | 模型还没有物理拆分。 | `DEFERRED_BY_SCOPE`；等会计和 truth/legacy 语义稳定后再评估。 |

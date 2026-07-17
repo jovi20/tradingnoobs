@@ -2,13 +2,13 @@
 Trading Noobs Backend - Positions Router
 Handles Position CRUD and Batch operations
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from typing import List, Optional
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import csv
 import io
 from datetime import datetime
@@ -38,9 +38,8 @@ from schemas import (
     PositionCreate, PositionUpdate, PositionResponse, PositionListResponse,
     TradeBatchCreate, TradeBatchUpdate, TradeBatchResponse,
     PositionStatusEnum, BatchTypeEnum,
-    ImportPreviewResponse, ImportConfirmRequest
 )
-from models import TradingPosition
+from models import TradingPosition, TradingPositionStatus
 from release_profile import RuntimeCapability
 from services.capability_service import is_effective_capability_enabled
 from services.public_id_service import resolve_position, resolve_trade_batch, resolve_trading_account
@@ -101,6 +100,66 @@ def _enum_value(value):
     return value.value if hasattr(value, "value") else str(value)
 
 
+def _truth_position_is_financially_open(truth_position: TradingPosition) -> bool:
+    """Conservatively derive slot occupancy from canonical accounting truth."""
+    try:
+        quantity_opened = Decimal(str(truth_position.quantity_opened or 0))
+        quantity_closed = Decimal(str(truth_position.quantity_closed or 0))
+        remaining_quantity = quantity_opened - quantity_closed
+        if not all(
+            quantity.is_finite()
+            for quantity in (quantity_opened, quantity_closed, remaining_quantity)
+        ):
+            return True
+        if quantity_opened < 0 or quantity_closed < 0 or remaining_quantity < 0:
+            return True
+        if remaining_quantity > 0:
+            return True
+    except (InvalidOperation, TypeError, ValueError):
+        return True
+
+    # A zero-quantity lifecycle is released only when canonical truth proves
+    # that it is closed (or archived after close). Corrupt/partial truth stays
+    # occupied so it cannot authorize a duplicate OPEN.
+    return truth_position.status not in {
+        TradingPositionStatus.CLOSED,
+        TradingPositionStatus.ARCHIVED,
+    }
+
+
+def _legacy_position_is_potentially_open(position: Position) -> bool:
+    """Keep legacy-only lifecycle decisions conservative until canonicalized."""
+    try:
+        open_quantity = Decimal(str(position.total_quantity or 0))
+        if not open_quantity.is_finite():
+            return True
+        return position.status == PositionStatus.OPEN or open_quantity != 0
+    except (InvalidOperation, TypeError, ValueError):
+        return True
+
+
+def _position_direction(
+    position: Position,
+    truth_position: TradingPosition | None,
+) -> PositionDirection:
+    if truth_position is not None:
+        return PositionDirection(_enum_value(truth_position.side))
+    return position.direction
+
+
+def _position_response_status(
+    position: Position,
+    truth_position: TradingPosition | None,
+) -> str:
+    if truth_position is None:
+        return _enum_value(position.status)
+    return (
+        PositionStatus.OPEN.value
+        if _truth_position_is_financially_open(truth_position)
+        else PositionStatus.CLOSED.value
+    )
+
+
 def _batch_response_payload(batch: TradeBatch) -> dict:
     return {
         "id": batch.id,
@@ -139,8 +198,8 @@ def _position_list_response_payload(
         "symbol": identity.normalized_symbol if identity else position.symbol,
         "exchange": identity.exchange_code if identity else position.exchange,
         "asset_type": identity.asset_type if identity else position.asset_type,
-        "direction": _enum_value(position.direction),
-        "status": _enum_value(position.status),
+        "direction": _enum_value(_position_direction(position, truth_position)),
+        "status": _position_response_status(position, truth_position),
         "total_quantity": position.total_quantity,
         "average_entry_price": position.average_entry_price,
         "realized_pnl": position.realized_pnl,
@@ -204,29 +263,44 @@ def _matching_open_positions(
         .filter(
             Position.user_id == user_id,
             Position.account_id == account.id,
-            Position.direction == direction,
-            Position.status == PositionStatus.OPEN,
         )
         .order_by(Position.id.asc())
         .all()
     )
     matches: list[Position] = []
     for position in candidates:
+        truth_position = resolve_truth_position_for_legacy(
+            db,
+            user_id=user_id,
+            legacy_position=position,
+        )
+        candidate_direction = _position_direction(position, truth_position)
+        candidate_is_open = (
+            _truth_position_is_financially_open(truth_position)
+            if truth_position is not None
+            else _legacy_position_is_potentially_open(position)
+        )
+        if candidate_direction != direction or not candidate_is_open:
+            continue
+
         projection = project_position_instrument(
             db,
             position,
-            truth_position=resolve_truth_position_for_legacy(
-                db,
-                user_id=user_id,
-                legacy_position=position,
-            ),
+            truth_position=truth_position,
         )
-        if projection is None:
-            try:
-                candidate_symbol = require_normalized_symbol(position.symbol)
-            except ReleaseContractViolation:
-                continue
-            if candidate_symbol == identity.normalized_symbol:
+        if projection is None or projection.source == "VALIDATED_PREUPGRADE_TRUTH":
+            candidate_symbols = set()
+            if projection is not None:
+                candidate_symbols.add(projection.identity.normalized_symbol)
+            raw_candidate_symbols = [position.symbol]
+            if truth_position is not None and truth_position.instrument is not None:
+                raw_candidate_symbols.append(truth_position.instrument.contract_symbol)
+            for raw_candidate_symbol in raw_candidate_symbols:
+                try:
+                    candidate_symbols.add(require_normalized_symbol(raw_candidate_symbol))
+                except ReleaseContractViolation:
+                    continue
+            if identity.normalized_symbol in candidate_symbols:
                 raise ReleaseContractViolation(
                     JOURNAL_BETA_CONTRACT.instruments.legacy_unproven_error,
                     "position.exchange",
@@ -401,10 +475,6 @@ async def list_positions(
         joinedload(Position.trading_account),
     ).filter(Position.user_id == current_user.id)
     
-    if status:
-        query = query.filter(Position.status == PositionStatus[status.value])
-    if symbol:
-        query = query.filter(Position.symbol.ilike(f"%{symbol}%"))
     if account_id:
         query = query.filter(Position.account_id == account_id)
     
@@ -419,6 +489,8 @@ async def list_positions(
         else None
     )
     canonical_market = _normalize_market_filter(market)
+    canonical_symbol_substring = symbol.casefold() if symbol else None
+    canonical_status = status.value if status else None
 
     positions = query.order_by(desc(Position.opened_at)).all()
     result = []
@@ -429,6 +501,14 @@ async def list_positions(
             pos,
             truth_position=truth_position,
         )
+        if canonical_status and _position_response_status(pos, truth_position) != canonical_status:
+            continue
+        if canonical_symbol_substring and (
+            projection is None
+            or canonical_symbol_substring
+            not in projection.identity.normalized_symbol.casefold()
+        ):
+            continue
         if canonical_asset_type and (
             projection is None or projection.identity.asset_type != canonical_asset_type
         ):
@@ -1157,74 +1237,3 @@ async def export_positions_csv(
             "Access-Control-Expose-Headers": "Content-Disposition"
         }
     )
-
-
-# ============== Import Endpoints ==============
-
-@router.post("/import/upload", response_model=ImportPreviewResponse)
-async def upload_import_file(
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Upload and parse CSV/Excel file for import preview"""
-    from services.import_service import ImportService
-    service = ImportService(db)
-    
-    token, preview_rows = await service.parse_file(file)
-    
-    valid_count = sum(1 for r in preview_rows if r['is_valid'])
-    error_count = len(preview_rows) - valid_count
-    
-    return {
-        "total_rows": len(preview_rows),
-        "valid_rows": valid_count,
-        "error_rows": error_count,
-        "preview_rows": preview_rows,
-        "file_token": token
-    }
-
-@router.post("/import/confirm")
-async def confirm_import(
-    request: ImportConfirmRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Confirm and process imported data"""
-    from services.import_service import ImportService
-    service = ImportService(db)
-    
-    if not request.account_id:
-        raise HTTPException(status_code=400, detail="Target account is required")
-        
-    count = service.process_import(
-        request.file_token,
-        request.account_id,
-        current_user.id,
-        request.selected_indices
-    )
-    
-    return {"message": "Import successful", "imported_count": count}
-
-@router.get("/import/template")
-async def get_import_template():
-    """Download CSV template"""
-    header = ["Time (YYYY-MM-DD HH:MM)", "Symbol", "Direction", "Action", "Price", "Quantity", "Planned Entry", "Planned SL", "Asset Type", "Strategy", "Emotion", "Confidence", "Reason", "Commission"]
-    example_open = ["2023-01-01 10:00", "AAPL", "LONG", "OPEN", "150.00", "100", "148.50", "145.00", "Stock", "Strategy A", "Neutral", "4", "Entry Signal", "2.0"]
-    example_close = ["2023-01-05 14:00", "AAPL", "LONG", "CLOSE", "155.00", "50", "", "", "", "Strategy A", "Happy", "5", "Target Hit", "2.0"]
-    
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(header)
-    writer.writerow(example_open)
-    writer.writerow(example_close)
-    
-    output.seek(0)
-    
-    # Use StreamingResponse for CSV download
-    response = StreamingResponse(
-        iter([output.getvalue()]),
-        media_type="text/csv"
-    )
-    response.headers["Content-Disposition"] = "attachment; filename=trade_import_template.csv"
-    return response

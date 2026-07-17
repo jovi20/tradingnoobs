@@ -13,6 +13,7 @@ interface CustomSelectProps {
     value: string | number
     onChange: (value: any) => void
     placeholder?: string
+    ariaLabel?: string
     className?: string
     size?: 'sm' | 'md'
 }
@@ -22,6 +23,7 @@ export default function CustomSelect({
     value,
     onChange,
     placeholder = '请选择',
+    ariaLabel,
     className = '',
     size = 'md'
 }: CustomSelectProps) {
@@ -61,6 +63,9 @@ export default function CustomSelect({
             <button
                 type="button"
                 onClick={handleToggle}
+                aria-label={ariaLabel}
+                aria-expanded={isOpen}
+                aria-haspopup="listbox"
                 className={`w-full ${size === 'sm' ? 'h-8 px-2.5 text-xs' : 'h-10 px-3.5 text-sm'} flex items-center justify-between gap-2 bg-panel border border-line rounded-md hover:border-line-strong transition-colors font-medium focus:outline-none focus:ring-2 focus:ring-ink/15`}
             >
                 <span className="truncate">
@@ -72,6 +77,8 @@ export default function CustomSelect({
             {/* Dropdown Menu */}
             {isOpen && (
                 <div
+                    role="listbox"
+                    aria-label={ariaLabel}
                     className={`absolute z-[60] w-full min-w-[160px] bg-panel border border-line rounded-md shadow-pop py-1 animate-scale-in max-h-[200px] overflow-y-auto ${openUpward
                             ? 'bottom-full mb-2 origin-bottom'
                             : 'top-full mt-2 origin-top'
@@ -81,6 +88,8 @@ export default function CustomSelect({
                         <button
                             key={option.value}
                             type="button"
+                            role="option"
+                            aria-selected={value === option.value}
                             onClick={() => {
                                 onChange(option.value)
                                 setIsOpen(false)

@@ -132,6 +132,7 @@ test('duplicate OPEN conflict surfaces a readable localized structured API error
       code: 'OPEN_POSITION_EXISTS',
       message: 'An open position already exists for this identity and direction',
       field: 'direction',
+      position_public_id: 'position-public-id',
     },
   }), {
     status: 409,
@@ -160,6 +161,7 @@ test('duplicate OPEN conflict surfaces a readable localized structured API error
         assert.ok(error instanceof ApiRequestError)
         assert.equal(error.status, 409)
         assert.equal(error.code, 'OPEN_POSITION_EXISTS')
+        assert.equal(error.positionPublicId, 'position-public-id')
         assert.equal(error.message, '同一账户中已存在相同标的和方向的未平仓仓位，请加仓到已有仓位。')
         assert.doesNotMatch(error.message, /\[object Object\]/)
         return true

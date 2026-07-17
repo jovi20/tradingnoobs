@@ -210,7 +210,13 @@ export const JOURNAL_BETA_RELEASE_CONTRACT = {
             ],
             "mode": "ONE_TIME_BOOTSTRAP",
             "trusted_external_trade_ids": false,
-            "implementation_gate": "JRN_011_AND_JRN_012"
+            "implementation_gate": "JRN_011_AND_JRN_012",
+            "preimplementation_policy": "DENY_ONLY_404_FEATURE_DISABLED",
+            "legacy_known_paths": [
+                "/api/positions/import/upload",
+                "/api/positions/import/confirm",
+                "/api/positions/import/template"
+            ]
         },
         "ibkr_flex_xml_v1": {
             "formats": [

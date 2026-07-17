@@ -21,6 +21,7 @@ from app_config.release_contract import (
     require_normalized_symbol,
     require_release_currency,
 )
+from routers.disabled_capabilities import GENERIC_BOOTSTRAP_DISABLED_ROUTES
 
 
 class JournalBetaReleaseContractTests(unittest.TestCase):
@@ -138,6 +139,25 @@ class JournalBetaReleaseContractTests(unittest.TestCase):
         )
         self.assertFalse(contract.imports.ibkr_flex_xml_v1.network_access)
         self.assertFalse(contract.imports.ibkr_flex_xml_v1.credential_access)
+        self.assertEqual(
+            contract.imports.generic_bootstrap.preimplementation_policy,
+            "DENY_ONLY_404_FEATURE_DISABLED",
+        )
+        self.assertEqual(
+            contract.imports.generic_bootstrap.legacy_known_paths,
+            (
+                "/api/positions/import/upload",
+                "/api/positions/import/confirm",
+                "/api/positions/import/template",
+            ),
+        )
+        self.assertEqual(
+            tuple(path for _method, path in GENERIC_BOOTSTRAP_DISABLED_ROUTES),
+            tuple(
+                path.removeprefix("/api/positions")
+                for path in contract.imports.generic_bootstrap.legacy_known_paths
+            ),
+        )
         self.assertTrue(contract.imports.ibkr_flex_xml_v1.repeat_overlap_incremental)
         self.assertEqual(
             contract.imports.ibkr_flex_xml_v1.first_binding_effect,

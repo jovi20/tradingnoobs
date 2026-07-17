@@ -87,6 +87,14 @@ OPEN_REGISTRATION_DISABLED_ROUTES = _disabled_routes(
     OPEN_REGISTRATION_LAZY_ROUTES
 )
 
+# The legacy import handlers predate the owner-bound, persistent ImportSession
+# contract. Keep every known path deny-only until JRN-011/JRN-012 replaces them.
+GENERIC_BOOTSTRAP_DISABLED_ROUTES: tuple[DisabledRoute, ...] = (
+    ("POST", "/import/upload"),
+    ("POST", "/import/confirm"),
+    ("GET", "/import/template"),
+)
+
 
 def feature_disabled_detail(capability: str) -> dict[str, str]:
     return {

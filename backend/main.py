@@ -102,6 +102,7 @@ def create_app(release_profile: ReleaseProfile | str | None = None) -> FastAPI:
         AI_INSIGHTS_LAZY_ROUTES,
         BROKER_SYNC_DISABLED_ROUTES,
         BROKER_SYNC_LAZY_ROUTES,
+        GENERIC_BOOTSTRAP_DISABLED_ROUTES,
         INSIGHT_ARTIFACTS_DISABLED_ROUTES,
         INSIGHT_ARTIFACTS_LAZY_ROUTES,
         INSIGHT_RUNS_DISABLED_ROUTES,
@@ -117,6 +118,14 @@ def create_app(release_profile: ReleaseProfile | str | None = None) -> FastAPI:
         RISK_CARDS_DISABLED_ROUTES,
         RISK_CARDS_LAZY_ROUTES,
         build_disabled_capability_router,
+    )
+
+    application.include_router(
+        build_disabled_capability_router(
+            prefix="/api/positions",
+            capability="GENERIC_BOOTSTRAP",
+            routes=GENERIC_BOOTSTRAP_DISABLED_ROUTES,
+        )
     )
 
     def runtime_dependencies(capability: RuntimeCapability):

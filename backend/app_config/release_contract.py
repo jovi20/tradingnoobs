@@ -136,6 +136,8 @@ class GenericBootstrapContract(_FrozenModel):
     mode: Literal["ONE_TIME_BOOTSTRAP"]
     trusted_external_trade_ids: Literal[False]
     implementation_gate: Literal["JRN_011_AND_JRN_012"]
+    preimplementation_policy: Literal["DENY_ONLY_404_FEATURE_DISABLED"]
+    legacy_known_paths: tuple[str, ...]
 
 
 class OwnerUploadLimitsContract(_FrozenModel):
@@ -350,6 +352,15 @@ class JournalBetaReleaseContract(_FrozenModel):
             "import adapter allowlist",
         )
         require_exact(self.imports.generic_bootstrap.formats, ("CSV_UTF8", "XLSX"), "generic formats")
+        require_exact(
+            self.imports.generic_bootstrap.legacy_known_paths,
+            (
+                "/api/positions/import/upload",
+                "/api/positions/import/confirm",
+                "/api/positions/import/template",
+            ),
+            "legacy generic import paths",
+        )
         require_exact(self.imports.ibkr_flex_xml_v1.formats, ("XML",), "IBKR formats")
         require_exact(
             self.source_states.trade_source_state,

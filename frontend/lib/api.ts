@@ -347,12 +347,14 @@ export interface TradingAccountUpdate {
 export class ApiRequestError extends Error {
     readonly status: number
     readonly code?: string
+    readonly positionPublicId?: string
 
-    constructor(status: number, message: string, code?: string) {
+    constructor(status: number, message: string, code?: string, positionPublicId?: string) {
         super(message)
         this.name = 'ApiRequestError'
         this.status = status
         this.code = code
+        this.positionPublicId = positionPublicId
     }
 }
 
@@ -364,7 +366,11 @@ const LOCALIZED_API_ERROR_MESSAGES: Readonly<Record<string, string>> = {
     OPEN_POSITION_EXISTS: '同一账户中已存在相同标的和方向的未平仓仓位，请加仓到已有仓位。',
 }
 
-function resolveApiError(payload: unknown, status: number): { message: string; code?: string } {
+function resolveApiError(payload: unknown, status: number): {
+    message: string
+    code?: string
+    positionPublicId?: string
+} {
     if (!payload || typeof payload !== 'object') {
         return { message: `HTTP ${status}` }
     }
@@ -374,18 +380,26 @@ function resolveApiError(payload: unknown, status: number): { message: string; c
         return { message: detail }
     }
     if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
-        const structuredDetail = detail as { code?: unknown; message?: unknown }
+        const structuredDetail = detail as {
+            code?: unknown
+            message?: unknown
+            position_public_id?: unknown
+        }
         const code = typeof structuredDetail.code === 'string' && structuredDetail.code.trim()
             ? structuredDetail.code.trim()
             : undefined
+        const positionPublicId = (
+            typeof structuredDetail.position_public_id === 'string'
+            && structuredDetail.position_public_id.trim()
+        ) ? structuredDetail.position_public_id.trim() : undefined
         const localizedMessage = code ? LOCALIZED_API_ERROR_MESSAGES[code] : undefined
-        if (localizedMessage) return { message: localizedMessage, code }
+        if (localizedMessage) return { message: localizedMessage, code, positionPublicId }
 
         const message = typeof structuredDetail.message === 'string' && structuredDetail.message.trim()
             ? structuredDetail.message.trim()
             : undefined
-        if (message) return { message, code }
-        if (code) return { message: code, code }
+        if (message) return { message, code, positionPublicId }
+        if (code) return { message: code, code, positionPublicId }
     }
     if (Array.isArray(detail)) {
         const validationMessage = detail.find(item => (
@@ -422,7 +436,12 @@ async function fetchAPI(
     if (!response.ok) {
         const errorPayload = await response.json().catch(() => null)
         const error = resolveApiError(errorPayload, response.status)
-        throw new ApiRequestError(response.status, error.message, error.code)
+        throw new ApiRequestError(
+            response.status,
+            error.message,
+            error.code,
+            error.positionPublicId,
+        )
     }
 
     // Handle 204 No Content
@@ -1418,44 +1437,6 @@ export const positionsAPI = {
         }, token)
     },
 
-    // Import operations
-    importUpload: async (token: string, file: File): Promise<any> => {
-        const formData = new FormData()
-        formData.append('file', file)
-
-        // Use raw fetch for FormData to avoid Content-Type json override
-        const response = await fetch(`${API_BASE}/api/positions/import/upload`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            },
-            body: formData
-        })
-
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({ detail: 'Upload failed' }))
-            throw new Error(error.detail || 'Upload failed')
-        }
-        return response.json()
-    },
-
-    importConfirm: async (token: string, data: { file_token: string, account_id: number, selected_indices?: number[] }): Promise<any> => {
-        return fetchAPI('/api/positions/import/confirm', {
-            method: 'POST',
-            body: JSON.stringify(data)
-        }, token)
-    },
-
-    getImportTemplate: async (token: string): Promise<Blob> => {
-        const response = await fetch(`${API_BASE}/api/positions/import/template`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
-        })
-        if (!response.ok) throw new Error("Failed to download template")
-        return response.blob()
-    }
 }
 
 // ============== Market Data API ==============

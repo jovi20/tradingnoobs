@@ -218,12 +218,13 @@ effective_enabled = deployment_capability_allowlist AND runtime_rollout_flag
 完成定义：
 
 - 产出机器可读 release profile 和 ADR，冻结唯一 Beta 币种、instrument/event allowlist、`HEDGE_BY_DIRECTION`、单 event 聚合 fee、timezone、idempotency namespace/retention、Import 限额、`GENERIC_BOOTSTRAP` 与 `IBKR_FLEX_XML_V1` adapter allowlist、source-state 合同和禁用能力。
+- `GENERIC_BOOTSTRAP` 与 `IBKR_FLEX_XML_V1` 在各自 implementation gate 关闭前都不等于已实现：旧 `/api/positions/import/upload|confirm|template` 必须由不 import legacy handler 的 deny-only stub 返回 404 `FEATURE_DISABLED`，从 OpenAPI 移除，前端入口不存在且 `/positions/import` 直达访问进入框架 not-found 视图；只有 JRN-011/012 或 JRN-013 至 015 的 owner-bound 持久会话实现通过后才能按对应 adapter 重新开放。
 - 实现 deployment allowlist 与 runtime flag 的双层守卫；allowlist 只读环境/部署配置且不落业务数据库，Admin 不能强开 ceiling 外能力。
 - 在线 Broker、Market、AI、PDF、风险和开放注册的 API、UI、secret、job/outbox、文档同时 fail-closed；`IBKR_FLEX_XML_V1` 只允许本地文件解析，不得借 adapter 触发网络或读取凭据。
 - 未启用事件（stock split、option、transfer 等）即使直连 API 也稳定拒绝。
 - 当前 legacy create/bridge 必须执行 raw-ASCII full instrument identity 校验；已有仓位提示按完整 identity（含 exchange、direction、market、instrument、currency）匹配，slash symbol 通过 query 传输。未证明的历史 exchange 和普通用户共享 AssetMetadata 写入 fail-closed，不能产生半写 truth。
 
-必测：缺失/未知配置、DB flag 读取失败、DB 内伪造 allowlist、Admin 强开、直连 API、导航、设置写入和零 job/outbox side effect。
+必测：缺失/未知配置、DB flag 读取失败与 caller pending state 隔离、DB 内伪造 allowlist、Admin 强开、直连 API、legacy Import 跨 owner payload 的 deny-only 响应、导航、真实组件/1440x900 与 390x844 浏览器流程、设置写入和零 job/outbox side effect。
 
 #### JRN-002 可复现基线与 PostgreSQL CI
 
@@ -584,6 +585,7 @@ JRN-000 必须先完成；之后 JRN-001 先行，JRN-002 与 JRN-003 可并行�
 - 根据后续 WIP 复审增加 JRN-000，决定四个 Broker/Market migration 以 `IN_CHAIN_DISABLED` 纳入 `9cad10111213` baseline；同时冻结 `HEDGE_BY_DIRECTION`、单 event 聚合 fee、幂等/Import retention 和三项用户可见限制。
 - 根据 Claude 后续审阅归档两份遗留 P10 文档，并补严更晚 non-void lifecycle 对旧 CLOSE reversal 的阻断、ImportSession 创建与账户删除的统一锁协议，以及 JRN-002/003 分叉、JRN-004/005 汇合到 JRN-006 的 release closure。
 - 2026-07-17 根据用户对 IBKR 月度导入的复核，废止“所有成功 Import 后必须每月新建账户”的统一限制：通用 CSV/Excel 仍是一次性 bootstrap，`IBKR_FLEX_XML_V1` 则使用 immutable source binding 与 execution ID，在同一账户接受完全重复、窗口重叠或纯增量文件。
+- 2026-07-17 JRN-001 精确 SHA `cf4766de0e843b0a58a1882b30b3fe8556e1a23a` 的三路独立评审均要求修改：关闭可跨租户写入且绕过 identity 的 legacy Import；以 canonical truth 判定 open/side 和 symbol filter；禁止只读 pre-upgrade identity 进入 ADD；隔离 runtime flag read 与 caller pending state；保留 duplicate-OPEN 的 position public ID 以恢复 ADD；用 Playwright 真实浏览器测试替换源码正则完成声明；所有修复必须进入新 checkpoint 并重新取得同一 SHA 双路批准。
 - source-bound revision 增加 fingerprint/generation authority、旧 trade/change stale no-op、payload/correction/cancel reconciliation、binding-wide full confirm、永久幂等响应和 `TARGET_UNRESOLVED` 处理，避免重叠月报重复记账或旧更正反复开 case。
 - 增加 statement coverage continuity 与 immutable `StatementCoverageAcceptance`：execution identity 证明事实不重，accepted coverage 证明时间区间不漏；gap/bridge、空月份 noop、frontier 重建、导出和 release gate 均有验收。`CURRENT` 只表示 last-confirmed coverage as-of，不伪装成实时同步。
 - 冻结首次零成交 IBKR statement 语义：只要 flat boundary 与 coverage 均可证明，它就是 binding-effective `COMPLETED`，会建立 binding 和 acceptance；`COMPLETED_NOOP` 只用于已有 binding 下没有新增 canonical fact 的合法重复或 coverage-only confirm。ImportSession 只永久取消 hard-delete 资格，不会禁止同 binding 的后续增量。

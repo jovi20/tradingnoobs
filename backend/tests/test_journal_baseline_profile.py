@@ -114,6 +114,22 @@ class JournalBaselineProfileTests(unittest.TestCase):
         self.assertFalse(any(path.startswith("/api/market") for path in paths))
         self.assertFalse(any(path.startswith("/api/broker-sync") for path in paths))
         self.assertNotIn("/api/auth/register", paths)
+        self.assertNotIn("/api/positions/import/upload", paths)
+        self.assertNotIn("/api/positions/import/confirm", paths)
+        self.assertNotIn("/api/positions/import/template", paths)
+
+    def test_legacy_import_paths_are_side_effect_free_until_persistent_import_exists(self):
+        requests = (
+            ("post", "/api/positions/import/upload", {"files": {"file": ("trades.csv", b"symbol,date")}}),
+            ("post", "/api/positions/import/confirm", {"json": {"file_token": "untrusted", "account_id": 999}}),
+            ("get", "/api/positions/import/template", {}),
+        )
+
+        for method, path, kwargs in requests:
+            response = self.client.request(method, path, **kwargs)
+            self.assertEqual(response.status_code, 404, response.text)
+            self.assertEqual(response.json()["error"]["code"], "FEATURE_DISABLED")
+            self.assertEqual(response.json()["detail"]["capability"], "GENERIC_BOOTSTRAP")
 
     def test_open_registration_is_a_side_effect_free_disabled_route(self):
         with patch(
@@ -201,6 +217,7 @@ class JournalBaselineProfileTests(unittest.TestCase):
                 "    'services.market_data_service',",
                 "    'services.market_data_job_handlers',",
                 "    'services.broker_sync.service',",
+                "    'services.import_service',",
                 "    'services.insight_artifact_service',",
                 "    'services.llm_service',",
                 "    'services.report_export_service',",

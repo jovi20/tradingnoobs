@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import {
-    ArrowRight, Wallet, PlusCircle, Upload, Layers,
+    ArrowRight, Wallet, PlusCircle, Layers,
     Clock3, ClipboardCheck,
 } from 'lucide-react'
 
@@ -10,7 +10,6 @@ import { StatusPill } from '@/components/ui/StatusPill'
 const startSteps = [
     { href: '/settings', icon: Wallet, title: '添加账户', detail: '先建立一个交易账户作为资金与仓位的归属。' },
     { href: '/positions/new', icon: PlusCircle, title: '录入第一笔交易', detail: '记录开仓理由、计划与信心，形成第一条事件。' },
-    { href: '/positions/import', icon: Upload, title: '导入历史记录', detail: '用 CSV / Excel 批量导入既有交易，快速起步。' },
     { href: '/strategies', icon: Layers, title: '创建第一条策略', detail: '定义规则与检查清单，让复盘有纪律锚点。' },
 ]
 

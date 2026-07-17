@@ -20,6 +20,7 @@ from models import (
     TradeBatch,
     TradingAccount,
     TradingPosition,
+    TradingPositionStatus,
     User,
 )
 from services.auth_service import get_current_user
@@ -226,6 +227,38 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         )
         self.db.commit()
         return legacy_position
+
+    @staticmethod
+    def _msft_open_payload(account_id: int) -> dict:
+        return {
+            "account_id": account_id,
+            "symbol": "MSFT",
+            "exchange_code": "NASDAQ",
+            "asset_type": "STOCK",
+            "direction": "LONG",
+            "entry_price": "190",
+            "quantity": "1",
+            "entry_time": "2026-04-03T15:30:00+00:00",
+            "asset_metadata": {
+                "core_type": "STOCK",
+                "market": "US",
+                "currency": "USD",
+                "instrument": "SPOT",
+            },
+        }
+
+    @staticmethod
+    def _msft_check_params(account_public_id: str) -> dict:
+        return {
+            "account_id": account_public_id,
+            "symbol": "MSFT",
+            "exchange_code": "NASDAQ",
+            "direction": "LONG",
+            "asset_type": "STOCK",
+            "market": "US",
+            "instrument_type": "SPOT",
+            "quote_currency": "USD",
+        }
 
     def test_position_truth_bridge_endpoint_syncs_and_returns_truth_lifecycle(self):
         legacy_position = self._seed_legacy_position()
@@ -605,6 +638,156 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
                 rejected_filter.json()["detail"]["code"],
                 "UNSUPPORTED_MARKET",
             )
+
+    def test_duplicate_open_uses_truth_when_legacy_status_drifts_closed(self):
+        position = self._seed_open_legacy_position()
+        lifecycle = self.client.get(f"/api/positions/{position.public_id}/truth-lifecycle")
+        self.assertEqual(lifecycle.status_code, 200, lifecycle.text)
+
+        position.status = PositionStatus.CLOSED
+        self.db.commit()
+
+        duplicate = self.client.post(
+            "/api/positions",
+            json=self._msft_open_payload(position.account_id),
+        )
+        response = self.client.patch(
+            f"/api/positions/{position.public_id}",
+            json={"planned_entry_price": "181"},
+        )
+        open_list = self.client.get(
+            "/api/positions",
+            params={"account_id": position.account_id, "status": "OPEN"},
+        )
+        closed_list = self.client.get(
+            "/api/positions",
+            params={"account_id": position.account_id, "status": "CLOSED"},
+        )
+
+        self.assertEqual(duplicate.status_code, 409, duplicate.text)
+        self.assertEqual(duplicate.json()["detail"]["code"], "OPEN_POSITION_EXISTS")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["status"], "OPEN")
+        self.assertEqual([item["public_id"] for item in open_list.json()], [position.public_id])
+        self.assertEqual(closed_list.json(), [])
+        self.assertEqual(
+            self.db.query(Position).filter(Position.account_id == position.account_id).count(),
+            1,
+        )
+
+    def test_archived_truth_with_remaining_quantity_still_blocks_duplicate_open(self):
+        position = self._seed_open_legacy_position()
+        lifecycle = self.client.get(f"/api/positions/{position.public_id}/truth-lifecycle")
+        self.assertEqual(lifecycle.status_code, 200, lifecycle.text)
+
+        truth_position = self.db.query(TradingPosition).one()
+        truth_position.status = TradingPositionStatus.ARCHIVED
+        position.status = PositionStatus.CLOSED
+        self.db.commit()
+
+        duplicate = self.client.post(
+            "/api/positions",
+            json=self._msft_open_payload(position.account_id),
+        )
+        response = self.client.patch(
+            f"/api/positions/{position.public_id}",
+            json={"planned_entry_price": "181"},
+        )
+
+        self.assertEqual(duplicate.status_code, 409, duplicate.text)
+        self.assertEqual(duplicate.json()["detail"]["code"], "OPEN_POSITION_EXISTS")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["status"], "OPEN")
+        self.assertEqual(
+            self.db.query(Position).filter(Position.account_id == position.account_id).count(),
+            1,
+        )
+
+    def test_duplicate_open_and_response_use_truth_when_legacy_direction_drifts(self):
+        position = self._seed_open_legacy_position()
+        lifecycle = self.client.get(f"/api/positions/{position.public_id}/truth-lifecycle")
+        self.assertEqual(lifecycle.status_code, 200, lifecycle.text)
+
+        position.direction = PositionDirection.SHORT
+        self.db.commit()
+
+        duplicate = self.client.post(
+            "/api/positions",
+            json=self._msft_open_payload(position.account_id),
+        )
+        check = self.client.get(
+            "/api/positions/check/open",
+            params=self._msft_check_params(position.trading_account.public_id),
+        )
+
+        self.assertEqual(duplicate.status_code, 409, duplicate.text)
+        self.assertEqual(duplicate.json()["detail"]["code"], "OPEN_POSITION_EXISTS")
+        self.assertEqual(check.status_code, 200, check.text)
+        self.assertEqual(check.json()["direction"], "LONG")
+        self.assertEqual(
+            self.db.query(Position).filter(Position.account_id == position.account_id).count(),
+            1,
+        )
+
+    def test_symbol_filter_uses_canonical_projection_when_legacy_symbol_drifts(self):
+        position = self._seed_open_legacy_position()
+        lifecycle = self.client.get(f"/api/positions/{position.public_id}/truth-lifecycle")
+        self.assertEqual(lifecycle.status_code, 200, lifecycle.text)
+
+        position.symbol = "LEGACY-DRIFT"
+        self.db.commit()
+
+        canonical_match = self.client.get(
+            "/api/positions",
+            params={"account_id": position.account_id, "symbol": "sf"},
+        )
+        legacy_only_match = self.client.get(
+            "/api/positions",
+            params={"account_id": position.account_id, "symbol": "legacy"},
+        )
+
+        self.assertEqual(canonical_match.status_code, 200, canonical_match.text)
+        self.assertEqual(len(canonical_match.json()), 1)
+        self.assertEqual(canonical_match.json()[0]["symbol"], "MSFT")
+        self.assertEqual(legacy_only_match.status_code, 200, legacy_only_match.text)
+        self.assertEqual(legacy_only_match.json(), [])
+
+    def test_preupgrade_truth_projection_is_read_only_and_cannot_match_open(self):
+        position = self._seed_open_legacy_position()
+        lifecycle = self.client.get(f"/api/positions/{position.public_id}/truth-lifecycle")
+        self.assertEqual(lifecycle.status_code, 200, lifecycle.text)
+
+        asset = self.db.query(AssetMaster).filter(AssetMaster.canonical_code == "MSFT").one()
+        asset.metadata_json = {}
+        self.db.commit()
+
+        detail = self.client.get(f"/api/positions/{position.public_id}")
+        position.symbol = "LEGACY-DRIFT"
+        self.db.commit()
+        check = self.client.get(
+            "/api/positions/check/open",
+            params=self._msft_check_params(position.trading_account.public_id),
+        )
+        duplicate = self.client.post(
+            "/api/positions",
+            json=self._msft_open_payload(position.account_id),
+        )
+
+        self.assertEqual(detail.status_code, 200, detail.text)
+        self.assertEqual(detail.json()["symbol"], "MSFT")
+        self.assertEqual(detail.json()["asset_metadata"]["market"], "US")
+        for response in (check, duplicate):
+            self.assertEqual(response.status_code, 422, response.text)
+            self.assertEqual(
+                response.json()["detail"]["code"],
+                "LEGACY_INSTRUMENT_IDENTITY_UNPROVEN",
+            )
+        self.assertEqual(
+            self.db.query(Position).filter(Position.account_id == position.account_id).count(),
+            1,
+        )
+        self.db.refresh(asset)
+        self.assertEqual(asset.metadata_json, {})
 
     def test_position_create_requires_release_asset_type_and_usd_account(self):
         usd_account = TradingAccount(

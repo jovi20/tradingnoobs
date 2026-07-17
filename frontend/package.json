@@ -8,6 +8,7 @@
         "start": "next start",
         "lint": "eslint .",
         "test": "node --test tests/*.test.mts",
+        "test:browser": "playwright test",
         "generate:release-contract": "node scripts/generate-release-contract.mjs",
         "check:release-contract": "node scripts/generate-release-contract.mjs --check"
     },
@@ -37,6 +38,7 @@
         "tailwind-merge": "^3.6.0"
     },
     "devDependencies": {
+        "@playwright/test": "1.61.1",
         "@types/node": "^20",
         "@types/react": "^19.2.17",
         "@types/react-dom": "^19.2.3",
