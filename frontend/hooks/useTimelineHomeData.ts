@@ -2,9 +2,9 @@ import { useQuery } from '@tanstack/react-query'
 
 import { timelineAPI } from '@/lib/api'
 import { adaptTimelineHome, TimelineHomeViewModel } from '@/lib/adapters/timeline'
-import type { TimelineView } from '@/lib/read-models'
+import type { JournalTimelineView } from '@/lib/read-models'
 
-export function useTimelineHomeData(token: string | null, view: TimelineView = 'ALL') {
+export function useTimelineHomeData(token: string | null, view: JournalTimelineView = 'ALL') {
     const timelineQuery = useQuery({
         queryKey: ['timeline', 'home', token, view],
         queryFn: async (): Promise<TimelineHomeViewModel> => {

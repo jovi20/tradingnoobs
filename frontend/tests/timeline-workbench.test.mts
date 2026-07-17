@@ -18,7 +18,6 @@ const summaryBar: SummaryBar = {
   period_label: 'This week',
   trade_count: 7,
   review_completion_rate: 0.625,
-  net_equity_change: -1234.56,
   priority_alert_count: 2,
   trust: {
     as_of: '2026-06-09T09:00:00Z',
@@ -52,13 +51,22 @@ const event: TimelineEventCard = {
   href: '/positions/position-1',
 }
 
-test('buildTimelineSummaryMetrics formats the four workbench metrics', () => {
+test('buildTimelineSummaryMetrics exposes journal facts without estimated equity', () => {
   assert.deepEqual(buildTimelineSummaryMetrics(summaryBar), [
     { key: 'trades', label: '交易', value: '7', detail: '本周', tone: 'neutral' },
     { key: 'review_rate', label: '复盘完成', value: '63%', detail: '纪律覆盖率', tone: 'positive' },
-    { key: 'equity_change', label: '净值变化', value: '-1,234.56', detail: '估算', tone: 'negative' },
     { key: 'alerts', label: '重点提醒', value: '2', detail: '需要处理', tone: 'warning' },
   ])
+})
+
+test('buildTimelineSummaryMetrics handles omitted review completion safely', () => {
+  const incompleteSummaryBar = { ...summaryBar } as Partial<SummaryBar>
+  delete incompleteSummaryBar.review_completion_rate
+
+  assert.deepEqual(
+    buildTimelineSummaryMetrics(incompleteSummaryBar as SummaryBar)[1],
+    { key: 'review_rate', label: '复盘完成', value: '-', detail: '纪律覆盖率', tone: 'neutral' },
+  )
 })
 
 test('timeline event contract values use Chinese labels on the primary UI', () => {

@@ -9,22 +9,6 @@ const outputPath = path.resolve(frontendRoot, 'lib/generated/release-contract.ts
 const contract = JSON.parse(await readFile(contractPath, 'utf8'))
 
 const capabilityIds = contract.capabilities.default_disabled
-const runtimeNames = {
-    BROKER_SYNC: 'BROKER_SYNC_RUNTIME_ENABLED',
-    MARKET: 'MARKET_RUNTIME_ENABLED',
-    AI_INSIGHTS: 'AI_INSIGHTS_RUNTIME_ENABLED',
-    PDF_EXPORT: 'PDF_EXPORT_RUNTIME_ENABLED',
-    RISK_CARDS: 'RISK_CARDS_RUNTIME_ENABLED',
-    OPEN_REGISTRATION: 'OPEN_REGISTRATION_RUNTIME_ENABLED',
-}
-const runtimeNameIds = Object.keys(runtimeNames)
-if (
-    runtimeNameIds.length !== capabilityIds.length
-    || runtimeNameIds.some((capability) => !capabilityIds.includes(capability))
-) {
-    throw new Error('Optional capability IDs and frontend runtime constant names must match exactly.')
-}
-
 const serializedContract = JSON.stringify(contract, null, 4)
 
 const lines = [
@@ -37,7 +21,6 @@ const lines = [
     `export const RELEASE_INSTRUMENT_TYPES = ${JSON.stringify(contract.instruments.instrument_types)} as const`,
     `export const RELEASE_IMPORT_ADAPTERS = ${JSON.stringify(contract.imports.adapter_allowlist)} as const`,
     `export const OPTIONAL_CAPABILITY_IDS = ${JSON.stringify(capabilityIds)} as const`,
-    ...capabilityIds.map((capability) => `export const ${runtimeNames[capability]} = false as const`),
     '',
 ]
 const expected = `${lines.join('\n')}`

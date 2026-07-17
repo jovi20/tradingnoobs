@@ -5,13 +5,10 @@ import Link from 'next/link'
 import { useTheme } from '@/components/ThemeProvider'
 import {
     Activity,
-    BookOpen,
     Bot,
     CheckCircle2,
     Download,
-    ExternalLink,
     Gauge,
-    Info,
     KeyRound,
     Loader2,
     LogOut,
@@ -34,10 +31,7 @@ import {
     API_BASE,
     accountsAPI,
     authAPI,
-    brokerSyncAPI,
     settingsAPI,
-    type BrokerExecution,
-    type BrokerSyncRun,
     type TradingAccountCreate,
 } from '@/lib/api'
 import { adaptTradingAccount, type TradingAccountViewModel } from '@/lib/adapters/trading'
@@ -47,20 +41,13 @@ import {
 } from '@/lib/adapters/settings'
 import { SettingsAccountsOverview } from '@/components/settings/domain/SettingsAccountsOverview'
 import { getLocalizedUiError } from '@/lib/authErrors'
-import { BROKER_SYNC_RUNTIME_ENABLED, MARKET_RUNTIME_ENABLED } from '@/lib/release-profile'
 
 const ACCOUNT_TYPES = [
     { value: 'Spot', label: '现金账户' },
-    { value: 'Margin', label: '保证金账户' },
-    { value: 'Unified', label: '统一账户' },
 ]
 
 const CURRENCY_OPTIONS = [
     { value: 'USD', label: 'USD - 美元' },
-    { value: 'HKD', label: 'HKD - 港币' },
-    { value: 'CNY', label: 'CNY - 人民币' },
-    { value: 'EUR', label: 'EUR - 欧元' },
-    { value: 'GBP', label: 'GBP - 英镑' },
 ]
 
 const LOCALE_OPTIONS = [
@@ -77,72 +64,17 @@ const TIMEZONE_OPTIONS = [
 const ACCOUNT_TYPE_LABELS = Object.fromEntries(ACCOUNT_TYPES.map((item) => [item.value, item.label]))
 const LOCALE_LABELS = Object.fromEntries(LOCALE_OPTIONS.map((item) => [item.value, item.label]))
 const TIMEZONE_LABELS = Object.fromEntries(TIMEZONE_OPTIONS.map((item) => [item.value, item.label]))
-const IBKR_FLEX_GUIDE_URL = 'https://www.interactivebrokers.com/campus/ibkr-api-page/flex-web-service/'
-const BINANCE_API_GUIDE_URL = 'https://www.binance.com/en/support/faq/how-to-create-api-360002502072'
-const BINANCE_SPOT_TRADES_DOC_URL = 'https://developers.binance.com/docs/binance-spot-api-docs/rest-api/account-endpoints'
-const BINANCE_FUTURES_TRADES_DOC_URL = 'https://developers.binance.com/docs/derivatives/usds-margined-futures/account/rest-api/Account-Trade-List'
-
-const BINANCE_MARKET_OPTIONS = [
-    { value: 'SPOT', label: '现货' },
-    { value: 'USD_M_FUTURES', label: 'U 本位合约' },
-]
-
-function hasUsableSecret(value: string | null | undefined): boolean {
-    return Boolean(value && value.trim() && !value.includes('*'))
-}
-
-function parseSymbolList(value: string | null | undefined): string[] {
-    if (!value) return []
-    return Array.from(
-        new Set(
-            value
-                .split(/[\s,;，；]+/)
-                .map((item) => item.trim().toUpperCase())
-                .filter(Boolean)
-        )
-    )
-}
-
-function formatBrokerMarket(value: string | null | undefined): string {
-    return {
-        SPOT: '现货',
-        USD_M_FUTURES: 'U 本位合约',
-    }[value || ''] || '未标明市场'
-}
-
-function formatBrokerSyncStatus(value: string): string {
-    return {
-        RUNNING: '同步中',
-        SUCCEEDED: '已完成',
-        FAILED: '失败',
-    }[value] || '未知状态'
-}
-
-function formatExecutionSide(value: string): string {
-    return {
-        BUY: '买入',
-        SELL: '卖出',
-    }[value] || '方向未知'
-}
 
 export default function SettingsPage() {
     const { token, user, logout, refreshSettings, refreshUser } = useAuth()
     const { theme, setTheme } = useTheme()
-    const [settings, setSettings] = useState<SettingsPageState>({
-        ibkr_flex_query_id: '',
-        ibkr_flex_token: '',
-        ibkr_flex_start_date: '',
-        binance_api_key: '',
-        binance_api_secret: '',
-        binance_market_type: 'SPOT',
-        binance_symbols_text: '',
-    })
+    const [settings, setSettings] = useState<SettingsPageState>({})
     const [accounts, setAccounts] = useState<TradingAccountViewModel[]>([])
     const [isAccountFormOpen, setIsAccountFormOpen] = useState(false)
     const [accountForm, setAccountForm] = useState<TradingAccountCreate>({
         name: '',
         broker: '',
-        account_type: '',
+        account_type: 'Spot',
         currency: 'USD',
         description: '',
     })
@@ -163,26 +95,11 @@ export default function SettingsPage() {
     const [notice, setNotice] = useState('')
     const [passwordMessage, setPasswordMessage] = useState('')
     const [isExporting, setIsExporting] = useState(false)
-    const [brokerSyncRuns, setBrokerSyncRuns] = useState<BrokerSyncRun[]>([])
-    const [brokerExecutions, setBrokerExecutions] = useState<BrokerExecution[]>([])
-    const [brokerAction, setBrokerAction] = useState<string | null>(null)
-    const [brokerMessage, setBrokerMessage] = useState('')
-
     const isAdmin = user?.role === 'admin'
     const activeAccountCount = accounts.filter((account) => account.is_active).length
     const accountCurrencies = useMemo(
         () => Array.from(new Set(accounts.map((account) => account.currency))).filter(Boolean),
         [accounts]
-    )
-    const hasIBKRFlexConfig = Boolean(
-        settings.ibkr_flex_query_id && (hasUsableSecret(settings.ibkr_flex_token) || settings.ibkr_flex_token_masked)
-    )
-    const configuredBinanceSymbols = parseSymbolList(settings.binance_symbols_text)
-    const hasBinanceConfig = Boolean(
-        (hasUsableSecret(settings.binance_api_key) || settings.binance_api_key_masked) &&
-        (hasUsableSecret(settings.binance_api_secret) || settings.binance_api_secret_configured) &&
-        settings.binance_market_type &&
-        configuredBinanceSymbols.length > 0
     )
     const completionItems = useMemo(() => [
         {
@@ -200,15 +117,8 @@ export default function SettingsPage() {
             done: Boolean((settings.display_currency || 'USD') && (settings.up_color || 'GREEN')),
             detail: `${settings.display_currency || 'USD'} · ${settings.up_color === 'RED' ? '红涨' : '绿涨'}`,
         },
-        ...(BROKER_SYNC_RUNTIME_ENABLED ? [{
-            label: '连接配置',
-            done: hasIBKRFlexConfig || hasBinanceConfig,
-            detail: hasIBKRFlexConfig ? 'IBKR Flex 已就绪' : hasBinanceConfig ? 'Binance 已就绪' : '未配置',
-        }] : []),
     ], [
         accounts.length,
-        hasBinanceConfig,
-        hasIBKRFlexConfig,
         profileForm.locale,
         profileForm.timezone,
         settings,
@@ -225,18 +135,10 @@ export default function SettingsPage() {
             try {
                 setIsLoading(true)
                 setError('')
-                const promises: Promise<any>[] = [
+                const results = await Promise.all([
                     settingsAPI.get(token),
                     accountsAPI.list(token),
-                ]
-                if (BROKER_SYNC_RUNTIME_ENABLED) {
-                    promises.push(
-                        brokerSyncAPI.listRuns(token, 5).catch(() => []),
-                        brokerSyncAPI.listExecutions(token, 5).catch(() => []),
-                    )
-                }
-
-                const results = await Promise.all(promises)
+                ])
                 if (cancelled) return
                 const adapted = adaptSettingsPageData({
                     userSettings: results[0],
@@ -245,8 +147,6 @@ export default function SettingsPage() {
 
                 setSettings(adapted.settings)
                 setAccounts(adapted.accounts)
-                setBrokerSyncRuns(results[2] || [])
-                setBrokerExecutions(results[3] || [])
             } catch (err) {
                 console.error(err)
                 if (!cancelled) setError('加载设置失败')
@@ -263,26 +163,16 @@ export default function SettingsPage() {
 
     const reloadSavedState = async () => {
         if (!token) return
-        const promises: Promise<any>[] = [
+        const results = await Promise.all([
             settingsAPI.get(token),
             accountsAPI.list(token),
-        ]
-        if (BROKER_SYNC_RUNTIME_ENABLED) {
-            promises.push(
-                brokerSyncAPI.listRuns(token, 5).catch(() => []),
-                brokerSyncAPI.listExecutions(token, 5).catch(() => []),
-            )
-        }
-
-        const results = await Promise.all(promises)
+        ])
         const adapted = adaptSettingsPageData({
             userSettings: results[0],
             accounts: results[1],
         })
         setSettings(adapted.settings)
         setAccounts(adapted.accounts)
-        setBrokerSyncRuns(results[2] || [])
-        setBrokerExecutions(results[3] || [])
     }
 
     const updateSetting = (key: keyof SettingsPageState, value: string | number | null) => {
@@ -298,22 +188,6 @@ export default function SettingsPage() {
                 theme: theme || 'system',
                 up_color: settings.up_color || 'GREEN',
                 display_currency: settings.display_currency || 'USD',
-            }
-
-            if (BROKER_SYNC_RUNTIME_ENABLED) {
-                settingsPayload.ibkr_flex_query_id = settings.ibkr_flex_query_id || undefined
-                settingsPayload.ibkr_flex_start_date = settings.ibkr_flex_start_date || undefined
-                settingsPayload.binance_market_type = settings.binance_market_type || 'SPOT'
-                settingsPayload.binance_symbols = parseSymbolList(settings.binance_symbols_text)
-                if (hasUsableSecret(settings.ibkr_flex_token)) {
-                    settingsPayload.ibkr_flex_token = settings.ibkr_flex_token?.trim()
-                }
-                if (hasUsableSecret(settings.binance_api_key)) {
-                    settingsPayload.binance_api_key = settings.binance_api_key?.trim()
-                }
-                if (hasUsableSecret(settings.binance_api_secret)) {
-                    settingsPayload.binance_api_secret = settings.binance_api_secret?.trim()
-                }
             }
 
             await Promise.all([
@@ -337,37 +211,6 @@ export default function SettingsPage() {
             setIsSaving(false)
         }
     }
-
-    const handleBrokerAction = async (
-        actionKey: string,
-        action: () => Promise<{ ok?: boolean; message?: string; status?: string; records_inserted?: number; records_skipped?: number }>
-    ) => {
-        if (!token) return
-        setError('')
-        setBrokerMessage('')
-        setBrokerAction(actionKey)
-        try {
-            await handleSave()
-            const result = await action()
-            if ('records_inserted' in result) {
-                setBrokerMessage(`同步完成：新增 ${result.records_inserted || 0} 条，跳过 ${result.records_skipped || 0} 条`)
-            } else {
-                setBrokerMessage(getLocalizedUiError(
-                    result.message,
-                    result.ok === false ? '连接测试失败，请检查配置' : '连接测试成功'
-                ))
-            }
-            await reloadSavedState()
-        } catch (err: unknown) {
-            setBrokerMessage(getLocalizedUiError(err, '操作失败，请稍后重试'))
-        } finally {
-            setBrokerAction(null)
-        }
-    }
-
-    const brokerSyncPayload = () => ({
-        start_date: settings.ibkr_flex_start_date || undefined,
-    })
 
     const handleChangePassword = async (event: FormEvent) => {
         event.preventDefault()
@@ -434,7 +277,7 @@ export default function SettingsPage() {
         setAccountForm({
             name: '',
             broker: '',
-            account_type: '',
+            account_type: 'Spot',
             currency: 'USD',
             description: '',
         })
@@ -642,199 +485,6 @@ export default function SettingsPage() {
                         </div>
                     </section>
 
-                    {BROKER_SYNC_RUNTIME_ENABLED && (
-                    <section className="rounded-lg border border-line bg-panel shadow-panel dark:shadow-none">
-                        <div className="border-b border-line p-4">
-                            <h2 className="flex items-center gap-2 text-base font-bold">
-                                <Activity className="h-4 w-4" />
-                                连接与数据源
-                            </h2>
-                            <p className="mt-1 text-xs text-ink-muted">维护交易记录回补凭据。密钥留空时不会覆盖已保存配置。</p>
-                        </div>
-                        <div className="grid gap-4 p-4 xl:grid-cols-2">
-                            <SettingPanel title="IBKR Flex 历史回补">
-                                <div className="grid gap-3 sm:grid-cols-2">
-                                    <label className="block">
-                                        <span className="mb-1.5 block text-xs text-ink-muted">Flex Query ID</span>
-                                        <input
-                                            className="input font-mono text-sm"
-                                            value={settings.ibkr_flex_query_id || ''}
-                                            onChange={(event) => updateSetting('ibkr_flex_query_id', event.target.value)}
-                                            placeholder="例如: 123456"
-                                        />
-                                    </label>
-                                    <label className="block">
-                                        <span className="mb-1.5 block text-xs text-ink-muted">Flex Token</span>
-                                        <input
-                                            className="input font-mono text-sm"
-                                            type="password"
-                                            value={settings.ibkr_flex_token || ''}
-                                            onChange={(event) => updateSetting('ibkr_flex_token', event.target.value)}
-                                            placeholder={settings.ibkr_flex_token_masked || '新 Flex Token'}
-                                        />
-                                    </label>
-                                    <label className="block sm:col-span-2">
-                                        <span className="mb-1.5 block text-xs text-ink-muted">回补起始日期</span>
-                                        <input
-                                            className="input text-sm"
-                                            type="date"
-                                            value={settings.ibkr_flex_start_date || ''}
-                                            onChange={(event) => updateSetting('ibkr_flex_start_date', event.target.value)}
-                                        />
-                                    </label>
-                                </div>
-                                <ConnectionStatus ready={hasIBKRFlexConfig} readyLabel="IBKR Flex 已配置" emptyLabel="缺少 Flex Query ID / Token" />
-                                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                                    <button
-                                        type="button"
-                                        className="inline-flex items-center justify-center gap-2 rounded-md border border-line bg-panel-subtle px-4 py-2 text-sm font-medium text-ink-soft transition-colors hover:bg-panel disabled:opacity-50"
-                                        disabled={brokerAction !== null}
-                                        onClick={() => handleBrokerAction('ibkr-test', () => brokerSyncAPI.testIBKR(token!))}
-                                    >
-                                        {brokerAction === 'ibkr-test' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Activity className="mr-2 h-4 w-4" />}
-                                        测试连接
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="inline-flex items-center justify-center gap-2 rounded-md bg-ink px-4 py-2 text-sm font-medium text-canvas transition-colors hover:bg-ink-soft disabled:opacity-50"
-                                        disabled={brokerAction !== null}
-                                        onClick={() => handleBrokerAction('ibkr-sync', () => brokerSyncAPI.syncIBKR(token!, brokerSyncPayload()))}
-                                    >
-                                        {brokerAction === 'ibkr-sync' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-                                        回补成交
-                                    </button>
-                                </div>
-                                <ParameterGuide
-                                    title="IBKR 参数获取指南"
-                                    items={[
-                                        '在 IBKR Client Portal 创建 Flex Query，类型建议选择成交确认（Trade Confirmation）或活动报告（Activity）。',
-                                        '打开 Flex Web Service，复制 Token；进入已创建的 Flex Query，复制 Query ID。',
-                                        '报告格式建议选择 XML，字段需包含账号、成交时间、交易标的（symbol）、买卖方向、数量、价格、手续费、成交编号。',
-                                        '回补起始日期用于限制首次导入范围，避免重复拉取太久远的历史。',
-                                    ]}
-                                    links={[
-                                        { label: 'IBKR Flex Web Service', href: IBKR_FLEX_GUIDE_URL },
-                                    ]}
-                                />
-                            </SettingPanel>
-
-                            <SettingPanel title="Binance API">
-                                <div className="grid gap-3 sm:grid-cols-2">
-                                    <label className="block sm:col-span-2">
-                                        <span className="mb-1.5 block text-xs text-ink-muted">市场类型</span>
-                                        <select
-                                            className="input text-sm"
-                                            value={settings.binance_market_type || 'SPOT'}
-                                            onChange={(event) => updateSetting('binance_market_type', event.target.value)}
-                                        >
-                                            {BINANCE_MARKET_OPTIONS.map((item) => (
-                                                <option key={item.value} value={item.value}>{item.label}</option>
-                                            ))}
-                                        </select>
-                                    </label>
-                                    <label className="block">
-                                        <span className="mb-1.5 block text-xs text-ink-muted">API Key</span>
-                                        <input
-                                            className="input font-mono text-sm"
-                                            type="password"
-                                            value={settings.binance_api_key || ''}
-                                            onChange={(event) => updateSetting('binance_api_key', event.target.value)}
-                                            placeholder={settings.binance_api_key_masked || '新 API Key'}
-                                        />
-                                    </label>
-                                    <label className="block">
-                                        <span className="mb-1.5 block text-xs text-ink-muted">API Secret</span>
-                                        <input
-                                            className="input font-mono text-sm"
-                                            type="password"
-                                            value={settings.binance_api_secret || ''}
-                                            onChange={(event) => updateSetting('binance_api_secret', event.target.value)}
-                                            placeholder="新 API Secret"
-                                        />
-                                    </label>
-                                    <label className="block sm:col-span-2">
-                                        <span className="mb-1.5 block text-xs text-ink-muted">同步交易对</span>
-                                        <textarea
-                                            className="input min-h-24 font-mono text-sm"
-                                            value={settings.binance_symbols_text || ''}
-                                            onChange={(event) => updateSetting('binance_symbols_text', event.target.value)}
-                                            placeholder="BTCUSDT, ETHUSDT&#10;SOLUSDT"
-                                        />
-                                        <span className="mt-1 block text-xs text-ink-muted">支持逗号、空格或换行分隔；系统会按交易对拉取账户成交。</span>
-                                    </label>
-                                </div>
-                                <ConnectionStatus ready={hasBinanceConfig} readyLabel="Binance 成交同步已配置" emptyLabel="缺少 API Key / Secret / 同步交易对" />
-                                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                                    <button
-                                        type="button"
-                                        className="inline-flex items-center justify-center gap-2 rounded-md border border-line bg-panel-subtle px-4 py-2 text-sm font-medium text-ink-soft transition-colors hover:bg-panel disabled:opacity-50"
-                                        disabled={brokerAction !== null}
-                                        onClick={() => handleBrokerAction('binance-test', () => brokerSyncAPI.testBinance(token!))}
-                                    >
-                                        {brokerAction === 'binance-test' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Activity className="mr-2 h-4 w-4" />}
-                                        测试连接
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="inline-flex items-center justify-center gap-2 rounded-md bg-ink px-4 py-2 text-sm font-medium text-canvas transition-colors hover:bg-ink-soft disabled:opacity-50"
-                                        disabled={brokerAction !== null}
-                                        onClick={() => handleBrokerAction('binance-sync', () => brokerSyncAPI.syncBinance(token!, {}))}
-                                    >
-                                        {brokerAction === 'binance-sync' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-                                        同步成交
-                                    </button>
-                                </div>
-                                <ParameterGuide
-                                    title="Binance 参数获取指南"
-                                    items={[
-                                        '在 Binance API Management 新建 API Key，保存 API Key 和 Secret。',
-                                        '权限只需要读取账户/交易记录；不要开启提现权限。',
-                                        '现货成交记录需按交易对（symbol）查询，所以这里必须填写要回补的交易对。',
-                                        '如果使用 U 本位合约，市场类型选择 U 本位合约，并填写对应合约交易对。',
-                                        '接口只读取账户成交，不同步行情、K 线或标的价格。',
-                                    ]}
-                                    links={[
-                                        { label: '创建 Binance API Key', href: BINANCE_API_GUIDE_URL },
-                                        { label: '现货成交接口', href: BINANCE_SPOT_TRADES_DOC_URL },
-                                        { label: 'U 本位成交接口', href: BINANCE_FUTURES_TRADES_DOC_URL },
-                                    ]}
-                                />
-                            </SettingPanel>
-                        </div>
-                        {(brokerMessage || brokerSyncRuns.length > 0 || brokerExecutions.length > 0) && (
-                            <div className="border-t border-line p-4">
-                                {brokerMessage && (
-                                    <div className="mb-3 rounded-lg bg-panel-subtle p-3 text-sm text-ink-soft">
-                                        {brokerMessage}
-                                    </div>
-                                )}
-                                <BrokerSyncSnapshot runs={brokerSyncRuns} executions={brokerExecutions} />
-                            </div>
-                        )}
-                    </section>
-                    )}
-
-                    {isAdmin && (
-                        <section className="rounded-lg border border-line bg-panel p-4 shadow-panel dark:shadow-none">
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                <div>
-                                    <h2 className="flex items-center gap-2 text-base font-bold">
-                                        <Bot className="h-4 w-4" />
-                                        管理员配置中心
-                                    </h2>
-                                    <p className="mt-1 text-sm leading-6 text-ink-muted">
-                                        {MARKET_RUNTIME_ENABLED
-                                            ? '全局 LLM、行情密钥、集成启停和功能开关已统一放到运维工作台的平台页签。'
-                                            : '全局 LLM、集成启停和功能开关已统一放到运维工作台的平台页签。'}
-                                    </p>
-                                </div>
-                                <Link href="/admin/ops?tab=platform" className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-ink px-4 py-2 text-sm font-medium text-canvas transition-colors hover:bg-ink-soft">
-                                    <Gauge className="mr-2 h-4 w-4" />
-                                    打开平台配置
-                                </Link>
-                            </div>
-                        </section>
-                    )}
                 </div>
 
                 <aside className="space-y-5">
@@ -1002,7 +652,7 @@ export default function SettingsPage() {
                                         className="input text-sm"
                                         value={accountForm.name}
                                         onChange={(event) => setAccountForm({ ...accountForm, name: event.target.value })}
-                                        placeholder="例如: IBKR 主账户"
+                                        placeholder="例如: 主交易账户"
                                     />
                                 </label>
                                 <label className="block">
@@ -1012,17 +662,16 @@ export default function SettingsPage() {
                                         className="input text-sm"
                                         value={accountForm.broker}
                                         onChange={(event) => setAccountForm({ ...accountForm, broker: event.target.value })}
-                                        placeholder="Interactive Brokers"
+                                        placeholder="券商或交易所名称"
                                     />
                                 </label>
                                 <label className="block">
                                     <span className="mb-1.5 block text-xs font-bold uppercase tracking-[0.14em] text-ink-muted">类型</span>
                                     <select
                                         className="input text-sm"
-                                        value={accountForm.account_type || ''}
-                                        onChange={(event) => setAccountForm({ ...accountForm, account_type: event.target.value })}
+                                        value="Spot"
+                                        disabled
                                     >
-                                        <option value="">请选择…</option>
                                         {ACCOUNT_TYPES.map((item) => (
                                             <option key={item.value} value={item.value}>{item.label}</option>
                                         ))}
@@ -1032,8 +681,8 @@ export default function SettingsPage() {
                                     <span className="mb-1.5 block text-xs font-bold uppercase tracking-[0.14em] text-ink-muted">币种</span>
                                     <select
                                         className="input text-sm"
-                                        value={accountForm.currency}
-                                        onChange={(event) => setAccountForm({ ...accountForm, currency: event.target.value })}
+                                        value="USD"
+                                        disabled
                                     >
                                         {CURRENCY_OPTIONS.map((item) => (
                                             <option key={item.value} value={item.value}>{item.label}</option>
@@ -1122,116 +771,6 @@ function ChoiceButton({
             <p className="text-sm font-semibold">{label}</p>
             <p className="mt-1 text-xs text-ink-muted">{detail}</p>
         </button>
-    )
-}
-
-function ConnectionStatus({
-    ready,
-    readyLabel,
-    emptyLabel,
-}: {
-    ready: boolean
-    readyLabel: string
-    emptyLabel: string
-}) {
-    return (
-        <div className={`mt-3 rounded-lg px-3 py-2 text-xs font-semibold ${
-            ready
-                ? 'bg-profit/10 text-profit'
-                : 'bg-warning/12 text-warning'
-        }`}>
-            {ready ? readyLabel : emptyLabel}
-        </div>
-    )
-}
-
-function ParameterGuide({
-    title,
-    items,
-    links,
-}: {
-    title: string
-    items: string[]
-    links: Array<{ label: string; href: string }>
-}) {
-    return (
-        <div className="mt-3 rounded-lg border border-line bg-panel p-3">
-            <div className="flex items-center gap-2 text-xs font-bold text-ink-soft">
-                <BookOpen className="h-4 w-4" />
-                {title}
-            </div>
-            <div className="mt-3 grid gap-2">
-                {items.map((item) => (
-                    <div key={item} className="flex gap-2 text-xs leading-5 text-ink-soft">
-                        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-faint" />
-                        <span>{item}</span>
-                    </div>
-                ))}
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-                {links.map((link) => (
-                    <a
-                        key={link.href}
-                        href={link.href}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 rounded-md border border-line px-2.5 py-1.5 text-xs font-semibold text-ink-soft transition-colors hover:bg-panel-subtle"
-                    >
-                        {link.label}
-                        <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
-                ))}
-            </div>
-        </div>
-    )
-}
-
-function BrokerSyncSnapshot({
-    runs,
-    executions,
-}: {
-    runs: BrokerSyncRun[]
-    executions: BrokerExecution[]
-}) {
-    return (
-        <div className="grid gap-3 lg:grid-cols-2">
-            <div className="rounded-lg bg-panel-subtle p-3">
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted">最近同步</p>
-                <div className="mt-3 space-y-2">
-                    {runs.length === 0 ? (
-                        <p className="text-sm text-ink-muted">暂无同步记录</p>
-                    ) : runs.map((run) => (
-                        <div key={run.public_id} className="rounded-md bg-panel p-2 text-xs">
-                            <div className="flex items-center justify-between gap-2">
-                                <span className="font-semibold">{run.provider} · {formatBrokerMarket(run.market_type)}</span>
-                                <span className="rounded-full bg-panel-subtle px-2 py-0.5 font-semibold">{formatBrokerSyncStatus(run.status)}</span>
-                            </div>
-                            <p className="mt-1 text-ink-muted tn-nums">
-                                拉取 {run.records_fetched} · 新增 {run.records_inserted} · 跳过 {run.records_skipped}
-                            </p>
-                        </div>
-                    ))}
-                </div>
-            </div>
-            <div className="rounded-lg bg-panel-subtle p-3">
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink-muted">最近成交</p>
-                <div className="mt-3 space-y-2">
-                    {executions.length === 0 ? (
-                        <p className="text-sm text-ink-muted">暂无原始成交</p>
-                    ) : executions.map((execution) => (
-                        <div key={execution.public_id} className="rounded-md bg-panel p-2 text-xs">
-                            <div className="flex items-center justify-between gap-2">
-                                <span className="font-semibold">{execution.symbol}</span>
-                                <span className="tn-nums">{formatExecutionSide(execution.side)} {Number(execution.quantity).toLocaleString('zh-CN')}</span>
-                            </div>
-                            <p className="mt-1 text-ink-muted tn-nums">
-                                {execution.provider} · {new Date(execution.trade_time).toLocaleString('zh-CN')} · {Number(execution.price).toLocaleString('zh-CN')}
-                            </p>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        </div>
     )
 }
 

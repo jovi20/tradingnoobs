@@ -208,6 +208,9 @@ export const JOURNAL_BETA_RELEASE_CONTRACT = {
             "network_access": false,
             "credential_access": false,
             "repeat_overlap_incremental": true,
+            "first_binding_effect": "EFFECTIVE_EXECUTION_OR_PROVEN_FLAT_COVERAGE",
+            "proven_flat_empty_statement_can_bind": true,
+            "proven_flat_empty_binding_session_state": "COMPLETED",
             "execution_identity_field": "ibExecID",
             "provider_contract_gate_required": true,
             "implementation_gate": "JRN_013_THROUGH_JRN_015",
@@ -295,7 +298,12 @@ export const JOURNAL_BETA_RELEASE_CONTRACT = {
             {
                 "from_state": "CLEAN",
                 "to_state": "SOURCE_BOUND",
-                "trigger": "FIRST_IBKR_FLEX_NON_NOOP_CONFIRM"
+                "trigger": "FIRST_IBKR_FLEX_BINDING_EFFECTIVE_CONFIRM"
+            },
+            {
+                "from_state": "SOURCE_BOUND",
+                "to_state": "SOURCE_BOUND",
+                "trigger": "SAME_BINDING_REPEAT_OVERLAP_OR_INCREMENTAL_CONFIRM"
             }
         ]
     },
@@ -335,9 +343,3 @@ export const RELEASE_ASSET_TYPES = ["STOCK","FUND","CRYPTO"] as const
 export const RELEASE_INSTRUMENT_TYPES = ["SPOT"] as const
 export const RELEASE_IMPORT_ADAPTERS = ["GENERIC_BOOTSTRAP","IBKR_FLEX_XML_V1"] as const
 export const OPTIONAL_CAPABILITY_IDS = ["BROKER_SYNC","MARKET","AI_INSIGHTS","PDF_EXPORT","RISK_CARDS","OPEN_REGISTRATION"] as const
-export const BROKER_SYNC_RUNTIME_ENABLED = false as const
-export const MARKET_RUNTIME_ENABLED = false as const
-export const AI_INSIGHTS_RUNTIME_ENABLED = false as const
-export const PDF_EXPORT_RUNTIME_ENABLED = false as const
-export const RISK_CARDS_RUNTIME_ENABLED = false as const
-export const OPEN_REGISTRATION_RUNTIME_ENABLED = false as const

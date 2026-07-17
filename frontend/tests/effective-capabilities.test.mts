@@ -75,25 +75,29 @@ test('journal Beta does not include Insights route modules', () => {
   assert.equal(existsSync(resolve(frontendRoot, 'app/(product)/insights/[artifactId]/InsightArtifactDetailPageClient.tsx')), true)
 })
 
-test('optional UI entries are tied to effective capability IDs', () => {
+test('optional UI entries are gated or absent from journal-only surfaces', () => {
   const commandPalette = readSource('components/navigation/CommandPalette.tsx')
   const dashboardHeader = readSource('components/dashboard/workbench/DashboardWorkbenchHeader.tsx')
   const insightsClient = readSource('app/(product)/insights/InsightsPageClient.tsx')
 
   assert.match(commandPalette, /requiredCapability: 'AI_INSIGHTS'/)
   assert.match(commandPalette, /isEffectiveCapabilityEnabled\(effectiveCapabilities, c\.requiredCapability\)/)
-  assert.match(dashboardHeader, /requiredCapability: 'AI_INSIGHTS'/)
-  assert.match(dashboardHeader, /visibleQuickLinks/)
+  assert.doesNotMatch(dashboardHeader, /AI_INSIGHTS|\/insights|useEffectiveCapabilities/)
   assert.match(insightsClient, /isEffectiveCapabilityEnabled\(effectiveCapabilities, 'PDF_EXPORT'\)/)
   assert.match(insightsClient, /\{canExportPdf && \(/)
 })
 
-test('invite-only auth copy does not advertise disabled capabilities', () => {
+test('registration stays unreachable until the invite workflow is implemented', () => {
   const login = readSource('app/(auth)/login/page.tsx')
-  const register = readSource('app/(auth)/register/page.tsx')
+  const registerPath = resolve(frontendRoot, 'app/(auth)/register/page.tsx')
+  const authContext = readSource('contexts/AuthContext.tsx')
+  const api = readSource('lib/api.ts')
 
-  assert.match(login, /凭邀请注册/)
-  assert.match(register, /凭邀请创建账户/)
-  assert.match(register, /凭邀请注册/)
-  assert.doesNotMatch(`${login}\n${register}`, /AI|量化系统|追踪风险/)
+  assert.doesNotMatch(login, /\/register|凭邀请注册/)
+  assert.equal(existsSync(registerPath), false)
+  assert.doesNotMatch(
+    authContext,
+    /register:|authAPI\.register|['"]\/register['"]/
+  )
+  assert.doesNotMatch(api, /register:\s*async|['"]\/auth\/register['"]/)
 })

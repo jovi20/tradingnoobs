@@ -55,7 +55,7 @@ export function SettingsAccountsOverview({
 
             {accounts.length === 0 ? (
                 <div className="p-8 text-center text-sm text-ink-muted">
-                    暂无账户。添加一个券商账户后，交易记录、现金流水和组合视图会关联到这里。
+                    暂无账户。添加账户后，交易记录、资金流水和复盘会关联到这里。
                 </div>
             ) : (
                 <div className="divide-y divide-line">
@@ -63,7 +63,7 @@ export function SettingsAccountsOverview({
                         <Link
                             key={account.id}
                             href={`/settings/accounts/${account.routeId}`}
-                            className="grid gap-3 p-4 transition-colors hover:bg-panel-subtle md:grid-cols-[minmax(0,1.2fr)_repeat(3,minmax(0,0.7fr))_auto]"
+                            className="grid gap-3 p-4 transition-colors hover:bg-panel-subtle md:grid-cols-[minmax(0,1.2fr)_minmax(0,0.7fr)_auto]"
                         >
                             <div className="flex min-w-0 items-center gap-3">
                                 <div className="rounded-lg bg-panel-subtle p-2 text-ink-soft">
@@ -86,9 +86,7 @@ export function SettingsAccountsOverview({
                                 </div>
                             </div>
 
-                            <AccountValue label="账户净值" value={formatMoney(account, account.total_equity ?? account.cash_balance)} />
-                            <AccountValue label="市值" value={formatMoney(account, account.market_value)} />
-                            <AccountValue label="现金" value={formatMoney(account, account.cash_balance)} />
+                            <AccountValue label="日志余额" value={formatMoney(account, account.journal_balance)} />
 
                             <div className="hidden items-center justify-end text-ink-faint md:flex">
                                 <ChevronRight className="h-4 w-4" />

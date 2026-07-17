@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import {
     ArrowRight, Wallet, PlusCircle, Upload, Layers,
-    Clock3, ClipboardCheck, Sparkles,
+    Clock3, ClipboardCheck,
 } from 'lucide-react'
 
 import { Surface } from '@/components/ui/Surface'
@@ -28,7 +28,7 @@ export function TimelineZeroState() {
                     把记录变成可复盘的决策线程。
                 </h1>
                 <p className="mt-3 text-sm leading-6 text-ink-muted md:text-base">
-                    Trading Noobs 不只是流水账。录入交易后，时间线会把开仓、加减仓、平仓、复盘与 AI 洞察串成一条连续的决策故事。
+                    录入交易后，时间线会把开仓、加减仓、平仓与复盘串成一条连续的决策记录。
                 </p>
             </header>
 
@@ -91,17 +91,6 @@ export function TimelineZeroState() {
                             </div>
                             <p className="mt-2 text-sm font-semibold text-ink">本周纪律评分 B+</p>
                             <p className="mt-1 text-sm leading-6 text-ink-muted">检查清单命中 82%，止损执行有 1 次偏移待改进。</p>
-                        </div>
-
-                        {/* Sample AI insight */}
-                        <div className="rounded-lg border border-ai/25 bg-ai/8 p-4">
-                            <div className="flex items-center gap-2">
-                                <Sparkles className="h-4 w-4 text-ai" />
-                                <span className="text-xs font-semibold text-ai">AI 洞察</span>
-                            </div>
-                            <p className="mt-2 text-sm leading-6 text-ink-soft">
-                                你在趋势延续形态里的胜率明显高于反转形态，建议把反转类交易的仓位上限调低。
-                            </p>
                         </div>
                     </Surface>
                     <p className="px-1 text-xs text-ink-faint">

@@ -11,22 +11,28 @@ interface TimelineFeedPanelProps {
 
 export function TimelineFeedPanel({ timelineHome }: TimelineFeedPanelProps) {
     const emptyState = getTimelineEmptyState(timelineHome.pageState)
+    const journalGroups = timelineHome.timeline.groups
+        .map((group) => ({
+            ...group,
+            items: group.items.filter((event) => event.event_type !== 'AI_INSIGHT'),
+        }))
+        .filter((group) => group.items.length > 0)
 
     return (
         <Surface className="p-4 md:p-5">
             <SectionHeader
                 eyebrow="事件流"
                 title="主时间线"
-                description="按天分组，优先展示交易、复盘、AI 证据和异常。"
+                description="按天分组，优先展示交易、复盘和异常。"
             />
 
-            {timelineHome.timeline.groups.length === 0 ? (
+            {journalGroups.length === 0 ? (
                 <div className="mt-5">
                     <EmptyStatePanel title={emptyState.title} detail={emptyState.detail} />
                 </div>
             ) : (
                 <div className="mt-5 space-y-6">
-                    {timelineHome.timeline.groups.map((group) => (
+                    {journalGroups.map((group) => (
                         <div key={group.group_key} className="space-y-3">
                             <div className="flex items-center gap-3">
                                 <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-faint">

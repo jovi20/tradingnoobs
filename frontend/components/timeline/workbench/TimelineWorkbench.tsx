@@ -1,7 +1,6 @@
 import { buildTimelineSummaryMetrics } from '@/lib/adapters/timeline-workbench'
 import type { TimelineHomeViewModel } from '@/lib/adapters/timeline'
-import type { InsightRun } from '@/lib/insightArtifacts'
-import type { TimelineView } from '@/lib/read-models'
+import type { JournalTimelineView } from '@/lib/read-models'
 import { MetricTile } from '@/components/ui/MetricTile'
 import { PageFrame } from '@/components/ui/PageFrame'
 import { ReviewInboxPanel } from './ReviewInboxPanel'
@@ -12,13 +11,9 @@ import { TimelineWorkbenchHeader } from './TimelineWorkbenchHeader'
 
 interface TimelineWorkbenchProps {
     timelineHome: TimelineHomeViewModel
-    view: TimelineView
-    onChangeView: (value: TimelineView) => void
+    view: JournalTimelineView
+    onChangeView: (value: JournalTimelineView) => void
     onRefresh: () => void
-    insightRuns?: InsightRun[]
-    insightRunsLoading: boolean
-    insightRunsError: string | null
-    onRefreshInsights: () => void
 }
 
 export function TimelineWorkbench({
@@ -26,10 +21,6 @@ export function TimelineWorkbench({
     view,
     onChangeView,
     onRefresh,
-    insightRuns,
-    insightRunsLoading,
-    insightRunsError,
-    onRefreshInsights,
 }: TimelineWorkbenchProps) {
     const metrics = buildTimelineSummaryMetrics(timelineHome.summaryBar)
 
@@ -38,7 +29,7 @@ export function TimelineWorkbench({
             <div className="space-y-6">
                 <TimelineWorkbenchHeader pageMeta={timelineHome.pageMeta} onRefresh={onRefresh} />
 
-                <div className="grid gap-3 md:grid-cols-4">
+                <div className="grid gap-3 md:grid-cols-3">
                     {metrics.map((metric) => (
                         <MetricTile
                             key={metric.key}
@@ -63,10 +54,6 @@ export function TimelineWorkbench({
                     <div className="hidden lg:block">
                         <TimelineDecisionRail
                             timelineHome={timelineHome}
-                            insightRuns={insightRuns}
-                            insightRunsLoading={insightRunsLoading}
-                            insightRunsError={insightRunsError}
-                            onRefreshInsights={onRefreshInsights}
                             onSelectView={onChangeView}
                         />
                     </div>
@@ -75,10 +62,6 @@ export function TimelineWorkbench({
                 <div className="lg:hidden">
                     <TimelineDecisionRail
                         timelineHome={timelineHome}
-                        insightRuns={insightRuns}
-                        insightRunsLoading={insightRunsLoading}
-                        insightRunsError={insightRunsError}
-                        onRefreshInsights={onRefreshInsights}
                         onSelectView={onChangeView}
                         hideReviewInbox={timelineHome.reviewInbox.total > 0}
                     />

@@ -13,23 +13,22 @@ import {
     ArrowUpCircle,
     ArrowDownCircle,
     ArrowRight,
-    Filter,
     Upload
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { positionsAPI, TradeBatch } from '@/lib/api'
-import { PositionViewModel, TradingAccountViewModel } from '@/lib/adapters/trading'
+import { TradeBatch } from '@/lib/api'
+import { PositionViewModel } from '@/lib/adapters/trading'
 import { useTrendColor } from '@/hooks/useTrendColor'
 import CustomSelect from '@/components/CustomSelect'
 import {
-    getMarketLabel, getRiskLevelInfo, getCoreTypeLabel,
-    AssetMarket, AssetRiskLevel,
-    ALL_ASSET_CORE_TYPES, ALL_ASSET_MARKETS, ALL_ASSET_RISK_LEVELS,
+    getMarketLabel, getCoreTypeLabel,
+    AssetMarket,
+    ALL_ASSET_CORE_TYPES, ALL_ASSET_MARKETS,
     getCurrencySymbol
 } from '@/lib/symbolUtils'
 import { usePositionsData } from '@/hooks/usePositionsData'
 
-type PositionDimension = 'CORE_TYPE' | 'MARKET' | 'RISK'
+type PositionDimension = 'CORE_TYPE' | 'MARKET'
 
 interface SearchParamReader {
     get(name: string): string | null
@@ -46,18 +45,16 @@ const DEFAULT_POSITION_URL_FILTERS: PositionUrlFilters = {
 }
 
 function isPositionDimension(value: string | null): value is PositionDimension {
-    return value === 'CORE_TYPE' || value === 'MARKET' || value === 'RISK'
+    return value === 'CORE_TYPE' || value === 'MARKET'
 }
 
 function readPositionUrlFilters(searchParams: SearchParamReader): PositionUrlFilters | null {
     const core = searchParams.get('core_type')
     const market = searchParams.get('market')
-    const risk = searchParams.get('risk_level')
     const dimension = searchParams.get('dimension')
 
     if (core) return { dimension: 'CORE_TYPE', categoryFilter: core }
     if (market) return { dimension: 'MARKET', categoryFilter: market }
-    if (risk) return { dimension: 'RISK', categoryFilter: risk }
     if (isPositionDimension(dimension)) return { dimension, categoryFilter: 'ALL' }
     return null
 }
@@ -163,8 +160,6 @@ export default function PositionsPage() {
                 return ['ALL', ...ALL_ASSET_CORE_TYPES]
             case 'MARKET':
                 return ['ALL', ...ALL_ASSET_MARKETS]
-            case 'RISK':
-                return ['ALL', ...ALL_ASSET_RISK_LEVELS]
             default:
                 return ['ALL']
         }
@@ -177,8 +172,6 @@ export default function PositionsPage() {
                 return getCoreTypeLabel(cat as any)
             case 'MARKET':
                 return getMarketLabel(cat as any)
-            case 'RISK':
-                return getRiskLevelInfo(cat as any).label
             default:
                 return cat
         }
@@ -214,7 +207,6 @@ export default function PositionsPage() {
                 {[
                     { id: 'CORE_TYPE', label: '底层类别' },
                     { id: 'MARKET', label: '交易市场' },
-                    { id: 'RISK', label: '风险等级' },
                 ].map(dim => (
                     <button
                         key={dim.id}
@@ -249,11 +241,9 @@ export default function PositionsPage() {
                                     url.searchParams.delete('asset_type')
                                     url.searchParams.delete('core_type')
                                     url.searchParams.delete('market')
-                                    url.searchParams.delete('risk_level')
 
                                     if (cat !== 'ALL') {
-                                        const param = dimension === 'CORE_TYPE' ? 'core_type' :
-                                            dimension === 'MARKET' ? 'market' : 'risk_level'
+                                        const param = dimension === 'CORE_TYPE' ? 'core_type' : 'market'
                                         url.searchParams.set(param, cat)
                                         url.searchParams.set('dimension', dimension)
                                     } else {
@@ -358,11 +348,6 @@ export default function PositionsPage() {
                                                     {position.asset_metadata.sector}
                                                 </span>
                                             )}
-                                            {position.asset_metadata?.risk_level && (
-                                                <span className={`text-[10px] px-1.5 py-0.5 rounded border ${getRiskLevelInfo(position.asset_metadata.risk_level as AssetRiskLevel).color}`}>
-                                                    {getRiskLevelInfo(position.asset_metadata.risk_level as AssetRiskLevel).label}
-                                                </span>
-                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -390,25 +375,17 @@ export default function PositionsPage() {
                                         <p className="text-xs text-ink-muted">均价</p>
                                         <p className="font-medium text-sm md:text-base">{getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.average_entry_price || 0).toFixed(2)}</p>
                                     </div>
-                                    <div className="text-center md:text-right flex-1 md:flex-none">
-                                        <p className="text-xs text-ink-muted">{position.status === 'OPEN' ? '现价' : '出场'}</p>
-                                        <p className="font-medium text-sm md:text-base">
-                                            {position.current_price
-                                                ? `${getCurrencySymbol(position.asset_metadata?.currency)}${Number(position.current_price).toFixed(2)}`
-                                                : '-'}
-                                        </p>
-                                    </div>
                                     <div className="text-right flex-1 md:flex-none">
-                                        <p className="text-xs text-ink-muted">{position.status === 'OPEN' ? '持仓盈亏' : '已实现盈亏'}</p>
-                                        <p className={`font-semibold text-sm md:text-base flex items-center justify-end gap-1 ${(position.status === 'OPEN' ? Number(position.unrealized_pnl || 0) : Number(position.realized_pnl)) >= 0
+                                        <p className="text-xs text-ink-muted">已实现盈亏</p>
+                                        <p className={`font-semibold text-sm md:text-base flex items-center justify-end gap-1 ${Number(position.realized_pnl || 0) >= 0
                                             ? 'text-profit'
                                             : 'text-loss'
                                             }`}>
-                                            {(position.status === 'OPEN' ? Number(position.unrealized_pnl || 0) : Number(position.realized_pnl)) >= 0
+                                            {Number(position.realized_pnl || 0) >= 0
                                                 ? <TrendingUp className="w-3 h-3 md:w-4 md:h-4" />
                                                 : <TrendingDown className="w-3 h-3 md:w-4 md:h-4" />
                                             }
-                                            {getCurrencySymbol(position.asset_metadata?.currency)}{Math.abs(position.status === 'OPEN' ? Number(position.unrealized_pnl || 0) : Number(position.realized_pnl)).toFixed(2)}
+                                            {getCurrencySymbol(position.asset_metadata?.currency)}{Math.abs(Number(position.realized_pnl || 0)).toFixed(2)}
                                         </p>
                                     </div>
                                     <div className="text-ink-faint pl-2">

@@ -31,7 +31,10 @@ export function MobileBottomNav({ items, pathname }: MobileBottomNavProps) {
 
     return (
         <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-canvas/92 pb-safe backdrop-blur-md md:hidden">
-            <div className="flex gap-1 overflow-x-auto px-2 py-1.5">
+            <div
+                className="grid gap-0.5 px-1 py-1.5"
+                style={{ gridTemplateColumns: `repeat(${Math.max(visible.length, 1)}, minmax(0, 1fr))` }}
+            >
                 {visible.map((item) => {
                     const Icon = iconMap[item.icon]
                     const active = isNavigationItemActive(item.href, pathname)
@@ -40,7 +43,7 @@ export function MobileBottomNav({ items, pathname }: MobileBottomNavProps) {
                             key={item.href}
                             href={item.href}
                             className={cn(
-                                'flex min-w-[4.25rem] flex-col items-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors',
+                                'flex min-w-0 flex-col items-center gap-1 rounded-md px-1 py-1.5 text-[11px] font-medium transition-colors',
                                 active ? 'text-ink' : 'text-ink-faint',
                             )}
                         >

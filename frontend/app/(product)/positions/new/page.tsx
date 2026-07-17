@@ -12,8 +12,8 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
-    positionsAPI, accountsAPI, strategiesAPI, marketAPI,
-    Strategy, PositionCreate, BatchCreate, SymbolValidation, ChecklistItem
+    positionsAPI, accountsAPI, strategiesAPI,
+    Strategy, PositionCreate, BatchCreate
 } from '@/lib/api'
 import {
     adaptPosition,
@@ -24,27 +24,13 @@ import {
     TradingAccountViewModel
 } from '@/lib/adapters/trading'
 import {
-    buildMarketDataStatus,
-    type MarketFreshnessTone
-} from '@/lib/adapters/market-data'
-import { MARKET_RUNTIME_ENABLED } from '@/lib/release-profile'
-import {
-    detectSymbolType, getAssetTypeColor, getAssetTypeLabel,
-    getCoreTypeLabel, getMarketLabel, getRiskLevelInfo,
-    AssetCoreType, AssetMarket, AssetCurrency, AssetRiskLevel
+    AssetCoreType, AssetMarket, AssetCurrency
 } from '@/lib/symbolUtils'
 import DateTimePicker from '@/components/DateTimePicker'
 import CustomSelect from '@/components/CustomSelect'
 
 import { Info } from 'lucide-react'
 import ChecklistModal from '@/components/ChecklistModal'
-
-const marketStatusToneClasses: Record<MarketFreshnessTone, string> = {
-    positive: 'border-profit/30 bg-profit/10 text-profit',
-    neutral: 'border-line bg-panel-subtle text-ink-soft',
-    warning: 'border-warning/30 bg-warning/12 text-warning',
-    danger: 'border-loss/30 bg-loss/10 text-loss',
-}
 
 export default function NewPositionPage() {
     const { token } = useAuth()
@@ -59,10 +45,6 @@ export default function NewPositionPage() {
     // Existing position check
     const [existingPosition, setExistingPosition] = useState<PositionViewModel | null>(null)
     const [showExistingPrompt, setShowExistingPrompt] = useState(false)
-
-    // Symbol validation
-    const [symbolValidation, setSymbolValidation] = useState<SymbolValidation | null>(null)
-    const [isValidating, setIsValidating] = useState(false)
 
     // Form state
     const [form, setForm] = useState({
@@ -86,24 +68,11 @@ export default function NewPositionPage() {
             name: '',
             core_type: '' as AssetCoreType | '',
             market: '' as AssetMarket | '',
-            currency: '' as AssetCurrency | '',
+            currency: 'USD' as AssetCurrency,
             sector: '',
-            risk_level: '' as AssetRiskLevel | '',
-            instrument: ''
+            instrument: 'SPOT'
         }
     })
-    const symbolDetection = detectSymbolType(form.symbol)
-    const activeSymbolValidation = symbolValidation?.symbol === form.symbol.trim().toUpperCase()
-        ? symbolValidation
-        : null
-    const marketDataStatus = activeSymbolValidation?.valid && (
-        activeSymbolValidation.provider
-        || activeSymbolValidation.freshness
-        || activeSymbolValidation.degraded
-        || activeSymbolValidation.as_of
-    )
-        ? buildMarketDataStatus(activeSymbolValidation)
-        : null
 
     useEffect(() => {
         const fetchData = async () => {
@@ -142,7 +111,7 @@ export default function NewPositionPage() {
             }
             try {
                 const existing = await positionsAPI.checkOpen(token, form.symbol, form.account_id)
-                if (existing) {
+                if (existing && existing.direction === form.direction) {
                     setExistingPosition(adaptPosition(existing))
                     setShowExistingPrompt(true)
                 } else {
@@ -155,67 +124,7 @@ export default function NewPositionPage() {
         }
         const debounce = setTimeout(checkExisting, 500)
         return () => clearTimeout(debounce)
-    }, [token, form.symbol, form.account_id])
-
-    // Simplified symbol behavior: No auto-validation on typing
-    useEffect(() => {
-        if (!MARKET_RUNTIME_ENABLED) {
-            return
-        }
-        if (!form.symbol) {
-            const clearTimer = window.setTimeout(() => {
-                setSymbolValidation(null)
-            }, 0)
-            return () => window.clearTimeout(clearTimer)
-        }
-
-        // Debounce validation
-        let cancelled = false
-        const timeoutId = window.setTimeout(async () => {
-            if (!token) return
-            const detection = detectSymbolType(form.symbol)
-            setIsValidating(true)
-            try {
-                // Determine exchange hint based on detection
-                let exchangeHint = undefined
-                if (detection.type === 'CRYPTO') exchangeHint = 'BINANCE'
-                if (detection.type === 'HK_STOCK') exchangeHint = 'HKEX'
-                if (detection.type === 'A_STOCK') exchangeHint = 'A_SHARE'
-
-                const res = await marketAPI.validateSymbol(token, form.symbol, exchangeHint)
-                if (cancelled) return
-                setSymbolValidation(res)
-
-                if (res.valid && res.metadata) {
-                    // Auto-fill form if metadata found
-                    setForm(prev => ({
-                        ...prev,
-                        asset_type: res.asset_type || prev.asset_type,
-                        entry_price: (prev.entry_price && prev.entry_price !== '0') ? prev.entry_price : (res.price != null ? res.price.toString() : ''),
-                        metadata: {
-                            ...prev.metadata,
-                            name: res.name || res.metadata.name || prev.metadata.name,
-                            core_type: (res.metadata.core_type as any) || prev.metadata.core_type,
-                            market: (res.metadata.market as any) || prev.metadata.market,
-                            currency: (res.metadata.currency as any) || prev.metadata.currency,
-                            sector: res.metadata.sector || prev.metadata.sector,
-                            risk_level: (res.metadata.risk_level as any) || prev.metadata.risk_level,
-                            instrument: res.metadata.instrument || prev.metadata.instrument
-                        }
-                    }))
-                }
-            } catch (err) {
-                console.warn("Validation failed", err)
-            } finally {
-                if (!cancelled) setIsValidating(false)
-            }
-        }, 800)
-
-        return () => {
-            cancelled = true
-            window.clearTimeout(timeoutId)
-        }
-    }, [form.symbol, token])
+    }, [token, form.symbol, form.account_id, form.direction])
 
     const submitPosition = async (finalForm: typeof form) => {
         if (!token) return
@@ -246,8 +155,7 @@ export default function NewPositionPage() {
                     market: finalForm.metadata.market || undefined,
                     currency: finalForm.metadata.currency || undefined,
                     sector: finalForm.metadata.sector || undefined,
-                    risk_level: finalForm.metadata.risk_level || undefined,
-                    instrument: finalForm.metadata.instrument || undefined
+                    instrument: 'SPOT'
                 }
             }
 
@@ -269,6 +177,21 @@ export default function NewPositionPage() {
 
         if (!form.entry_price || !form.quantity) {
             setError('请输入价格和数量')
+            return
+        }
+
+        if (!form.asset_type || !form.metadata.market) {
+            setError('请选择资产类型和市场')
+            return
+        }
+
+        const validIdentity = (
+            (form.asset_type === 'STOCK' || form.asset_type === 'FUND')
+                ? form.metadata.market === 'US'
+                : form.asset_type === 'CRYPTO' && form.metadata.market === 'CRYPTO'
+        )
+        if (!validIdentity) {
+            setError('股票和基金仅支持 US 市场，加密资产仅支持 CRYPTO 市场')
             return
         }
 
@@ -437,14 +360,7 @@ export default function NewPositionPage() {
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium mb-2">
-                                标的代码 *
-                                {(activeSymbolValidation?.asset_type || (symbolDetection && symbolDetection.type !== 'UNKNOWN')) && (
-                                    <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${getAssetTypeColor((activeSymbolValidation?.asset_type as any) || symbolDetection?.type)}`}>
-                                        {getAssetTypeLabel((activeSymbolValidation?.asset_type as any) || symbolDetection?.type)}
-                                    </span>
-                                )}
-                            </label>
+                            <label className="block text-sm font-medium mb-2">标的代码 *</label>
                             <div className="relative">
                                 <input
                                     required
@@ -452,44 +368,11 @@ export default function NewPositionPage() {
                                     value={form.symbol}
                                     onChange={e => setForm({ ...form, symbol: e.target.value.toUpperCase() })}
                                     className="input uppercase"
-                                    placeholder="AAPL, 600519, BTCUSDT, 00700"
+                                    placeholder="AAPL, SPY, BTC/USD"
                                 />
                             </div>
-
-                            {/* Format hint for unknown only */}
-                            {symbolDetection && symbolDetection.type === 'UNKNOWN' && form.symbol.length > 0 && (
-                                <p className="text-xs mt-1 text-warning">
-                                    格式提示: A股(6位数字) | 港股(5位数字) | 美股(字母) | 加密(XXXUSDT)
-                                </p>
-                            )}
                         </div>
                     </div>
-
-                    {isValidating && form.symbol && (
-                        <div role="status" aria-live="polite" className="flex items-center gap-2 text-xs text-ink-muted">
-                            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-                            正在验证标的并获取行情
-                        </div>
-                    )}
-
-                    {marketDataStatus && (
-                        <div
-                            role="status"
-                            aria-live="polite"
-                            className={`rounded-md border px-3 py-2 text-xs ${marketStatusToneClasses[marketDataStatus.tone]}`}
-                        >
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                                <span className="font-semibold">行情来源：{marketDataStatus.providerLabel}</span>
-                                <span>新鲜度：{marketDataStatus.freshnessLabel}</span>
-                                {marketDataStatus.asOf && (
-                                    <span className="tn-nums">数据截至：{new Date(marketDataStatus.asOf).toLocaleString('zh-CN')}</span>
-                                )}
-                            </div>
-                            {marketDataStatus.degradedReason && (
-                                <p className="mt-1 leading-5">{marketDataStatus.degradedReason}</p>
-                            )}
-                        </div>
-                    )}
 
                     {/* Direction */}
                     <div>
@@ -554,7 +437,7 @@ export default function NewPositionPage() {
                     <div className="pt-4 border-t border-line">
                         <div className="flex items-center gap-2 mb-4 text-ink-muted">
                             <Info className="w-4 h-4" />
-                            <span className="text-xs font-semibold uppercase tracking-wider">资产多维属性（自动识别）</span>
+                            <span className="text-xs font-semibold uppercase tracking-wider">标的身份</span>
                         </div>
 
                         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
@@ -564,12 +447,8 @@ export default function NewPositionPage() {
                                     size="sm"
                                     options={[
                                         { value: 'STOCK', label: '股票 (STOCK)' },
-                                        { value: 'BOND', label: '债券 (BOND)' },
                                         { value: 'FUND', label: '基金 (FUND)' },
-                                        { value: 'COMMODITY', label: '大宗商品 (COMM)' },
-                                        { value: 'FX', label: '外汇 (FX)' },
-                                        { value: 'DERIVATIVE', label: '衍生品 (DERIV)' },
-                                        { value: 'CRYPTO', label: '加密资产' },
+                                        { value: 'CRYPTO', label: '加密资产 (CRYPTO)' },
                                     ]}
                                     value={form.metadata.core_type}
                                     onChange={val => setForm({ ...form, metadata: { ...form.metadata, core_type: val as any }, asset_type: val as string })}
@@ -581,13 +460,7 @@ export default function NewPositionPage() {
                                     size="sm"
                                     options={[
                                         { value: 'US', label: '美股 (US)' },
-                                        { value: 'HK', label: '港股 (HK)' },
-                                        { value: 'A_SHARE', label: 'A股 (A_SHARE)' },
-                                        { value: 'CN_OTC', label: '中国场外 (OTC)' },
-                                        { value: 'FOREX', label: '外汇市场 (FX)' },
-                                        { value: 'COMMODITY_FUT', label: '商品期货 (FUT)' },
-                                        { value: 'UK', label: '英股 (UK)' },
-                                        { value: 'CRYPTO', label: '加密资产' },
+                                        { value: 'CRYPTO', label: '加密市场 (CRYPTO)' },
                                     ]}
                                     value={form.metadata.market}
                                     onChange={val => setForm({ ...form, metadata: { ...form.metadata, market: val as any } })}
@@ -599,28 +472,20 @@ export default function NewPositionPage() {
                                     size="sm"
                                     options={[
                                         { value: 'USD', label: '美元 (USD)' },
-                                        { value: 'HKD', label: '港币 (HKD)' },
-                                        { value: 'CNY', label: '人民币 (CNY)' },
-                                        { value: 'EUR', label: '欧元 (EUR)' },
-                                        { value: 'GBP', label: '英镑 (GBP)' },
                                     ]}
-                                    value={form.metadata.currency}
-                                    onChange={val => setForm({ ...form, metadata: { ...form.metadata, currency: val as any } })}
+                                    value="USD"
+                                    onChange={() => undefined}
                                 />
                             </div>
                             <div>
-                                <label className="block text-[10px] uppercase font-bold text-ink-faint mb-1">风险等级</label>
+                                <label className="block text-[10px] uppercase font-bold text-ink-faint mb-1">工具类型</label>
                                 <CustomSelect
                                     size="sm"
                                     options={[
-                                        { value: 'CONSERVATIVE', label: '保守 (CONSERV)' },
-                                        { value: 'MODERATE', label: '稳健 (MODERATE)' },
-                                        { value: 'GROWTH', label: '成长 (GROWTH)' },
-                                        { value: 'AGGRESSIVE', label: '激进 (AGGR)' },
-                                        { value: 'HEDGE', label: '避险 (HEDGE)' },
+                                        { value: 'SPOT', label: '现货 (SPOT)' },
                                     ]}
-                                    value={form.metadata.risk_level}
-                                    onChange={val => setForm({ ...form, metadata: { ...form.metadata, risk_level: val as any } })}
+                                    value="SPOT"
+                                    onChange={() => undefined}
                                 />
                             </div>
                             <div>
@@ -631,16 +496,6 @@ export default function NewPositionPage() {
                                     onChange={e => setForm({ ...form, metadata: { ...form.metadata, sector: e.target.value } })}
                                     className="input py-1 text-sm h-9"
                                     placeholder="例如：科技、AI"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] uppercase font-bold text-ink-faint mb-1">工具类型</label>
-                                <input
-                                    type="text"
-                                    value={form.metadata.instrument}
-                                    onChange={e => setForm({ ...form, metadata: { ...form.metadata, instrument: e.target.value } })}
-                                    className="input py-1 text-sm h-9"
-                                    placeholder="例如：现货、ETF、期货"
                                 />
                             </div>
                         </div>

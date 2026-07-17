@@ -70,7 +70,7 @@ test('getTimelineEmptyState returns copy for zero and small-data states', () => 
   })
   assert.deepEqual(getTimelineEmptyState('SMALL_DATA'), {
     title: '已经有基础数据，但现在更适合看事件线和单笔复盘。',
-    detail: '继续记录更多交易后，复盘待办和宏观分析会更稳定。',
+    detail: '继续记录更多交易后，复盘待办和复盘趋势会更稳定。',
   })
 })
 

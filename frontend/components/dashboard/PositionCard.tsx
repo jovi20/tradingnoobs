@@ -1,60 +1,46 @@
 import Link from 'next/link'
-import { TrendingUp, TrendingDown } from 'lucide-react'
-import { useTrendColor } from '@/hooks/useTrendColor'
-import { PositionViewModel } from '@/lib/adapters/trading'
+import { BookOpen } from 'lucide-react'
+import type { PositionViewModel } from '@/lib/adapters/trading'
 import { getCurrencySymbol } from '@/lib/symbolUtils'
 
 interface PositionCardProps {
     position: PositionViewModel
 }
 
+function formatEntryPrice(position: PositionViewModel) {
+    if (position.average_entry_price === undefined || position.average_entry_price === null) return '-'
+    const currencySymbol = getCurrencySymbol(position.asset_metadata?.currency)
+    return `${currencySymbol}${Number(position.average_entry_price).toFixed(2)}`
+}
+
 export default function PositionCard({ position }: PositionCardProps) {
-    const trendColor = useTrendColor()
-    const pnl = position.status === 'OPEN' ? (Number(position.unrealized_pnl) || 0) : (Number(position.realized_pnl) || 0)
-    const isPositive = pnl >= 0
-    const cs = getCurrencySymbol(position.asset_metadata?.currency)
-
     return (
-        <Link href={`/positions/${position.routeId}`}>
-            <div className="rounded-lg border border-transparent bg-panel p-2 shadow-panel dark:shadow-none transition-colors cursor-pointer hover:border-line">
-                <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center space-x-2">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isPositive ? trendColor.upBg : trendColor.downBg}`}>
-                            {isPositive ? (
-                                <TrendingUp className={`w-4 h-4 ${trendColor.upColor}`} />
-                            ) : (
-                                <TrendingDown className={`w-4 h-4 ${trendColor.downColor}`} />
-                            )}
-                        </div>
-                        <div className="min-w-0">
-                            <h3 className="font-semibold text-sm truncate">{position.symbol}</h3>
-                            <p className="text-[10px] text-ink-muted truncate">{position.exchange}</p>
-                        </div>
+        <Link
+            href={`/positions/${position.routeId}`}
+            className="block rounded-lg border border-line bg-panel p-3 shadow-panel transition-colors hover:border-line-strong dark:shadow-none"
+        >
+            <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-panel-subtle text-ink-muted">
+                        <BookOpen className="h-4 w-4" />
                     </div>
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${position.direction === 'LONG' ? 'bg-profit/10 text-profit' : 'bg-loss/10 text-loss'}`}>
-                        {position.direction === 'LONG' ? '做多' : '做空'}
-                    </span>
+                    <div className="min-w-0">
+                        <h3 className="truncate text-sm font-semibold text-ink">{position.symbol}</h3>
+                        <p className="truncate text-[10px] text-ink-muted">{position.exchange}</p>
+                    </div>
                 </div>
-
-                <div className="grid grid-cols-2 gap-y-1 gap-x-2 text-xs">
-                    <div>
-                        <p className="text-ink-muted">均价</p>
-                        <p className="font-medium tn-nums">{cs}{Number(position.average_entry_price || 0).toFixed(2)}</p>
-                    </div>
-                    <div>
-                        <p className="text-ink-muted">现价</p>
-                        <p className="font-medium tn-nums">{position.current_price ? `${cs}${Number(position.current_price).toFixed(2)}` : '-'}</p>
-                    </div>
-                    <div>
-                        <p className="text-ink-muted">数量</p>
-                        <p className="font-medium tn-nums">{Number(position.total_quantity).toLocaleString()}</p>
-                    </div>
-                    <div>
-                        <p className="text-ink-muted">盈亏</p>
-                        <p className={`font-bold tn-nums ${isPositive ? trendColor.upColor : trendColor.downColor}`}>
-                            {isPositive ? '+' : ''}{cs}{pnl.toFixed(2)}
-                        </p>
-                    </div>
+                <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${position.direction === 'LONG' ? 'bg-profit/10 text-profit' : 'bg-loss/10 text-loss'}`}>
+                    {position.direction === 'LONG' ? '做多' : '做空'}
+                </span>
+            </div>
+            <div className="grid grid-cols-2 gap-x-3 text-xs">
+                <div>
+                    <p className="text-ink-muted">建仓均价</p>
+                    <p className="mt-1 font-medium text-ink tn-nums">{formatEntryPrice(position)}</p>
+                </div>
+                <div>
+                    <p className="text-ink-muted">当前数量</p>
+                    <p className="mt-1 font-medium text-ink tn-nums">{Number(position.total_quantity).toLocaleString()}</p>
                 </div>
             </div>
         </Link>

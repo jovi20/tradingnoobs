@@ -421,7 +421,7 @@ test('lifecycle legacy panel state makes old DTO surfaces migration-only when tr
   })
 })
 
-test('lifecycle primary actions combine narrative, reversal, and cash adjustment states', () => {
+test('lifecycle primary actions expose only narrative and reversal states', () => {
   const actions = lifecycleAdapter.getLifecyclePrimaryActions({
     hasEditableNarrativeEvent: true,
     reversal: {
@@ -437,8 +437,7 @@ test('lifecycle primary actions combine narrative, reversal, and cash adjustment
   assert.equal(actions.narrative.label, '编辑交易叙事')
   assert.equal(actions.reversal.canRun, true)
   assert.equal(actions.reversal.label, '撤销最新事件')
-  assert.equal(actions.cashAdjustment.canRun, true)
-  assert.equal(actions.cashAdjustment.label, '记录现金调整')
+  assert.deepEqual(Object.keys(actions), ['narrative', 'reversal'])
 })
 
 test('lifecycle event rail items expose node tone and date labels', () => {

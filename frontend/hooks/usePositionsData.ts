@@ -6,7 +6,7 @@ interface UsePositionsDataProps {
     token: string | null
     statusFilter: 'ALL' | 'OPEN' | 'CLOSED'
     accountFilter: number | 'ALL'
-    dimension: 'CORE_TYPE' | 'MARKET' | 'RISK'
+    dimension: 'CORE_TYPE' | 'MARKET'
     categoryFilter: string
 }
 
@@ -26,9 +26,6 @@ export function usePositionsData({
     categoryFilter
 }: UsePositionsDataProps): UsePositionsDataResult {
 
-    // 1. Fetch Positions with Filters
-    console.log('usePositionsData hook called', { token: !!token, statusFilter, accountFilter, dimension, categoryFilter })
-
     const positionsQuery = useQuery({
         queryKey: ['positions', token, statusFilter, accountFilter, dimension, categoryFilter],
         queryFn: async () => {
@@ -42,7 +39,6 @@ export function usePositionsData({
             if (categoryFilter !== 'ALL') {
                 if (dimension === 'CORE_TYPE') params.core_type = categoryFilter
                 if (dimension === 'MARKET') params.market = categoryFilter
-                if (dimension === 'RISK') params.risk_level = categoryFilter
             }
 
             const positions = await positionsAPI.list(token, params)

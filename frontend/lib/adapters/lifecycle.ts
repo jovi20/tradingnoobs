@@ -86,7 +86,6 @@ export interface LifecyclePrimaryAction {
 export interface LifecyclePrimaryActions {
     narrative: LifecyclePrimaryAction
     reversal: LifecyclePrimaryAction
-    cashAdjustment: LifecyclePrimaryAction
 }
 
 export interface LifecycleEventRailItem {
@@ -259,11 +258,6 @@ export function getLifecyclePrimaryActions(input: {
             canRun: input.reversal.canReverse,
             label: input.reversal.label,
             reason: input.reversal.reason,
-        },
-        cashAdjustment: {
-            canRun: true,
-            label: '记录现金调整',
-            reason: '追加 MANUAL_ADJUSTMENT 事件和 CASH_ADJUSTMENT 流水，不改变 FIFO 持仓数量。',
         },
     }
 }

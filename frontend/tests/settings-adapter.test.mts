@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 import { adaptSettingsPageData } from '../lib/adapters/settings.ts'
 
-test('adaptSettingsPageData maps user settings into safe local state', () => {
+test('adaptSettingsPageData exposes only journal appearance settings', () => {
   const result = adaptSettingsPageData({
     userSettings: {
       id: 1,
@@ -37,15 +37,10 @@ test('adaptSettingsPageData maps user settings into safe local state', () => {
     ],
   })
 
-  assert.equal(result.settings.binance_api_key, '')
-  assert.equal(result.settings.binance_api_key_masked, 'masked-user-key')
-  assert.equal(result.settings.binance_api_secret, '')
-  assert.equal(result.settings.binance_api_secret_configured, true)
-  assert.equal(result.settings.binance_market_type, 'SPOT')
-  assert.equal(result.settings.binance_symbols_text, 'BTCUSDT, ETHUSDT')
-  assert.equal(result.settings.ibkr_flex_query_id, '123456')
-  assert.equal(result.settings.ibkr_flex_token, '')
-  assert.equal(result.settings.ibkr_flex_token_masked, 'masked-flex-token')
-  assert.equal(result.settings.ibkr_flex_start_date, '2024-01-01')
+  assert.deepEqual(result.settings, {
+    theme: 'system',
+    up_color: 'GREEN',
+    display_currency: 'USD',
+  })
   assert.equal(result.accounts[0].routeId, 'acct-public')
 })

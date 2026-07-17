@@ -1,16 +1,15 @@
-import type { TimelineView } from '@/lib/read-models'
+import type { JournalTimelineView } from '@/lib/read-models'
 
-const viewOptions: Array<{ value: TimelineView; label: string }> = [
+const viewOptions: Array<{ value: JournalTimelineView; label: string }> = [
     { value: 'ALL', label: '全部' },
     { value: 'TRADING', label: '交易' },
     { value: 'REVIEW', label: '复盘' },
-    { value: 'AI', label: 'AI' },
     { value: 'EXCEPTION', label: '异常' },
 ]
 
 interface TimelineViewTabsProps {
-    value: TimelineView
-    onChange: (value: TimelineView) => void
+    value: JournalTimelineView
+    onChange: (value: JournalTimelineView) => void
 }
 
 export function TimelineViewTabs({ value, onChange }: TimelineViewTabsProps) {

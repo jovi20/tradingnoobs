@@ -10,21 +10,12 @@ import {
     ArrowDownCircle
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { positionsAPI, Position, BatchCreate, marketAPI, type SymbolValidation } from '@/lib/api'
+import { positionsAPI, Position, BatchCreate } from '@/lib/api'
 import { buildTruthTradeEventFromBatchForm, getTruthFirstWriteFallbackState } from '@/lib/adapters/trading'
 import { adaptLifecycleDetail, type LifecycleDetailViewModel } from '@/lib/adapters/lifecycle'
-import { buildMarketDataStatus, type MarketFreshnessTone } from '@/lib/adapters/market-data'
-import { MARKET_RUNTIME_ENABLED } from '@/lib/release-profile'
 import { getCurrencySymbol } from '@/lib/symbolUtils'
 import DateTimePicker from '@/components/DateTimePicker'
 import CustomSelect from '@/components/CustomSelect'
-
-const marketStatusToneClasses: Record<MarketFreshnessTone, string> = {
-    positive: 'border-profit/30 bg-profit/10 text-profit',
-    neutral: 'border-line bg-panel-subtle text-ink-soft',
-    warning: 'border-warning/30 bg-warning/12 text-warning',
-    danger: 'border-loss/30 bg-loss/10 text-loss',
-}
 
 export default function AddBatchPage() {
     const { token } = useAuth()
@@ -36,7 +27,6 @@ export default function AddBatchPage() {
     const [position, setPosition] = useState<Position | null>(null)
     const [truthLifecycle, setTruthLifecycle] = useState<LifecycleDetailViewModel | null>(null)
     const [truthPositionPublicId, setTruthPositionPublicId] = useState<string | null>(null)
-    const [marketQuote, setMarketQuote] = useState<SymbolValidation | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState('')
@@ -47,14 +37,6 @@ export default function AddBatchPage() {
     const currentOpenQuantity = truthLifecycle?.openQuantity ?? Number(position?.total_quantity || 0)
     const currentAverageOpenPrice = truthLifecycle?.averageOpenPrice ?? Number(position?.average_entry_price || 0)
     const currencySymbol = getCurrencySymbol(truthLifecycle?.baseCurrency || position?.asset_metadata?.currency)
-    const marketDataStatus = marketQuote?.valid && (
-        marketQuote.provider
-        || marketQuote.freshness
-        || marketQuote.degraded
-        || marketQuote.as_of
-    )
-        ? buildMarketDataStatus(marketQuote)
-        : null
 
     // Form state
     const [form, setForm] = useState({
@@ -81,23 +63,6 @@ export default function AddBatchPage() {
                 const lifecycle = truthData ? adaptLifecycleDetail(truthData) : null
                 setTruthLifecycle(lifecycle)
                 setTruthPositionPublicId(lifecycle?.truthPositionPublicId || null)
-
-                // 2. Try to get current market price to pre-fill
-                if (MARKET_RUNTIME_ENABLED && data.status === 'OPEN') {
-                    try {
-                        const quote = await marketAPI.validateSymbol(token, data.symbol)
-                        setMarketQuote(quote)
-                        const latestPrice = quote.price
-                        if (quote.valid && latestPrice != null) {
-                            setForm(prev => ({
-                                ...prev,
-                                price: latestPrice.toString()
-                            }))
-                        }
-                    } catch (e) {
-                        console.warn('获取最新价格失败', e)
-                    }
-                }
             } catch (err: any) {
                 setError(err.message || '加载失败')
             } finally {
@@ -296,25 +261,6 @@ export default function AddBatchPage() {
                             />
                         </div>
                     </div>
-
-                    {marketDataStatus && (
-                        <div
-                            role="status"
-                            aria-live="polite"
-                            className={`rounded-md border px-3 py-2 text-xs ${marketStatusToneClasses[marketDataStatus.tone]}`}
-                        >
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                                <span className="font-semibold">行情来源：{marketDataStatus.providerLabel}</span>
-                                <span>新鲜度：{marketDataStatus.freshnessLabel}</span>
-                                {marketDataStatus.asOf && (
-                                    <span className="tn-nums">数据截至：{new Date(marketDataStatus.asOf).toLocaleString('zh-CN')}</span>
-                                )}
-                            </div>
-                            {marketDataStatus.degradedReason && (
-                                <p className="mt-1 leading-5">{marketDataStatus.degradedReason}</p>
-                            )}
-                        </div>
-                    )}
 
                     <div>
                         <label className="block text-sm font-medium mb-2">时间 *</label>

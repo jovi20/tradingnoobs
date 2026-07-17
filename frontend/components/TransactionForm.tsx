@@ -1,5 +1,9 @@
 import { useState } from 'react'
-import { accountsAPI, type TransactionCreate } from '@/lib/api'
+import {
+    accountsAPI,
+    type JournalTransactionCreateType,
+    type TransactionCreate,
+} from '@/lib/api'
 import { Loader2, Plus } from 'lucide-react'
 import { getCurrencySymbol } from '@/lib/symbolUtils'
 
@@ -50,14 +54,15 @@ export function TransactionForm({ token, accountId, currency, onSuccess, onCance
                         id="transaction-type"
                         className="w-full p-2 border rounded-md bg-background"
                         value={formData.type}
-                        onChange={e => setFormData({ ...formData, type: e.target.value })}
+                        onChange={e => setFormData({
+                            ...formData,
+                            type: e.target.value as JournalTransactionCreateType,
+                        })}
                     >
                         <option value="DEPOSIT">入金</option>
                         <option value="WITHDRAWAL">出金</option>
                         <option value="INTEREST">利息</option>
                         <option value="FEE">手续费或税费</option>
-                        <option value="TRANSFER_IN">转入</option>
-                        <option value="TRANSFER_OUT">转出</option>
                     </select>
                 </div>
 

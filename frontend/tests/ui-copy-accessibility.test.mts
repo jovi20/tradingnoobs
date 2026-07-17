@@ -42,18 +42,15 @@ test('confirmed icon-only controls expose accessible names', () => {
   assert.match(positionDetail, /aria-label="返回交易记录"/)
   assert.match(positionDetail, /aria-label="关闭修改交易记录对话框"/)
   assert.match(positionDetail, /aria-label="关闭编辑资产属性对话框"/)
-  assert.match(positionDetail, /aria-label="关闭编辑价格极值对话框"/)
   assert.match(addBatch, /aria-label="返回持仓详情"/)
   assert.match(newPosition, /aria-label="返回交易记录"/)
   assert.match(lifecycleModals, /aria-label="关闭交易叙事编辑"/)
-  assert.match(lifecycleModals, /aria-label="关闭现金调整"/)
   assert.match(adminShell, /aria-label="返回产品"/)
   assert.match(adminShell, /aria-label=\{item\.label\}/)
 })
 
 test('auth errors are announced and primary product headings do not mix English labels', () => {
   const login = readSource('app/(auth)/login/page.tsx')
-  const register = readSource('app/(auth)/register/page.tsx')
   const sidebar = readSource('components/navigation/AppSidebar.tsx')
   const timeline = readSource('components/timeline/workbench/ReviewInboxPanel.tsx')
   const dashboard = readSource('components/dashboard/workbench/DashboardWorkbenchHeader.tsx')
@@ -61,7 +58,6 @@ test('auth errors are announced and primary product headings do not mix English 
   const admin = readSource('app/(admin)/admin/ops/page.tsx')
 
   assert.match(login, /role="alert"/)
-  assert.match(register, /role="alert"/)
   assert.doesNotMatch(sidebar, />Decision Journal</)
   assert.doesNotMatch(timeline, /eyebrow="Review Inbox"/)
   assert.doesNotMatch(dashboard, /eyebrow="Macro Command Center"/)
@@ -87,4 +83,12 @@ test('administrator workbench grid can shrink to a mobile viewport', () => {
   assert.match(admin, /grid-cols-\[minmax\(0,1fr\)\]/)
   assert.match(admin, /<div className="min-w-0 space-y-5">/)
   assert.match(admin, /<div className="min-w-0 rounded-lg border border-line bg-panel/)
+})
+
+test('mobile product navigation fits every visible item without horizontal scrolling', () => {
+  const source = readSource('components/navigation/MobileBottomNav.tsx')
+
+  assert.match(source, /gridTemplateColumns: `repeat\(\$\{Math\.max\(visible\.length, 1\)\}, minmax\(0, 1fr\)\)`/)
+  assert.match(source, /flex min-w-0 flex-col/)
+  assert.doesNotMatch(source, /overflow-x-auto|min-w-\[4\.25rem\]/)
 })

@@ -11,7 +11,6 @@ interface AuthContextType {
     isLoading: boolean
     isAuthenticated: boolean
     login: (email: string, password: string) => Promise<void>
-    register: (email: string, password: string, invite_code: string) => Promise<void>
     logout: () => Promise<void>
     refreshUser: () => Promise<void>
     refreshSettings: () => Promise<void>
@@ -20,7 +19,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 const TOKEN_KEY = 'tradingnoobs_token'
-const PUBLIC_PATHS = ['/login', '/register']
+const PUBLIC_PATHS = ['/login']
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null)
@@ -114,12 +113,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     }
 
-    const register = async (email: string, password: string, invite_code: string) => {
-        await authAPI.register(email, password, invite_code)
-        // 注册成功后自动登录
-        await login(email, password)
-    }
-
     const logout = async () => {
         if (token) {
             try {
@@ -153,7 +146,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 isLoading,
                 isAuthenticated: !!token,
                 login,
-                register,
                 logout,
                 refreshUser,
                 refreshSettings

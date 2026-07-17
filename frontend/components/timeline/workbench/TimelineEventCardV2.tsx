@@ -25,7 +25,6 @@ export function TimelineEventCardV2({ event }: TimelineEventCardV2Props) {
         event.thesis_excerpt ||
         event.invalidation_excerpt ||
         event.checklist_summary ||
-        event.ai_annotation ||
         event.emotion ||
         event.confidence ||
         event.tags?.length
@@ -74,9 +73,6 @@ export function TimelineEventCardV2({ event }: TimelineEventCardV2Props) {
                                 {event.checklist_summary && <p><span className="font-semibold text-ink">检查清单</span> · {event.checklist_summary}</p>}
                                 {event.emotion && <p><span className="font-semibold text-ink">情绪</span> · {event.emotion}</p>}
                                 {event.confidence !== undefined && <p><span className="font-semibold text-ink">信心度</span> · {event.confidence}</p>}
-                                {event.ai_annotation && (
-                                    <p><span className="font-semibold text-ai">AI</span> · {event.ai_annotation.summary}</p>
-                                )}
                                 {event.tags && event.tags.length > 0 && (
                                     <div className="flex flex-wrap gap-1.5 pt-1">
                                         {event.tags.map((tag) => (

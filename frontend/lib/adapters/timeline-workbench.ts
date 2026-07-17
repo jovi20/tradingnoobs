@@ -13,7 +13,7 @@ export type WorkbenchTone =
     | 'ai'
 
 export interface TimelineSummaryMetric {
-    key: 'trades' | 'review_rate' | 'equity_change' | 'alerts'
+    key: 'trades' | 'review_rate' | 'alerts'
     label: string
     value: string
     detail: string
@@ -55,17 +55,13 @@ export function getTimelineEventTypeLabel(eventType: TimelineEventType): string 
 }
 
 export function buildTimelineSummaryMetrics(summaryBar: SummaryBar): TimelineSummaryMetric[] {
-    const reviewRate = summaryBar.review_completion_rate === null
-        ? '-'
-        : `${Math.round(summaryBar.review_completion_rate * 100)}%`
-    const equityChange = summaryBar.net_equity_change === null
-        ? '-'
-        : summaryBar.net_equity_change.toLocaleString(undefined, { maximumFractionDigits: 2 })
-    const equityTone: WorkbenchTone = summaryBar.net_equity_change === null
-        ? 'neutral'
-        : summaryBar.net_equity_change < 0
-            ? 'negative'
-            : 'positive'
+    const rawReviewRate = summaryBar.review_completion_rate
+    const reviewRate = typeof rawReviewRate === 'number' && Number.isFinite(rawReviewRate)
+        ? rawReviewRate
+        : null
+    const reviewRateLabel = reviewRate !== null
+        ? `${Math.round(reviewRate * 100)}%`
+        : '-'
 
     return [
         {
@@ -78,18 +74,11 @@ export function buildTimelineSummaryMetrics(summaryBar: SummaryBar): TimelineSum
         {
             key: 'review_rate',
             label: '复盘完成',
-            value: reviewRate,
+            value: reviewRateLabel,
             detail: '纪律覆盖率',
-            tone: summaryBar.review_completion_rate !== null && summaryBar.review_completion_rate >= 0.6
-                ? 'positive'
-                : 'warning',
-        },
-        {
-            key: 'equity_change',
-            label: '净值变化',
-            value: equityChange,
-            detail: summaryBar.trust?.value_status === 'ESTIMATED' ? '估算' : '最终',
-            tone: equityTone,
+            tone: reviewRate !== null
+                ? reviewRate >= 0.6 ? 'positive' : 'warning'
+                : 'neutral',
         },
         {
             key: 'alerts',

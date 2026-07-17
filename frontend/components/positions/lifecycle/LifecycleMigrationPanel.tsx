@@ -4,10 +4,8 @@ import {
     Award,
     Calendar,
     Edit3,
-    Loader2,
     MessageSquare,
     Target,
-    TrendingUp,
     Wrench,
 } from 'lucide-react'
 
@@ -21,10 +19,8 @@ import {
     getCoreTypeLabel,
     getCurrencySymbol,
     getMarketLabel,
-    getRiskLevelInfo,
     type AssetCoreType,
     type AssetMarket,
-    type AssetRiskLevel,
 } from '@/lib/symbolUtils'
 
 interface LegacyMutationState {
@@ -45,12 +41,9 @@ interface LifecycleMigrationPanelProps {
     hasTruthLifecycle: boolean
     panel: LifecycleLegacyPanelState
     sortedBatches: TradeBatchViewModel[]
-    isAnalyzing: boolean
     legacyBatchMutationState: LegacyMutationState
     legacyReviewDisplayState: LegacyReviewState
     onEditMetadata: () => void
-    onEditExtremes: () => void
-    onAnalyze: () => void
     onEditBatch: (batch: TradeBatchViewModel) => void
 }
 
@@ -59,12 +52,9 @@ export function LifecycleMigrationPanel({
     hasTruthLifecycle,
     panel,
     sortedBatches,
-    isAnalyzing,
     legacyBatchMutationState,
     legacyReviewDisplayState,
     onEditMetadata,
-    onEditExtremes,
-    onAnalyze,
     onEditBatch,
 }: LifecycleMigrationPanelProps) {
     const currencySymbol = getCurrencySymbol(position.asset_metadata?.currency)
@@ -90,8 +80,8 @@ export function LifecycleMigrationPanel({
             <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <LegacyMetric label="持仓数量" value={Number(position.total_quantity).toLocaleString()} />
                 <LegacyMetric
-                    label="均价 / 当前价"
-                    value={`${currencySymbol}${Number(position.average_entry_price || 0).toFixed(2)}${position.current_price ? ` -> ${currencySymbol}${Number(position.current_price).toFixed(2)}` : ''}`}
+                    label="持仓均价"
+                    value={`${currencySymbol}${Number(position.average_entry_price || 0).toFixed(2)}`}
                 />
                 <LegacyMetric
                     label="旧版已实现盈亏"
@@ -112,7 +102,7 @@ export function LifecycleMigrationPanel({
                             <Edit3 className="h-4 w-4" />
                         </button>
                     </div>
-                    <div className="mt-4 grid gap-4 md:grid-cols-4">
+                    <div className="mt-4 grid gap-4 md:grid-cols-3">
                         <LegacyFact
                             label="资产类型"
                             value={position.asset_metadata.instrument
@@ -121,36 +111,15 @@ export function LifecycleMigrationPanel({
                         />
                         <LegacyFact label="交易市场" value={`${getMarketLabel(position.asset_metadata.market as AssetMarket)} · ${position.asset_metadata.currency}`} />
                         <LegacyFact label="所属板块" value={position.asset_metadata.sector || '未分类'} />
-                        <LegacyFact label="风险评级" value={getRiskLevelInfo(position.asset_metadata.risk_level as AssetRiskLevel).label} />
                     </div>
                 </div>
             )}
 
             <div className="mt-5 rounded-lg border border-line bg-panel p-5">
-                <div className="flex items-center justify-between gap-3">
-                    <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.18em] text-warning">
-                        <TrendingUp className="h-4 w-4" />
-                        旧版 MAE/MFE 与执行偏移
-                    </h3>
-                    <div className="flex gap-2">
-                        <button type="button" onClick={onEditExtremes} aria-label="编辑价格极值" title="编辑价格极值" className="rounded-md bg-warning/12 p-2 text-warning transition-colors hover:bg-warning/20">
-                            <Edit3 className="h-4 w-4" />
-                        </button>
-                        <button type="button" onClick={onAnalyze} disabled={isAnalyzing} aria-label={isAnalyzing ? '正在分析历史价格' : '分析历史价格'} title={isAnalyzing ? '正在分析历史价格' : '分析历史价格'} className="rounded-md bg-warning/12 p-2 text-warning transition-colors hover:bg-warning/20 disabled:opacity-60">
-                            {isAnalyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <TrendingUp className="h-4 w-4" />}
-                        </button>
-                    </div>
-                </div>
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                    <LegacyFact
-                        label="持仓期最高"
-                        value={position.max_price_during_hold ? `${currencySymbol}${Number(position.max_price_during_hold).toFixed(2)}` : '-'}
-                    />
-                    <LegacyFact
-                        label="持仓期最低"
-                        value={position.min_price_during_hold ? `${currencySymbol}${Number(position.min_price_during_hold).toFixed(2)}` : '-'}
-                    />
-                </div>
+                <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.18em] text-warning">
+                    <Target className="h-4 w-4" />
+                    旧版计划与执行偏移
+                </h3>
                 {position.drift_analysis?.has_planned_data && (
                     <div className="mt-4 grid gap-3 md:grid-cols-4">
                         <LegacyFact label="计划入场价" value={`${currencySymbol}${Number(position.planned_entry_price || 0).toFixed(2)}`} />

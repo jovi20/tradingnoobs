@@ -12,7 +12,6 @@ import {
     type TradeBatchViewModel,
 } from '@/lib/adapters/trading'
 import { LifecycleActionPanel } from './LifecycleActionPanel'
-import { LifecycleAiSidecarPanel } from './LifecycleAiSidecarPanel'
 import { LifecycleEventRail } from './LifecycleEventRail'
 import { LifecycleEvidencePanel } from './LifecycleEvidencePanel'
 import { LifecycleHero } from './LifecycleHero'
@@ -23,14 +22,10 @@ interface LifecycleWorkbenchProps {
     lifecycle: LifecycleDetailViewModel
     legacyPosition: PositionViewModel | null
     sortedBatches: TradeBatchViewModel[]
-    isAnalyzing: boolean
     isReversing: boolean
     onEditNarrative: () => void
     onReverseLatest: () => void
-    onManualAdjustment: () => void
     onEditMetadata: () => void
-    onEditExtremes: () => void
-    onAnalyze: () => void
     onEditBatch: (batch: TradeBatchViewModel) => void
 }
 
@@ -38,14 +33,10 @@ export function LifecycleWorkbench({
     lifecycle,
     legacyPosition,
     sortedBatches,
-    isAnalyzing,
     isReversing,
     onEditNarrative,
     onReverseLatest,
-    onManualAdjustment,
     onEditMetadata,
-    onEditExtremes,
-    onAnalyze,
     onEditBatch,
 }: LifecycleWorkbenchProps) {
     const reversal = getLifecycleReversalAction(lifecycle)
@@ -71,13 +62,11 @@ export function LifecycleWorkbench({
                         isReversing={isReversing}
                         onEditNarrative={onEditNarrative}
                         onReverseLatest={onReverseLatest}
-                        onManualAdjustment={onManualAdjustment}
                     />
                     <LifecycleEvidencePanel lifecycle={lifecycle} />
                 </div>
                 <aside className="space-y-6">
                     <LifecycleEventRail lifecycle={lifecycle} />
-                    <LifecycleAiSidecarPanel lifecycle={lifecycle} />
                 </aside>
             </div>
             {legacyPanel.shouldRender && legacyPosition && (
@@ -86,12 +75,9 @@ export function LifecycleWorkbench({
                     hasTruthLifecycle
                     panel={legacyPanel}
                     sortedBatches={sortedBatches}
-                    isAnalyzing={isAnalyzing}
                     legacyBatchMutationState={legacyBatchMutationState}
                     legacyReviewDisplayState={legacyReviewDisplayState}
                     onEditMetadata={onEditMetadata}
-                    onEditExtremes={onEditExtremes}
-                    onAnalyze={onAnalyze}
                     onEditBatch={onEditBatch}
                 />
             )}

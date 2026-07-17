@@ -10,35 +10,38 @@ interface TimelineContextRailProps {
 }
 
 export function TimelineContextRail({ contextRail, onSelectView }: TimelineContextRailProps) {
+    const selectedObject = contextRail.selected_object?.object_type === 'INSIGHT_ARTIFACT'
+        || contextRail.selected_object?.href.startsWith('/insights')
+        ? undefined
+        : contextRail.selected_object
+    const quickFilters = contextRail.quick_filters.filter((filter) => filter.key !== 'AI')
     const quickFilterLabels: Record<string, string> = {
         ALL: '全部',
         TRADING: '交易',
         REVIEW: '复盘',
-        AI: 'AI',
         EXCEPTION: '异常',
     }
     const objectTypeLabels: Record<string, string> = {
         TRADING_POSITION: '交易持仓',
         POSITION_EVENT: '持仓事件',
         ACCOUNT: '交易账户',
-        INSIGHT_ARTIFACT: '洞察记录',
         PORTFOLIO: '投资组合',
     }
     return (
         <aside className="space-y-4">
             <Surface className="p-4">
                 <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-faint">上下文栏</h2>
-                {contextRail.selected_object ? (
+                {selectedObject ? (
                     <div className="mt-4 rounded-md border border-line bg-panel-subtle/60 p-4">
                         <p className="text-xs text-ink-faint">
-                            {objectTypeLabels[contextRail.selected_object.object_type] ?? contextRail.selected_object.object_type}
+                            {objectTypeLabels[selectedObject.object_type] ?? selectedObject.object_type}
                         </p>
-                        <p className="mt-1 font-semibold text-ink">{contextRail.selected_object.title}</p>
-                        {contextRail.selected_object.subtitle && (
-                            <p className="mt-1 text-sm text-ink-muted">{contextRail.selected_object.subtitle}</p>
+                        <p className="mt-1 font-semibold text-ink">{selectedObject.title}</p>
+                        {selectedObject.subtitle && (
+                            <p className="mt-1 text-sm text-ink-muted">{selectedObject.subtitle}</p>
                         )}
                         <Link
-                            href={contextRail.selected_object.href}
+                            href={selectedObject.href}
                             className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-ai transition-opacity hover:opacity-80"
                         >
                             打开详情
@@ -53,7 +56,7 @@ export function TimelineContextRail({ contextRail, onSelectView }: TimelineConte
             <Surface className="p-4">
                 <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-faint">快速筛选</h2>
                 <div className="mt-4 flex flex-wrap gap-2">
-                    {contextRail.quick_filters.map((filter) => (
+                    {quickFilters.map((filter) => (
                         <button
                             key={filter.key}
                             type="button"

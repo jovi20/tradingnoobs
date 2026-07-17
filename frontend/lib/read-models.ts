@@ -59,7 +59,6 @@ export interface SummaryBar {
     period_label: string
     trade_count: number
     review_completion_rate: number | null
-    net_equity_change: number | null
     priority_alert_count: number
     trust?: TrustMeta
 }
@@ -207,6 +206,96 @@ export interface TimelineHomeData {
 }
 
 export type TimelineHomeResponse = ReadModelEnvelope<TimelineHomeData>
+
+export type JournalTimelineDataSource = 'MANUAL' | 'IMPORTED' | 'DERIVED'
+export type JournalTimelineView = 'ALL' | 'TRADING' | 'REVIEW' | 'EXCEPTION'
+export type JournalReviewInboxKind =
+    | 'MISSING_THESIS'
+    | 'MISSING_REVIEW'
+    | 'CHECKLIST_MISS'
+    | 'LOSING_STREAK'
+export type JournalRecommendedActionKind =
+    | 'OPEN_POSITION_DETAIL'
+    | 'START_REVIEW'
+    | 'COMPLETE_THESIS'
+export type JournalLinkedObjectType = 'TRADING_POSITION' | 'POSITION_EVENT' | 'ACCOUNT'
+export type JournalTimelineEventType =
+    | 'OPEN'
+    | 'ADD'
+    | 'REDUCE'
+    | 'CLOSE'
+    | 'REVIEW_COMPLETED'
+    | 'CHECKLIST_MISS'
+    | 'LOSING_STREAK_ALERT'
+
+export interface JournalTrustMeta extends Omit<TrustMeta, 'source'> {
+    source: JournalTimelineDataSource
+}
+
+export interface JournalSummaryBar extends Omit<SummaryBar, 'trust'> {
+    trust?: JournalTrustMeta
+}
+
+export interface JournalReviewInboxAction extends Omit<ReviewInboxAction, 'kind'> {
+    kind: JournalRecommendedActionKind
+}
+
+export interface JournalLinkedObjectRef extends Omit<LinkedObjectRef, 'object_type'> {
+    object_type: JournalLinkedObjectType
+}
+
+export interface JournalReviewInboxItem extends Omit<ReviewInboxItem, 'kind' | 'recommended_action' | 'linked_object' | 'trust'> {
+    kind: JournalReviewInboxKind
+    recommended_action: JournalReviewInboxAction
+    linked_object: JournalLinkedObjectRef
+    trust?: JournalTrustMeta
+}
+
+export interface JournalReviewInbox extends Omit<ReviewInbox, 'items' | 'trust'> {
+    items: JournalReviewInboxItem[]
+    trust?: JournalTrustMeta
+}
+
+export interface JournalTimelineEventCard extends Omit<TimelineEventCard, 'event_type' | 'ai_annotation' | 'trust'> {
+    event_type: JournalTimelineEventType
+    trust?: JournalTrustMeta
+}
+
+export interface JournalTimelineGroup extends Omit<TimelineGroup, 'items'> {
+    items: JournalTimelineEventCard[]
+}
+
+export interface JournalTimelineFeed extends Omit<TimelineFeed, 'active_view' | 'groups' | 'trust'> {
+    active_view: JournalTimelineView
+    groups: JournalTimelineGroup[]
+    trust?: JournalTrustMeta
+}
+
+export interface JournalWeeklyDisciplineSnapshot extends Omit<WeeklyDisciplineSnapshot, 'trust'> {
+    trust?: JournalTrustMeta
+}
+
+export interface JournalContextRailSelectedObject extends Omit<ContextRailSelectedObject, 'object_type'> {
+    object_type: JournalLinkedObjectType
+}
+
+export interface JournalContextRail extends Omit<ContextRail, 'selected_object' | 'weekly_discipline_snapshot' | 'trust'> {
+    selected_object?: JournalContextRailSelectedObject
+    weekly_discipline_snapshot?: JournalWeeklyDisciplineSnapshot
+    trust?: JournalTrustMeta
+}
+
+export interface JournalTimelineHomeData extends Omit<TimelineHomeData, 'summary_bar' | 'review_inbox' | 'timeline' | 'context_rail'> {
+    summary_bar: JournalSummaryBar
+    review_inbox: JournalReviewInbox
+    timeline: JournalTimelineFeed
+    context_rail: JournalContextRail
+}
+
+export interface JournalTimelineHomeResponse extends Omit<TimelineHomeResponse, 'data' | 'meta'> {
+    data: JournalTimelineHomeData
+    meta: JournalTrustMeta
+}
 
 export type LifecycleReviewStatus = 'OPEN' | 'CLOSED_PENDING_REVIEW' | 'REVIEWED'
 export type LifecycleNodeType = 'OPEN' | 'ADD' | 'REDUCE' | 'CLOSE' | 'REVERSAL' | 'MANUAL_ADJUSTMENT' | 'REVIEW' | 'AI_CONCLUSION'

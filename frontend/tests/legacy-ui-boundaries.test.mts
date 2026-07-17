@@ -18,7 +18,6 @@ const legacyDtoImportAllowlist = {
   ],
   legacy_analytics: [
     'components/dashboard/MaeMfeScatterPlot.tsx',
-    'lib/adapters/chart-views.ts',
   ],
   adapter_boundary: [
     'lib/adapters/trading.ts',

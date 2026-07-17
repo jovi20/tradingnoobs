@@ -6,15 +6,12 @@ import Link from 'next/link'
 import {
     ArrowLeft,
     Loader2,
-    TrendingUp,
-    TrendingDown,
     ArrowUpCircle,
     ArrowDownCircle,
     Plus,
     Trash2,
     Edit3,
     Calendar,
-    DollarSign,
     Target,
     MessageSquare,
     Award,
@@ -42,13 +39,10 @@ import { LifecycleWorkbench } from '@/components/positions/lifecycle/LifecycleWo
 import {
     getCoreTypeLabel,
     getMarketLabel,
-    getRiskLevelInfo,
     AssetCoreType,
     AssetMarket,
-    AssetRiskLevel,
     ALL_ASSET_CORE_TYPES,
     ALL_ASSET_MARKETS,
-    ALL_ASSET_RISK_LEVELS,
     getCurrencySymbol
 } from '@/lib/symbolUtils'
 import CustomSelect from '@/components/CustomSelect'
@@ -98,30 +92,13 @@ export default function PositionDetailPage() {
         core_type: 'STOCK',
         market: 'US',
         sector: '',
-        risk_level: 'MODERATE',
         instrument: 'Spot'
     })
 
-    // Extremes Edit State
-    const [editingExtremes, setEditingExtremes] = useState(false)
-    const [isSavingExtremes, setIsSavingExtremes] = useState(false)
-    const [isAnalyzing, setIsAnalyzing] = useState(false)
-    const [extremesForm, setExtremesForm] = useState({
-        max_price: 0,
-        min_price: 0
-    })
     const [editingTruthNarrative, setEditingTruthNarrative] = useState(false)
     const [isSavingTruthNarrative, setIsSavingTruthNarrative] = useState(false)
     const [isReversingTruthEvent, setIsReversingTruthEvent] = useState(false)
     const [truthNarrativeForm, setTruthNarrativeForm] = useState<LifecycleNarrativeDraft>(emptyTruthNarrativeForm)
-    const [editingManualAdjustment, setEditingManualAdjustment] = useState(false)
-    const [isSavingManualAdjustment, setIsSavingManualAdjustment] = useState(false)
-    const [manualAdjustmentForm, setManualAdjustmentForm] = useState({
-        amount: 0,
-        currency: 'USD',
-        occurred_at: new Date().toISOString(),
-        note: '',
-    })
 
     useEffect(() => {
         const fetchPosition = async () => {
@@ -214,7 +191,6 @@ export default function PositionDetailPage() {
             core_type: position.asset_metadata.core_type || 'STOCK',
             market: position.asset_metadata.market || 'US',
             sector: position.asset_metadata.sector || '',
-            risk_level: position.asset_metadata.risk_level || 'MODERATE',
             instrument: position.asset_metadata.instrument || 'Spot'
         })
         setEditingMetadata(true)
@@ -236,7 +212,6 @@ export default function PositionDetailPage() {
                     core_type: metadataForm.core_type,
                     market: metadataForm.market,
                     sector: metadataForm.sector,
-                    risk_level: metadataForm.risk_level,
                     instrument: metadataForm.instrument
                 }
             })
@@ -252,45 +227,6 @@ export default function PositionDetailPage() {
             alert(err.message || '更新失败')
         } finally {
             setIsSavingMetadata(false)
-        }
-    }
-
-    const handleAnalyze = async () => {
-        if (!token || !position) return
-        setIsAnalyzing(true)
-        try {
-            const [updated, truthData] = await Promise.all([
-                positionsAPI.analyze(token, position.routeId),
-                positionsAPI.getTruthLifecycle(token, position.routeId).catch(() => null),
-            ])
-            setPosition(adaptPosition(updated))
-            setTruthLifecycle(truthData ? adaptLifecycleDetail(truthData) : null)
-        } catch (err: any) {
-            alert(err.message || '分析失败')
-        } finally {
-            setIsAnalyzing(false)
-        }
-    }
-
-    const handleUpdateExtremes = async () => {
-        if (!token || !position) return
-        setIsSavingExtremes(true)
-        try {
-            await positionsAPI.update(token, position.routeId, {
-                max_price_during_hold: extremesForm.max_price,
-                min_price_during_hold: extremesForm.min_price
-            })
-            const [updated, truthData] = await Promise.all([
-                positionsAPI.get(token, position.routeId),
-                positionsAPI.getTruthLifecycle(token, position.routeId).catch(() => null),
-            ])
-            setPosition(adaptPosition(updated))
-            setTruthLifecycle(truthData ? adaptLifecycleDetail(truthData) : null)
-            setEditingExtremes(false)
-        } catch (err: any) {
-            alert(err.message || '更新失败')
-        } finally {
-            setIsSavingExtremes(false)
         }
     }
 
@@ -360,46 +296,6 @@ export default function PositionDetailPage() {
             alert(err.message || '撤销审计事件失败')
         } finally {
             setIsReversingTruthEvent(false)
-        }
-    }
-
-    const openManualAdjustmentModal = () => {
-        if (!truthLifecycle) return
-        setManualAdjustmentForm({
-            amount: 0,
-            currency: position?.asset_metadata?.currency || truthLifecycle.cashEffects[0]?.currency || 'USD',
-            occurred_at: new Date().toISOString(),
-            note: '',
-        })
-        setEditingManualAdjustment(true)
-    }
-
-    const handleCreateManualAdjustment = async () => {
-        if (!token || !truthLifecycle) return
-        if (!Number.isFinite(manualAdjustmentForm.amount) || manualAdjustmentForm.amount === 0) {
-            alert('现金调整金额不能为 0。')
-            return
-        }
-
-        setIsSavingManualAdjustment(true)
-        try {
-            const updatedLifecycle = await positionsAPI.createTradingPositionManualAdjustment(
-                token,
-                truthLifecycle.truthPositionPublicId,
-                {
-                    amount: manualAdjustmentForm.amount,
-                    currency: manualAdjustmentForm.currency,
-                    occurred_at: manualAdjustmentForm.occurred_at,
-                    note: manualAdjustmentForm.note,
-                }
-            )
-            setTruthLifecycle(adaptLifecycleDetail(updatedLifecycle))
-            setEditingManualAdjustment(false)
-            setError('')
-        } catch (err: any) {
-            alert(err.message || '记录现金调整失败')
-        } finally {
-            setIsSavingManualAdjustment(false)
         }
     }
 
@@ -501,21 +397,10 @@ export default function PositionDetailPage() {
                     lifecycle={truthLifecycle}
                     legacyPosition={position}
                     sortedBatches={sortedBatches}
-                    isAnalyzing={isAnalyzing}
                     isReversing={isReversingTruthEvent}
                     onEditNarrative={openTruthNarrativeModal}
                     onReverseLatest={handleReverseLatestTruthEvent}
-                    onManualAdjustment={openManualAdjustmentModal}
                     onEditMetadata={openMetadataModal}
-                    onEditExtremes={() => {
-                        if (!position) return
-                        setExtremesForm({
-                            max_price: Number(position.max_price_during_hold || 0),
-                            min_price: Number(position.min_price_during_hold || 0),
-                        })
-                        setEditingExtremes(true)
-                    }}
-                    onAnalyze={handleAnalyze}
                     onEditBatch={openEditModal}
                 />
             )}
@@ -534,20 +419,15 @@ export default function PositionDetailPage() {
 
             {/* Summary Card */}
             <div className="card overflow-hidden">
-                <div className="grid grid-cols-2 lg:grid-cols-5 gap-0 divide-x divide-y lg:divide-y-0 divide-line">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-0 divide-x divide-y lg:divide-y-0 divide-line">
                     <div className="p-4 lg:p-6">
                         <p className="text-xs text-ink-muted mb-1 uppercase tracking-wider font-semibold">持仓数量</p>
                         <p className="text-xl font-bold">{Number(position.total_quantity).toLocaleString()}</p>
                     </div>
                     <div className="p-4 lg:p-6">
-                        <p className="text-xs text-ink-muted mb-1 uppercase tracking-wider font-semibold">均价 / 当前价</p>
+                        <p className="text-xs text-ink-muted mb-1 uppercase tracking-wider font-semibold">持仓均价</p>
                         <p className="text-xl font-bold">
                             {getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.average_entry_price || 0).toFixed(2)}
-                            {position.current_price && (
-                                <span className="text-sm font-normal ml-2 text-ink-faint">
-                                    → {getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.current_price).toFixed(2)}
-                                </span>
-                            )}
                         </p>
                     </div>
                     <div className="p-4 lg:p-6">
@@ -556,14 +436,6 @@ export default function PositionDetailPage() {
                             {isPositive ? '+' : ''}{getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.realized_pnl).toFixed(2)}
                         </p>
                     </div>
-                    {position.status === 'OPEN' && (
-                        <div className="p-4 lg:p-6 bg-panel-subtle/50">
-                            <p className="text-xs text-ink-muted mb-1 uppercase tracking-wider font-semibold">未实现盈亏</p>
-                            <p className={`text-xl font-bold ${(position.unrealized_pnl || 0) >= 0 ? 'pnl-positive' : 'pnl-negative'}`}>
-                                {(position.unrealized_pnl || 0) >= 0 ? '+' : ''}{getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.unrealized_pnl || 0).toFixed(2)}
-                            </p>
-                        </div>
-                    )}
                     <div className="p-4 lg:p-6">
                         <p className="text-xs text-ink-muted mb-1 uppercase tracking-wider font-semibold">开仓日期</p>
                         <p className="text-lg font-medium">
@@ -590,7 +462,7 @@ export default function PositionDetailPage() {
                         资产属性
                     </h2>
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
                         <div>
                             <p className="text-xs text-ink-muted mb-1">资产类型</p>
                             <p className="font-semibold flex items-center">
@@ -616,82 +488,9 @@ export default function PositionDetailPage() {
                             <p className="text-xs text-ink-muted mb-1">所属板块</p>
                             <p className="font-semibold">{position.asset_metadata.sector || '未分类'}</p>
                         </div>
-                        <div>
-                            <p className="text-xs text-ink-muted mb-1">风险评级</p>
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${getRiskLevelInfo(position.asset_metadata.risk_level as AssetRiskLevel).color}`}>
-                                {getRiskLevelInfo(position.asset_metadata.risk_level as AssetRiskLevel).label}
-                            </span>
-                        </div>
                     </div>
                 </div>
             )}
-
-            {/* Price Extremes & MAE/MFE Card */}
-            <div className="card p-5 relative group">
-                <button
-                    onClick={() => {
-                        setExtremesForm({
-                            max_price: Number(position.max_price_during_hold || 0),
-                            min_price: Number(position.min_price_during_hold || 0)
-                        })
-                        setEditingExtremes(true)
-                    }}
-                    aria-label="手动修改价格极值"
-                    className="absolute top-4 right-14 p-2 rounded-lg bg-panel hover:bg-panel-subtle text-ink-muted transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-                    title="手动修改极值"
-                >
-                    <Edit3 className="w-4 h-4" />
-                </button>
-                <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                    <button
-                        onClick={handleAnalyze}
-                        disabled={isAnalyzing}
-                        aria-label={isAnalyzing ? '正在分析历史价格' : '分析历史价格'}
-                        className="p-2 rounded-lg bg-ai/8 hover:bg-ai/8 dark:hover:bg-ai/8 text-ai dark:text-ai"
-                        title="自动分析 (从历史数据)"
-                    >
-                        {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
-                    </button>
-                </div>
-
-                <h2 className="text-sm font-bold text-ink-faint mb-4 uppercase tracking-wider flex items-center">
-                    <TrendingUp className="w-4 h-4 mr-2" />
-                    价格极值 (MAE/MFE)
-                </h2>
-
-                <div className="grid grid-cols-2 gap-6">
-                    <div>
-                        <p className="text-xs text-ink-muted mb-1">持仓期最高价</p>
-                        <p className="font-semibold text-lg flex items-center">
-                            {position.max_price_during_hold ? (
-                                <span>{getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.max_price_during_hold).toFixed(2)}</span>
-                            ) : (
-                                <span className="text-line-strong">-</span>
-                            )}
-                        </p>
-                        {position.average_entry_price && position.max_price_during_hold && (
-                            <p className={`text-xs mt-1 ${position.direction === 'LONG' ? 'text-profit' : 'text-loss'}`}>
-                                {position.direction === 'LONG' ? 'MFE' : 'MAE'}: {((Number(position.max_price_during_hold) - Number(position.average_entry_price)) / Number(position.average_entry_price) * 100).toFixed(2)}%
-                            </p>
-                        )}
-                    </div>
-                    <div>
-                        <p className="text-xs text-ink-muted mb-1">持仓期最低价</p>
-                        <p className="font-semibold text-lg flex items-center">
-                            {position.min_price_during_hold ? (
-                                <span>{getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.min_price_during_hold).toFixed(2)}</span>
-                            ) : (
-                                <span className="text-line-strong">-</span>
-                            )}
-                        </p>
-                        {position.average_entry_price && position.min_price_during_hold && (
-                            <p className={`text-xs mt-1 ${position.direction === 'LONG' ? 'text-loss' : 'text-profit'}`}>
-                                {position.direction === 'LONG' ? 'MAE' : 'MFE'}: {((Number(position.min_price_during_hold) - Number(position.average_entry_price)) / Number(position.average_entry_price) * 100).toFixed(2)}%
-                            </p>
-                        )}
-                    </div>
-                </div>
-            </div>
 
             {/* Phase 1: Plan Drift Analysis Card */}
             {position.drift_analysis?.has_planned_data && (
@@ -1054,20 +853,6 @@ export default function PositionDetailPage() {
                                     ))}
                                 </select>
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">风险评级</label>
-                                <select
-                                    value={metadataForm.risk_level}
-                                    onChange={e => setMetadataForm({ ...metadataForm, risk_level: e.target.value })}
-                                    className="input"
-                                >
-                                    {ALL_ASSET_RISK_LEVELS.map(level => (
-                                        <option key={level} value={level}>
-                                            {getRiskLevelInfo(level).label} ({level})
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
                             <div className="md:col-span-2">
                                 <label className="block text-sm font-medium mb-1">行业 / 板块</label>
                                 <input
@@ -1098,63 +883,6 @@ export default function PositionDetailPage() {
                     </div>
                 </div>
             )}
-            {/* Edit Extremes Modal */}
-            {editingExtremes && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/50 backdrop-blur-sm">
-                    <div className="card w-full max-w-sm shadow-2xl animate-in zoom-in duration-200">
-                        <div className="p-6 border-b border-line flex items-center justify-between">
-                            <h3 className="text-lg font-bold">编辑价格极值</h3>
-                            <button
-                                type="button"
-                                onClick={() => setEditingExtremes(false)}
-                                aria-label="关闭编辑价格极值对话框"
-                                title="关闭编辑价格极值对话框"
-                                className="p-2 hover:bg-panel-subtle rounded-lg transition-colors"
-                            >
-                                <Plus className="w-5 h-5 rotate-45" />
-                            </button>
-                        </div>
-                        <div className="p-6 space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium mb-1">持仓期最高价</label>
-                                <input
-                                    type="number"
-                                    step="any"
-                                    value={extremesForm.max_price}
-                                    onChange={e => setExtremesForm({ ...extremesForm, max_price: parseFloat(e.target.value) })}
-                                    className="input"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">持仓期最低价</label>
-                                <input
-                                    type="number"
-                                    step="any"
-                                    value={extremesForm.min_price}
-                                    onChange={e => setExtremesForm({ ...extremesForm, min_price: parseFloat(e.target.value) })}
-                                    className="input"
-                                />
-                            </div>
-                        </div>
-                        <div className="p-6 border-t border-line flex justify-end space-x-3">
-                            <button
-                                onClick={() => setEditingExtremes(false)}
-                                className="btn btn-secondary"
-                            >
-                                取消
-                            </button>
-                            <button
-                                onClick={handleUpdateExtremes}
-                                disabled={isSavingExtremes}
-                                className="btn btn-primary flex items-center space-x-2"
-                            >
-                                {isSavingExtremes && <Loader2 className="w-4 h-4 animate-spin" />}
-                                <span>保存</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
                 </>
             )}
             <LifecycleModals
@@ -1164,12 +892,6 @@ export default function PositionDetailPage() {
                 onChangeTruthNarrativeForm={setTruthNarrativeForm}
                 onCloseTruthNarrative={() => setEditingTruthNarrative(false)}
                 onSaveTruthNarrative={handleUpdateTruthNarrative}
-                editingManualAdjustment={editingManualAdjustment}
-                isSavingManualAdjustment={isSavingManualAdjustment}
-                manualAdjustmentForm={manualAdjustmentForm}
-                onChangeManualAdjustmentForm={setManualAdjustmentForm}
-                onCloseManualAdjustment={() => setEditingManualAdjustment(false)}
-                onSaveManualAdjustment={handleCreateManualAdjustment}
             />
         </div>
     )

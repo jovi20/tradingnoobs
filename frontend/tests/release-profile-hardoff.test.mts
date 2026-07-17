@@ -4,12 +4,7 @@ import { dirname, resolve } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import {
-  BROKER_SYNC_RUNTIME_ENABLED,
-  MARKET_RUNTIME_ENABLED,
-  RELEASE_PROFILE,
-  resolveReleaseProfile,
-} from '../lib/release-profile.ts'
+import { RELEASE_PROFILE, resolveReleaseProfile } from '../lib/release-profile.ts'
 
 const testDir = dirname(fileURLToPath(import.meta.url))
 const frontendRoot = resolve(testDir, '..')
@@ -23,8 +18,6 @@ test('unknown or missing frontend profile fails closed to JOURNAL_BASELINE', () 
   assert.equal(resolveReleaseProfile('unknown'), 'JOURNAL_BASELINE')
   assert.equal(resolveReleaseProfile('DEVELOPMENT_FULL'), 'DEVELOPMENT_FULL')
   assert.equal(RELEASE_PROFILE, 'JOURNAL_BASELINE')
-  assert.equal(BROKER_SYNC_RUNTIME_ENABLED, false)
-  assert.equal(MARKET_RUNTIME_ENABLED, false)
 })
 
 test('launch profile cannot be changed through browser process env', () => {
@@ -34,23 +27,21 @@ test('launch profile cannot be changed through browser process env', () => {
   assert.match(profileSource, /RELEASE_PROFILE: ReleaseProfile = 'JOURNAL_BASELINE'/)
   assert.doesNotMatch(profileSource, /process\.env/)
   assert.match(profileSource, /from '\.\/generated\/release-contract\.ts'/)
-  assert.match(generatedContractSource, /MARKET_RUNTIME_ENABLED = false as const/)
-  assert.match(generatedContractSource, /BROKER_SYNC_RUNTIME_ENABLED = false as const/)
+  assert.doesNotMatch(profileSource, /RUNTIME_ENABLED/)
+  assert.doesNotMatch(generatedContractSource, /RUNTIME_ENABLED/)
 })
 
-test('optional UI calls are guarded by the build-time release profile', () => {
+test('optional provider implementations are absent from baseline product surfaces', () => {
   const settingsPage = readSource('app/(product)/settings/page.tsx')
   const dailyPage = readSource('app/(product)/daily/page.tsx')
   const newPositionPage = readSource('app/(product)/positions/new/page.tsx')
   const addBatchPage = readSource('app/(product)/positions/[id]/add-batch/page.tsx')
   const adminOpsPage = readSource('app/(admin)/admin/ops/page.tsx')
 
-  assert.match(settingsPage, /BROKER_SYNC_RUNTIME_ENABLED && \(/)
-  assert.match(settingsPage, /if \(BROKER_SYNC_RUNTIME_ENABLED\)/)
-  assert.match(dailyPage, /MARKET_RUNTIME_ENABLED\s*\? await Promise\.all\(/)
-  assert.match(dailyPage, /buildLocalMarketCalendar\(market, year, month \+ 1\)/)
-  assert.match(newPositionPage, /if \(!MARKET_RUNTIME_ENABLED\)/)
-  assert.match(addBatchPage, /MARKET_RUNTIME_ENABLED && data\.status === 'OPEN'/)
-  assert.match(adminOpsPage, /MARKET_RUNTIME_ENABLED && platformForm\.finnhubApiKey\.trim\(\)/)
-  assert.match(adminOpsPage, /MARKET_RUNTIME_ENABLED && <LabeledInput/)
+  assert.doesNotMatch(settingsPage, /brokerSyncAPI|BROKER_SYNC_RUNTIME_ENABLED|ibkr_flex|binance_api/)
+  assert.doesNotMatch(dailyPage, /marketAPI|MARKET_RUNTIME_ENABLED|buildLocalMarketCalendar|MarketCalendar/)
+  assert.doesNotMatch(newPositionPage, /marketAPI|MARKET_RUNTIME_ENABLED|validateSymbol/)
+  assert.doesNotMatch(addBatchPage, /marketAPI|MARKET_RUNTIME_ENABLED|validateSymbol/)
+  assert.doesNotMatch(adminOpsPage, /MARKET_RUNTIME_ENABLED|LLM|OpenAI|Finnhub|testLLM/)
+  assert.doesNotMatch(adminOpsPage, /listIntegrationCredentials|upsertIntegrationCredential/)
 })

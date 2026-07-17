@@ -2,23 +2,22 @@ import { ChartFrame } from '@/components/charts/ChartFrame'
 import { SvgLineChart } from '@/components/charts/renderers/SvgLineChart'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { Surface } from '@/components/ui/Surface'
-import { shouldRenderEquityLineChart } from '@/lib/adapters/chart-views'
 import type { DashboardPeriodLabel, DashboardPeriodMetrics, DashboardPeriodOption } from '@/lib/adapters/dashboard'
 import type { ChartSchema, ChartTrustMeta } from '@/lib/charts'
 
-interface DashboardEquityHeroProps {
+interface DashboardRealizedPnlHeroProps {
     periodOptions: DashboardPeriodOption[]
     selectedPeriod: DashboardPeriodLabel
     onSelectPeriod: (label: DashboardPeriodLabel) => void
     periodMetrics: DashboardPeriodMetrics
-    pnlHistory: Array<{ date: string; pnl: number; pnl_percent: number; total_equity?: number }>
+    pnlHistory: Array<{ date: string; pnl: number; pnl_percent: number }>
     currencySymbol: string
     upClassName: string
     downClassName: string
     lineColor: string
 }
 
-export function DashboardEquityHero({
+export function DashboardRealizedPnlHero({
     periodOptions,
     selectedPeriod,
     onSelectPeriod,
@@ -28,41 +27,41 @@ export function DashboardEquityHero({
     upClassName,
     downClassName,
     lineColor,
-}: DashboardEquityHeroProps) {
-    const trendClassName = periodMetrics.periodPnl >= 0 ? upClassName : downClassName
-    const periodValueClassName = periodMetrics.periodValue >= 0 ? upClassName : downClassName
-    const equityChartSchema = {
+}: DashboardRealizedPnlHeroProps) {
+    const valueClassName = periodMetrics.periodValue >= 0 ? upClassName : downClassName
+    const referenceClassName = periodMetrics.periodPnl >= 0 ? upClassName : downClassName
+    const hasRealizedHistory = pnlHistory.some((point) => point.pnl !== 0 || point.pnl_percent !== 0)
+    const realizedChartSchema = {
         schema_version: 'chart.v1',
         chart_type: 'line',
         data_path: 'pnlHistory',
         dimensions: [{ field: 'date', label: 'Date' }],
-        series: [{ field: 'pnl_percent', label: 'PnL %', color: lineColor }],
+        series: [{ field: 'pnl_percent', label: 'Realized PnL / initial principal (%)', color: lineColor }],
     } satisfies ChartSchema
-    const equityTrustMeta = {
-        freshness: 'DELAYED',
-        source: 'LOCAL_DASHBOARD_HISTORY',
-        source_refs: ['dashboard:pnlHistory'],
+    const realizedTrustMeta = {
+        freshness: 'FRESH',
+        source: 'JOURNAL_REALIZED_HISTORY',
+        source_refs: ['dashboard:pnl-history'],
     } satisfies ChartTrustMeta
-    const canRenderEquityChart = shouldRenderEquityLineChart(pnlHistory)
 
     return (
         <Surface className="overflow-hidden p-4 md:p-6">
             <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-start">
                 <SectionHeader
-                    eyebrow="净值与回撤"
-                    title="资金曲线"
-                    description="主图展示当前阶段的收益方向，右侧同步给出风险解释。"
+                    eyebrow="已实现结果"
+                    title="累计已实现盈亏"
+                    description="按日志中的减仓和平仓事实累计；百分比以账户初始本金为分母，仅作已实现收益参考。"
                 />
-                <div className="flex flex-wrap gap-1">
+                <div className="grid w-full grid-cols-4 gap-1 rounded-lg bg-panel-subtle p-1 md:flex md:w-auto md:max-w-full md:overflow-x-auto">
                     {periodOptions.map((option) => (
                         <button
                             key={option.label}
                             type="button"
                             onClick={() => onSelectPeriod(option.label)}
-                            className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                            className={`min-w-0 rounded-md px-2 py-1.5 text-xs font-semibold transition-colors md:shrink-0 md:px-3 ${
                                 selectedPeriod === option.label
                                     ? 'bg-ink text-canvas'
-                                    : 'bg-panel-subtle text-ink-muted hover:bg-panel'
+                                    : 'text-ink-muted hover:bg-panel hover:text-ink'
                             }`}
                         >
                             {option.label}
@@ -71,30 +70,30 @@ export function DashboardEquityHero({
                 </div>
             </div>
             <div className="mt-4 flex flex-wrap items-end gap-2">
-                <p className={`text-3xl font-semibold tracking-tight tn-nums ${trendClassName}`}>
+                <p className={`text-3xl font-semibold tn-nums ${valueClassName}`}>
+                    {periodMetrics.periodValue >= 0 ? '+' : '-'}{currencySymbol}{Math.abs(periodMetrics.periodValue).toLocaleString()}
+                </p>
+                <p className={`pb-1 text-sm font-semibold tn-nums ${referenceClassName}`}>
                     {periodMetrics.periodPnl >= 0 ? '+' : ''}{periodMetrics.periodPnl.toFixed(2)}%
                 </p>
-                <p className={`pb-1 text-sm font-semibold tn-nums ${periodValueClassName}`}>
-                    ({periodMetrics.periodValue >= 0 ? '+' : ''}{currencySymbol}{Math.abs(periodMetrics.periodValue).toLocaleString()})
-                </p>
-                <p className="pb-1 text-xs text-ink-faint">{selectedPeriod}阶段盈亏</p>
+                <p className="pb-1 text-xs text-ink-faint">{selectedPeriod}已实现收益参考</p>
             </div>
             <ChartFrame
-                eyebrow="净值走势"
-                title="资金曲线数据"
-                description="本阶段使用已加载的本地历史数据绘制，数据来源与新鲜度见右上角标识。"
-                schema={equityChartSchema}
-                trustMeta={equityTrustMeta}
+                eyebrow="已实现收益参考"
+                title="累计已实现盈亏曲线"
+                description="每个日期点表示所选区间内截至当日的累计已实现结果。"
+                schema={realizedChartSchema}
+                trustMeta={realizedTrustMeta}
                 emptyState={{
-                    is_empty: !canRenderEquityChart,
-                    reason: !canRenderEquityChart ? 'NO_EQUITY_HISTORY' : null,
-                    message: !canRenderEquityChart ? '暂无资金曲线数据' : undefined,
+                    is_empty: !hasRealizedHistory,
+                    reason: !hasRealizedHistory ? 'NO_REALIZED_PNL_HISTORY' : null,
+                    message: !hasRealizedHistory ? '所选区间暂无已实现盈亏记录。' : undefined,
                 }}
-                dataCount={canRenderEquityChart ? pnlHistory.length : 0}
+                dataCount={hasRealizedHistory ? pnlHistory.length : 0}
                 compact
                 className="mt-5"
             >
-                {canRenderEquityChart && (
+                {hasRealizedHistory && (
                     <div className="h-[280px] md:h-[340px]">
                         <SvgLineChart
                             data={pnlHistory}

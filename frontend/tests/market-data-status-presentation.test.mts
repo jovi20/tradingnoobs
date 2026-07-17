@@ -11,27 +11,29 @@ function readSource(relativePath: string): string {
   return readFileSync(resolve(frontendRoot, relativePath), 'utf8')
 }
 
-test('position forms present routed market data provenance without a provider selector', () => {
+test('journal baseline position forms do not load or present market data', () => {
   const pages = [
     readSource('app/(product)/positions/new/page.tsx'),
     readSource('app/(product)/positions/[id]/add-batch/page.tsx'),
   ]
 
   for (const source of pages) {
-    assert.match(source, /buildMarketDataStatus/)
-    assert.match(source, /行情来源：/)
-    assert.match(source, /新鲜度：/)
-    assert.match(source, /数据截至：/)
-    assert.match(source, /marketDataStatus\.degradedReason/)
-    assert.match(source, /role="status"/)
+    assert.doesNotMatch(source, /marketAPI|MARKET_RUNTIME_ENABLED|SymbolValidation/)
+    assert.doesNotMatch(source, /buildMarketDataStatus|validateSymbol|marketDataStatus/)
+    assert.doesNotMatch(source, /行情来源：|新鲜度：|数据截至：/)
     assert.doesNotMatch(source, /选择行情源|切换行情源|setMarketProvider/)
   }
 })
 
-test('new-position market validation ignores responses for a superseded symbol', () => {
+test('new-position requires manual release identity and only matches same-side positions', () => {
   const source = readSource('app/(product)/positions/new/page.tsx')
 
-  assert.match(source, /let cancelled = false/)
-  assert.match(source, /if \(cancelled\) return/)
-  assert.match(source, /symbolValidation\?\.symbol === form\.symbol\.trim\(\)\.toUpperCase\(\)/)
+  assert.match(source, /\{ value: 'STOCK', label:/)
+  assert.match(source, /\{ value: 'FUND', label:/)
+  assert.match(source, /\{ value: 'CRYPTO', label:/)
+  assert.match(source, /\{ value: 'US', label:/)
+  assert.match(source, /value="USD"/)
+  assert.match(source, /value="SPOT"/)
+  assert.match(source, /existing && existing\.direction === form\.direction/)
+  assert.doesNotMatch(source, /detectSymbolType|symbolValidation|isValidating/)
 })

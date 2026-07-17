@@ -1,4 +1,4 @@
-import type { Position } from '../api.ts'
+import type { PositionMarketAnalysis } from '../api.ts'
 import type { ChartEmptyState, ChartSchema, ChartTrustMeta } from '../charts.ts'
 
 export interface MaeMfeScatterPoint {
@@ -10,7 +10,7 @@ export interface MaeMfeScatterPoint {
   pnlPercent: number
 }
 
-export function buildMaeMfeScatterPoints(positions: Position[]): MaeMfeScatterPoint[] {
+export function buildMaeMfeScatterPoints(positions: PositionMarketAnalysis[]): MaeMfeScatterPoint[] {
   return positions
     .map((position) => {
       if (!position.average_entry_price || !position.max_price_during_hold || !position.min_price_during_hold) return null

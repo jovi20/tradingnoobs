@@ -10,7 +10,6 @@ import {
     Loader2,
     AlertCircle,
     CheckCircle2,
-    TrendingUp,
     Shield,
     DollarSign,
     Key
@@ -26,8 +25,6 @@ import { getCurrencySymbol } from '@/lib/symbolUtils'
 
 const ACCOUNT_TYPES = [
     { value: 'Spot', label: '现金账户' },
-    { value: 'Margin', label: '保证金账户' },
-    { value: 'Unified', label: '统一账户' },
 ]
 
 export default function AccountDetailPage() {
@@ -65,8 +62,8 @@ export default function AccountDetailPage() {
                 setForm({
                     name: accountData.name,
                     broker: accountData.broker,
-                    account_type: accountData.account_type || '',
-                    currency: accountData.currency,
+                    account_type: 'Spot',
+                    currency: 'USD',
                     description: accountData.description || ''
                 })
             } catch (err: any) {
@@ -193,38 +190,16 @@ export default function AccountDetailPage() {
                 {/* Main Content: Info & Transactions */}
                 <div className="lg:col-span-2 space-y-8">
                     {/* Account Stats Cards */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:max-w-sm">
                         <div className="rounded-lg border border-line bg-panel p-6">
                             <div className="flex justify-between items-start mb-4">
                                 <div className="p-2 rounded-lg bg-profit/8 dark:bg-profit/8 text-profit dark:text-profit">
                                     <DollarSign className="w-5 h-5" />
                                 </div>
-                                <span className="text-[10px] font-bold text-ink-faint">可用现金</span>
+                                <span className="text-[10px] font-bold text-ink-faint">日志余额</span>
                             </div>
                             <p className="text-2xl font-mono font-bold text-ink">
-                                {getCurrencySymbol(account.currency)} {Number(account.cash_balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                            </p>
-                        </div>
-                        <div className="rounded-lg border border-line bg-panel p-6">
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="p-2 rounded-lg bg-ai/8 dark:bg-ai/8 text-ai dark:text-ai">
-                                    <TrendingUp className="w-5 h-5" />
-                                </div>
-                                <span className="text-[10px] font-bold text-ink-faint">持仓市值</span>
-                            </div>
-                            <p className="text-2xl font-mono font-bold text-ink">
-                                {getCurrencySymbol(account.currency)} {Number(account.market_value || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                            </p>
-                        </div>
-                        <div className="rounded-lg border border-line bg-panel p-6">
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="p-2 rounded-lg bg-ai/8 dark:bg-ai/8 text-ai dark:text-ai">
-                                    <TrendingUp className="w-5 h-5" />
-                                </div>
-                                <span className="text-[10px] font-bold text-ink-faint">账户净值</span>
-                            </div>
-                            <p className="text-2xl font-mono font-bold text-ink">
-                                {getCurrencySymbol(account.currency)} {Number(account.total_equity ?? account.cash_balance ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                {getCurrencySymbol(account.currency)} {Number(account.journal_balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </p>
                         </div>
                     </div>
@@ -300,10 +275,9 @@ export default function AccountDetailPage() {
                                     <select
                                         id="account-type"
                                         className="input text-sm"
-                                        value={form.account_type || ''}
-                                        onChange={e => setForm({ ...form, account_type: e.target.value })}
+                                        value="Spot"
+                                        disabled
                                     >
-                                        <option value="">请选择</option>
                                         {ACCOUNT_TYPES.map(t => (
                                             <option key={t.value} value={t.value}>{t.label}</option>
                                         ))}
@@ -314,8 +288,8 @@ export default function AccountDetailPage() {
                                     <input
                                         id="account-currency"
                                         className="input text-sm"
-                                        value={form.currency}
-                                        onChange={e => setForm({ ...form, currency: e.target.value })}
+                                        value="USD"
+                                        readOnly
                                     />
                                 </div>
                             </div>

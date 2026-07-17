@@ -98,12 +98,12 @@ export function getTimelineEmptyState(pageState: TimelineHomeViewModel['pageStat
         case 'SMALL_DATA':
             return {
                 title: '已经有基础数据，但现在更适合看事件线和单笔复盘。',
-                detail: '继续记录更多交易后，复盘待办和宏观分析会更稳定。',
+                detail: '继续记录更多交易后，复盘待办和复盘趋势会更稳定。',
             }
         case 'EMPTY_CONFIGURED':
             return {
                 title: '账户已经配置好，但还没有新的事件进入时间线。',
-                detail: '接下来可以新增一笔交易，或者检查同步配置。',
+                detail: '接下来可以新增一笔交易，开始形成可复盘的事件记录。',
             }
         default:
             return {

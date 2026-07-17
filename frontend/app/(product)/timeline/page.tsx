@@ -3,9 +3,8 @@
 import { useState } from 'react'
 
 import { useAuth } from '@/contexts/AuthContext'
-import { useInsightRuns } from '@/hooks/useInsightRuns'
 import { useTimelineHomeData } from '@/hooks/useTimelineHomeData'
-import type { TimelineView } from '@/lib/read-models'
+import type { JournalTimelineView } from '@/lib/read-models'
 import { EmptyStatePanel } from '@/components/ui/EmptyStatePanel'
 import { LoadingState } from '@/components/ui/Spinner'
 import { Button } from '@/components/ui/Button'
@@ -14,9 +13,8 @@ import { TimelineZeroState } from '@/components/timeline/TimelineZeroState'
 
 export default function TimelinePage() {
     const { token } = useAuth()
-    const [view, setView] = useState<TimelineView>('ALL')
+    const [view, setView] = useState<JournalTimelineView>('ALL')
     const { timelineHome, isLoading, error, refresh } = useTimelineHomeData(token, view)
-    const insightRunsQuery = useInsightRuns(token)
 
     if (isLoading) {
         return <LoadingState label="正在加载时间线…" />
@@ -36,7 +34,7 @@ export default function TimelinePage() {
         return (
             <EmptyStatePanel
                 title="暂时没有可展示的时间线数据。"
-                detail="先记录交易或检查同步设置，时间线会在有事件后形成。"
+                detail="记录交易后，相关生命周期事件会在这里形成时间线。"
             />
         )
     }
@@ -52,10 +50,6 @@ export default function TimelinePage() {
             view={view}
             onChangeView={setView}
             onRefresh={refresh}
-            insightRuns={insightRunsQuery.data}
-            insightRunsLoading={insightRunsQuery.isLoading}
-            insightRunsError={insightRunsQuery.error ? insightRunsQuery.error.message : null}
-            onRefreshInsights={() => insightRunsQuery.refetch()}
         />
     )
 }

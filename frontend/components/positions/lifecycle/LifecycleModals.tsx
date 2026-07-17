@@ -1,14 +1,6 @@
 import { Loader2, Plus } from 'lucide-react'
 
-import DateTimePicker from '@/components/DateTimePicker'
 import type { LifecycleNarrativeDraft } from '@/lib/adapters/lifecycle'
-
-interface ManualAdjustmentForm {
-    amount: number
-    currency: string
-    occurred_at: string
-    note: string
-}
 
 interface LifecycleModalsProps {
     editingTruthNarrative: boolean
@@ -17,12 +9,6 @@ interface LifecycleModalsProps {
     onChangeTruthNarrativeForm: (form: LifecycleNarrativeDraft) => void
     onCloseTruthNarrative: () => void
     onSaveTruthNarrative: () => void
-    editingManualAdjustment: boolean
-    isSavingManualAdjustment: boolean
-    manualAdjustmentForm: ManualAdjustmentForm
-    onChangeManualAdjustmentForm: (form: ManualAdjustmentForm) => void
-    onCloseManualAdjustment: () => void
-    onSaveManualAdjustment: () => void
 }
 
 export function LifecycleModals(props: LifecycleModalsProps) {
@@ -147,101 +133,6 @@ export function LifecycleModals(props: LifecycleModalsProps) {
                             >
                                 {props.isSavingTruthNarrative && <Loader2 className="h-4 w-4 animate-spin" />}
                                 <span>保存叙事</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-            {props.editingManualAdjustment && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4 backdrop-blur-sm">
-                    <div className="rounded-lg border border-line bg-panel shadow-panel dark:shadow-none w-full max-w-lg animate-in zoom-in duration-200">
-                        <div className="flex items-start justify-between gap-4 border-b border-line p-6">
-                            <div>
-                                <p className="text-xs font-bold uppercase tracking-[0.18em] text-warning">
-                                    资金流水
-                                </p>
-                                <h3 className="mt-1 text-lg font-bold">记录现金调整</h3>
-                                <p className="mt-1 text-xs text-ink-muted">
-                                    只写入手动调整事件和现金调整流水，不修改先进先出持仓数量或已实现盈亏。
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={props.onCloseManualAdjustment}
-                                aria-label="关闭现金调整"
-                                title="关闭现金调整"
-                                className="rounded-md p-2 transition-colors hover:bg-panel-subtle"
-                            >
-                                <Plus className="h-5 w-5 rotate-45" />
-                            </button>
-                        </div>
-                        <div className="space-y-4 p-6">
-                            <div className="grid gap-4 md:grid-cols-[1fr_120px]">
-                                <div>
-                                    <label className="mb-1 block text-sm font-medium">调整金额</label>
-                                    <input
-                                        type="number"
-                                        step="any"
-                                        value={props.manualAdjustmentForm.amount}
-                                        onChange={(event) => props.onChangeManualAdjustmentForm({
-                                            ...props.manualAdjustmentForm,
-                                            amount: Number(event.target.value),
-                                        })}
-                                        className="input"
-                                        placeholder="-7.25"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="mb-1 block text-sm font-medium">币种</label>
-                                    <input
-                                        value={props.manualAdjustmentForm.currency}
-                                        onChange={(event) => props.onChangeManualAdjustmentForm({
-                                            ...props.manualAdjustmentForm,
-                                            currency: event.target.value.toUpperCase(),
-                                        })}
-                                        className="input"
-                                        placeholder="USD"
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="mb-1 block text-sm font-medium">发生时间</label>
-                                <DateTimePicker
-                                    value={props.manualAdjustmentForm.occurred_at}
-                                    onChange={(value) => props.onChangeManualAdjustmentForm({
-                                        ...props.manualAdjustmentForm,
-                                        occurred_at: value,
-                                    })}
-                                />
-                            </div>
-                            <div>
-                                <label className="mb-1 block text-sm font-medium">调整说明</label>
-                                <textarea
-                                    value={props.manualAdjustmentForm.note}
-                                    onChange={(event) => props.onChangeManualAdjustmentForm({
-                                        ...props.manualAdjustmentForm,
-                                        note: event.target.value,
-                                    })}
-                                    className="input min-h-[90px]"
-                                    placeholder="例如：券商现金校准、手续费返还或对账调整"
-                                />
-                            </div>
-                            <div className="rounded-lg border border-warning/30 bg-warning/8 p-3 text-xs leading-5 text-warning">
-                                正数会增加账户现金，负数会减少账户现金；这不是成交修正，也不会改写任何历史事件。
-                            </div>
-                        </div>
-                        <div className="flex justify-end space-x-3 border-t border-line p-6">
-                            <button type="button" onClick={props.onCloseManualAdjustment} className="inline-flex items-center justify-center gap-2 rounded-md border border-line bg-panel-subtle px-4 py-2 text-sm font-medium text-ink-soft transition-colors hover:bg-panel">
-                                取消
-                            </button>
-                            <button
-                                type="button"
-                                onClick={props.onSaveManualAdjustment}
-                                disabled={props.isSavingManualAdjustment}
-                                className="inline-flex items-center justify-center gap-2 rounded-md bg-ink px-4 py-2 text-sm font-medium text-canvas transition-colors hover:bg-ink-soft"
-                            >
-                                {props.isSavingManualAdjustment && <Loader2 className="h-4 w-4 animate-spin" />}
-                                <span>保存调整</span>
                             </button>
                         </div>
                     </div>

@@ -6,7 +6,6 @@ import { useSearchParams } from 'next/navigation'
 import {
     AlertTriangle,
     Ban,
-    Bot,
     CheckCircle2,
     Clipboard,
     DatabaseBackup,
@@ -17,12 +16,10 @@ import {
     Loader2,
     LockKeyhole,
     PlayCircle,
-    PlugZap,
     Power,
     RefreshCcw,
     Save,
     Search,
-    Server,
     ShieldCheck,
     SlidersHorizontal,
     ToggleLeft,
@@ -43,22 +40,12 @@ import {
     type AdminUserOperationResponse,
     type AdminUserSummary,
     type FeatureFlag,
-    type IntegrationCredential,
-    type PlatformSetting,
 } from '@/lib/api'
 import { adaptAdminJobsPageData, getAdminJobStatusTone, type AdminJobViewModel } from '@/lib/adapters/admin-jobs'
 import { formatBackupResult, formatPasswordResetNotice, isValidUserPublicIdInput } from '@/lib/adapters/admin-ops'
-import { MARKET_RUNTIME_ENABLED } from '@/lib/release-profile'
 
 type OpsTab = 'backup' | 'users' | 'platform'
 type UserFilter = 'all' | 'active' | 'disabled' | 'admin'
-
-interface PlatformControlForm {
-    llmApiUrl: string
-    llmModel: string
-    openAiApiKey: string
-    finnhubApiKey: string
-}
 
 interface FeatureFlagForm {
     key: string
@@ -109,30 +96,12 @@ function formatUserStatus(status: string): string {
     return labels[status.toUpperCase()] ?? status
 }
 
-function platformSettingValue(settings: PlatformSetting[], key: string): string {
-    return settings.find((item) => item.key === key)?.value || ''
-}
-
-function findCredential(
-    credentials: IntegrationCredential[],
-    providerKey: string,
-    credentialKey: string
-): IntegrationCredential | null {
-    return credentials.find(
-        (credential) =>
-            credential.provider_key === providerKey &&
-            credential.credential_key === credentialKey
-    ) || null
-}
-
 export default function AdminOperationsPage() {
     const { token, user } = useAuth()
     const searchParams = useSearchParams()
     const [summary, setSummary] = useState<AdminOpsSummary | null>(null)
     const [users, setUsers] = useState<AdminUserSummary[]>([])
     const [backups, setBackups] = useState<AdminBackupSummary[]>([])
-    const [platformSettings, setPlatformSettings] = useState<PlatformSetting[]>([])
-    const [integrationCredentials, setIntegrationCredentials] = useState<IntegrationCredential[]>([])
     const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([])
     const [recentJobs, setRecentJobs] = useState<AdminJobViewModel[]>([])
     const [jobCounts, setJobCounts] = useState<Record<AdminJobStatus, number>>(emptyJobCounts)
@@ -149,12 +118,6 @@ export default function AdminOperationsPage() {
             ? tabParam
             : 'backup'
     })
-    const [platformForm, setPlatformForm] = useState<PlatformControlForm>({
-        llmApiUrl: '',
-        llmModel: 'gpt-4',
-        openAiApiKey: '',
-        finnhubApiKey: '',
-    })
     const [featureFlagForm, setFeatureFlagForm] = useState<FeatureFlagForm>({
         key: '',
         enabled: true,
@@ -166,10 +129,7 @@ export default function AdminOperationsPage() {
     const [isRoleRunning, setIsRoleRunning] = useState(false)
     const [isActiveRunning, setIsActiveRunning] = useState(false)
     const [isResetRunning, setIsResetRunning] = useState(false)
-    const [isPlatformSaving, setIsPlatformSaving] = useState(false)
     const [isFlagSaving, setIsFlagSaving] = useState(false)
-    const [isIntegrationSaving, setIsIntegrationSaving] = useState('')
-    const [isTestingLLM, setIsTestingLLM] = useState(false)
     const [copiedSecret, setCopiedSecret] = useState(false)
     const [error, setError] = useState('')
     const [platformMessage, setPlatformMessage] = useState('')
@@ -179,18 +139,6 @@ export default function AdminOperationsPage() {
     const passwordResetNotice = passwordResetResult ? formatPasswordResetNotice(passwordResetResult) : null
     const targetUserPublicId = (selectedUserPublicId || manualUserPublicId).trim()
     const selectedUser = users.find((item) => item.public_id === targetUserPublicId) || null
-    const openAiCredential = findCredential(integrationCredentials, 'openai', 'api_key')
-        || findCredential(integrationCredentials, 'llm', 'api_key')
-    const finnhubCredential = MARKET_RUNTIME_ENABLED
-        ? findCredential(integrationCredentials, 'finnhub', 'api_key')
-        : null
-    const visibleIntegrationCredentials = useMemo(
-        () => integrationCredentials.filter((credential) => (
-            MARKET_RUNTIME_ENABLED || credential.provider_key.toLowerCase() !== 'finnhub'
-        )),
-        [integrationCredentials],
-    )
-
     const userMetrics = useMemo(() => {
         const active = users.filter((item) => item.is_active).length
         const admins = users.filter((item) => item.role === 'admin').length
@@ -221,7 +169,6 @@ export default function AdminOperationsPage() {
         if ((summary?.stale_running_job_count || 0) > 0) items.push('存在运行超时的任务')
         if ((summary?.expired_business_lock_count || 0) > 0) items.push('存在过期业务锁')
         if ((summary?.expired_feature_flag_count || 0) > 0) items.push('存在过期的功能开关')
-        if (summary && summary.configured_integration_count < 1) items.push('未配置任何平台集成密钥')
         if (summary && summary.admin_count < 1) items.push('没有管理员账户')
         return items
     }, [summary])
@@ -236,16 +183,12 @@ export default function AdminOperationsPage() {
                 usersData,
                 backupsData,
                 jobsData,
-                platformSettingsData,
-                integrationCredentialsData,
                 featureFlagsData,
             ] = await Promise.all([
                 adminAPI.getOpsSummary(token),
                 adminAPI.listUsers(token, 200),
                 adminAPI.listBackups(token, 10),
                 adminAPI.listJobs(token, { limit: 12 }),
-                adminAPI.listPlatformSettings(token),
-                adminAPI.listIntegrationCredentials(token),
                 adminAPI.listFeatureFlags(token),
             ])
             const adaptedJobs = adaptAdminJobsPageData(jobsData)
@@ -256,20 +199,11 @@ export default function AdminOperationsPage() {
             setSummary(summaryData)
             setUsers(usersData)
             setBackups(backupsData)
-            setPlatformSettings(platformSettingsData)
-            setIntegrationCredentials(integrationCredentialsData)
             setFeatureFlags(featureFlagsData)
             setRecentJobs(adaptedJobs.items.slice(0, 6))
             setJobCounts(adaptedJobs.counts)
             setSelectedUserPublicId(nextSelectedUser)
             setManualUserPublicId((current) => nextSelectedUser ? '' : current)
-            setPlatformForm((current) => ({
-                ...current,
-                llmApiUrl: platformSettingValue(platformSettingsData, 'llm_api_url'),
-                llmModel: platformSettingValue(platformSettingsData, 'llm_model') || 'gpt-4',
-                openAiApiKey: '',
-                finnhubApiKey: '',
-            }))
         } catch (err: any) {
             setError(err.message || '加载运维数据失败')
         } finally {
@@ -360,84 +294,6 @@ export default function AdminOperationsPage() {
         await navigator.clipboard.writeText(passwordResetNotice.temporaryPassword)
         setCopiedSecret(true)
         window.setTimeout(() => setCopiedSecret(false), 1800)
-    }
-
-    const savePlatformControls = async () => {
-        if (!token) return
-        setError('')
-        setPlatformMessage('')
-        setIsPlatformSaving(true)
-        try {
-            const updates: Promise<unknown>[] = [
-                adminAPI.upsertPlatformSetting(token, 'llm_api_url', {
-                    value: platformForm.llmApiUrl.trim(),
-                    description: 'LLM API 基础地址',
-                }),
-                adminAPI.upsertPlatformSetting(token, 'llm_model', {
-                    value: platformForm.llmModel.trim() || 'gpt-4',
-                    description: 'LLM 模型名称',
-                }),
-            ]
-            if (platformForm.openAiApiKey.trim()) {
-                updates.push(adminAPI.upsertIntegrationCredential(token, 'openai', 'api_key', {
-                    secret_value: platformForm.openAiApiKey.trim(),
-                    description: 'OpenAI API 密钥',
-                    is_active: true,
-                }))
-            }
-            if (MARKET_RUNTIME_ENABLED && platformForm.finnhubApiKey.trim()) {
-                updates.push(adminAPI.upsertIntegrationCredential(token, 'finnhub', 'api_key', {
-                    secret_value: platformForm.finnhubApiKey.trim(),
-                    description: 'Finnhub API 密钥',
-                    is_active: true,
-                }))
-            }
-
-            await Promise.all(updates)
-            setPlatformMessage('平台配置已保存')
-            await loadOpsData()
-        } catch (err: any) {
-            setError(err.message || '保存平台配置失败')
-        } finally {
-            setIsPlatformSaving(false)
-        }
-    }
-
-    const testLLMConnection = async () => {
-        if (!token) return
-        setError('')
-        setPlatformMessage('')
-        setIsTestingLLM(true)
-        try {
-            const result = await adminAPI.testLLM(token)
-            setPlatformMessage(result.message ? 'LLM 连接测试成功' : 'LLM 连接成功')
-        } catch (err: any) {
-            setError(err.message || 'LLM 连接测试失败')
-        } finally {
-            setIsTestingLLM(false)
-        }
-    }
-
-    const toggleIntegrationCredential = async (credential: IntegrationCredential) => {
-        if (!token) return
-        const savingKey = `${credential.provider_key}:${credential.credential_key}`
-        setError('')
-        setPlatformMessage('')
-        setIsIntegrationSaving(savingKey)
-        try {
-            await adminAPI.updateIntegrationCredentialActive(
-                token,
-                credential.provider_key,
-                credential.credential_key,
-                !credential.is_active
-            )
-            setPlatformMessage(`${credential.provider_key}/${credential.credential_key} 已${credential.is_active ? '停用' : '启用'}`)
-            await loadOpsData()
-        } catch (err: any) {
-            setError(err.message || '更新集成状态失败')
-        } finally {
-            setIsIntegrationSaving('')
-        }
     }
 
     const saveFeatureFlag = async () => {
@@ -562,7 +418,7 @@ export default function AdminOperationsPage() {
                 <StatusTile icon={<ShieldCheck className="h-4 w-4" />} label="管理员" value={String(summary?.admin_count ?? userMetrics.admins)} detail="拥有管理权限的用户" />
                 <StatusTile icon={<DatabaseBackup className="h-4 w-4" />} label="备份" value={String(summary?.backup_count ?? backups.length)} detail={summary?.latest_backup_at ? formatDate(summary.latest_backup_at) : '暂无记录'} />
                 <StatusTile icon={<Gauge className="h-4 w-4" />} label="运行任务" value={String(jobCount(summary?.job_counts, 'RUNNING') || jobCounts.RUNNING)} detail={`${jobCount(summary?.job_counts, 'QUEUED') || jobCounts.QUEUED} 个排队中`} />
-                <StatusTile icon={<Server className="h-4 w-4" />} label="平台配置" value={String(summary?.configured_integration_count ?? integrationCredentials.filter((item) => item.is_configured).length)} detail={`${summary?.enabled_feature_flag_count ?? featureFlags.filter((item) => item.enabled).length} 个功能开关已启用`} />
+                <StatusTile icon={<Flag className="h-4 w-4" />} label="功能开关" value={String(featureFlags.length)} detail={`${summary?.enabled_feature_flag_count ?? featureFlags.filter((item) => item.enabled).length} 个已启用`} />
                 <StatusTile icon={<AlertTriangle className="h-4 w-4" />} label="风险" value={String(riskItems.length)} detail={riskItems[0] || '无异常'} tone={riskItems.length > 0 ? 'danger' : 'neutral'} />
             </section>
 
@@ -589,7 +445,7 @@ export default function AdminOperationsPage() {
                             <SystemFact label="数据库" value={summary?.database_backend || '未知'} />
                             <SystemFact label="备份服务" value={summary?.backup_provider_configured ? '已配置' : '未配置'} />
                             <SystemFact label="超时任务" value={String(summary?.stale_running_job_count ?? 0)} />
-                            <SystemFact label="平台设置" value={String(summary?.platform_setting_count ?? platformSettings.length)} />
+                            <SystemFact label="启用功能开关" value={String(summary?.enabled_feature_flag_count ?? featureFlags.filter((item) => item.enabled).length)} />
                             <SystemFact label="活动业务锁" value={String(summary?.active_business_lock_count ?? 0)} />
                             <SystemFact label="过期功能开关" value={String(summary?.expired_feature_flag_count ?? 0)} />
                         </div>
@@ -928,108 +784,8 @@ export default function AdminOperationsPage() {
                                 <PanelHeading
                                     icon={<SlidersHorizontal className="h-5 w-5" />}
                                     title="平台控制"
-                                    detail="集中管理 LLM 配置、平台密钥、连接测试和功能开关。"
+                                    detail="管理运行时功能开关及灰度比例。"
                                 />
-
-                                <div className="rounded-lg border border-line p-4">
-                                    <h3 className="mb-4 flex items-center gap-2 text-sm font-bold">
-                                        <Bot className="h-4 w-4" />
-                                        LLM 与行情配置
-                                    </h3>
-                                    <div className="grid gap-3">
-                                        <LabeledInput
-                                            label="LLM API 地址"
-                                            value={platformForm.llmApiUrl}
-                                            onChange={(value) => setPlatformForm((current) => ({ ...current, llmApiUrl: value }))}
-                                            placeholder="https://api.openai.com/v1"
-                                        />
-                                        <LabeledInput
-                                            label="LLM 模型"
-                                            value={platformForm.llmModel}
-                                            onChange={(value) => setPlatformForm((current) => ({ ...current, llmModel: value }))}
-                                            placeholder="gpt-4"
-                                        />
-                                        <LabeledInput
-                                            label="OpenAI API 密钥"
-                                            type="password"
-                                            value={platformForm.openAiApiKey}
-                                            onChange={(value) => setPlatformForm((current) => ({ ...current, openAiApiKey: value }))}
-                                            placeholder={openAiCredential?.masked_value || 'sk-...'}
-                                        />
-                                        {MARKET_RUNTIME_ENABLED && <LabeledInput
-                                            label="Finnhub API 密钥"
-                                            type="password"
-                                            value={platformForm.finnhubApiKey}
-                                            onChange={(value) => setPlatformForm((current) => ({ ...current, finnhubApiKey: value }))}
-                                            placeholder={finnhubCredential?.masked_value || 'token'}
-                                        />}
-                                    </div>
-                                    <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                                        <button
-                                            type="button"
-                                            onClick={savePlatformControls}
-                                            disabled={isPlatformSaving}
-                                            className="inline-flex items-center justify-center gap-2 rounded-md bg-ink px-4 py-2 text-sm font-medium text-canvas transition-colors hover:bg-ink-soft disabled:opacity-50"
-                                        >
-                                            {isPlatformSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                                            保存平台配置
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={testLLMConnection}
-                                            disabled={isTestingLLM}
-                                            className="inline-flex items-center justify-center gap-2 rounded-md border border-line bg-panel-subtle px-4 py-2 text-sm font-medium text-ink-soft transition-colors hover:bg-panel disabled:opacity-50"
-                                        >
-                                            {isTestingLLM ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlugZap className="mr-2 h-4 w-4" />}
-                                            测试 LLM
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div className="rounded-lg border border-line p-4">
-                                    <h3 className="mb-3 flex items-center gap-2 text-sm font-bold">
-                                        <Server className="h-4 w-4" />
-                                        集成凭据
-                                    </h3>
-                                    <div className="space-y-2">
-                                        {visibleIntegrationCredentials.length === 0 ? (
-                                            <EmptyResult icon={<Server className="h-5 w-5" />} text="还没有平台集成密钥。" />
-                                        ) : (
-                                            visibleIntegrationCredentials.map((credential) => {
-                                                const savingKey = `${credential.provider_key}:${credential.credential_key}`
-                                                return (
-                                                    <div key={savingKey} className="flex items-center justify-between gap-3 rounded-lg bg-panel-subtle p-3 text-sm">
-                                                        <div className="min-w-0">
-                                                            <p className="font-semibold">{credential.provider_key} / {credential.credential_key}</p>
-                                                            <p className="mt-1 truncate font-mono text-xs text-ink-muted">
-                                                                {credential.masked_value || '未配置'}
-                                                            </p>
-                                                        </div>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => toggleIntegrationCredential(credential)}
-                                                            disabled={isIntegrationSaving === savingKey}
-                                                            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
-                                                                credential.is_active
-                                                                    ? 'bg-profit/10 text-profit hover:bg-profit/20'
-                                                                    : 'bg-panel-subtle text-ink-soft hover:bg-panel'
-                                                            }`}
-                                                        >
-                                                            {isIntegrationSaving === savingKey ? (
-                                                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                                            ) : credential.is_active ? (
-                                                                <ToggleRight className="h-3.5 w-3.5" />
-                                                            ) : (
-                                                                <ToggleLeft className="h-3.5 w-3.5" />
-                                                            )}
-                                                            {credential.is_active ? '已启用' : '已停用'}
-                                                        </button>
-                                                    </div>
-                                                )
-                                            })
-                                        )}
-                                    </div>
-                                </div>
 
                                 <div className="rounded-lg border border-line p-4">
                                     <h3 className="mb-4 flex items-center gap-2 text-sm font-bold">
@@ -1192,33 +948,6 @@ function PanelHeading({ icon, title, detail }: { icon: ReactNode; title: string;
                 <p className="mt-1 text-sm leading-6 text-ink-muted">{detail}</p>
             </div>
         </div>
-    )
-}
-
-function LabeledInput({
-    label,
-    value,
-    onChange,
-    placeholder,
-    type = 'text',
-}: {
-    label: string
-    value: string
-    onChange: (value: string) => void
-    placeholder?: string
-    type?: 'text' | 'password'
-}) {
-    return (
-        <label className="block">
-            <span className="mb-1.5 block text-xs font-bold uppercase tracking-[0.14em] text-ink-muted">{label}</span>
-            <input
-                className="input font-mono text-sm"
-                type={type}
-                value={value}
-                onChange={(event) => onChange(event.target.value)}
-                placeholder={placeholder}
-            />
-        </label>
     )
 }
 

@@ -1,5 +1,8 @@
-import type { LifecycleDetailResponse, TimelineHomeResponse } from './read-models'
-import type { DashboardChartPayload } from './chartSchemas'
+import type {
+    JournalTimelineHomeResponse,
+    JournalTimelineView,
+    LifecycleDetailResponse,
+} from './read-models'
 import { buildBlobDownloadFromResponse, type BlobDownloadPayload } from './download.ts'
 
 /**
@@ -230,36 +233,21 @@ export interface PortfolioFlow {
     links: SankeyLink[]
 }
 
-export interface AccountAllocation {
+export interface DashboardAccountBalance {
     name: string
     broker: string
-    value: number
-    percent: number
+    journal_balance: number
 }
 
 export interface DashboardStats {
-    total_assets: number;
-    total_pnl: number
+    journal_balance: number
+    realized_pnl: number
     win_rate: number
     avg_pnl_ratio: number
     total_trades: number
     open_positions: number
     closed_trades: number
-    asset_allocation: AssetAllocation[]
-    core_type_allocation: AssetAllocation[];
-    market_allocation: AssetAllocation[];
-    risk_level_allocation: AssetAllocation[];
-    account_allocation: AccountAllocation[]
-    top_movers: PositionMover[]
-    bottom_movers: PositionMover[]
-    portfolio_flow?: PortfolioFlow
-    chart_payloads?: Record<string, DashboardChartPayload<AssetAllocation>>
-    // Risk Metrics
-    sharpe_ratio?: number
-    sortino_ratio?: number
-    calmar_ratio?: number
-    max_drawdown?: number
-    risk_summary?: RiskSummaryResponse | null
+    account_balances: DashboardAccountBalance[]
 }
 
 export interface DailySummary {
@@ -281,12 +269,7 @@ export interface TradingAccount {
     account_type?: string
     currency: string
     initial_balance: number
-    cash_balance?: number
-    current_balance?: number
-    market_value?: number // Real-time calculated
-    total_equity?: number // Real-time calculated (NAV)
-    total_assets?: number
-    total_liabilities?: number
+    journal_balance: number
     description?: string
     is_active: boolean
     created_at: string
@@ -304,8 +287,10 @@ export interface Transaction {
     created_at: string
 }
 
+export type JournalTransactionCreateType = 'DEPOSIT' | 'WITHDRAWAL' | 'INTEREST' | 'FEE'
+
 export interface TransactionCreate {
-    type: string
+    type: JournalTransactionCreateType
     amount: number
     currency?: string
     date: string
@@ -346,10 +331,14 @@ export interface TradingAccountCreate {
     account_type?: string
     currency: string
     initial_balance?: number
-    cash_balance?: number
-    current_balance?: number
-    total_assets?: number
-    total_liabilities?: number
+    description?: string
+}
+
+export interface TradingAccountUpdate {
+    name?: string
+    broker?: string
+    account_type?: string
+    currency?: string
     description?: string
 }
 
@@ -425,13 +414,6 @@ export const authAPI = {
         }
 
         return response.json()
-    },
-
-    register: async (email: string, password: string, invite_code: string) => {
-        return fetchAPI('/auth/register', {
-            method: 'POST',
-            body: JSON.stringify({ email, password, invite_code }),
-        })
     },
 
     me: async (token: string) => {
@@ -641,9 +623,9 @@ export const timelineAPI = {
     home: async (
         token: string,
         params?: {
-            view?: 'ALL' | 'TRADING' | 'REVIEW' | 'AI' | 'EXCEPTION'
+            view?: JournalTimelineView
         }
-    ): Promise<TimelineHomeResponse> => {
+    ): Promise<JournalTimelineHomeResponse> => {
         const searchParams = new URLSearchParams()
         if (params?.view) searchParams.append('view', params.view)
         const query = searchParams.toString()
@@ -736,7 +718,7 @@ export const accountsAPI = {
         }, token)
     },
 
-    update: async (token: string, id: number | string, data: Partial<TradingAccountCreate> & { is_active?: boolean }): Promise<TradingAccount> => {
+    update: async (token: string, id: number | string, data: TradingAccountUpdate): Promise<TradingAccount> => {
         return fetchAPI(`/api/accounts/${id}`, {
             method: 'PATCH',
             body: JSON.stringify(data),
@@ -1134,8 +1116,6 @@ export interface Position {
     total_quantity: number
     average_entry_price?: number
     realized_pnl: number
-    current_price?: number  // Live price for open positions
-    unrealized_pnl?: number  // Calculated unrealized P&L
     opened_at: string
     closed_at?: string
     trade_review?: string
@@ -1162,7 +1142,11 @@ export interface Position {
         stop_loss_risk_pct?: number
         execution_quality?: 'excellent' | 'good' | 'fair' | 'poor'
     }
-    // Phase 2: MAE/MFE
+}
+
+export interface PositionMarketAnalysis extends Position {
+    current_price?: number
+    unrealized_pnl?: number
     max_price_during_hold?: number
     min_price_during_hold?: number
 }
@@ -1191,7 +1175,6 @@ export interface PositionCreate {
         market?: string
         currency?: string
         sector?: string
-        risk_level?: string
         instrument?: string
     }
 }
@@ -1241,14 +1224,6 @@ export interface TradingPositionTradeEventReverseCreate {
     note?: string
 }
 
-export interface TradingPositionManualAdjustmentCreate {
-    amount: number
-    currency?: string
-    occurred_at: string
-    fx_rate_to_account_ccy?: number
-    note?: string
-}
-
 // ============== Positions API ==============
 
 export const positionsAPI = {
@@ -1258,7 +1233,6 @@ export const positionsAPI = {
         account_id?: number | string;
         core_type?: string;
         market?: string;
-        risk_level?: string;
         asset_type?: string;
     }): Promise<Position[]> => {
         const searchParams = new URLSearchParams()
@@ -1267,7 +1241,6 @@ export const positionsAPI = {
         if (params?.account_id) searchParams.append('account_id', params.account_id.toString())
         if (params?.core_type) searchParams.append('core_type', params.core_type)
         if (params?.market) searchParams.append('market', params.market)
-        if (params?.risk_level) searchParams.append('risk_level', params.risk_level)
         if (params?.asset_type) searchParams.append('asset_type', params.asset_type)
         const query = searchParams.toString()
         return fetchAPI(`/api/positions${query ? `?${query}` : ''}`, {}, token)
@@ -1320,17 +1293,6 @@ export const positionsAPI = {
         }, token)
     },
 
-    createTradingPositionManualAdjustment: async (
-        token: string,
-        positionPublicId: string,
-        data: TradingPositionManualAdjustmentCreate
-    ): Promise<LifecycleDetailResponse> => {
-        return fetchAPI(`/api/trading-positions/${positionPublicId}/adjustments`, {
-            method: 'POST',
-            body: JSON.stringify(data),
-        }, token)
-    },
-
     create: async (token: string, data: PositionCreate): Promise<Position> => {
         return fetchAPI('/api/positions', {
             method: 'POST',
@@ -1355,7 +1317,7 @@ export const positionsAPI = {
         return fetchAPI(`/api/positions/check/${symbol}?account_id=${accountId}`, {}, token)
     },
 
-    analyze: async (token: string, id: number | string): Promise<Position> => {
+    analyze: async (token: string, id: number | string): Promise<PositionMarketAnalysis> => {
         return fetchAPI(`/api/positions/${id}/analyze`, {
             method: 'POST',
         }, token)
