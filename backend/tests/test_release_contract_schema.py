@@ -14,7 +14,11 @@ from app_config.release_contract import (
     ReleaseContractViolation,
     load_release_contract,
     require_allowed_asset_type,
+    require_allowed_instrument_type,
+    require_allowed_market,
     require_allowed_transaction_type,
+    require_exchange_code,
+    require_normalized_symbol,
     require_release_currency,
 )
 
@@ -34,6 +38,11 @@ class JournalBetaReleaseContractTests(unittest.TestCase):
     def test_contract_rejects_enum_drift_and_unknown_fields(self):
         raw = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
         raw["instruments"]["asset_types"] = ["STOCK", "FUND", "CRYPTO", "BOND"]
+        with self.assertRaises(ValidationError):
+            JournalBetaReleaseContract.model_validate(raw)
+
+        raw = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+        raw["instruments"]["shared_asset_metadata_user_write"] = "ALLOWED"
         with self.assertRaises(ValidationError):
             JournalBetaReleaseContract.model_validate(raw)
 
@@ -64,6 +73,62 @@ class JournalBetaReleaseContractTests(unittest.TestCase):
             with self.subTest(transaction_type=transaction_type):
                 with self.assertRaises(ReleaseContractViolation):
                     require_allowed_transaction_type(transaction_type)
+
+    def test_instrument_tokens_require_raw_ascii_and_match_storage_widths(self):
+        instrument_contract = JOURNAL_BETA_CONTRACT.instruments
+        self.assertEqual(
+            instrument_contract.raw_identity_token_policy,
+            "REJECT_NON_ASCII_THEN_TRIM_UPPER",
+        )
+        self.assertEqual(
+            instrument_contract.legacy_identity_evidence,
+            ("REQUEST_VALIDATED", "EXACT_JOURNAL_IDENTITY_V1"),
+        )
+        self.assertEqual(
+            instrument_contract.legacy_unproven_error,
+            "LEGACY_INSTRUMENT_IDENTITY_UNPROVEN",
+        )
+        self.assertEqual(
+            instrument_contract.preupgrade_truth_read_policy,
+            "READ_ONLY_NO_IDENTITY_REWRITE",
+        )
+        self.assertEqual(instrument_contract.shared_asset_metadata_owner, "SYSTEM")
+        self.assertEqual(instrument_contract.shared_asset_metadata_user_write, "FORBIDDEN")
+        self.assertEqual(instrument_contract.canonical_identity_schema_task, "JRN-007")
+        self.assertEqual(require_exchange_code(" nasdaq "), "NASDAQ")
+        self.assertEqual(require_normalized_symbol(" btc/usd "), "BTC/USD")
+        self.assertEqual(require_normalized_symbol("a" * 50), "A" * 50)
+
+        for value in ("ß", "naſdaq", "ı", "ﬀ", "A" * 33):
+            with self.subTest(exchange_code=value):
+                with self.assertRaises(ReleaseContractViolation) as raised:
+                    require_exchange_code(value)
+                self.assertEqual(raised.exception.code, "INVALID_EXCHANGE_CODE")
+
+        for value in ("ſpy", "ıbm", "ﬀ", "A" * 51):
+            with self.subTest(symbol=value):
+                with self.assertRaises(ReleaseContractViolation) as raised:
+                    require_normalized_symbol(value)
+                self.assertEqual(raised.exception.code, "INVALID_NORMALIZED_SYMBOL")
+
+    def test_all_identity_tokens_reject_unicode_whitespace_before_normalization(self):
+        cases = (
+            (lambda value: require_allowed_asset_type(value), "\u00a0stock\u00a0", "UNSUPPORTED_ASSET_TYPE"),
+            (lambda value: require_allowed_market(value), "\u2003us\u2003", "UNSUPPORTED_MARKET"),
+            (
+                lambda value: require_allowed_instrument_type(value),
+                "\u00a0spot\u00a0",
+                "UNSUPPORTED_INSTRUMENT_TYPE",
+            ),
+            (lambda value: require_release_currency(value), "\u2003usd\u2003", "UNSUPPORTED_RELEASE_CURRENCY"),
+            (lambda value: require_exchange_code(value), "\u00a0nasdaq\u00a0", "INVALID_EXCHANGE_CODE"),
+            (lambda value: require_normalized_symbol(value), "\u2003aapl\u2003", "INVALID_NORMALIZED_SYMBOL"),
+        )
+        for validator, value, expected_code in cases:
+            with self.subTest(value=value, expected_code=expected_code):
+                with self.assertRaises(ReleaseContractViolation) as raised:
+                    validator(value)
+                self.assertEqual(raised.exception.code, expected_code)
 
     def test_import_and_source_names_are_frozen_without_claiming_implementation(self):
         contract = JOURNAL_BETA_CONTRACT

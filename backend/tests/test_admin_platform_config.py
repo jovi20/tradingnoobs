@@ -95,7 +95,7 @@ class AdminPlatformConfigTests(unittest.TestCase):
         payload = response.json()
         self.assertTrue(payload["is_configured"])
         self.assertNotEqual(payload["masked_value"], raw_secret)
-        self.assertTrue(payload["masked_value"].startswith("sk-l"))
+        self.assertTrue(payload["masked_value"].startswith("test"))
 
         db = self.SessionLocal()
         try:

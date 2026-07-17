@@ -86,5 +86,5 @@ test('truth event writes return to the canonical legacy position route', () => {
   const newPositionSource = readFrontendFile('app/(product)/positions/new/page.tsx')
 
   assert.match(addBatchSource, /router\.push\(`\/positions\/\$\{position\.public_id\}`\)/)
-  assert.match(newPositionSource, /router\.push\(`\/positions\/\$\{existingPosition\.routeId\}`\)/)
+  assert.match(newPositionSource, /router\.push\(`\/positions\/\$\{targetPosition\.routeId\}`\)/)
 })

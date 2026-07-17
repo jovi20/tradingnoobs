@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -13,24 +13,135 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import {
     positionsAPI, accountsAPI, strategiesAPI,
-    Strategy, PositionCreate, BatchCreate
+    Strategy, PositionCreate, PositionOpenIdentity, BatchCreate,
+    ReleaseAssetType, ReleaseCurrency, ReleaseInstrumentType, ReleaseMarket
 } from '@/lib/api'
 import {
     adaptPosition,
     adaptTradingAccounts,
     buildTruthTradeEventFromBatchForm,
     getTruthFirstWriteFallbackState,
+    normalizeReleasePositionIdentityInput,
     PositionViewModel,
+    ReleasePositionIdentityField,
     TradingAccountViewModel
 } from '@/lib/adapters/trading'
-import {
-    AssetCoreType, AssetMarket, AssetCurrency
-} from '@/lib/symbolUtils'
 import DateTimePicker from '@/components/DateTimePicker'
 import CustomSelect from '@/components/CustomSelect'
 
 import { Info } from 'lucide-react'
 import ChecklistModal from '@/components/ChecklistModal'
+
+interface PositionIdentityInput {
+    account_id: number
+    symbol: string
+    exchange_code: string
+    direction: 'LONG' | 'SHORT'
+    asset_type: ReleaseAssetType | ''
+    metadata: {
+        market: ReleaseMarket | ''
+        currency: ReleaseCurrency
+        instrument: ReleaseInstrumentType
+    }
+}
+
+type NewPositionFormState = Omit<PositionIdentityInput, 'metadata'> & {
+    strategy_id?: number
+    entry_price: string
+    quantity: string
+    entry_time: string
+    entry_reason: string
+    entry_emotion: string
+    entry_confidence?: number
+    planned_entry_price: string
+    planned_stop_loss: string
+    checklist_responses: Record<string, boolean>
+    metadata: PositionIdentityInput['metadata'] & {
+        core_type: ReleaseAssetType | ''
+    }
+}
+
+type NormalizedNewPositionFormState = Omit<NewPositionFormState, 'asset_type' | 'metadata'> & {
+    asset_type: ReleaseAssetType
+    metadata: {
+        core_type: ReleaseAssetType
+        market: ReleaseMarket
+        currency: ReleaseCurrency
+        instrument: ReleaseInstrumentType
+    }
+}
+
+const IDENTITY_FIELD_LABELS: Record<ReleasePositionIdentityField, string> = {
+    symbol: '标的代码',
+    exchange_code: '交易所代码',
+    asset_type: '资产类型',
+    market: '市场',
+    instrument_type: '工具类型',
+    quote_currency: '计价货币',
+}
+
+function getReleaseAssetTypeSelection(value: unknown): ReleaseAssetType | '' {
+    return value === 'STOCK' || value === 'FUND' || value === 'CRYPTO' ? value : ''
+}
+
+function getReleaseMarketSelection(value: unknown): ReleaseMarket | '' {
+    return value === 'US' || value === 'CRYPTO' ? value : ''
+}
+
+function parsePositionIdentity(form: PositionIdentityInput) {
+    return normalizeReleasePositionIdentityInput({
+        symbol: form.symbol,
+        exchange_code: form.exchange_code,
+        asset_type: form.asset_type,
+        market: form.metadata.market,
+        instrument_type: form.metadata.instrument,
+        quote_currency: form.metadata.currency,
+    })
+}
+
+function getIdentityValidationError(form: PositionIdentityInput): string | null {
+    const result = parsePositionIdentity(form)
+    if (result.ok) return null
+    if (result.reason === 'INVALID_COMBINATION') {
+        return '股票和基金仅支持 US 市场，加密资产仅支持 CRYPTO 市场'
+    }
+    if (result.reason === 'REQUIRED') {
+        if (result.field === 'symbol') return '请输入标的代码'
+        if (result.field === 'exchange_code') return '请输入交易所代码'
+        return `请选择${IDENTITY_FIELD_LABELS[result.field]}`
+    }
+    if (result.reason === 'NON_ASCII') {
+        return `${IDENTITY_FIELD_LABELS[result.field]}仅支持 ASCII 字符`
+    }
+    return `${IDENTITY_FIELD_LABELS[result.field]}格式不符合当前发布合同`
+}
+
+function normalizeIdentityForm(form: NewPositionFormState): NormalizedNewPositionFormState | null {
+    const result = parsePositionIdentity(form)
+    if (!result.ok) return null
+    return {
+        ...form,
+        symbol: result.identity.symbol,
+        exchange_code: result.identity.exchange_code,
+        asset_type: result.identity.asset_type,
+        metadata: {
+            core_type: result.identity.asset_type,
+            market: result.identity.market,
+            currency: result.identity.quote_currency,
+            instrument: result.identity.instrument_type,
+        },
+    }
+}
+
+function buildOpenIdentity(form: PositionIdentityInput): PositionOpenIdentity | null {
+    const result = parsePositionIdentity(form)
+    if (!result.ok) return null
+    return {
+        account_id: form.account_id,
+        direction: form.direction,
+        ...result.identity,
+    }
+}
 
 export default function NewPositionPage() {
     const { token } = useAuth()
@@ -47,32 +158,52 @@ export default function NewPositionPage() {
     const [showExistingPrompt, setShowExistingPrompt] = useState(false)
 
     // Form state
-    const [form, setForm] = useState({
+    const [form, setForm] = useState<NewPositionFormState>({
         account_id: 0,
         symbol: '',
-        direction: 'LONG' as 'LONG' | 'SHORT',
-        strategy_id: undefined as number | undefined,
+        exchange_code: '',
+        direction: 'LONG',
+        strategy_id: undefined,
         entry_price: '',
         quantity: '',
         entry_time: new Date().toISOString(),
         entry_reason: '',
         entry_emotion: '',
-        entry_confidence: undefined as number | undefined,
+        entry_confidence: undefined,
         asset_type: '',
         // Phase 1: Plan Drift Detection
-        planned_entry_price: '' as string,
-        planned_stop_loss: '' as string,
+        planned_entry_price: '',
+        planned_stop_loss: '',
         // Phase 1: Checklist Responses
-        checklist_responses: {} as Record<string, boolean>,
+        checklist_responses: {},
         metadata: {
-            name: '',
-            core_type: '' as AssetCoreType | '',
-            market: '' as AssetMarket | '',
-            currency: 'USD' as AssetCurrency,
-            sector: '',
+            core_type: '',
+            market: '',
+            currency: 'USD',
             instrument: 'SPOT'
         }
     })
+    const identitySnapshot = useMemo<PositionIdentityInput>(() => ({
+        account_id: form.account_id,
+        symbol: form.symbol,
+        exchange_code: form.exchange_code,
+        direction: form.direction,
+        asset_type: form.asset_type,
+        metadata: {
+            market: form.metadata.market,
+            currency: form.metadata.currency,
+            instrument: form.metadata.instrument,
+        },
+    }), [
+        form.account_id,
+        form.symbol,
+        form.exchange_code,
+        form.direction,
+        form.asset_type,
+        form.metadata.market,
+        form.metadata.currency,
+        form.metadata.instrument,
+    ])
 
     useEffect(() => {
         const fetchData = async () => {
@@ -101,40 +232,78 @@ export default function NewPositionPage() {
 
     const [isAddingBatch, setIsAddingBatch] = useState(false)
 
-    // Check for existing position when symbol or account changes
+    // Check for an existing lifecycle only when the complete identity is valid.
     useEffect(() => {
+        let cancelled = false
+        const clearExisting = () => {
+            if (cancelled) return
+            setExistingPosition(null)
+            setShowExistingPrompt(false)
+        }
         const checkExisting = async () => {
-            if (!token || !form.symbol || !form.account_id) {
-                setExistingPosition(null)
-                setShowExistingPrompt(false)
+            const openIdentity = buildOpenIdentity(identitySnapshot)
+            if (
+                !token
+                || !identitySnapshot.account_id
+                || getIdentityValidationError(identitySnapshot)
+                || !openIdentity
+            ) {
+                clearExisting()
                 return
             }
             try {
-                const existing = await positionsAPI.checkOpen(token, form.symbol, form.account_id)
-                if (existing && existing.direction === form.direction) {
+                const existing = await positionsAPI.checkOpen(
+                    token,
+                    openIdentity,
+                )
+                if (cancelled) return
+                if (existing) {
                     setExistingPosition(adaptPosition(existing))
                     setShowExistingPrompt(true)
                 } else {
-                    setExistingPosition(null)
-                    setShowExistingPrompt(false)
+                    clearExisting()
                 }
             } catch {
-                // Ignore errors, just don't show prompt
+                clearExisting()
             }
         }
         const debounce = setTimeout(checkExisting, 500)
-        return () => clearTimeout(debounce)
-    }, [token, form.symbol, form.account_id, form.direction])
+        return () => {
+            cancelled = true
+            clearTimeout(debounce)
+        }
+    }, [token, identitySnapshot])
 
-    const submitPosition = async (finalForm: typeof form) => {
+    const prepareForSubmission = (candidate: NewPositionFormState): NormalizedNewPositionFormState | null => {
+        if (!candidate.entry_price || !candidate.quantity) {
+            setError('请输入价格和数量')
+            return null
+        }
+        const identityError = getIdentityValidationError(candidate)
+        if (identityError) {
+            setError(identityError)
+            return null
+        }
+        const normalizedForm = normalizeIdentityForm(candidate)
+        if (!normalizedForm) {
+            setError('标的身份不符合当前发布合同')
+            return null
+        }
+        return normalizedForm
+    }
+
+    const submitPosition = async (candidate: NewPositionFormState) => {
         if (!token) return
+        const finalForm = prepareForSubmission(candidate)
+        if (!finalForm) return
         setError('')
         setIsSubmitting(true)
 
         try {
             const data: PositionCreate = {
                 account_id: finalForm.account_id,
-                symbol: finalForm.symbol.toUpperCase(),
+                symbol: finalForm.symbol,
+                exchange_code: finalForm.exchange_code,
                 direction: finalForm.direction,
                 strategy_id: finalForm.strategy_id,
                 entry_price: parseFloat(finalForm.entry_price),
@@ -143,18 +312,16 @@ export default function NewPositionPage() {
                 entry_reason: finalForm.entry_reason || undefined,
                 entry_emotion: finalForm.entry_emotion || undefined,
                 entry_confidence: finalForm.entry_confidence,
-                asset_type: finalForm.asset_type || undefined,
+                asset_type: finalForm.asset_type,
                 // Phase 1: Plan Drift Detection
                 planned_entry_price: finalForm.planned_entry_price ? parseFloat(finalForm.planned_entry_price) : undefined,
                 planned_stop_loss: finalForm.planned_stop_loss ? parseFloat(finalForm.planned_stop_loss) : undefined,
                 // Phase 1: Checklist Responses
                 checklist_responses: Object.keys(finalForm.checklist_responses).length > 0 ? finalForm.checklist_responses : undefined,
                 asset_metadata: {
-                    name: finalForm.metadata.name || finalForm.symbol,
-                    core_type: finalForm.metadata.core_type || undefined,
-                    market: finalForm.metadata.market || undefined,
-                    currency: finalForm.metadata.currency || undefined,
-                    sector: finalForm.metadata.sector || undefined,
+                    core_type: finalForm.metadata.core_type,
+                    market: finalForm.metadata.market,
+                    currency: finalForm.metadata.currency,
                     instrument: 'SPOT'
                 }
             }
@@ -175,25 +342,9 @@ export default function NewPositionPage() {
         e.preventDefault()
         if (!token) return
 
-        if (!form.entry_price || !form.quantity) {
-            setError('请输入价格和数量')
-            return
-        }
-
-        if (!form.asset_type || !form.metadata.market) {
-            setError('请选择资产类型和市场')
-            return
-        }
-
-        const validIdentity = (
-            (form.asset_type === 'STOCK' || form.asset_type === 'FUND')
-                ? form.metadata.market === 'US'
-                : form.asset_type === 'CRYPTO' && form.metadata.market === 'CRYPTO'
-        )
-        if (!validIdentity) {
-            setError('股票和基金仅支持 US 市场，加密资产仅支持 CRYPTO 市场')
-            return
-        }
+        const normalizedForm = prepareForSubmission(form)
+        if (!normalizedForm) return
+        setForm(normalizedForm)
 
         // Check if strategy has checklist items
         if (form.strategy_id) {
@@ -205,42 +356,55 @@ export default function NewPositionPage() {
         }
 
         // Directly submit if no checklist
-        submitPosition(form)
+        submitPosition(normalizedForm)
     }
 
     const handleChecklistConfirm = (responses: Record<string, boolean>) => {
         const updatedForm = { ...form, checklist_responses: responses }
         setForm(updatedForm)
+        setShowChecklistModal(false)
         submitPosition(updatedForm)
     }
 
     const handleAddToExisting = async () => {
         if (!token || !existingPosition) return
 
-        if (!form.entry_price || !form.quantity) {
-            setError('请输入加仓的价格和数量')
-            // Scroll to fields
-            document.querySelector('.input[type="number"]')?.scrollIntoView({ behavior: 'smooth' })
-            return
-        }
+        const normalizedForm = prepareForSubmission(form)
+        if (!normalizedForm) return
 
         setError('')
         setIsAddingBatch(true)
 
         try {
+            const openIdentity = buildOpenIdentity(normalizedForm)
+            if (!openIdentity) {
+                setError('标的身份不符合当前发布合同')
+                return
+            }
+            const confirmed = await positionsAPI.checkOpen(
+                token,
+                openIdentity,
+            )
+            if (!confirmed || confirmed.public_id !== existingPosition.public_id) {
+                setExistingPosition(null)
+                setShowExistingPrompt(false)
+                setError('已有仓位已变化，请重新确认标的身份')
+                return
+            }
+            const targetPosition = adaptPosition(confirmed)
             const batchData: BatchCreate = {
                 type: 'ENTRY',
-                price: parseFloat(form.entry_price),
-                quantity: parseFloat(form.quantity),
-                time: form.entry_time,
-                reason: form.entry_reason || undefined,
-                emotion: form.entry_emotion || undefined,
-                confidence: form.entry_confidence
+                price: parseFloat(normalizedForm.entry_price),
+                quantity: parseFloat(normalizedForm.quantity),
+                time: normalizedForm.entry_time,
+                reason: normalizedForm.entry_reason || undefined,
+                emotion: normalizedForm.entry_emotion || undefined,
+                confidence: normalizedForm.entry_confidence
             }
 
-            const truthData = await positionsAPI.getTruthLifecycle(token, existingPosition.routeId).catch(() =>
-                existingPosition.truth_position_public_id
-                    ? positionsAPI.getTradingPositionLifecycle(token, existingPosition.truth_position_public_id).catch(() => null)
+            const truthData = await positionsAPI.getTruthLifecycle(token, targetPosition.routeId).catch(() =>
+                targetPosition.truth_position_public_id
+                    ? positionsAPI.getTradingPositionLifecycle(token, targetPosition.truth_position_public_id).catch(() => null)
                     : null
             )
             const truthPositionPublicId = truthData?.data?.position_summary?.public_id
@@ -249,9 +413,9 @@ export default function NewPositionPage() {
                 await positionsAPI.createTradingPositionTradeEvent(
                     token,
                     truthPositionPublicId,
-                    buildTruthTradeEventFromBatchForm(batchData, existingPosition)
+                    buildTruthTradeEventFromBatchForm(batchData, targetPosition)
                 )
-                router.push(`/positions/${existingPosition.routeId}`)
+                router.push(`/positions/${targetPosition.routeId}`)
             } else {
                 const fallbackState = getTruthFirstWriteFallbackState(false, false)
                 if (!fallbackState.canWriteLegacyFallback) {
@@ -259,8 +423,8 @@ export default function NewPositionPage() {
                     return
                 }
 
-                await positionsAPI.addBatch(token, existingPosition.routeId, batchData, { migrationFallback: true })
-                router.push(`/positions/${existingPosition.routeId}`)
+                await positionsAPI.addBatch(token, targetPosition.routeId, batchData, { migrationFallback: true })
+                router.push(`/positions/${targetPosition.routeId}`)
             }
         } catch (err: any) {
             setError(err.message || '加仓失败')
@@ -334,13 +498,12 @@ export default function NewPositionPage() {
                                 >
                                     {isAddingBatch ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : '加仓到此仓位'}
                                 </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setShowExistingPrompt(false)}
+                                <Link
+                                    href={`/positions/${existingPosition.routeId}`}
                                     className="btn flex-1 btn-outline border-warning/30 dark:border-warning/30 text-warning dark:text-warning hover:bg-warning/8 dark:hover:bg-warning/8"
                                 >
-                                    开新仓位
-                                </button>
+                                    查看已有仓位
+                                </Link>
                             </div>
                         </div>
                     </div>
@@ -366,7 +529,7 @@ export default function NewPositionPage() {
                                     required
                                     type="text"
                                     value={form.symbol}
-                                    onChange={e => setForm({ ...form, symbol: e.target.value.toUpperCase() })}
+                                    onChange={e => setForm({ ...form, symbol: e.target.value })}
                                     className="input uppercase"
                                     placeholder="AAPL, SPY, BTC/USD"
                                 />
@@ -404,7 +567,7 @@ export default function NewPositionPage() {
                     </div>
 
                     {/* Strategy & Multi-dimensional Attributes */}
-                    <div className="grid grid-cols-2 gap-4">
+                    <div>
                         <div>
                             <label className="block text-sm font-medium mb-2">策略（可选）</label>
                             <CustomSelect
@@ -419,16 +582,6 @@ export default function NewPositionPage() {
                                     setForm({ ...form, strategy_id: strategyId, checklist_responses: {} })
                                 }}
                                 placeholder="选择交易策略"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium mb-2">标的名称</label>
-                            <input
-                                type="text"
-                                value={form.metadata.name}
-                                onChange={e => setForm({ ...form, metadata: { ...form.metadata, name: e.target.value } })}
-                                className="input"
-                                placeholder="标的名称"
                             />
                         </div>
                     </div>
@@ -451,7 +604,14 @@ export default function NewPositionPage() {
                                         { value: 'CRYPTO', label: '加密资产 (CRYPTO)' },
                                     ]}
                                     value={form.metadata.core_type}
-                                    onChange={val => setForm({ ...form, metadata: { ...form.metadata, core_type: val as any }, asset_type: val as string })}
+                                    onChange={val => {
+                                        const assetType = getReleaseAssetTypeSelection(val)
+                                        setForm({
+                                            ...form,
+                                            asset_type: assetType,
+                                            metadata: { ...form.metadata, core_type: assetType },
+                                        })
+                                    }}
                                 />
                             </div>
                             <div>
@@ -463,7 +623,24 @@ export default function NewPositionPage() {
                                         { value: 'CRYPTO', label: '加密市场 (CRYPTO)' },
                                     ]}
                                     value={form.metadata.market}
-                                    onChange={val => setForm({ ...form, metadata: { ...form.metadata, market: val as any } })}
+                                    onChange={val => setForm({
+                                        ...form,
+                                        metadata: { ...form.metadata, market: getReleaseMarketSelection(val) },
+                                    })}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] uppercase font-bold text-ink-faint mb-1">交易所代码 *</label>
+                                <input
+                                    required
+                                    type="text"
+                                    maxLength={32}
+                                    value={form.exchange_code}
+                                    onChange={e => setForm({ ...form, exchange_code: e.target.value })}
+                                    className="input py-1 text-sm h-9 uppercase"
+                                    placeholder="NASDAQ, NYSE, ARCA, COINBASE"
+                                    autoCapitalize="characters"
+                                    spellCheck={false}
                                 />
                             </div>
                             <div>
@@ -486,16 +663,6 @@ export default function NewPositionPage() {
                                     ]}
                                     value="SPOT"
                                     onChange={() => undefined}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] uppercase font-bold text-ink-faint mb-1">行业/主题</label>
-                                <input
-                                    type="text"
-                                    value={form.metadata.sector}
-                                    onChange={e => setForm({ ...form, metadata: { ...form.metadata, sector: e.target.value } })}
-                                    className="input py-1 text-sm h-9"
-                                    placeholder="例如：科技、AI"
                                 />
                             </div>
                         </div>
@@ -627,7 +794,7 @@ export default function NewPositionPage() {
                 {/* Submit */}
                 <button
                     type="submit"
-                    disabled={isSubmitting || (showExistingPrompt && !!existingPosition)}
+                    disabled={isSubmitting || !!existingPosition}
                     className="w-full btn btn-primary py-3"
                 >
                     {isSubmitting ? (

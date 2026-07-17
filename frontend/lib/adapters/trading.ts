@@ -1,12 +1,18 @@
 import type {
     BatchCreate,
     Position,
+    PositionOpenIdentity,
+    ReleaseAssetType,
+    ReleaseCurrency,
+    ReleaseInstrumentType,
+    ReleaseMarket,
     TradeBatch,
     TradingAccount,
     TradingPositionTradeEventCreate,
     Transaction,
 } from '../api.ts'
 import { getEntityRouteId } from '../entityIds.ts'
+import { JOURNAL_BETA_RELEASE_CONTRACT } from '../generated/release-contract.ts'
 
 export interface TradeBatchViewModel extends TradeBatch {
     routeId: string
@@ -68,6 +74,171 @@ export function adaptTradingAccounts(accounts: TradingAccount[]): TradingAccount
 
 export function adaptPositions(positions: Position[]): PositionViewModel[] {
     return positions.map(adaptPosition)
+}
+
+const ASCII_IDENTITY_WHITESPACE_AT_EDGES = /^[\t\n\v\f\r ]+|[\t\n\v\f\r ]+$/g
+const RELEASE_ASSET_TYPES = JOURNAL_BETA_RELEASE_CONTRACT.instruments.asset_types satisfies readonly ReleaseAssetType[]
+const RELEASE_MARKETS = JOURNAL_BETA_RELEASE_CONTRACT.instruments.markets satisfies readonly ReleaseMarket[]
+const RELEASE_INSTRUMENT_TYPES = JOURNAL_BETA_RELEASE_CONTRACT.instruments.instrument_types satisfies readonly ReleaseInstrumentType[]
+const RELEASE_CURRENCIES = JOURNAL_BETA_RELEASE_CONTRACT.currency.account_base_currencies satisfies readonly ReleaseCurrency[]
+const RELEASE_ASSET_TYPE_ALIASES: Readonly<Record<string, ReleaseAssetType>> = (
+    JOURNAL_BETA_RELEASE_CONTRACT.instruments.asset_type_aliases
+)
+const RELEASE_INSTRUMENT_COMBINATIONS = JOURNAL_BETA_RELEASE_CONTRACT.instruments.allowed_combinations
+const RELEASE_EXCHANGE_CODE_PATTERN = new RegExp(
+    JOURNAL_BETA_RELEASE_CONTRACT.instruments.exchange_code_pattern
+)
+const RELEASE_SYMBOL_PATTERN = new RegExp(
+    JOURNAL_BETA_RELEASE_CONTRACT.instruments.normalized_symbol_pattern
+)
+
+export type ReleasePositionIdentityField =
+    | 'symbol'
+    | 'exchange_code'
+    | 'asset_type'
+    | 'market'
+    | 'instrument_type'
+    | 'quote_currency'
+
+export interface ReleasePositionIdentityInput {
+    symbol: string
+    exchange_code: string
+    asset_type: string
+    market: string
+    instrument_type: string
+    quote_currency: string
+}
+
+export type NormalizedReleasePositionIdentity = Omit<PositionOpenIdentity, 'account_id' | 'direction'>
+
+export type ReleasePositionIdentityNormalizationResult =
+    | { ok: true; identity: NormalizedReleasePositionIdentity }
+    | {
+        ok: false
+        field: ReleasePositionIdentityField
+        reason: 'REQUIRED' | 'NON_ASCII' | 'INVALID' | 'INVALID_COMBINATION'
+    }
+
+function isAllowedToken<T extends string>(value: string, allowed: readonly T[]): value is T {
+    return allowed.some(candidate => candidate === value)
+}
+
+function canonicalizeReleaseAssetType(value: string): ReleaseAssetType | null {
+    if (isAllowedToken(value, RELEASE_ASSET_TYPES)) return value
+    return RELEASE_ASSET_TYPE_ALIASES[value] ?? null
+}
+
+export function isAsciiIdentityInput(value: string): boolean {
+    return /^[\x00-\x7F]*$/.test(value)
+}
+
+export function normalizeAsciiIdentityInput(value: string): string {
+    if (!isAsciiIdentityInput(value)) {
+        throw new TypeError('Identity input must be ASCII before normalization')
+    }
+    return value.replace(ASCII_IDENTITY_WHITESPACE_AT_EDGES, '').toUpperCase()
+}
+
+export function normalizeExchangeCodeInput(value: string): string {
+    return normalizeAsciiIdentityInput(value)
+}
+
+export const isAsciiExchangeCodeInput = isAsciiIdentityInput
+
+export function normalizeSymbolInput(value: string): string {
+    return normalizeAsciiIdentityInput(value)
+}
+
+export function isValidExchangeCodeInput(value: string): boolean {
+    if (!isAsciiIdentityInput(value)) return false
+    return RELEASE_EXCHANGE_CODE_PATTERN.test(normalizeExchangeCodeInput(value))
+}
+
+export function isValidSymbolInput(value: string): boolean {
+    if (!isAsciiIdentityInput(value)) return false
+    return RELEASE_SYMBOL_PATTERN.test(normalizeSymbolInput(value))
+}
+
+export function normalizeReleasePositionIdentityInput(
+    input: ReleasePositionIdentityInput
+): ReleasePositionIdentityNormalizationResult {
+    const rawTokens: Array<[ReleasePositionIdentityField, string]> = [
+        ['symbol', input.symbol],
+        ['exchange_code', input.exchange_code],
+        ['asset_type', input.asset_type],
+        ['market', input.market],
+        ['instrument_type', input.instrument_type],
+        ['quote_currency', input.quote_currency],
+    ]
+
+    // Contract order is deliberate: reject every raw non-ASCII token before trimming or uppercasing any token.
+    for (const [field, rawValue] of rawTokens) {
+        if (!isAsciiIdentityInput(rawValue)) {
+            return { ok: false, field, reason: 'NON_ASCII' }
+        }
+    }
+
+    const symbol = normalizeSymbolInput(input.symbol)
+    const exchangeCode = normalizeExchangeCodeInput(input.exchange_code)
+    const rawNormalizedAssetType = normalizeAsciiIdentityInput(input.asset_type)
+    const market = normalizeAsciiIdentityInput(input.market)
+    const instrumentType = normalizeAsciiIdentityInput(input.instrument_type)
+    const quoteCurrency = normalizeAsciiIdentityInput(input.quote_currency)
+
+    const normalizedTokens: Array<[ReleasePositionIdentityField, string]> = [
+        ['symbol', symbol],
+        ['exchange_code', exchangeCode],
+        ['asset_type', rawNormalizedAssetType],
+        ['market', market],
+        ['instrument_type', instrumentType],
+        ['quote_currency', quoteCurrency],
+    ]
+    for (const [field, normalizedValue] of normalizedTokens) {
+        if (!normalizedValue) {
+            return { ok: false, field, reason: 'REQUIRED' }
+        }
+    }
+
+    if (!RELEASE_SYMBOL_PATTERN.test(symbol)) {
+        return { ok: false, field: 'symbol', reason: 'INVALID' }
+    }
+    if (!RELEASE_EXCHANGE_CODE_PATTERN.test(exchangeCode)) {
+        return { ok: false, field: 'exchange_code', reason: 'INVALID' }
+    }
+    const assetType = canonicalizeReleaseAssetType(rawNormalizedAssetType)
+    if (!assetType) {
+        return { ok: false, field: 'asset_type', reason: 'INVALID' }
+    }
+    if (!isAllowedToken(market, RELEASE_MARKETS)) {
+        return { ok: false, field: 'market', reason: 'INVALID' }
+    }
+    if (!isAllowedToken(instrumentType, RELEASE_INSTRUMENT_TYPES)) {
+        return { ok: false, field: 'instrument_type', reason: 'INVALID' }
+    }
+    if (!isAllowedToken(quoteCurrency, RELEASE_CURRENCIES)) {
+        return { ok: false, field: 'quote_currency', reason: 'INVALID' }
+    }
+
+    const validCombination = RELEASE_INSTRUMENT_COMBINATIONS.some(combination => (
+        combination.asset_type === assetType
+        && combination.market === market
+        && combination.instrument_type === instrumentType
+    ))
+    if (!validCombination) {
+        return { ok: false, field: 'market', reason: 'INVALID_COMBINATION' }
+    }
+
+    return {
+        ok: true,
+        identity: {
+            symbol,
+            exchange_code: exchangeCode,
+            asset_type: assetType,
+            market,
+            instrument_type: instrumentType,
+            quote_currency: quoteCurrency,
+        },
+    }
 }
 
 export function buildTruthTradeEventFromBatchForm(

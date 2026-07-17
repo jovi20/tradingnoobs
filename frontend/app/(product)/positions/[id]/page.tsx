@@ -82,13 +82,6 @@ export default function PositionDetailPage() {
         confidence: 3
     })
 
-    // Metadata Edit State
-    const [editingMetadata, setEditingMetadata] = useState(false)
-    const [isSavingMetadata, setIsSavingMetadata] = useState(false)
-    const [metadataForm, setMetadataForm] = useState({
-        sector: '',
-    })
-
     const [editingTruthNarrative, setEditingTruthNarrative] = useState(false)
     const [isSavingTruthNarrative, setIsSavingTruthNarrative] = useState(false)
     const [isReversingTruthEvent, setIsReversingTruthEvent] = useState(false)
@@ -176,39 +169,6 @@ export default function PositionDetailPage() {
             alert(err.message || '更新失败')
         } finally {
             setIsSavingBatch(false)
-        }
-    }
-
-    const openMetadataModal = () => {
-        if (!position?.asset_metadata) return
-        setMetadataForm({
-            sector: position.asset_metadata.sector || '',
-        })
-        setEditingMetadata(true)
-    }
-
-    const handleUpdateMetadata = async () => {
-        if (!token || !position) return
-
-        setIsSavingMetadata(true)
-        try {
-            await positionsAPI.update(token, position.routeId, {
-                asset_metadata: {
-                    sector: metadataForm.sector,
-                }
-            })
-
-            const [updated, truthData] = await Promise.all([
-                positionsAPI.get(token, position.routeId),
-                positionsAPI.getTruthLifecycle(token, position.routeId).catch(() => null),
-            ])
-            setPosition(adaptPosition(updated))
-            setTruthLifecycle(truthData ? adaptLifecycleDetail(truthData) : null)
-            setEditingMetadata(false)
-        } catch (err: any) {
-            alert(err.message || '更新失败')
-        } finally {
-            setIsSavingMetadata(false)
         }
     }
 
@@ -382,7 +342,6 @@ export default function PositionDetailPage() {
                     isReversing={isReversingTruthEvent}
                     onEditNarrative={openTruthNarrativeModal}
                     onReverseLatest={handleReverseLatestTruthEvent}
-                    onEditMetadata={openMetadataModal}
                     onEditBatch={openEditModal}
                 />
             )}
@@ -430,15 +389,6 @@ export default function PositionDetailPage() {
             {/* Metadata Card */}
             {position.asset_metadata && (
                 <div className="card p-5 relative group">
-                    <button
-                        onClick={openMetadataModal}
-                        aria-label="编辑行业板块"
-                        className="absolute top-4 right-4 p-2 rounded-lg bg-panel hover:bg-panel-subtle text-ink-muted transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-                        title="编辑行业板块"
-                    >
-                        <Edit3 className="w-4 h-4" />
-                    </button>
-
                     <h2 className="text-sm font-bold text-ink-faint mb-4 uppercase tracking-wider flex items-center">
                         <Target className="w-4 h-4 mr-2" />
                         资产属性
@@ -775,53 +725,6 @@ export default function PositionDetailPage() {
                             >
                                 {isSavingBatch && <Loader2 className="w-4 h-4 animate-spin" />}
                                 <span>保存修改</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-            {/* Descriptive metadata only; financial identity remains frozen. */}
-            {editingMetadata && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/50 backdrop-blur-sm">
-                    <div className="card w-full max-w-lg shadow-2xl animate-in zoom-in duration-200">
-                        <div className="p-6 border-b border-line flex items-center justify-between">
-                            <h3 className="text-lg font-bold">编辑行业板块</h3>
-                            <button
-                                type="button"
-                                onClick={() => setEditingMetadata(false)}
-                                aria-label="关闭编辑行业板块对话框"
-                                title="关闭编辑行业板块对话框"
-                                className="p-2 hover:bg-panel-subtle rounded-lg transition-colors"
-                            >
-                                <Plus className="w-5 h-5 rotate-45" />
-                            </button>
-                        </div>
-                        <div className="p-6">
-                            <div>
-                                <label className="block text-sm font-medium mb-1">行业 / 板块</label>
-                                <input
-                                    type="text"
-                                    value={metadataForm.sector}
-                                    onChange={e => setMetadataForm({ ...metadataForm, sector: e.target.value })}
-                                    className="input"
-                                    placeholder="例如：科技、医疗、消费"
-                                />
-                            </div>
-                        </div>
-                        <div className="p-6 border-t border-line flex justify-end space-x-3">
-                            <button
-                                onClick={() => setEditingMetadata(false)}
-                                className="btn btn-secondary"
-                            >
-                                取消
-                            </button>
-                            <button
-                                onClick={handleUpdateMetadata}
-                                disabled={isSavingMetadata}
-                                className="btn btn-primary flex items-center space-x-2"
-                            >
-                                {isSavingMetadata && <Loader2 className="w-4 h-4 animate-spin" />}
-                                <span>保存板块</span>
                             </button>
                         </div>
                     </div>

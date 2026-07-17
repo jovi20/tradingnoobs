@@ -25,7 +25,6 @@ interface LifecycleWorkbenchProps {
     isReversing: boolean
     onEditNarrative: () => void
     onReverseLatest: () => void
-    onEditMetadata: () => void
     onEditBatch: (batch: TradeBatchViewModel) => void
 }
 
@@ -36,7 +35,6 @@ export function LifecycleWorkbench({
     isReversing,
     onEditNarrative,
     onReverseLatest,
-    onEditMetadata,
     onEditBatch,
 }: LifecycleWorkbenchProps) {
     const reversal = getLifecycleReversalAction(lifecycle)
@@ -77,7 +75,6 @@ export function LifecycleWorkbench({
                     sortedBatches={sortedBatches}
                     legacyBatchMutationState={legacyBatchMutationState}
                     legacyReviewDisplayState={legacyReviewDisplayState}
-                    onEditMetadata={onEditMetadata}
                     onEditBatch={onEditBatch}
                 />
             )}

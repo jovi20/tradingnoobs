@@ -70,30 +70,8 @@ test('account and lifecycle surfaces avoid unsupported valuation claims', () => 
     assert.doesNotMatch(source, /handleAnalyze|onAnalyze|isAnalyzing|分析历史价格/)
     assert.doesNotMatch(source, /max_price_during_hold|min_price_during_hold|editingExtremes|onEditExtremes|MAE\/MFE/)
   }
-  const metadataStateStart = position.indexOf('const [metadataForm')
-  const metadataStateEnd = position.indexOf('const [editingTruthNarrative')
-  const metadataHandlerStart = position.indexOf('const handleUpdateMetadata')
-  const metadataHandlerEnd = position.indexOf('const openTruthNarrativeModal')
-  const metadataModalStart = position.indexOf('{/* Descriptive metadata only')
-  const metadataModalEnd = position.indexOf('<LifecycleModals')
-  for (const boundary of [
-    metadataStateStart,
-    metadataStateEnd,
-    metadataHandlerStart,
-    metadataHandlerEnd,
-    metadataModalStart,
-    metadataModalEnd,
-  ]) {
-    assert.notEqual(boundary, -1)
-  }
-  const metadataState = position.slice(metadataStateStart, metadataStateEnd)
-  const metadataHandler = position.slice(metadataHandlerStart, metadataHandlerEnd)
-  const metadataModal = position.slice(metadataModalStart, metadataModalEnd)
-  assert.match(metadataState, /sector: ''/)
-  assert.doesNotMatch(metadataState, /core_type|market|currency|instrument/)
-  assert.match(metadataHandler, /asset_metadata:\s*\{\s*sector: metadataForm\.sector/)
-  assert.doesNotMatch(metadataHandler, /core_type|market|currency|instrument/)
-  assert.doesNotMatch(metadataModal, /<select|底层资产|交易工具|所属市场/)
+  assert.doesNotMatch(position, /metadataForm|editingMetadata|handleUpdateMetadata|编辑行业板块/)
+  assert.doesNotMatch(migrationPanel, /onEditMetadata|编辑旧版资产属性/)
   assert.doesNotMatch(position, /ALL_ASSET_CORE_TYPES|ALL_ASSET_MARKETS|现货、ETF、期货/)
   assert.doesNotMatch(workbench, /onAnalyze|isAnalyzing/)
   for (const source of [position, workbench, actionPanel, lifecycleModals, lifecycleAdapter, api]) {

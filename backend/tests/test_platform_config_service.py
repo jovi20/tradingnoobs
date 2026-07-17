@@ -2,8 +2,9 @@ import os
 import tempfile
 import unittest
 from datetime import datetime, timezone
+from unittest.mock import patch
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from database import Base
@@ -102,6 +103,20 @@ class PlatformConfigServiceTests(unittest.TestCase):
         self.assertTrue(get_feature_flag_enabled(self.db, "targeted_rollout_zero", actor_key="beta-user"))
         self.assertFalse(get_feature_flag_enabled(self.db, "targeted_rollout_zero", actor_key="other-user"))
         self.assertTrue(get_feature_flag_enabled(self.db, "targeted_rollout_all", actor_key="other-user"))
+
+    def test_feature_flag_read_failure_rolls_back_savepoint_and_keeps_session_usable(self):
+        self.db.execute(text("DROP TABLE feature_flags"))
+        self.db.commit()
+
+        with patch.object(
+            self.db,
+            "begin_nested",
+            wraps=self.db.begin_nested,
+        ) as begin_nested:
+            self.assertFalse(get_feature_flag_enabled(self.db, "broken_flag"))
+
+        begin_nested.assert_called_once_with()
+        self.assertEqual(self.db.execute(text("SELECT 1")).scalar_one(), 1)
 
 
 if __name__ == "__main__":

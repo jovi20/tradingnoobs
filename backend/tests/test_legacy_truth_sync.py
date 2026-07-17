@@ -28,7 +28,11 @@ from models import (
     TradingPositionStatus,
     User,
 )
-from services.legacy_truth_sync_service import sync_all_legacy_positions_to_truth, sync_legacy_position_to_truth
+from services.legacy_truth_sync_service import (
+    sync_all_legacy_positions_to_truth,
+    sync_legacy_position_to_truth,
+    validate_legacy_instrument_identity,
+)
 
 
 class LegacyTruthSyncTests(unittest.TestCase):
@@ -161,10 +165,28 @@ class LegacyTruthSyncTests(unittest.TestCase):
         self.db.commit()
         return position
 
+    def _expected_identity(self, position: Position):
+        self.db.refresh(position)
+        metadata = position.asset_metadata
+        return validate_legacy_instrument_identity(
+            position_asset_type=position.asset_type,
+            account_currency=position.trading_account.currency,
+            symbol=position.symbol,
+            exchange_code=position.exchange,
+            metadata_core_type=metadata.core_type if metadata else None,
+            metadata_market=metadata.market if metadata else None,
+            metadata_currency=metadata.currency if metadata else None,
+            metadata_instrument=metadata.instrument if metadata else None,
+        )
+
     def test_sync_legacy_position_creates_truth_position_and_events(self):
         legacy_position = self._seed_legacy_position()
 
-        truth_position = sync_legacy_position_to_truth(self.db, legacy_position.id)
+        truth_position = sync_legacy_position_to_truth(
+            self.db,
+            legacy_position.id,
+            expected_identity=self._expected_identity(legacy_position),
+        )
 
         self.assertIsInstance(truth_position, TradingPosition)
         self.assertEqual(truth_position.status, TradingPositionStatus.CLOSED)
@@ -200,7 +222,11 @@ class LegacyTruthSyncTests(unittest.TestCase):
     def test_sync_legacy_position_is_idempotent(self):
         legacy_position = self._seed_legacy_position()
 
-        first = sync_legacy_position_to_truth(self.db, legacy_position.id)
+        first = sync_legacy_position_to_truth(
+            self.db,
+            legacy_position.id,
+            expected_identity=self._expected_identity(legacy_position),
+        )
         second = sync_legacy_position_to_truth(self.db, legacy_position.id)
 
         self.assertEqual(first.id, second.id)
@@ -225,7 +251,11 @@ class LegacyTruthSyncTests(unittest.TestCase):
     def test_sync_legacy_position_derives_truth_pnl_from_fifo_events(self):
         legacy_position = self._seed_legacy_position(realized_pnl=Decimal("999"))
 
-        truth_position = sync_legacy_position_to_truth(self.db, legacy_position.id)
+        truth_position = sync_legacy_position_to_truth(
+            self.db,
+            legacy_position.id,
+            expected_identity=self._expected_identity(legacy_position),
+        )
 
         events = self.db.query(PositionEvent).order_by(PositionEvent.event_time.asc()).all()
         ledger_entries = self.db.query(AccountLedgerEntry).order_by(AccountLedgerEntry.occurred_at.asc()).all()
@@ -236,7 +266,7 @@ class LegacyTruthSyncTests(unittest.TestCase):
         self.assertEqual(ledger_entries[0].amount, Decimal("180"))
 
     def test_sync_all_legacy_positions_reports_created_summary(self):
-        self._seed_legacy_position(
+        first_position = self._seed_legacy_position(
             email="batch@example.com",
             user_public_id="user-batch",
             account_public_id="acct-batch-1",
@@ -244,7 +274,7 @@ class LegacyTruthSyncTests(unittest.TestCase):
             symbol="AAPL",
             realized_pnl=Decimal("180"),
         )
-        self._seed_legacy_position(
+        second_position = self._seed_legacy_position(
             email="batch@example.com",
             user_public_id="user-batch",
             account_public_id="acct-batch-2",
@@ -255,7 +285,13 @@ class LegacyTruthSyncTests(unittest.TestCase):
             realized_pnl=Decimal("90"),
         )
 
-        summary = sync_all_legacy_positions_to_truth(self.db)
+        summary = sync_all_legacy_positions_to_truth(
+            self.db,
+            expected_identities={
+                first_position.id: self._expected_identity(first_position),
+                second_position.id: self._expected_identity(second_position),
+            },
+        )
 
         self.assertEqual(summary["processed"], 2)
         self.assertEqual(summary["created_positions"], 2)
@@ -266,7 +302,7 @@ class LegacyTruthSyncTests(unittest.TestCase):
         self.assertEqual(self.db.query(AccountLedgerEntry).count(), 2)
 
     def test_sync_all_legacy_positions_is_idempotent_across_reruns(self):
-        self._seed_legacy_position(
+        position = self._seed_legacy_position(
             email="idempotent@example.com",
             user_public_id="user-idempotent",
             account_public_id="acct-idempotent",
@@ -274,7 +310,12 @@ class LegacyTruthSyncTests(unittest.TestCase):
             symbol="NVDA",
         )
 
-        first = sync_all_legacy_positions_to_truth(self.db)
+        first = sync_all_legacy_positions_to_truth(
+            self.db,
+            expected_identities={
+                position.id: self._expected_identity(position),
+            },
+        )
         second = sync_all_legacy_positions_to_truth(self.db)
 
         self.assertEqual(first["processed"], 1)

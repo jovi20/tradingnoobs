@@ -53,9 +53,21 @@ class InstrumentContract(_FrozenModel):
     identity_fields: tuple[str, ...]
     exchange_code_required: Literal[True]
     identity_token_normalization: Literal["ASCII_TRIM_UPPER"]
+    raw_identity_token_policy: Literal["REJECT_NON_ASCII_THEN_TRIM_UPPER"]
     exchange_code_pattern: str
     normalized_symbol_pattern: str
+    raw_exchange_code_input_pattern: str
+    raw_normalized_symbol_input_pattern: str
     quote_currency_must_equal_account_currency: Literal[True]
+    legacy_identity_evidence: tuple[
+        Literal["REQUEST_VALIDATED", "EXACT_JOURNAL_IDENTITY_V1"],
+        ...,
+    ]
+    legacy_unproven_error: Literal["LEGACY_INSTRUMENT_IDENTITY_UNPROVEN"]
+    preupgrade_truth_read_policy: Literal["READ_ONLY_NO_IDENTITY_REWRITE"]
+    shared_asset_metadata_owner: Literal["SYSTEM"]
+    shared_asset_metadata_user_write: Literal["FORBIDDEN"]
+    canonical_identity_schema_task: Literal["JRN-007"]
     disabled_asset_types: tuple[str, ...]
     disabled_instrument_types: tuple[str, ...]
 
@@ -252,8 +264,23 @@ class JournalBetaReleaseContract(_FrozenModel):
         )
         require_exact(
             self.instruments.normalized_symbol_pattern,
-            r"^[A-Z0-9][A-Z0-9._/-]{0,63}$",
+            r"^[A-Z0-9][A-Z0-9._/-]{0,49}$",
             "symbol pattern",
+        )
+        require_exact(
+            self.instruments.raw_exchange_code_input_pattern,
+            r"^[\t\n\v\f\r ]*[A-Za-z0-9][A-Za-z0-9._-]{0,31}[\t\n\v\f\r ]*$",
+            "raw exchange code input pattern",
+        )
+        require_exact(
+            self.instruments.raw_normalized_symbol_input_pattern,
+            r"^[\t\n\v\f\r ]*[A-Za-z0-9][A-Za-z0-9._/-]{0,49}[\t\n\v\f\r ]*$",
+            "raw symbol input pattern",
+        )
+        require_exact(
+            self.instruments.legacy_identity_evidence,
+            ("REQUEST_VALIDATED", "EXACT_JOURNAL_IDENTITY_V1"),
+            "legacy identity evidence",
         )
         require_exact(
             self.instruments.disabled_asset_types,
@@ -447,6 +474,43 @@ ALLOWED_MARKETS = frozenset(JOURNAL_BETA_CONTRACT.instruments.markets)
 ASSET_TYPE_ALIASES = MappingProxyType(dict(JOURNAL_BETA_CONTRACT.instruments.asset_type_aliases))
 TRANSACTION_INPUT_MAP = MappingProxyType(dict(JOURNAL_BETA_CONTRACT.events.transaction_input_map))
 ALLOWED_TRANSACTION_TYPES = frozenset(TRANSACTION_INPUT_MAP)
+EXCHANGE_CODE_PATTERN = re.compile(
+    JOURNAL_BETA_CONTRACT.instruments.exchange_code_pattern,
+    flags=re.ASCII,
+)
+NORMALIZED_SYMBOL_PATTERN = re.compile(
+    JOURNAL_BETA_CONTRACT.instruments.normalized_symbol_pattern,
+    flags=re.ASCII,
+)
+ASCII_IDENTITY_WHITESPACE = " \t\n\v\f\r"
+
+
+def _raw_case_insensitive_token_pattern(values: tuple[str, ...]) -> str:
+    def token_pattern(value: str) -> str:
+        return "".join(
+            f"[{character}{character.lower()}]"
+            if "A" <= character <= "Z"
+            else re.escape(character)
+            for character in value
+        )
+
+    whitespace = r"[\t\n\v\f\r ]*"
+    alternatives = "|".join(token_pattern(value) for value in values)
+    return rf"^{whitespace}(?:{alternatives}){whitespace}$"
+
+
+RAW_ASSET_TYPE_INPUT_PATTERN = _raw_case_insensitive_token_pattern(
+    (*JOURNAL_BETA_CONTRACT.instruments.asset_types, *ASSET_TYPE_ALIASES.keys())
+)
+RAW_MARKET_INPUT_PATTERN = _raw_case_insensitive_token_pattern(
+    JOURNAL_BETA_CONTRACT.instruments.markets
+)
+RAW_INSTRUMENT_TYPE_INPUT_PATTERN = _raw_case_insensitive_token_pattern(
+    JOURNAL_BETA_CONTRACT.instruments.instrument_types
+)
+RAW_CURRENCY_INPUT_PATTERN = _raw_case_insensitive_token_pattern(
+    JOURNAL_BETA_CONTRACT.currency.account_base_currencies
+)
 
 
 class ReleaseContractViolation(ValueError):
@@ -457,19 +521,43 @@ class ReleaseContractViolation(ValueError):
         super().__init__(f"{code}: {field} is outside the journal Beta contract")
 
 
+def _normalize_raw_ascii_token(
+    value: object,
+    *,
+    code: str,
+    field: str,
+) -> str:
+    raw_value = str(value or "")
+    if not raw_value.isascii():
+        raise ReleaseContractViolation(code, field, value)
+    return raw_value.strip(ASCII_IDENTITY_WHITESPACE).upper()
+
+
 def normalize_contract_token(value: object) -> str:
-    return str(value or "").strip().upper()
+    return _normalize_raw_ascii_token(
+        value,
+        code="INVALID_CONTRACT_TOKEN",
+        field="value",
+    )
 
 
 def require_release_currency(value: object, *, field: str = "currency") -> str:
-    normalized = normalize_contract_token(value)
+    normalized = _normalize_raw_ascii_token(
+        value,
+        code="UNSUPPORTED_RELEASE_CURRENCY",
+        field=field,
+    )
     if normalized != RELEASE_BASE_CURRENCY:
         raise ReleaseContractViolation("UNSUPPORTED_RELEASE_CURRENCY", field, value)
     return normalized
 
 
 def require_allowed_transaction_type(value: object) -> str:
-    normalized = normalize_contract_token(getattr(value, "value", value))
+    normalized = _normalize_raw_ascii_token(
+        getattr(value, "value", value),
+        code="UNSUPPORTED_TRANSACTION_TYPE",
+        field="type",
+    )
     canonical_event = TRANSACTION_INPUT_MAP.get(normalized)
     if canonical_event not in JOURNAL_BETA_CONTRACT.events.cash:
         raise ReleaseContractViolation("UNSUPPORTED_TRANSACTION_TYPE", "type", value)
@@ -477,10 +565,62 @@ def require_allowed_transaction_type(value: object) -> str:
 
 
 def require_allowed_asset_type(value: object) -> str:
-    normalized = normalize_contract_token(getattr(value, "value", value))
+    normalized = _normalize_raw_ascii_token(
+        getattr(value, "value", value),
+        code="UNSUPPORTED_ASSET_TYPE",
+        field="asset_type",
+    )
     normalized = ASSET_TYPE_ALIASES.get(normalized, normalized)
     if normalized not in ALLOWED_ASSET_TYPES:
         raise ReleaseContractViolation("UNSUPPORTED_ASSET_TYPE", "asset_type", value)
+    return normalized
+
+
+def require_allowed_market(value: object, *, field: str = "market") -> str:
+    normalized = _normalize_raw_ascii_token(
+        getattr(value, "value", value),
+        code="UNSUPPORTED_MARKET",
+        field=field,
+    )
+    if normalized not in ALLOWED_MARKETS:
+        raise ReleaseContractViolation("UNSUPPORTED_MARKET", field, value)
+    return normalized
+
+
+def require_allowed_instrument_type(
+    value: object,
+    *,
+    field: str = "instrument_type",
+) -> str:
+    normalized = _normalize_raw_ascii_token(
+        getattr(value, "value", value),
+        code="UNSUPPORTED_INSTRUMENT_TYPE",
+        field=field,
+    )
+    if normalized not in ALLOWED_INSTRUMENT_TYPES:
+        raise ReleaseContractViolation("UNSUPPORTED_INSTRUMENT_TYPE", field, value)
+    return normalized
+
+
+def require_exchange_code(value: object) -> str:
+    normalized = _normalize_raw_ascii_token(
+        value,
+        code="INVALID_EXCHANGE_CODE",
+        field="exchange_code",
+    )
+    if not EXCHANGE_CODE_PATTERN.fullmatch(normalized):
+        raise ReleaseContractViolation("INVALID_EXCHANGE_CODE", "exchange_code", value)
+    return normalized
+
+
+def require_normalized_symbol(value: object) -> str:
+    normalized = _normalize_raw_ascii_token(
+        value,
+        code="INVALID_NORMALIZED_SYMBOL",
+        field="symbol",
+    )
+    if not NORMALIZED_SYMBOL_PATTERN.fullmatch(normalized):
+        raise ReleaseContractViolation("INVALID_NORMALIZED_SYMBOL", "symbol", value)
     return normalized
 
 

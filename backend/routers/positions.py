@@ -14,33 +14,45 @@ import io
 from datetime import datetime
 
 from app_config.release_contract import (
+    JOURNAL_BETA_CONTRACT,
+    RAW_ASSET_TYPE_INPUT_PATTERN,
+    RAW_CURRENCY_INPUT_PATTERN,
+    RAW_INSTRUMENT_TYPE_INPUT_PATTERN,
+    RAW_MARKET_INPUT_PATTERN,
     ReleaseContractViolation,
     release_violation_detail,
     require_allowed_asset_type,
+    require_allowed_market,
+    require_exchange_code,
+    require_normalized_symbol,
     require_release_currency,
 )
 from database import get_db
 from observability import get_structured_logger, log_event
 from routers.auth import get_current_user
 from models import (
-    User, Position, TradeBatch, TradingAccount, AssetMetadata,
+    User, Position, TradeBatch, TradingAccount,
     PositionStatus, PositionDirection, BatchType
 )
 from schemas import (
     PositionCreate, PositionUpdate, PositionResponse, PositionListResponse,
     TradeBatchCreate, TradeBatchUpdate, TradeBatchResponse,
-    PositionStatusEnum, BatchTypeEnum, AssetMetadataUpdate,
+    PositionStatusEnum, BatchTypeEnum,
     ImportPreviewResponse, ImportConfirmRequest
 )
-from models import AssetCoreType, AssetMarket, AssetCurrency
 from models import TradingPosition
 from release_profile import RuntimeCapability
 from services.capability_service import is_effective_capability_enabled
 from services.public_id_service import resolve_position, resolve_trade_batch, resolve_trading_account
 from services.legacy_truth_sync_service import (
+    LegacyInstrumentIdentity,
     legacy_position_truth_public_id,
     sync_legacy_position_to_truth,
     validate_legacy_instrument_identity,
+)
+from services.position_instrument_projection_service import (
+    PositionInstrumentProjection,
+    project_position_instrument,
 )
 from services.trading_position_read_service import build_trading_position_lifecycle_payload
 from services.trading_position_read_service import resolve_truth_position_by_public_id
@@ -87,6 +99,163 @@ def _release_contract_value(callable_, *args, **kwargs):
 
 def _enum_value(value):
     return value.value if hasattr(value, "value") else str(value)
+
+
+def _batch_response_payload(batch: TradeBatch) -> dict:
+    return {
+        "id": batch.id,
+        "public_id": batch.public_id,
+        "position_id": batch.position_id,
+        "type": _enum_value(batch.type),
+        "price": batch.price,
+        "quantity": batch.quantity,
+        "time": batch.time,
+        "reason": batch.reason,
+        "emotion": batch.emotion,
+        "confidence": batch.confidence,
+        "pnl": batch.pnl,
+        "created_at": batch.created_at,
+    }
+
+
+def _position_list_response_payload(
+    db: Session,
+    position: Position,
+    *,
+    truth_position: TradingPosition | None,
+    instrument_projection: PositionInstrumentProjection | None = None,
+) -> dict:
+    projection = instrument_projection or project_position_instrument(
+        db,
+        position,
+        truth_position=truth_position,
+    )
+    identity = projection.identity if projection else None
+    return {
+        "id": position.id,
+        "public_id": position.public_id,
+        "truth_position_public_id": truth_position.public_id if truth_position else None,
+        "account_id": position.account_id,
+        "symbol": identity.normalized_symbol if identity else position.symbol,
+        "exchange": identity.exchange_code if identity else position.exchange,
+        "asset_type": identity.asset_type if identity else position.asset_type,
+        "direction": _enum_value(position.direction),
+        "status": _enum_value(position.status),
+        "total_quantity": position.total_quantity,
+        "average_entry_price": position.average_entry_price,
+        "realized_pnl": position.realized_pnl,
+        "opened_at": position.opened_at,
+        "closed_at": position.closed_at,
+        "created_at": position.created_at,
+        "asset_metadata": projection.response_metadata() if projection else None,
+        "batches": [_batch_response_payload(batch) for batch in position.batches],
+    }
+
+
+def _position_response_payload(
+    db: Session,
+    position: Position,
+    *,
+    truth_position: TradingPosition | None,
+) -> dict:
+    payload = _position_list_response_payload(
+        db,
+        position,
+        truth_position=truth_position,
+    )
+    payload.update(
+        {
+            "user_id": position.user_id,
+            "strategy_id": position.strategy_id,
+            "trade_review": position.trade_review,
+            "screenshots": position.screenshots or [],
+            "lessons": position.lessons or [],
+            "rating": position.rating,
+            "updated_at": position.updated_at,
+            "planned_entry_price": position.planned_entry_price,
+            "planned_stop_loss": position.planned_stop_loss,
+            "planned_take_profit": position.planned_take_profit,
+            "checklist_responses": position.checklist_responses,
+            "checklist_completed_at": position.checklist_completed_at,
+            "drift_analysis": calculate_drift(position),
+        }
+    )
+    return payload
+
+
+def _normalize_market_filter(value: str | None) -> str | None:
+    return (
+        _release_contract_value(require_allowed_market, value)
+        if value is not None
+        else None
+    )
+
+
+def _matching_open_positions(
+    db: Session,
+    *,
+    user_id: int,
+    account: TradingAccount,
+    identity: LegacyInstrumentIdentity,
+    direction: PositionDirection,
+) -> list[Position]:
+    candidates = (
+        db.query(Position)
+        .filter(
+            Position.user_id == user_id,
+            Position.account_id == account.id,
+            Position.direction == direction,
+            Position.status == PositionStatus.OPEN,
+        )
+        .order_by(Position.id.asc())
+        .all()
+    )
+    matches: list[Position] = []
+    for position in candidates:
+        projection = project_position_instrument(
+            db,
+            position,
+            truth_position=resolve_truth_position_for_legacy(
+                db,
+                user_id=user_id,
+                legacy_position=position,
+            ),
+        )
+        if projection is None:
+            try:
+                candidate_symbol = require_normalized_symbol(position.symbol)
+            except ReleaseContractViolation:
+                continue
+            if candidate_symbol == identity.normalized_symbol:
+                raise ReleaseContractViolation(
+                    JOURNAL_BETA_CONTRACT.instruments.legacy_unproven_error,
+                    "position.exchange",
+                    position.exchange,
+                )
+            continue
+        if projection.identity == identity:
+            matches.append(position)
+    return matches
+
+
+def _raise_open_position_conflict(matches: list[Position]) -> None:
+    if len(matches) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "AMBIGUOUS_OPEN_POSITION",
+                "message": "Multiple open lifecycles match the same instrument identity and side",
+            },
+        )
+    if matches:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "OPEN_POSITION_EXISTS",
+                "message": "Use ADD for an existing same-side lifecycle",
+                "position_public_id": matches[0].public_id,
+            },
+        )
 
 
 def recalculate_position(position: Position, db: Session):
@@ -226,9 +395,10 @@ async def list_positions(
     """List all positions for the current user"""
     truth_by_legacy_id = project_user_truth_positions_to_legacy(db, user_id=current_user.id)
     from sqlalchemy.orm import joinedload
-    query = db.query(Position).outerjoin(AssetMetadata).options(
+    query = db.query(Position).options(
         joinedload(Position.batches),
-        joinedload(Position.asset_metadata)
+        joinedload(Position.asset_metadata),
+        joinedload(Position.trading_account),
     ).filter(Position.user_id == current_user.id)
     
     if status:
@@ -238,78 +408,48 @@ async def list_positions(
     if account_id:
         query = query.filter(Position.account_id == account_id)
     
-    if asset_type:
-        query = query.filter(Position.asset_type == asset_type)
-    
-    if core_type:
-        query = query.filter(AssetMetadata.core_type == core_type)
-    if market:
-        query = query.filter(AssetMetadata.market == market)
+    canonical_asset_type = (
+        _release_contract_value(require_allowed_asset_type, asset_type)
+        if asset_type
+        else None
+    )
+    canonical_core_type = (
+        _release_contract_value(require_allowed_asset_type, core_type)
+        if core_type
+        else None
+    )
+    canonical_market = _normalize_market_filter(market)
 
     positions = query.order_by(desc(Position.opened_at)).all()
-    
-    # Build response
     result = []
     for pos in positions:
-        pos_dict = {
-            'id': pos.id,
-            'public_id': pos.public_id,
-            'truth_position_public_id': (
-                truth_by_legacy_id[pos.id].public_id
-                if pos.id in truth_by_legacy_id
-                else None
-            ),
-            'account_id': pos.account_id,
-            'symbol': pos.symbol,
-            'exchange': pos.exchange,
-            'asset_type': pos.asset_type,
-            'direction': pos.direction.value,
-            'status': pos.status.value,
-            'total_quantity': pos.total_quantity,
-            'average_entry_price': pos.average_entry_price,
-            'realized_pnl': pos.realized_pnl,
-            'opened_at': pos.opened_at,
-            'closed_at': pos.closed_at,
-            'created_at': pos.created_at,
-            'asset_metadata': None
-        }
+        truth_position = truth_by_legacy_id.get(pos.id)
+        projection = project_position_instrument(
+            db,
+            pos,
+            truth_position=truth_position,
+        )
+        if canonical_asset_type and (
+            projection is None or projection.identity.asset_type != canonical_asset_type
+        ):
+            continue
+        if canonical_core_type and (
+            projection is None or projection.identity.asset_type != canonical_core_type
+        ):
+            continue
+        if canonical_market and (
+            projection is None or projection.identity.market != canonical_market
+        ):
+            continue
+        result.append(
+            _position_list_response_payload(
+                db,
+                pos,
+                truth_position=truth_position,
+                instrument_projection=projection,
+            )
+        )
 
-        # Populate asset_metadata
-        if pos.asset_metadata:
-            meta = pos.asset_metadata
-            pos_dict['asset_metadata'] = {
-                'symbol': meta.symbol,
-                'name': meta.name,
-                'core_type': meta.core_type,
-                'market': meta.market,
-                'currency': meta.currency,
-                'sector': meta.sector,
-                'instrument': meta.instrument
-            }
-
-        # Populate batches for detailed view (since frontend logic is simplified)
-        pos_dict['batches'] = [
-            {
-                'id': b.id,
-                'public_id': b.public_id,
-                'position_id': b.position_id,
-                'type': b.type.value,
-                'price': b.price,
-                'quantity': b.quantity,
-                'time': b.time,
-                'reason': b.reason,
-                'emotion': b.emotion,
-                'confidence': b.confidence,
-                'pnl': b.pnl,
-                'created_at': b.created_at
-            } for b in pos.batches
-        ]
-        
-        result.append(pos_dict)
-        
-
-        
-        
     return result
 
 
@@ -325,7 +465,8 @@ async def get_position(
     if position:
         position = db.query(Position).options(
             joinedload(Position.batches),
-            joinedload(Position.asset_metadata)
+            joinedload(Position.asset_metadata),
+            joinedload(Position.trading_account),
         ).filter(
             Position.id == position.id,
             Position.user_id == current_user.id
@@ -347,46 +488,11 @@ async def get_position(
         )
         db.flush()
     
-    # Phase 1: Calculate drift analysis
-    drift_analysis = calculate_drift(position)
-    
-    # Convert to response dict manually to include drift_analysis
-    response = {
-        "id": position.id,
-        "public_id": position.public_id,
-        "truth_position_public_id": truth_position.public_id if truth_position else None,
-        "user_id": position.user_id,
-        "account_id": position.account_id,
-        "strategy_id": position.strategy_id,
-        "symbol": position.symbol,
-        "exchange": position.exchange,
-        "asset_type": position.asset_type,
-        "direction": position.direction.value,
-        "status": position.status.value,
-        "total_quantity": position.total_quantity,
-        "average_entry_price": position.average_entry_price,
-        "realized_pnl": position.realized_pnl,
-        "opened_at": position.opened_at,
-        "closed_at": position.closed_at,
-        "trade_review": position.trade_review,
-        "screenshots": position.screenshots or [],
-        "lessons": position.lessons or [],
-        "rating": position.rating,
-        "created_at": position.created_at,
-        "updated_at": position.updated_at,
-        "asset_metadata": position.asset_metadata,
-        "batches": position.batches,
-        # Phase 1 fields
-        "planned_entry_price": position.planned_entry_price,
-        "planned_stop_loss": position.planned_stop_loss,
-        "planned_take_profit": position.planned_take_profit,
-        "checklist_responses": position.checklist_responses,
-        "checklist_responses": position.checklist_responses,
-        "checklist_completed_at": position.checklist_completed_at,
-        "drift_analysis": drift_analysis,
-    }
-    
-    return response
+    return _position_response_payload(
+        db,
+        position,
+        truth_position=truth_position,
+    )
 
 
 @router.get("/{position_id}/truth-lifecycle")
@@ -405,12 +511,12 @@ async def get_position_truth_lifecycle(
         current_user.id,
         truth_public_id,
     )
-    has_truth_native_changes = bool(
-        truth_position
-        and any(event.input_source != "LEGACY_BACKFILL" for event in truth_position.events)
-    )
-    if truth_position is None or not has_truth_native_changes:
-        truth_position = sync_legacy_position_to_truth(db, legacy_position.id)
+    if truth_position is None:
+        truth_position = _release_contract_value(
+            sync_legacy_position_to_truth,
+            db,
+            legacy_position.id,
+        )
     else:
         project_truth_accounting_to_legacy(
             db,
@@ -468,35 +574,49 @@ async def create_position(
         require_allowed_asset_type,
         position_data.asset_type,
     )
+    symbol_upper = _release_contract_value(
+        require_normalized_symbol,
+        position_data.symbol,
+    )
+    exchange_code = _release_contract_value(
+        require_exchange_code,
+        position_data.exchange_code,
+    )
 
-    # Ensure AssetMetadata exists for this symbol
-    symbol_upper = position_data.symbol.upper()
-    asset_meta = db.query(AssetMetadata).filter(AssetMetadata.symbol == symbol_upper).first()
-    _release_contract_value(
+    metadata_create = position_data.asset_metadata.model_dump()
+    identity = _release_contract_value(
         validate_legacy_instrument_identity,
         position_asset_type=detected_type,
         account_currency=account.currency,
-        metadata_core_type=asset_meta.core_type if asset_meta else None,
-        metadata_market=asset_meta.market if asset_meta else None,
-        metadata_currency=asset_meta.currency if asset_meta else None,
-        metadata_instrument=asset_meta.instrument if asset_meta else None,
+        symbol=symbol_upper,
+        exchange_code=exchange_code,
+        metadata_core_type=metadata_create["core_type"],
+        metadata_market=metadata_create["market"],
+        metadata_currency=metadata_create["currency"],
+        metadata_instrument=metadata_create["instrument"],
     )
-    if not asset_meta:
-        # Create basic metadata - will be enriched via API or manual update
-        asset_meta = AssetMetadata(symbol=symbol_upper, name=symbol_upper)
-        db.add(asset_meta)
-        db.flush()
-    
-    # Create position with asset_metadata_symbol link
+    requested_direction = PositionDirection[position_data.direction.value]
+    _raise_open_position_conflict(
+        _release_contract_value(
+            _matching_open_positions,
+            db,
+            user_id=current_user.id,
+            account=account,
+            identity=identity,
+            direction=requested_direction,
+        )
+    )
+    # The global legacy AssetMetadata(symbol) table is read-only for ordinary
+    # users. JRN-007 replaces this bridge with canonical full-identity storage.
     position = Position(
         user_id=current_user.id,
         account_id=position_data.account_id,
         strategy_id=position_data.strategy_id,
         symbol=symbol_upper,
-        exchange=account.broker,
+        exchange=exchange_code,
         asset_type=detected_type,
-        asset_metadata_symbol=symbol_upper,  # Link to metadata
-        direction=PositionDirection[position_data.direction.value],
+        asset_metadata_symbol=None,
+        direction=requested_direction,
         status=PositionStatus.OPEN,
         total_quantity=position_data.quantity,
         average_entry_price=position_data.entry_price,
@@ -530,11 +650,14 @@ async def create_position(
         sync_legacy_position_to_truth,
         db,
         position.id,
+        expected_identity=identity,
     )
     db.refresh(position)
-    position.truth_position_public_id = truth_position.public_id
-    
-    return position
+    return _position_response_payload(
+        db,
+        position,
+        truth_position=truth_position,
+    )
 
 
 @router.patch("/{position_id}", response_model=PositionResponse)
@@ -569,67 +692,20 @@ async def update_position(
             )
     
     # Handle Asset Metadata Update
-    metadata_update = update_data.pop('asset_metadata', None)
-    if metadata_update:
-        # Find or create metadata for this symbol
-        asset_meta = db.query(AssetMetadata).filter(
-            AssetMetadata.symbol == position.symbol
-        ).first()
-        
-        if not asset_meta:
-            asset_meta = AssetMetadata(symbol=position.symbol)
-            db.add(asset_meta)
-
-        identity = _release_contract_value(
-            validate_legacy_instrument_identity,
-            position_asset_type=position.asset_type,
-            account_currency=(
-                position.trading_account.currency
-                if position.trading_account
-                else None
-            ),
-            metadata_core_type=metadata_update.get(
-                "core_type",
-                asset_meta.core_type,
-            ),
-            metadata_market=metadata_update.get(
-                "market",
-                asset_meta.market,
-            ),
-            metadata_currency=metadata_update.get(
-                "currency",
-                asset_meta.currency,
-            ),
-            metadata_instrument=metadata_update.get(
-                "instrument",
-                asset_meta.instrument,
-            ),
-        )
-
-        # Update fields
-        for key, value in metadata_update.items():
-            if value is not None:
-                if key == 'core_type' and value:
-                    setattr(asset_meta, key, AssetCoreType(identity.asset_type))
-                elif key == 'market' and value:
-                    setattr(asset_meta, key, AssetMarket(identity.market))
-                elif key == 'currency' and value:
-                    setattr(asset_meta, key, AssetCurrency(identity.quote_currency))
-                elif key == 'instrument' and value:
-                    setattr(asset_meta, key, identity.instrument_type)
-                else:
-                    setattr(asset_meta, key, value)
-        
-        # Ensure the link exists
-        if position.asset_metadata_symbol != position.symbol:
-            position.asset_metadata_symbol = position.symbol
-    
     for key, value in update_data.items():
         setattr(position, key, value)
     
     db.commit()
     db.refresh(position)
-    return position
+    return _position_response_payload(
+        db,
+        position,
+        truth_position=resolve_truth_position_for_legacy(
+            db,
+            user_id=current_user.id,
+            legacy_position=position,
+        ),
+    )
 
 
 @router.delete("/{position_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -820,27 +896,100 @@ async def update_batch(
 
 # ============== Helper Endpoints ==============
 
-@router.get("/check/{symbol}", response_model=Optional[PositionListResponse])
+@router.get("/check/open", response_model=Optional[PositionListResponse])
 async def check_open_position(
-    symbol: str,
-    account_id: str,
+    symbol: str = Query(
+        ...,
+        json_schema_extra={
+            "pattern": JOURNAL_BETA_CONTRACT.instruments.raw_normalized_symbol_input_pattern,
+            "x-normalized-pattern": JOURNAL_BETA_CONTRACT.instruments.normalized_symbol_pattern,
+            "x-normalization": JOURNAL_BETA_CONTRACT.instruments.identity_token_normalization,
+        },
+    ),
+    account_id: str = Query(..., min_length=1),
+    exchange_code: str = Query(
+        ...,
+        json_schema_extra={
+            "pattern": JOURNAL_BETA_CONTRACT.instruments.raw_exchange_code_input_pattern,
+            "x-normalized-pattern": JOURNAL_BETA_CONTRACT.instruments.exchange_code_pattern,
+            "x-normalization": JOURNAL_BETA_CONTRACT.instruments.identity_token_normalization,
+        },
+    ),
+    direction: PositionDirection = Query(...),
+    asset_type: str = Query(
+        ...,
+        json_schema_extra={
+            "pattern": RAW_ASSET_TYPE_INPUT_PATTERN,
+            "x-canonical-values": list(JOURNAL_BETA_CONTRACT.instruments.asset_types),
+            "x-normalization": JOURNAL_BETA_CONTRACT.instruments.identity_token_normalization,
+        },
+    ),
+    market: str = Query(
+        ...,
+        json_schema_extra={
+            "pattern": RAW_MARKET_INPUT_PATTERN,
+            "x-canonical-values": list(JOURNAL_BETA_CONTRACT.instruments.markets),
+            "x-normalization": JOURNAL_BETA_CONTRACT.instruments.identity_token_normalization,
+        },
+    ),
+    instrument_type: str = Query(
+        ...,
+        json_schema_extra={
+            "pattern": RAW_INSTRUMENT_TYPE_INPUT_PATTERN,
+            "x-canonical-values": list(JOURNAL_BETA_CONTRACT.instruments.instrument_types),
+            "x-normalization": JOURNAL_BETA_CONTRACT.instruments.identity_token_normalization,
+        },
+    ),
+    quote_currency: str = Query(
+        ...,
+        json_schema_extra={
+            "pattern": RAW_CURRENCY_INPUT_PATTERN,
+            "x-canonical-values": list(JOURNAL_BETA_CONTRACT.currency.account_base_currencies),
+            "x-normalization": JOURNAL_BETA_CONTRACT.instruments.identity_token_normalization,
+        },
+    ),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Check if user has an open position for the given symbol and account"""
+    """Return an open position only when the complete release identity matches."""
     project_user_truth_positions_to_legacy(db, user_id=current_user.id)
     account = resolve_trading_account(db, current_user.id, account_id)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 
-    position = db.query(Position).filter(
-        Position.user_id == current_user.id,
-        Position.symbol == symbol.upper(),
-        Position.account_id == account.id,
-        Position.status == PositionStatus.OPEN
-    ).first()
-    
-    return position
+    requested_identity = _release_contract_value(
+        validate_legacy_instrument_identity,
+        position_asset_type=asset_type,
+        account_currency=account.currency,
+        symbol=symbol,
+        exchange_code=exchange_code,
+        metadata_core_type=asset_type,
+        metadata_market=market,
+        metadata_currency=quote_currency,
+        metadata_instrument=instrument_type,
+    )
+    matches = _release_contract_value(
+        _matching_open_positions,
+        db,
+        user_id=current_user.id,
+        account=account,
+        identity=requested_identity,
+        direction=direction,
+    )
+    if len(matches) > 1:
+        _raise_open_position_conflict(matches)
+    if not matches:
+        return None
+    match = matches[0]
+    return _position_list_response_payload(
+        db,
+        match,
+        truth_position=resolve_truth_position_for_legacy(
+            db,
+            user_id=current_user.id,
+            legacy_position=match,
+        ),
+    )
 
 
 # ============== Export Endpoints ==============

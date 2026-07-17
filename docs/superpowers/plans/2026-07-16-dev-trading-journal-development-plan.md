@@ -134,9 +134,11 @@ effective_enabled = deployment_capability_allowlist AND runtime_rollout_flag
 
 ### 4.4 Instrument identity 与日志内容
 
-- 无 Market Data/security master 时，由用户或 Import 提供 instrument identity；规范键至少为 `(asset_type, market, exchange_code, normalized_symbol, instrument_type, quote_currency)`，数据库唯一约束和 normalization 规则由 JRN-001 冻结。
+- 无 Market Data/security master 时，由用户或 Import 提供 instrument identity；规范键至少为 `(asset_type, market, exchange_code, normalized_symbol, instrument_type, quote_currency)`。JRN-001 冻结为先对未裁剪的原始 token 拒绝任意非 ASCII 字符，再只裁剪 ASCII whitespace 并 uppercase；`exchange_code` 长度 1 至 32，pattern 为 `^[A-Z0-9][A-Z0-9._-]{0,31}$`；`normalized_symbol` 受现有 legacy/PostgreSQL 列宽约束为 1 至 50，pattern 为 `^[A-Z0-9][A-Z0-9._/-]{0,49}$`。JRN-007 实现完整组合唯一约束；任何扩宽必须先做 forward migration 再升级合同。
 - JRN-007 在 canonical 事务内 deterministic get-or-create 合法的 `AssetMaster/TradeInstrument`；并发唯一键竞争必须 replay/get existing。同 symbol 不同 market/exchange 不得串用，quote currency 必须等于 account base currency。
 - instrument identity 一旦被财务事实引用就不可原地改；不支持的 asset/instrument/market 组合 fail-closed，不调用外部 provider 猜测。
+- JRN-001 期间的 legacy bridge 只接受本次请求已显式校验并同事务传入的 identity，或已由 exact `journal_identity_v1` 证明的 identity；历史 `Position.exchange` 曾被写成 broker/`Imported` 等值，单凭格式合法不得升级为 canonical exchange。无上述证据返回 `LEGACY_INSTRUMENT_IDENTITY_UNPROVEN` 且零 canonical side effect；已有 pre-upgrade truth 可继续只读，但不得借读取重写缺失 identity metadata。显式 reconciliation/backfill 与同 symbol 多 market/exchange 的正式 schema 由 JRN-007 完成。
+- 现有 `AssetMetadata(symbol)` 是跨 owner 共享 legacy 表，在 owner-scoped label 模型完成前视为 system-owned：普通 create/update 不能写 `name/sector` 或原地修改共享 metadata。用户自定义标签若进入 Beta，必须落到 owner/position-scoped 模型并通过 JRN-004 tenant matrix，不能复用全局 symbol 行。
 - trade event 的财务字段和 checklist snapshot 不可变。narrative/review/daily note 是可编辑日志内容，编辑必须追加 revision/audit（actor、time、前后版本关联），不能原地改写财务 event；策略/checklist 新版本只影响未来 snapshot。
 - 持仓采用 `HEDGE_BY_DIRECTION`，financially-open uniqueness 为 `(account_id, instrument_id, side)`；financially open 指 remaining quantity 大于 0 且未 void，archive 不释放该槽位。opposite-side OPEN 创建独立 lifecycle，PnL、FIFO lot、fee 和 reversal 各自重放；没有自动平旧开新或 long/short netting。
 
@@ -219,6 +221,7 @@ effective_enabled = deployment_capability_allowlist AND runtime_rollout_flag
 - 实现 deployment allowlist 与 runtime flag 的双层守卫；allowlist 只读环境/部署配置且不落业务数据库，Admin 不能强开 ceiling 外能力。
 - 在线 Broker、Market、AI、PDF、风险和开放注册的 API、UI、secret、job/outbox、文档同时 fail-closed；`IBKR_FLEX_XML_V1` 只允许本地文件解析，不得借 adapter 触发网络或读取凭据。
 - 未启用事件（stock split、option、transfer 等）即使直连 API 也稳定拒绝。
+- 当前 legacy create/bridge 必须执行 raw-ASCII full instrument identity 校验；已有仓位提示按完整 identity（含 exchange、direction、market、instrument、currency）匹配，slash symbol 通过 query 传输。未证明的历史 exchange 和普通用户共享 AssetMetadata 写入 fail-closed，不能产生半写 truth。
 
 必测：缺失/未知配置、DB flag 读取失败、DB 内伪造 allowlist、Admin 强开、直连 API、导航、设置写入和零 job/outbox side effect。
 
@@ -587,6 +590,7 @@ JRN-000 必须先完成；之后 JRN-001 先行，JRN-002 与 JRN-003 可并行�
 - 为避免把来源解析、bootstrap、增量 confirm 和 correction replay 塞入同一大任务，Import 拆为 JRN-011 至 015，后续任务顺延；当前共 22 个任务（JRN-000 至 JRN-021）。在线 Broker Sync、Flex Token 存储和后台拉取仍保持关闭。
 - JRN-013 退出门依赖 JRN-008，并强制复用同一 lifecycle simulation/domain rules；schema/parser/provider evidence 可提前，但 source preview 不得复制第二套会计状态机。
 - 代码现实复核确认现有 `BrokerExecution.idempotency_key` 只在 RAW 层跳重，IBKR parser 仍有不可信 ID fallback，且没有 source binding/fingerprint/coverage/canonical application/reconciliation；不得把本轮计划批准写成已实现。
+- JRN-001 代码预审确认 legacy `Position.exchange` 曾由 broker/`Imported` 填充，且共享 `AssetMetadata(symbol)` 无 owner；计划据此冻结 default-deny identity provenance、已有 truth 只读兼容和 system-owned shared metadata。normalized symbol 上限同步现有 PostgreSQL/legacy 列宽收敛为 50，扩宽必须先 migration 后升级合同。
 
 2026-07-16 版曾经过独立 reviewer 复核并取得 `APPROVE`。2026-07-17 source-bound revision 及后续首次零成交 binding-effective 澄清改变了产品合同、任务编号和发布闭包，任何旧 verdict 都不自动覆盖当前 plan blob。当前精确版本必须随 JRN-001 稳定 checkpoint 接受两路独立只读评审；评审所绑定的 commit、plan blob、finding 与最终 verdict 只记录在 JRN-001 checkpoint record，避免由计划正文自证批准。
 

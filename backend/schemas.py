@@ -7,6 +7,14 @@ from datetime import datetime, date
 from decimal import Decimal
 from enum import Enum
 
+from app_config.release_contract import (
+    JOURNAL_BETA_CONTRACT,
+    RAW_ASSET_TYPE_INPUT_PATTERN,
+    RAW_CURRENCY_INPUT_PATTERN,
+    RAW_INSTRUMENT_TYPE_INPUT_PATTERN,
+    RAW_MARKET_INPUT_PATTERN,
+)
+
 
 # ============== Enums ==============
 
@@ -1290,19 +1298,71 @@ class AssetMetadataResponse(BaseModel):
         from_attributes = True
 
 
-class AssetMetadataUpdate(BaseModel):
-    name: Optional[str] = None
-    core_type: Optional[str] = None # Using str to allow flexible input or enum mapping in router
-    market: Optional[str] = None
-    currency: Optional[str] = None
-    sector: Optional[str] = None
-    instrument: Optional[str] = None
+class PositionInstrumentIdentityCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    core_type: str = Field(
+        ...,
+        json_schema_extra={
+            "pattern": RAW_ASSET_TYPE_INPUT_PATTERN,
+            "x-canonical-values": list(JOURNAL_BETA_CONTRACT.instruments.asset_types),
+            "x-normalization": JOURNAL_BETA_CONTRACT.instruments.identity_token_normalization,
+        },
+    )
+    market: str = Field(
+        ...,
+        json_schema_extra={
+            "pattern": RAW_MARKET_INPUT_PATTERN,
+            "x-canonical-values": list(JOURNAL_BETA_CONTRACT.instruments.markets),
+            "x-normalization": JOURNAL_BETA_CONTRACT.instruments.identity_token_normalization,
+        },
+    )
+    currency: str = Field(
+        ...,
+        json_schema_extra={
+            "pattern": RAW_CURRENCY_INPUT_PATTERN,
+            "x-canonical-values": list(JOURNAL_BETA_CONTRACT.currency.account_base_currencies),
+            "x-normalization": JOURNAL_BETA_CONTRACT.instruments.identity_token_normalization,
+        },
+    )
+    instrument: str = Field(
+        ...,
+        json_schema_extra={
+            "pattern": RAW_INSTRUMENT_TYPE_INPUT_PATTERN,
+            "x-canonical-values": list(JOURNAL_BETA_CONTRACT.instruments.instrument_types),
+            "x-normalization": JOURNAL_BETA_CONTRACT.instruments.identity_token_normalization,
+        },
+    )
 
 
 class PositionCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     account_id: int
-    symbol: str = Field(..., max_length=50)
-    asset_type: Optional[str] = None
+    symbol: str = Field(
+        ...,
+        json_schema_extra={
+            "pattern": JOURNAL_BETA_CONTRACT.instruments.raw_normalized_symbol_input_pattern,
+            "x-normalized-pattern": JOURNAL_BETA_CONTRACT.instruments.normalized_symbol_pattern,
+            "x-normalization": JOURNAL_BETA_CONTRACT.instruments.identity_token_normalization,
+        },
+    )
+    exchange_code: str = Field(
+        ...,
+        json_schema_extra={
+            "pattern": JOURNAL_BETA_CONTRACT.instruments.raw_exchange_code_input_pattern,
+            "x-normalized-pattern": JOURNAL_BETA_CONTRACT.instruments.exchange_code_pattern,
+            "x-normalization": JOURNAL_BETA_CONTRACT.instruments.identity_token_normalization,
+        },
+    )
+    asset_type: str = Field(
+        ...,
+        json_schema_extra={
+            "pattern": RAW_ASSET_TYPE_INPUT_PATTERN,
+            "x-canonical-values": list(JOURNAL_BETA_CONTRACT.instruments.asset_types),
+            "x-normalization": JOURNAL_BETA_CONTRACT.instruments.identity_token_normalization,
+        },
+    )
     direction: PositionDirectionEnum
     strategy_id: Optional[int] = None
     # First batch info
@@ -1318,15 +1378,17 @@ class PositionCreate(BaseModel):
     planned_take_profit: Optional[List[dict]] = None  # [{"price": 100, "percent": 50}, ...]
     # Phase 1: Checklist Responses
     checklist_responses: Optional[dict] = None  # {"1": true, "2": false, ...}
+    asset_metadata: PositionInstrumentIdentityCreate
 
 
 class PositionUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     strategy_id: Optional[int] = None
     trade_review: Optional[str] = None
     screenshots: Optional[List[str]] = None
     lessons: Optional[List[str]] = None
     rating: Optional[int] = Field(None, ge=1, le=5)
-    asset_metadata: Optional[AssetMetadataUpdate] = None
     # Phase 1: Plan Drift Detection
     planned_entry_price: Optional[Decimal] = None
     planned_stop_loss: Optional[Decimal] = None

@@ -338,7 +338,13 @@ def _append_losing_streak_inbox_item(items: list[ReviewInboxItem], positions: li
     )
 
 
-def _build_data_stale_items(positions: list[Position], db: Session, as_of: str) -> list[ReviewInboxItem]:
+def _build_data_stale_items(
+    positions: list[Position],
+    db: Session,
+    as_of: str,
+    *,
+    actor_key: str,
+) -> list[ReviewInboxItem]:
     items: list[ReviewInboxItem] = []
     open_positions = [position for position in positions if position.status == PositionStatus.OPEN]
     if not open_positions:
@@ -346,7 +352,7 @@ def _build_data_stale_items(positions: list[Position], db: Session, as_of: str) 
 
     from services.market_data_access import MarketDataService
 
-    market_service = MarketDataService(db)
+    market_service = MarketDataService(db, actor_key=actor_key)
     for position in open_positions:
         try:
             asyncio.run(market_service.get_quote(position.symbol, position.exchange))
@@ -1019,7 +1025,14 @@ def _get_timeline_home(
         inbox_items = list(review_inbox.items)
         _append_losing_streak_inbox_item(inbox_items, positions, as_of)
         if market_enabled:
-            inbox_items.extend(_build_data_stale_items(positions, db, as_of))
+            inbox_items.extend(
+                _build_data_stale_items(
+                    positions,
+                    db,
+                    as_of,
+                    actor_key=actor_key,
+                )
+            )
 
     if risk_cards_enabled:
         inbox_items.extend(

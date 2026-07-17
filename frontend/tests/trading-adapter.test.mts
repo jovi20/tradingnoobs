@@ -7,7 +7,113 @@ import {
   getLegacyPositionDeleteState,
   getLegacyReviewDisplayState,
   getTruthFirstWriteFallbackState,
+  isAsciiExchangeCodeInput,
+  isValidExchangeCodeInput,
+  isValidSymbolInput,
+  normalizeAsciiIdentityInput,
+  normalizeExchangeCodeInput,
+  normalizeReleasePositionIdentityInput,
+  normalizeSymbolInput,
 } from '../lib/adapters/trading.ts'
+
+test('exchange-code input normalization trims, uppercases, and identifies non-ASCII input', () => {
+  assert.equal(normalizeExchangeCodeInput('  nasdaq  '), 'NASDAQ')
+  assert.equal(normalizeExchangeCodeInput('coinbase.us'), 'COINBASE.US')
+  assert.equal(normalizeSymbolInput('  btc/usd  '), 'BTC/USD')
+  assert.equal(isAsciiExchangeCodeInput('NYSE-ARCA_1'), true)
+  assert.equal(isAsciiExchangeCodeInput('NASDAQ交易所'), false)
+  assert.equal(isAsciiExchangeCodeInput('NÁSDAQ'), false)
+  for (const spoof of ['ß', 'ı', 'ﬀ', 'naſdaq']) {
+    assert.equal(isValidExchangeCodeInput(spoof), false)
+  }
+  assert.equal(isValidExchangeCodeInput('a'.repeat(32)), true)
+  assert.equal(isValidExchangeCodeInput('a'.repeat(33)), false)
+  assert.equal(isValidSymbolInput('BTC/USD'), true)
+  assert.equal(isValidSymbolInput('a'.repeat(50)), true)
+  assert.equal(isValidSymbolInput('a'.repeat(51)), false)
+  assert.equal(isValidSymbolInput('ſpy'), false)
+  assert.equal(isValidExchangeCodeInput(`NASDAQ\u00a0`), false)
+  assert.equal(isValidSymbolInput(`\u2003AAPL`), false)
+  assert.throws(() => normalizeAsciiIdentityInput(`NASDAQ\u00a0`), /must be ASCII/)
+})
+
+test('release identity rejects non-ASCII in all six raw tokens before ASCII trim and uppercase', () => {
+  const validIdentity = {
+    symbol: 'btc/usd',
+    exchange_code: 'coinbase',
+    asset_type: 'crypto',
+    market: 'crypto',
+    instrument_type: 'spot',
+    quote_currency: 'usd',
+  }
+
+  assert.deepEqual(
+    normalizeReleasePositionIdentityInput({
+      symbol: '\t btc/usd \r',
+      exchange_code: '\n coinbase \v',
+      asset_type: '\f crypto ',
+      market: ' crypto\t',
+      instrument_type: ' spot\n',
+      quote_currency: '\r usd ',
+    }),
+    {
+      ok: true,
+      identity: {
+        symbol: 'BTC/USD',
+        exchange_code: 'COINBASE',
+        asset_type: 'CRYPTO',
+        market: 'CRYPTO',
+        instrument_type: 'SPOT',
+        quote_currency: 'USD',
+      },
+    },
+  )
+  assert.deepEqual(
+    normalizeReleasePositionIdentityInput({
+      ...validIdentity,
+      asset_type: ' etf ',
+      market: ' us ',
+    }),
+    {
+      ok: true,
+      identity: {
+        symbol: 'BTC/USD',
+        exchange_code: 'COINBASE',
+        asset_type: 'FUND',
+        market: 'US',
+        instrument_type: 'SPOT',
+        quote_currency: 'USD',
+      },
+    },
+  )
+
+  const fields = [
+    'symbol',
+    'exchange_code',
+    'asset_type',
+    'market',
+    'instrument_type',
+    'quote_currency',
+  ] as const
+  for (const nonAsciiWhitespace of ['\u00a0', '\u2003']) {
+    for (const field of fields) {
+      const result = normalizeReleasePositionIdentityInput({
+        ...validIdentity,
+        [field]: `${nonAsciiWhitespace}${validIdentity[field]}`,
+      })
+      assert.deepEqual(result, { ok: false, field, reason: 'NON_ASCII' })
+    }
+  }
+
+  assert.deepEqual(
+    normalizeReleasePositionIdentityInput({
+      ...validIdentity,
+      symbol: ' ',
+      quote_currency: `USD\u00a0`,
+    }),
+    { ok: false, field: 'quote_currency', reason: 'NON_ASCII' },
+  )
+})
 
 test('buildTruthTradeEventFromBatchForm maps entry batches to ADD truth events', () => {
   const event = buildTruthTradeEventFromBatchForm(

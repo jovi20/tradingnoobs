@@ -19,6 +19,7 @@ from models import (
     PositionStatus,
     TradeBatch,
     TradingAccount,
+    TradingPosition,
     User,
 )
 from services.auth_service import get_current_user
@@ -70,6 +71,29 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         if os.path.exists(self.db_path):
             os.remove(self.db_path)
 
+    def _seed_proven_asset_identity(self, *, symbol: str, exchange_code: str) -> None:
+        self.db.add(
+            AssetMaster(
+                public_id=f"proven-{symbol.lower()}-asset",
+                canonical_code=symbol,
+                display_symbol=symbol,
+                name=symbol,
+                asset_type="STOCK",
+                quote_currency="USD",
+                status="ACTIVE",
+                metadata_json={
+                    "journal_identity_v1": {
+                        "asset_type": "STOCK",
+                        "market": "US",
+                        "exchange_code": exchange_code,
+                        "normalized_symbol": symbol,
+                        "instrument_type": "SPOT",
+                        "quote_currency": "USD",
+                    }
+                },
+            )
+        )
+
     def _seed_legacy_position(self):
         account = TradingAccount(
             user_id=self.user.id,
@@ -90,6 +114,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
             instrument="Spot",
         )
         self.db.add(metadata)
+        self._seed_proven_asset_identity(symbol="AAPL", exchange_code="NASDAQ")
         self.db.commit()
         self.db.refresh(account)
 
@@ -163,6 +188,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
             instrument="Spot",
         )
         self.db.add(metadata)
+        self._seed_proven_asset_identity(symbol="MSFT", exchange_code="NASDAQ")
         self.db.commit()
         self.db.refresh(account)
 
@@ -428,6 +454,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
             json={
                 "account_id": account.id,
                 "symbol": "NVDA",
+                "exchange_code": "NASDAQ",
                 "asset_type": "EQUITY",
                 "direction": "LONG",
                 "entry_price": "900",
@@ -436,6 +463,12 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
                 "entry_reason": "New position should create truth lifecycle",
                 "entry_emotion": "Focused",
                 "entry_confidence": 4,
+                "asset_metadata": {
+                    "core_type": "STOCK",
+                    "market": "US",
+                    "currency": "USD",
+                    "instrument": "SPOT",
+                },
             },
         )
 
@@ -450,6 +483,128 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         self.assertEqual(lifecycle_payload["data"]["position_summary"]["public_id"], truth_public_id)
         node_types = [node["node_type"] for node in lifecycle_payload["data"]["lifecycle_thread"]["nodes"]]
         self.assertEqual(node_types, ["OPEN"])
+
+    def test_position_identity_projection_is_consistent_across_create_list_detail_and_check(self):
+        account = TradingAccount(
+            user_id=self.user.id,
+            public_id="acct-identity-projection",
+            name="Identity Projection",
+            broker="IBKR",
+            currency="USD",
+            is_active=True,
+        )
+        self.db.add(account)
+        self.db.commit()
+        self.db.refresh(account)
+
+        expected_metadata = {
+            "symbol": "QQQ",
+            "name": "QQQ",
+            "core_type": "FUND",
+            "market": "US",
+            "currency": "USD",
+            "sector": None,
+            "instrument": "SPOT",
+        }
+        create_response = self.client.post(
+            "/api/positions",
+            json={
+                "account_id": account.id,
+                "symbol": " qqq ",
+                "exchange_code": " nasdaq ",
+                "asset_type": "ETF",
+                "direction": "LONG",
+                "entry_price": "500",
+                "quantity": "2",
+                "entry_time": "2026-04-03T15:30:00+00:00",
+                "asset_metadata": {
+                    "core_type": "FUND",
+                    "market": "US",
+                    "currency": "USD",
+                    "instrument": "SPOT",
+                },
+            },
+        )
+
+        self.assertEqual(create_response.status_code, 201, create_response.text)
+        created_payload = create_response.json()
+        self.assertEqual(created_payload["asset_metadata"], expected_metadata)
+        self.assertEqual(created_payload["asset_type"], "FUND")
+        self.assertEqual(created_payload["exchange"], "NASDAQ")
+
+        self.db.expire_all()
+        stored_position = self.db.query(Position).filter(Position.symbol == "QQQ").one()
+        self.assertIsNone(stored_position.asset_metadata_symbol)
+        self.assertEqual(
+            self.db.query(AssetMetadata).filter(AssetMetadata.symbol == "QQQ").count(),
+            0,
+        )
+
+        # Canonical truth remains the response/filter authority if a legacy
+        # compatibility column later drifts.
+        stored_position.asset_type = "STOCK"
+        stored_position.exchange = "NYSE"
+        self.db.commit()
+
+        detail_response = self.client.get(
+            f"/api/positions/{created_payload['public_id']}"
+        )
+        list_response = self.client.get(
+            "/api/positions",
+            params={
+                "account_id": account.id,
+                "asset_type": "ETF",
+                "core_type": "FUND",
+                "market": "us",
+            },
+        )
+        check_response = self.client.get(
+            "/api/positions/check/open",
+            params={
+                "account_id": account.public_id,
+                "symbol": "QQQ",
+                "exchange_code": "NASDAQ",
+                "direction": "LONG",
+                "asset_type": "FUND",
+                "market": "US",
+                "instrument_type": "SPOT",
+                "quote_currency": "USD",
+            },
+        )
+
+        self.assertEqual(detail_response.status_code, 200, detail_response.text)
+        self.assertEqual(list_response.status_code, 200, list_response.text)
+        self.assertEqual(check_response.status_code, 200, check_response.text)
+        self.assertEqual(len(list_response.json()), 1)
+        for payload in (
+            detail_response.json(),
+            list_response.json()[0],
+            check_response.json(),
+        ):
+            self.assertEqual(payload["asset_metadata"], expected_metadata)
+            self.assertEqual(payload["asset_type"], "FUND")
+            self.assertEqual(payload["exchange"], "NASDAQ")
+
+        excluded = self.client.get(
+            "/api/positions",
+            params={
+                "account_id": account.id,
+                "asset_type": "STOCK",
+            },
+        )
+        self.assertEqual(excluded.status_code, 200, excluded.text)
+        self.assertEqual(excluded.json(), [])
+
+        for non_ascii_market in ("\u00a0US", "US\u2003"):
+            rejected_filter = self.client.get(
+                "/api/positions",
+                params={"account_id": account.id, "market": non_ascii_market},
+            )
+            self.assertEqual(rejected_filter.status_code, 422, rejected_filter.text)
+            self.assertEqual(
+                rejected_filter.json()["detail"]["code"],
+                "UNSUPPORTED_MARKET",
+            )
 
     def test_position_create_requires_release_asset_type_and_usd_account(self):
         usd_account = TradingAccount(
@@ -475,10 +630,17 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
             payload = {
                 "account_id": account_id,
                 "symbol": "NVDA",
+                "exchange_code": "NASDAQ",
                 "direction": "LONG",
                 "entry_price": "900",
                 "quantity": "2",
                 "entry_time": "2026-04-03T15:30:00+00:00",
+                "asset_metadata": {
+                    "core_type": "STOCK",
+                    "market": "US",
+                    "currency": "USD",
+                    "instrument": "SPOT",
+                },
             }
             if asset_type_marker is not None:
                 payload["asset_type"] = asset_type_marker
@@ -489,10 +651,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         currency_response = request(non_usd_account.id, "STOCK")
 
         self.assertEqual(missing_response.status_code, 422)
-        self.assertEqual(
-            missing_response.json()["detail"]["code"],
-            "UNSUPPORTED_ASSET_TYPE",
-        )
+        self.assertEqual(missing_response.json()["detail"][0]["loc"][-1], "asset_type")
         self.assertEqual(unsupported_response.status_code, 422)
         self.assertEqual(
             unsupported_response.json()["detail"]["code"],
@@ -510,7 +669,363 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
             0,
         )
 
-    def test_position_create_revalidates_reused_metadata_before_truth_sync(self):
+    def test_position_create_normalizes_and_persists_full_release_identity(self):
+        account = TradingAccount(
+            user_id=self.user.id,
+            public_id="acct-full-identity",
+            name="Full Identity",
+            broker="IBKR",
+            currency="USD",
+            is_active=True,
+        )
+        self.db.add(account)
+        self.db.commit()
+        self.db.refresh(account)
+
+        base_payload = {
+            "account_id": account.id,
+            "asset_type": "EQUITY",
+            "direction": "LONG",
+            "entry_price": "100",
+            "quantity": "1",
+            "entry_time": "2026-04-03T15:30:00+00:00",
+            "asset_metadata": {
+                "core_type": "equity",
+                "market": "us",
+                "currency": "usd",
+                "instrument": "spot",
+            },
+        }
+
+        def request(**overrides):
+            return self.client.post(
+                "/api/positions",
+                json={**base_payload, **overrides},
+            )
+
+        for overrides, expected_code in (
+            ({"symbol": "   ", "exchange_code": "NASDAQ"}, "INVALID_NORMALIZED_SYMBOL"),
+            ({"symbol": " 苹果 ", "exchange_code": "NASDAQ"}, "INVALID_NORMALIZED_SYMBOL"),
+            ({"symbol": "ſpy", "exchange_code": "NASDAQ"}, "INVALID_NORMALIZED_SYMBOL"),
+            ({"symbol": "NVDA", "exchange_code": "naſdaq"}, "INVALID_EXCHANGE_CODE"),
+            ({"symbol": "NVDA", "exchange_code": "ß"}, "INVALID_EXCHANGE_CODE"),
+            ({"symbol": "NVDA", "exchange_code": "   "}, "INVALID_EXCHANGE_CODE"),
+            ({"symbol": "NVDA", "exchange_code": "纳斯达克"}, "INVALID_EXCHANGE_CODE"),
+        ):
+            with self.subTest(overrides=overrides):
+                response = request(**overrides)
+                self.assertEqual(response.status_code, 422)
+                self.assertEqual(response.json()["detail"]["code"], expected_code)
+
+        shared_label_response = request(
+            symbol="NVDA",
+            exchange_code="NASDAQ",
+            asset_metadata={
+                **base_payload["asset_metadata"],
+                "name": "User-owned label",
+                "sector": "Technology",
+            },
+        )
+        self.assertEqual(shared_label_response.status_code, 422)
+        self.assertEqual(
+            {item["loc"][-1] for item in shared_label_response.json()["detail"]},
+            {"name", "sector"},
+        )
+
+        valid_response = request(symbol=" nvda ", exchange_code=" nasdaq ")
+        self.assertEqual(valid_response.status_code, 201, valid_response.text)
+        self.db.expire_all()
+        position = self.db.query(Position).filter(Position.symbol == "NVDA").one()
+        self.assertEqual(position.exchange, "NASDAQ")
+        asset = self.db.query(AssetMaster).filter(AssetMaster.canonical_code == "NVDA").one()
+        self.assertEqual(asset.asset_type, "STOCK")
+        self.assertEqual(asset.quote_currency, "USD")
+        self.assertEqual(
+            asset.metadata_json["journal_identity_v1"],
+            {
+                "asset_type": "STOCK",
+                "market": "US",
+                "exchange_code": "NASDAQ",
+                "normalized_symbol": "NVDA",
+                "instrument_type": "SPOT",
+                "quote_currency": "USD",
+            },
+        )
+
+        duplicate_same_side = request(symbol="NVDA", exchange_code="NASDAQ")
+        self.assertEqual(duplicate_same_side.status_code, 409, duplicate_same_side.text)
+        self.assertEqual(
+            duplicate_same_side.json()["detail"]["code"],
+            "OPEN_POSITION_EXISTS",
+        )
+
+        opposite_side = request(
+            symbol="NVDA",
+            exchange_code="NASDAQ",
+            direction="SHORT",
+        )
+        self.assertEqual(opposite_side.status_code, 201, opposite_side.text)
+
+        # JRN-007 replaces the legacy symbol-only AssetMaster key. Until then,
+        # a same-symbol cross-exchange create must fail closed rather than alias.
+        conflicting_exchange = request(symbol="NVDA", exchange_code="NYSE")
+        self.assertEqual(conflicting_exchange.status_code, 422)
+        self.assertEqual(
+            conflicting_exchange.json()["detail"]["code"],
+            "INSTRUMENT_IDENTITY_MISMATCH",
+        )
+        self.assertEqual(
+            self.db.query(Position).filter(Position.symbol == "NVDA").count(),
+            2,
+        )
+
+        self.db.add(AssetMetadata(symbol="NULLMETA", name=None))
+        self.db.commit()
+        shared_metadata_response = request(
+            symbol="NULLMETA",
+            exchange_code="NASDAQ",
+        )
+        self.assertEqual(
+            shared_metadata_response.status_code,
+            201,
+            shared_metadata_response.text,
+        )
+        self.db.expire_all()
+        untouched = self.db.query(AssetMetadata).filter(
+            AssetMetadata.symbol == "NULLMETA"
+        ).one()
+        self.assertIsNone(untouched.name)
+        self.assertIsNone(untouched.core_type)
+        self.assertIsNone(untouched.market)
+        self.assertIsNone(untouched.currency)
+        self.assertIsNone(untouched.instrument)
+        created = self.db.query(Position).filter(Position.symbol == "NULLMETA").one()
+        self.assertIsNone(created.asset_metadata_symbol)
+
+    def test_truth_sync_rejects_any_unproven_legacy_exchange_without_partial_writes(self):
+        account = TradingAccount(
+            user_id=self.user.id,
+            public_id="acct-unproven-exchange",
+            name="Legacy broker-derived exchange",
+            broker="IBKR",
+            currency="USD",
+            is_active=True,
+        )
+        metadata = AssetMetadata(
+            symbol="MSFT",
+            name="Microsoft",
+            core_type="STOCK",
+            market="US",
+            currency="USD",
+            instrument="SPOT",
+        )
+        self.db.add_all([account, metadata])
+        self.db.commit()
+        position = Position(
+            user_id=self.user.id,
+            account_id=account.id,
+            public_id="legacy-broker-derived-position",
+            symbol="MSFT",
+            exchange="Imported",
+            asset_type="EQUITY",
+            direction=PositionDirection.LONG,
+            status=PositionStatus.OPEN,
+            total_quantity=Decimal("1"),
+            average_entry_price=Decimal("300"),
+            opened_at=datetime(2026, 4, 1, 9, 30, tzinfo=timezone.utc),
+            asset_metadata_symbol="MSFT",
+        )
+        self.db.add(position)
+        self.db.commit()
+
+        response = self.client.get(
+            f"/api/positions/{position.public_id}/truth-lifecycle"
+        )
+
+        self.assertEqual(response.status_code, 422, response.text)
+        self.assertEqual(
+            response.json()["detail"]["code"],
+            "LEGACY_INSTRUMENT_IDENTITY_UNPROVEN",
+        )
+        self.assertEqual(
+            self.db.query(AssetMaster).filter(AssetMaster.canonical_code == "MSFT").count(),
+            0,
+        )
+        self.assertEqual(
+            self.db.query(TradingPosition).filter(
+                TradingPosition.account_id == account.id
+            ).count(),
+            0,
+        )
+
+        detail = self.client.get(f"/api/positions/{position.public_id}")
+        filtered_list = self.client.get(
+            "/api/positions",
+            params={"asset_type": "STOCK", "market": "US"},
+        )
+        check = self.client.get(
+            "/api/positions/check/open",
+            params={
+                "account_id": account.public_id,
+                "symbol": "MSFT",
+                "exchange_code": "IMPORTED",
+                "direction": "LONG",
+                "asset_type": "STOCK",
+                "market": "US",
+                "instrument_type": "SPOT",
+                "quote_currency": "USD",
+            },
+        )
+        self.assertEqual(detail.status_code, 200, detail.text)
+        self.assertIsNone(detail.json()["asset_metadata"])
+        self.assertEqual(filtered_list.status_code, 200, filtered_list.text)
+        self.assertEqual(filtered_list.json(), [])
+        self.assertEqual(check.status_code, 422, check.text)
+        self.assertEqual(
+            check.json()["detail"]["code"],
+            "LEGACY_INSTRUMENT_IDENTITY_UNPROVEN",
+        )
+        self.assertEqual(
+            self.db.query(TradingPosition).filter(
+                TradingPosition.account_id == account.id
+            ).count(),
+            0,
+        )
+
+        def create(symbol: str):
+            return self.client.post(
+                "/api/positions",
+                json={
+                    "account_id": account.id,
+                    "symbol": symbol,
+                    "exchange_code": "NASDAQ",
+                    "asset_type": "STOCK",
+                    "direction": "LONG",
+                    "entry_price": "100",
+                    "quantity": "1",
+                    "entry_time": "2026-04-03T15:30:00+00:00",
+                    "asset_metadata": {
+                        "core_type": "STOCK",
+                        "market": "US",
+                        "currency": "USD",
+                        "instrument": "SPOT",
+                    },
+                },
+            )
+
+        same_symbol = create("MSFT")
+        self.assertEqual(same_symbol.status_code, 422, same_symbol.text)
+        self.assertEqual(
+            same_symbol.json()["detail"]["code"],
+            "LEGACY_INSTRUMENT_IDENTITY_UNPROVEN",
+        )
+        self.assertEqual(self.db.query(Position).filter(Position.account_id == account.id).count(), 1)
+        self.assertEqual(self.db.query(AssetMaster).count(), 0)
+        self.assertEqual(self.db.query(TradingPosition).count(), 0)
+
+        different_symbol = create("AAPL")
+        self.assertEqual(different_symbol.status_code, 201, different_symbol.text)
+        self.assertEqual(different_symbol.json()["symbol"], "AAPL")
+        self.assertEqual(self.db.query(Position).filter(Position.account_id == account.id).count(), 2)
+        self.assertEqual(
+            self.db.query(TradingPosition).filter(
+                TradingPosition.account_id == account.id
+            ).count(),
+            1,
+        )
+
+    def test_exact_identity_proof_projects_without_creating_truth(self):
+        position = self._seed_open_legacy_position()
+        account = position.trading_account
+        self.assertEqual(self.db.query(TradingPosition).count(), 0)
+
+        detail = self.client.get(f"/api/positions/{position.public_id}")
+        filtered_list = self.client.get(
+            "/api/positions",
+            params={"asset_type": "STOCK", "core_type": "EQUITY", "market": "US"},
+        )
+        check = self.client.get(
+            "/api/positions/check/open",
+            params={
+                "account_id": account.public_id,
+                "symbol": "MSFT",
+                "exchange_code": "NASDAQ",
+                "direction": "LONG",
+                "asset_type": "STOCK",
+                "market": "US",
+                "instrument_type": "SPOT",
+                "quote_currency": "USD",
+            },
+        )
+
+        self.assertEqual(detail.status_code, 200, detail.text)
+        self.assertEqual(filtered_list.status_code, 200, filtered_list.text)
+        self.assertEqual(check.status_code, 200, check.text)
+        self.assertEqual(len(filtered_list.json()), 1)
+        for payload in (detail.json(), filtered_list.json()[0], check.json()):
+            self.assertEqual(payload["public_id"], position.public_id)
+            self.assertEqual(payload["exchange"], "NASDAQ")
+            self.assertEqual(payload["asset_metadata"]["core_type"], "STOCK")
+            self.assertEqual(payload["asset_metadata"]["market"], "US")
+
+        self.assertEqual(self.db.query(TradingPosition).count(), 0)
+        self.assertEqual(
+            self.db.query(AssetMaster).filter(
+                AssetMaster.canonical_code == "MSFT"
+            ).one().metadata_json["journal_identity_v1"]["exchange_code"],
+            "NASDAQ",
+        )
+
+    def test_existing_legacy_truth_remains_readable_when_preupgrade_asset_lacks_identity_metadata(self):
+        legacy_position = self._seed_legacy_position()
+        first = self.client.get(
+            f"/api/positions/{legacy_position.public_id}/truth-lifecycle"
+        )
+        self.assertEqual(first.status_code, 200, first.text)
+
+        asset = self.db.query(AssetMaster).filter(AssetMaster.canonical_code == "AAPL").one()
+        asset.metadata_json = {}
+        self.db.commit()
+
+        second = self.client.get(
+            f"/api/positions/{legacy_position.public_id}/truth-lifecycle"
+        )
+
+        self.assertEqual(second.status_code, 200, second.text)
+        self.assertEqual(
+            second.json()["data"]["position_summary"]["public_id"],
+            first.json()["data"]["position_summary"]["public_id"],
+        )
+
+        detail = self.client.get(f"/api/positions/{legacy_position.public_id}")
+        filtered_list = self.client.get(
+            "/api/positions",
+            params={"asset_type": "EQUITY", "core_type": "STOCK", "market": "US"},
+        )
+        self.assertEqual(detail.status_code, 200, detail.text)
+        self.assertEqual(filtered_list.status_code, 200, filtered_list.text)
+        self.assertEqual(len(filtered_list.json()), 1)
+        for payload in (detail.json(), filtered_list.json()[0]):
+            self.assertEqual(
+                payload["asset_metadata"],
+                {
+                    "symbol": "AAPL",
+                    "name": "Apple Inc.",
+                    "core_type": "STOCK",
+                    "market": "US",
+                    "currency": "USD",
+                    "sector": None,
+                    "instrument": "SPOT",
+                },
+            )
+
+        self.db.expire_all()
+        unchanged_asset = self.db.query(AssetMaster).filter(
+            AssetMaster.canonical_code == "AAPL"
+        ).one()
+        self.assertEqual(unchanged_asset.metadata_json, {})
+
+    def test_position_create_ignores_shared_legacy_metadata_and_never_mutates_it(self):
         account = TradingAccount(
             user_id=self.user.id,
             public_id="acct-metadata-reuse",
@@ -561,6 +1076,13 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
                 currency="USD",
                 instrument="Spot",
             ),
+            AssetMetadata(
+                symbol="ALIASMASTER",
+                core_type="STOCK",
+                market="US",
+                currency="USD",
+                instrument="Spot",
+            ),
             AssetMaster(
                 public_id="bad-master-public-id",
                 canonical_code="BADMASTER",
@@ -570,6 +1092,25 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
                 quote_currency="USD",
                 status="ACTIVE",
                 metadata_json={},
+            ),
+            AssetMaster(
+                public_id="alias-master-public-id",
+                canonical_code="ALIASMASTER",
+                display_symbol="ALIASMASTER",
+                name="Noncanonical stored master",
+                asset_type="EQUITY",
+                quote_currency="usd",
+                status="ACTIVE",
+                metadata_json={
+                    "journal_identity_v1": {
+                        "asset_type": "STOCK",
+                        "market": "US",
+                        "exchange_code": "NASDAQ",
+                        "normalized_symbol": "ALIASMASTER",
+                        "instrument_type": "SPOT",
+                        "quote_currency": "USD",
+                    },
+                },
             ),
         ])
         self.db.commit()
@@ -581,11 +1122,18 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
                 json={
                     "account_id": account.id,
                     "symbol": symbol,
+                    "exchange_code": "NASDAQ",
                     "asset_type": "EQUITY",
                     "direction": "LONG",
                     "entry_price": "100",
                     "quantity": "1",
                     "entry_time": "2026-04-03T15:30:00+00:00",
+                    "asset_metadata": {
+                        "core_type": "STOCK",
+                        "market": "US",
+                        "currency": "USD",
+                        "instrument": "SPOT",
+                    },
                 },
             )
 
@@ -594,31 +1142,36 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         bad_instrument_response = request("BADINSTR")
         mismatch_response = request("BADMISMATCH")
         bad_master_response = request("BADMASTER")
+        alias_master_response = request("ALIASMASTER")
         valid_response = request("GOODMETA")
 
-        self.assertEqual(bad_type_response.status_code, 422)
-        self.assertEqual(bad_type_response.json()["detail"]["code"], "UNSUPPORTED_ASSET_TYPE")
-        self.assertEqual(bad_currency_response.status_code, 422)
-        self.assertEqual(
-            bad_currency_response.json()["detail"]["code"],
-            "UNSUPPORTED_RELEASE_CURRENCY",
-        )
-        self.assertEqual(bad_instrument_response.status_code, 422)
-        self.assertEqual(
-            bad_instrument_response.json()["detail"]["code"],
-            "UNSUPPORTED_INSTRUMENT_TYPE",
-        )
-        self.assertEqual(mismatch_response.status_code, 422)
-        self.assertEqual(
-            mismatch_response.json()["detail"]["code"],
-            "INSTRUMENT_IDENTITY_MISMATCH",
-        )
+        for response in (
+            bad_type_response,
+            bad_currency_response,
+            bad_instrument_response,
+            mismatch_response,
+            valid_response,
+        ):
+            self.assertEqual(response.status_code, 201, response.text)
         self.assertEqual(bad_master_response.status_code, 422)
         self.assertEqual(
             bad_master_response.json()["detail"]["code"],
             "INSTRUMENT_IDENTITY_MISMATCH",
         )
-        self.assertEqual(valid_response.status_code, 201)
+        self.assertEqual(alias_master_response.status_code, 422)
+        self.assertEqual(
+            alias_master_response.json()["detail"]["code"],
+            "INSTRUMENT_IDENTITY_MISMATCH",
+        )
+        self.assertEqual(
+            self.db.query(Position).filter(
+                Position.symbol.in_([
+                    "BADMASTER",
+                    "ALIASMASTER",
+                ])
+            ).count(),
+            0,
+        )
         self.assertEqual(
             self.db.query(Position).filter(
                 Position.symbol.in_([
@@ -626,55 +1179,68 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
                     "BADCCY",
                     "BADINSTR",
                     "BADMISMATCH",
-                    "BADMASTER",
+                    "GOODMETA",
                 ])
             ).count(),
-            0,
+            5,
+        )
+        self.db.expire_all()
+        self.assertEqual(
+            self.db.query(AssetMetadata).filter(AssetMetadata.symbol == "BADBOND").one().core_type.value,
+            "BOND",
+        )
+        self.assertEqual(
+            self.db.query(AssetMetadata).filter(AssetMetadata.symbol == "BADCCY").one().currency.value,
+            "HKD",
         )
         asset = self.db.query(AssetMaster).filter(AssetMaster.canonical_code == "GOODMETA").one()
         self.assertEqual(asset.asset_type, "STOCK")
         self.assertEqual(asset.quote_currency, "USD")
 
-    def test_asset_metadata_patch_is_release_guarded_and_never_raises_unknown_enum(self):
+    def test_shared_asset_metadata_patch_is_forbidden_without_owner_scoped_storage(self):
         legacy_position = self._seed_legacy_position()
 
-        cases = (
-            ({"core_type": "BOND"}, "UNSUPPORTED_ASSET_TYPE"),
-            ({"core_type": "NOT_A_TYPE"}, "UNSUPPORTED_ASSET_TYPE"),
-            ({"market": "HK"}, "UNSUPPORTED_MARKET"),
-            ({"market": "NOT_A_MARKET"}, "UNSUPPORTED_MARKET"),
-            ({"market": "CRYPTO"}, "UNSUPPORTED_INSTRUMENT_COMBINATION"),
-            ({"currency": "HKD"}, "UNSUPPORTED_RELEASE_CURRENCY"),
-            ({"instrument": "Future"}, "UNSUPPORTED_INSTRUMENT_TYPE"),
-            ({"core_type": "FUND"}, "INSTRUMENT_IDENTITY_MISMATCH"),
+        original = self.db.query(AssetMetadata).filter(AssetMetadata.symbol == "AAPL").one()
+        original_values = (
+            original.core_type,
+            original.market,
+            original.currency,
+            original.instrument,
+            original.sector,
         )
-        for metadata_update, expected_code in cases:
+        for metadata_update in (
+            {"core_type": "BOND"},
+            {"market": "CRYPTO"},
+            {"currency": "HKD"},
+            {"instrument": "Future"},
+            {"sector": "Technology"},
+            {},
+        ):
             with self.subTest(metadata_update=metadata_update):
                 response = self.client.patch(
                     f"/api/positions/{legacy_position.public_id}",
                     json={"asset_metadata": metadata_update},
                 )
-                self.assertEqual(response.status_code, 422)
-                self.assertEqual(response.json()["detail"]["code"], expected_code)
+                self.assertEqual(response.status_code, 422, response.text)
+                self.assertTrue(
+                    all(
+                        item["type"] == "extra_forbidden"
+                        for item in response.json()["detail"]
+                    )
+                )
 
-        valid_response = self.client.patch(
-            f"/api/positions/{legacy_position.public_id}",
-            json={
-                "asset_metadata": {
-                    "core_type": "equity",
-                    "market": "us",
-                    "currency": "usd",
-                    "sector": "Technology",
-                }
-            },
-        )
-        self.assertEqual(valid_response.status_code, 200)
         self.db.expire_all()
         metadata = self.db.query(AssetMetadata).filter(AssetMetadata.symbol == "AAPL").one()
-        self.assertEqual(metadata.core_type.value, "STOCK")
-        self.assertEqual(metadata.market.value, "US")
-        self.assertEqual(metadata.currency.value, "USD")
-        self.assertEqual(metadata.sector, "Technology")
+        self.assertEqual(
+            (
+                metadata.core_type,
+                metadata.market,
+                metadata.currency,
+                metadata.instrument,
+                metadata.sector,
+            ),
+            original_values,
+        )
 
     def test_legacy_review_write_is_rejected_when_truth_lifecycle_exists_without_migration_header(self):
         legacy_position = self._seed_legacy_position()

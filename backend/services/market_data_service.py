@@ -214,13 +214,23 @@ class MarketDataService:
                         break
 
                 if not has_daily_coverage:
-                    enqueue_daily_backfill(
-                        persistence_db,
-                        symbol=payload["symbol"],
-                        exchange=exchange,
-                        start=warmup_start,
-                        end=warmup_end,
-                    )
+                    try:
+                        with persistence_db.begin_nested():
+                            enqueue_daily_backfill(
+                                persistence_db,
+                                symbol=payload["symbol"],
+                                exchange=exchange,
+                                start=warmup_start,
+                                end=warmup_end,
+                            )
+                    except Exception as error:
+                        log_event(
+                            logger,
+                            "warning",
+                            "market_daily_warmup_enqueue_failed",
+                            symbol=payload.get("symbol"),
+                            error=str(error),
+                        )
         except Exception as error:
             log_event(
                 logger,

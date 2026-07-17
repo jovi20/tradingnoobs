@@ -12,8 +12,11 @@ from sqlalchemy.orm import Session
 from app_config.release_contract import (
     JOURNAL_BETA_CONTRACT,
     ReleaseContractViolation,
-    normalize_contract_token,
     require_allowed_asset_type,
+    require_allowed_instrument_type,
+    require_allowed_market,
+    require_exchange_code,
+    require_normalized_symbol,
     require_release_currency,
 )
 from models import (
@@ -36,6 +39,7 @@ from services.trading_accounting_service import AccountingEvent, calculate_fifo_
 
 
 LEGACY_TRUTH_NAMESPACE = uuid.UUID("7db5f25d-3f43-4e32-a8e3-bd245f7d7001")
+_JOURNAL_IDENTITY_METADATA_KEY = "journal_identity_v1"
 _ALLOWED_INSTRUMENT_COMBINATIONS = frozenset(
     (item.asset_type, item.instrument_type, item.market)
     for item in JOURNAL_BETA_CONTRACT.instruments.allowed_combinations
@@ -46,6 +50,8 @@ _ALLOWED_INSTRUMENT_COMBINATIONS = frozenset(
 class LegacyInstrumentIdentity:
     asset_type: str
     market: str
+    exchange_code: str
+    normalized_symbol: str
     instrument_type: str
     quote_currency: str
 
@@ -76,12 +82,16 @@ def validate_legacy_instrument_identity(
     *,
     position_asset_type: object,
     account_currency: object,
+    symbol: object,
+    exchange_code: object,
     metadata_core_type: object | None = None,
     metadata_market: object | None = None,
     metadata_currency: object | None = None,
     metadata_instrument: object | None = None,
 ) -> LegacyInstrumentIdentity:
     """Resolve and validate the legacy fields used to create canonical instrument truth."""
+    normalized_symbol = require_normalized_symbol(symbol)
+    exchange_code = require_exchange_code(exchange_code)
     position_asset_type = require_allowed_asset_type(position_asset_type)
     asset_type = (
         require_allowed_asset_type(metadata_core_type)
@@ -111,24 +121,19 @@ def validate_legacy_instrument_identity(
         )
 
     market = (
-        normalize_contract_token(getattr(metadata_market, "value", metadata_market))
+        require_allowed_market(metadata_market, field="asset_metadata.market")
         if metadata_market is not None
         else ("CRYPTO" if asset_type == "CRYPTO" else "US")
     )
-    if market not in JOURNAL_BETA_CONTRACT.instruments.markets:
-        raise ReleaseContractViolation("UNSUPPORTED_MARKET", "asset_metadata.market", metadata_market)
 
     instrument_type = (
-        normalize_contract_token(metadata_instrument)
-        if metadata_instrument is not None and str(metadata_instrument).strip()
+        require_allowed_instrument_type(
+            metadata_instrument,
+            field="asset_metadata.instrument",
+        )
+        if metadata_instrument is not None
         else TradeInstrumentType.SPOT.value
     )
-    if instrument_type not in JOURNAL_BETA_CONTRACT.instruments.instrument_types:
-        raise ReleaseContractViolation(
-            "UNSUPPORTED_INSTRUMENT_TYPE",
-            "asset_metadata.instrument",
-            metadata_instrument,
-        )
     if (asset_type, instrument_type, market) not in _ALLOWED_INSTRUMENT_COMBINATIONS:
         raise ReleaseContractViolation(
             "UNSUPPORTED_INSTRUMENT_COMBINATION",
@@ -139,8 +144,65 @@ def validate_legacy_instrument_identity(
     return LegacyInstrumentIdentity(
         asset_type=asset_type,
         market=market,
+        exchange_code=exchange_code,
+        normalized_symbol=normalized_symbol,
         instrument_type=instrument_type,
         quote_currency=quote_currency,
+    )
+
+
+def _identity_payload(identity: LegacyInstrumentIdentity) -> dict[str, str]:
+    return {
+        "asset_type": identity.asset_type,
+        "market": identity.market,
+        "exchange_code": identity.exchange_code,
+        "normalized_symbol": identity.normalized_symbol,
+        "instrument_type": identity.instrument_type,
+        "quote_currency": identity.quote_currency,
+    }
+
+
+def _asset_matches_identity(
+    asset: AssetMaster,
+    identity: LegacyInstrumentIdentity,
+) -> bool:
+    return (
+        _enum_value(asset.asset_type, "") == identity.asset_type
+        and _enum_value(asset.quote_currency, "") == identity.quote_currency
+        and isinstance(asset.metadata_json, dict)
+        and asset.metadata_json.get(_JOURNAL_IDENTITY_METADATA_KEY)
+        == _identity_payload(identity)
+    )
+
+
+def _require_proven_legacy_identity(
+    db: Session,
+    legacy_position: Position,
+    identity: LegacyInstrumentIdentity,
+    *,
+    expected_identity: LegacyInstrumentIdentity | None,
+) -> None:
+    if expected_identity is not None:
+        if identity != expected_identity:
+            raise ReleaseContractViolation(
+                "INSTRUMENT_IDENTITY_MISMATCH",
+                "position.exchange",
+                legacy_position.exchange,
+            )
+        return
+
+    existing_asset = (
+        db.query(AssetMaster)
+        .filter(AssetMaster.canonical_code == identity.normalized_symbol)
+        .first()
+    )
+    if existing_asset is not None and _asset_matches_identity(existing_asset, identity):
+        return
+
+    raise ReleaseContractViolation(
+        "LEGACY_INSTRUMENT_IDENTITY_UNPROVEN",
+        "position.exchange",
+        legacy_position.exchange,
     )
 
 
@@ -149,18 +211,10 @@ def _ensure_asset_master(
     legacy_position: Position,
     identity: LegacyInstrumentIdentity,
 ) -> AssetMaster:
-    canonical_code = legacy_position.symbol.upper()
+    canonical_code = identity.normalized_symbol
     asset = db.query(AssetMaster).filter(AssetMaster.canonical_code == canonical_code).first()
     if asset:
-        existing_asset_type = require_allowed_asset_type(asset.asset_type)
-        existing_quote_currency = require_release_currency(
-            asset.quote_currency,
-            field="asset_master.quote_currency",
-        )
-        if (
-            existing_asset_type != identity.asset_type
-            or existing_quote_currency != identity.quote_currency
-        ):
+        if not _asset_matches_identity(asset, identity):
             raise ReleaseContractViolation(
                 "INSTRUMENT_IDENTITY_MISMATCH",
                 "asset_master.canonical_code",
@@ -179,15 +233,21 @@ def _ensure_asset_master(
         status="ACTIVE",
         sector=metadata.sector if metadata else None,
         industry=None,
-        metadata_json={},
+        metadata_json={
+            _JOURNAL_IDENTITY_METADATA_KEY: _identity_payload(identity),
+        },
     )
     db.add(asset)
     db.flush()
     return asset
 
 
-def _ensure_trade_instrument(db: Session, asset: AssetMaster, legacy_position: Position) -> TradeInstrument:
-    contract_symbol = legacy_position.symbol.upper()
+def _ensure_trade_instrument(
+    db: Session,
+    asset: AssetMaster,
+    identity: LegacyInstrumentIdentity,
+) -> TradeInstrument:
+    contract_symbol = identity.normalized_symbol
     instrument = (
         db.query(TradeInstrument)
         .filter(
@@ -201,7 +261,10 @@ def _ensure_trade_instrument(db: Session, asset: AssetMaster, legacy_position: P
         return instrument
 
     instrument = TradeInstrument(
-        public_id=_deterministic_public_id("trade_instrument", contract_symbol),
+        public_id=_deterministic_public_id(
+            "trade_instrument",
+            "|".join(_identity_payload(identity).values()),
+        ),
         asset_id=asset.id,
         instrument_type=TradeInstrumentType.SPOT,
         display_name=asset.name,
@@ -375,7 +438,12 @@ def _apply_fifo_accounting(
         event.realized_pnl_net = result.realized_pnl_net
 
 
-def sync_legacy_position_to_truth(db: Session, legacy_position_id: int) -> TradingPosition:
+def sync_legacy_position_to_truth(
+    db: Session,
+    legacy_position_id: int,
+    *,
+    expected_identity: LegacyInstrumentIdentity | None = None,
+) -> TradingPosition:
     legacy_position = (
         db.query(Position)
         .filter(Position.id == legacy_position_id)
@@ -392,13 +460,21 @@ def sync_legacy_position_to_truth(db: Session, legacy_position_id: int) -> Tradi
             if legacy_position.trading_account
             else None
         ),
+        symbol=legacy_position.symbol,
+        exchange_code=legacy_position.exchange,
         metadata_core_type=metadata.core_type if metadata else None,
         metadata_market=metadata.market if metadata else None,
         metadata_currency=metadata.currency if metadata else None,
         metadata_instrument=metadata.instrument if metadata else None,
     )
+    _require_proven_legacy_identity(
+        db,
+        legacy_position,
+        identity,
+        expected_identity=expected_identity,
+    )
     asset = _ensure_asset_master(db, legacy_position, identity)
-    instrument = _ensure_trade_instrument(db, asset, legacy_position)
+    instrument = _ensure_trade_instrument(db, asset, identity)
 
     truth_public_id = legacy_position_truth_public_id(legacy_position)
     truth_position = db.query(TradingPosition).filter(TradingPosition.public_id == truth_public_id).first()
@@ -439,7 +515,12 @@ def sync_legacy_position_to_truth(db: Session, legacy_position_id: int) -> Tradi
     return truth_position
 
 
-def sync_all_legacy_positions_to_truth(db: Session, legacy_position_ids: list[int] | None = None) -> dict[str, int]:
+def sync_all_legacy_positions_to_truth(
+    db: Session,
+    legacy_position_ids: list[int] | None = None,
+    *,
+    expected_identities: dict[int, LegacyInstrumentIdentity] | None = None,
+) -> dict[str, int]:
     query = db.query(Position.id).order_by(Position.id.asc())
     if legacy_position_ids:
         query = query.filter(Position.id.in_(legacy_position_ids))
@@ -458,7 +539,11 @@ def sync_all_legacy_positions_to_truth(db: Session, legacy_position_ids: list[in
         truth_public_id = legacy_position_truth_public_id(legacy_position)
         existed = db.query(TradingPosition.id).filter(TradingPosition.public_id == truth_public_id).first() is not None
         try:
-            sync_legacy_position_to_truth(db, legacy_position_id)
+            sync_legacy_position_to_truth(
+                db,
+                legacy_position_id,
+                expected_identity=(expected_identities or {}).get(legacy_position_id),
+            )
             if existed:
                 summary["updated_positions"] += 1
             else:

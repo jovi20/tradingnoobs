@@ -1,23 +1,30 @@
-"""Profile-aware Market access used by journal routes.
+"""Effective-capability-aware Market access used by journal routes.
 
-The real Market implementation is imported lazily only in DEVELOPMENT_FULL.
+The real implementation is imported lazily only when the deployment ceiling
+and database runtime rollout both enable Market.
 """
 from __future__ import annotations
 
 from typing import Any
 
-from release_profile import RuntimeCapability, is_capability_enabled
+from release_profile import RuntimeCapability
+from services.capability_service import is_effective_capability_enabled
 
 
 class MarketDataService:
-    def __init__(self, db, **kwargs):
+    def __init__(self, db, *, actor_key: str | None = None, **kwargs):
         self.db = db
+        self.actor_key = actor_key
         self.kwargs = kwargs
         self._delegate = None
 
     @property
     def is_available(self) -> bool:
-        return is_capability_enabled(RuntimeCapability.MARKET)
+        return is_effective_capability_enabled(
+            self.db,
+            RuntimeCapability.MARKET,
+            actor_key=self.actor_key,
+        )
 
     def _real_service(self):
         if not self.is_available:

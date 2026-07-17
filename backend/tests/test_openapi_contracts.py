@@ -33,6 +33,53 @@ class OpenAPIContractTests(unittest.TestCase):
         self.assertIn("JournalTimelineHomeResponse", schemas)
         self.assertIn("TradingPositionLifecycleResponse", schemas)
 
+    def test_position_create_publishes_raw_and_canonical_identity_contract(self):
+        schemas = self.openapi["components"]["schemas"]
+        create_schema = schemas["PositionCreate"]
+        identity_schema = schemas["PositionInstrumentIdentityCreate"]
+
+        self.assertTrue(
+            {
+                "account_id",
+                "symbol",
+                "exchange_code",
+                "asset_type",
+                "direction",
+                "entry_price",
+                "quantity",
+                "entry_time",
+                "asset_metadata",
+            }
+            <= set(create_schema["required"])
+        )
+        self.assertEqual(
+            create_schema["properties"]["symbol"]["pattern"],
+            r"^[\t\n\v\f\r ]*[A-Za-z0-9][A-Za-z0-9._/-]{0,49}[\t\n\v\f\r ]*$",
+        )
+        self.assertEqual(
+            create_schema["properties"]["symbol"]["x-normalized-pattern"],
+            r"^[A-Z0-9][A-Z0-9._/-]{0,49}$",
+        )
+        self.assertEqual(
+            create_schema["properties"]["exchange_code"]["pattern"],
+            r"^[\t\n\v\f\r ]*[A-Za-z0-9][A-Za-z0-9._-]{0,31}[\t\n\v\f\r ]*$",
+        )
+        self.assertEqual(
+            create_schema["properties"]["exchange_code"]["x-normalized-pattern"],
+            r"^[A-Z0-9][A-Z0-9._-]{0,31}$",
+        )
+        self.assertEqual(
+            set(identity_schema["required"]),
+            {"core_type", "market", "currency", "instrument"},
+        )
+        for field in ("core_type", "market", "currency", "instrument"):
+            with self.subTest(field=field):
+                self.assertIn("pattern", identity_schema["properties"][field])
+                self.assertEqual(
+                    identity_schema["properties"][field]["x-normalization"],
+                    "ASCII_TRIM_UPPER",
+                )
+
     def test_empty_ceiling_publishes_only_core_user_settings_fields(self):
         with patch(
             "release_profile.STATIC_DEPLOYMENT_CAPABILITY_POLICY",

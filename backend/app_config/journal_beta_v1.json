@@ -71,9 +71,21 @@
     ],
     "exchange_code_required": true,
     "identity_token_normalization": "ASCII_TRIM_UPPER",
+    "raw_identity_token_policy": "REJECT_NON_ASCII_THEN_TRIM_UPPER",
     "exchange_code_pattern": "^[A-Z0-9][A-Z0-9._-]{0,31}$",
-    "normalized_symbol_pattern": "^[A-Z0-9][A-Z0-9._/-]{0,63}$",
+    "normalized_symbol_pattern": "^[A-Z0-9][A-Z0-9._/-]{0,49}$",
+    "raw_exchange_code_input_pattern": "^[\\t\\n\\v\\f\\r ]*[A-Za-z0-9][A-Za-z0-9._-]{0,31}[\\t\\n\\v\\f\\r ]*$",
+    "raw_normalized_symbol_input_pattern": "^[\\t\\n\\v\\f\\r ]*[A-Za-z0-9][A-Za-z0-9._/-]{0,49}[\\t\\n\\v\\f\\r ]*$",
     "quote_currency_must_equal_account_currency": true,
+    "legacy_identity_evidence": [
+      "REQUEST_VALIDATED",
+      "EXACT_JOURNAL_IDENTITY_V1"
+    ],
+    "legacy_unproven_error": "LEGACY_INSTRUMENT_IDENTITY_UNPROVEN",
+    "preupgrade_truth_read_policy": "READ_ONLY_NO_IDENTITY_REWRITE",
+    "shared_asset_metadata_owner": "SYSTEM",
+    "shared_asset_metadata_user_write": "FORBIDDEN",
+    "canonical_identity_schema_task": "JRN-007",
     "disabled_asset_types": [
       "BOND",
       "COMMODITY",

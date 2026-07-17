@@ -346,16 +346,55 @@ export interface TradingAccountUpdate {
 
 export class ApiRequestError extends Error {
     readonly status: number
+    readonly code?: string
 
-    constructor(status: number, message: string) {
+    constructor(status: number, message: string, code?: string) {
         super(message)
         this.name = 'ApiRequestError'
         this.status = status
+        this.code = code
     }
 }
 
 export function isAuthenticationApiError(error: unknown): boolean {
     return error instanceof ApiRequestError && (error.status === 401 || error.status === 403)
+}
+
+const LOCALIZED_API_ERROR_MESSAGES: Readonly<Record<string, string>> = {
+    OPEN_POSITION_EXISTS: '同一账户中已存在相同标的和方向的未平仓仓位，请加仓到已有仓位。',
+}
+
+function resolveApiError(payload: unknown, status: number): { message: string; code?: string } {
+    if (!payload || typeof payload !== 'object') {
+        return { message: `HTTP ${status}` }
+    }
+
+    const detail = (payload as { detail?: unknown }).detail
+    if (typeof detail === 'string' && detail.trim()) {
+        return { message: detail }
+    }
+    if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+        const structuredDetail = detail as { code?: unknown; message?: unknown }
+        const code = typeof structuredDetail.code === 'string' && structuredDetail.code.trim()
+            ? structuredDetail.code.trim()
+            : undefined
+        const localizedMessage = code ? LOCALIZED_API_ERROR_MESSAGES[code] : undefined
+        if (localizedMessage) return { message: localizedMessage, code }
+
+        const message = typeof structuredDetail.message === 'string' && structuredDetail.message.trim()
+            ? structuredDetail.message.trim()
+            : undefined
+        if (message) return { message, code }
+        if (code) return { message: code, code }
+    }
+    if (Array.isArray(detail)) {
+        const validationMessage = detail.find(item => (
+            item && typeof item === 'object' && typeof (item as { msg?: unknown }).msg === 'string'
+        )) as { msg?: string } | undefined
+        if (validationMessage?.msg) return { message: validationMessage.msg }
+    }
+
+    return { message: `HTTP ${status}` }
 }
 
 async function fetchAPI(
@@ -381,8 +420,9 @@ async function fetchAPI(
     })
 
     if (!response.ok) {
-        const error = await response.json().catch(() => ({ detail: 'Request failed' }))
-        throw new ApiRequestError(response.status, error.detail || `HTTP ${response.status}`)
+        const errorPayload = await response.json().catch(() => null)
+        const error = resolveApiError(errorPayload, response.status)
+        throw new ApiRequestError(response.status, error.message, error.code)
     }
 
     // Handle 204 No Content
@@ -1110,7 +1150,7 @@ export interface Position {
     strategy_id?: number
     symbol: string
     exchange: string
-    asset_type?: string
+    asset_type: string | null
     direction: 'LONG' | 'SHORT'
     status: 'OPEN' | 'CLOSED'
     total_quantity: number
@@ -1151,10 +1191,16 @@ export interface PositionMarketAnalysis extends Position {
     min_price_during_hold?: number
 }
 
+export type ReleaseAssetType = 'STOCK' | 'FUND' | 'CRYPTO'
+export type ReleaseMarket = 'US' | 'CRYPTO'
+export type ReleaseInstrumentType = 'SPOT'
+export type ReleaseCurrency = 'USD'
+
 export interface PositionCreate {
     account_id: number
     symbol: string
-    asset_type?: string
+    exchange_code: string
+    asset_type: ReleaseAssetType
     direction: 'LONG' | 'SHORT'
     strategy_id?: number
     entry_price: number
@@ -1169,14 +1215,35 @@ export interface PositionCreate {
     planned_take_profit?: { price: number; percent?: number }[]
     // Phase 1: Checklist Responses
     checklist_responses?: Record<string, boolean>
-    asset_metadata?: {
-        name?: string
-        core_type?: string
-        market?: string
-        currency?: string
-        sector?: string
-        instrument?: string
+    asset_metadata: {
+        core_type: ReleaseAssetType
+        market: ReleaseMarket
+        currency: ReleaseCurrency
+        instrument: ReleaseInstrumentType
     }
+}
+
+export interface PositionUpdatePayload {
+    strategy_id?: number
+    trade_review?: string
+    screenshots?: string[]
+    lessons?: string[]
+    rating?: number
+    planned_entry_price?: number
+    planned_stop_loss?: number
+    planned_take_profit?: { price: number; percent?: number }[]
+    checklist_responses?: Record<string, boolean>
+}
+
+export interface PositionOpenIdentity {
+    account_id: number | string
+    symbol: string
+    exchange_code: string
+    direction: 'LONG' | 'SHORT'
+    asset_type: ReleaseAssetType
+    market: ReleaseMarket
+    instrument_type: ReleaseInstrumentType
+    quote_currency: ReleaseCurrency
 }
 
 export interface BatchCreate {
@@ -1300,7 +1367,7 @@ export const positionsAPI = {
         }, token)
     },
 
-    update: async (token: string, id: number | string, data: Partial<Position>): Promise<Position> => {
+    update: async (token: string, id: number | string, data: PositionUpdatePayload): Promise<Position> => {
         return fetchAPI(`/api/positions/${id}`, {
             method: 'PATCH',
             body: JSON.stringify(data),
@@ -1313,8 +1380,11 @@ export const positionsAPI = {
         }, token)
     },
 
-    checkOpen: async (token: string, symbol: string, accountId: number | string): Promise<Position | null> => {
-        return fetchAPI(`/api/positions/check/${symbol}?account_id=${accountId}`, {}, token)
+    checkOpen: async (token: string, identity: PositionOpenIdentity): Promise<Position | null> => {
+        const query = new URLSearchParams(
+            Object.entries(identity).map(([key, value]) => [key, String(value)])
+        )
+        return fetchAPI(`/api/positions/check/open?${query.toString()}`, {}, token)
     },
 
     analyze: async (token: string, id: number | string): Promise<PositionMarketAnalysis> => {

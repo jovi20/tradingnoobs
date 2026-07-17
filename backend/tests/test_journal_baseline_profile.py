@@ -180,8 +180,8 @@ class JournalBaselineProfileTests(unittest.TestCase):
                 "_fetch_rate",
                 new=AsyncMock(side_effect=AssertionError("provider must not run")),
             ) as fetch_rate:
-                rate = asyncio.run(exchange_rate_service.get_exchange_rate("USD", "CNY"))
-        self.assertGreater(rate, 0)
+                with self.assertRaises(exchange_rate_service.ExchangeRateUnavailableError):
+                    asyncio.run(exchange_rate_service.get_exchange_rate("USD", "CNY"))
         fetch_rate.assert_not_awaited()
 
     def test_clean_process_imports_no_real_optional_handlers(self):

@@ -39,7 +39,10 @@ from models import (
     User,
 )
 from services.auth_service import get_current_user
-from services.legacy_truth_sync_service import sync_legacy_position_to_truth
+from services.legacy_truth_sync_service import (
+    sync_legacy_position_to_truth,
+    validate_legacy_instrument_identity,
+)
 
 
 class TradingPositionLifecycleRouterTests(unittest.TestCase):
@@ -87,6 +90,19 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         self.engine.dispose()
         if os.path.exists(self.db_path):
             os.remove(self.db_path)
+
+    def _expected_identity(self, position: Position):
+        metadata = position.asset_metadata
+        return validate_legacy_instrument_identity(
+            position_asset_type=position.asset_type,
+            account_currency=position.trading_account.currency,
+            symbol=position.symbol,
+            exchange_code=position.exchange,
+            metadata_core_type=metadata.core_type if metadata else None,
+            metadata_market=metadata.market if metadata else None,
+            metadata_currency=metadata.currency if metadata else None,
+            metadata_instrument=metadata.instrument if metadata else None,
+        )
 
     def _seed_synced_position(self):
         account = TradingAccount(
@@ -171,7 +187,11 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         ])
         self.db.commit()
 
-        return sync_legacy_position_to_truth(self.db, legacy_position.id)
+        return sync_legacy_position_to_truth(
+            self.db,
+            legacy_position.id,
+            expected_identity=self._expected_identity(legacy_position),
+        )
 
     def _seed_open_synced_position(self):
         account = TradingAccount(
@@ -232,7 +252,11 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         )
         self.db.commit()
 
-        return sync_legacy_position_to_truth(self.db, legacy_position.id)
+        return sync_legacy_position_to_truth(
+            self.db,
+            legacy_position.id,
+            expected_identity=self._expected_identity(legacy_position),
+        )
 
     def test_lifecycle_route_returns_position_summary_and_thread(self):
         truth_position = self._seed_synced_position()

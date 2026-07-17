@@ -48,7 +48,10 @@ async def analyze_position(
         start_date=start_date,
         end_date=end_date,
     )
-    history = await MarketDataService(db).get_price_history(
+    history = await MarketDataService(
+        db,
+        actor_key=current_user.public_id,
+    ).get_price_history(
         position.symbol,
         start_date,
         end_date,

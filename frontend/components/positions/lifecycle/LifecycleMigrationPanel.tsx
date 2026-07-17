@@ -43,7 +43,6 @@ interface LifecycleMigrationPanelProps {
     sortedBatches: TradeBatchViewModel[]
     legacyBatchMutationState: LegacyMutationState
     legacyReviewDisplayState: LegacyReviewState
-    onEditMetadata: () => void
     onEditBatch: (batch: TradeBatchViewModel) => void
 }
 
@@ -54,7 +53,6 @@ export function LifecycleMigrationPanel({
     sortedBatches,
     legacyBatchMutationState,
     legacyReviewDisplayState,
-    onEditMetadata,
     onEditBatch,
 }: LifecycleMigrationPanelProps) {
     const currencySymbol = getCurrencySymbol(position.asset_metadata?.currency)
@@ -98,9 +96,6 @@ export function LifecycleMigrationPanel({
                             <Target className="h-4 w-4" />
                             旧版资产元数据
                         </h3>
-                        <button type="button" onClick={onEditMetadata} aria-label="编辑旧版资产属性" title="编辑旧版资产属性" className="rounded-md bg-warning/12 p-2 text-warning transition-colors hover:bg-warning/20">
-                            <Edit3 className="h-4 w-4" />
-                        </button>
                     </div>
                     <div className="mt-4 grid gap-4 md:grid-cols-3">
                         <LegacyFact

@@ -22,6 +22,10 @@ from models import (
     User,
 )
 from services.auth_service import get_current_user
+from services.legacy_truth_sync_service import (
+    sync_legacy_position_to_truth,
+    validate_legacy_instrument_identity,
+)
 
 
 class PublicIdNestedRouteTests(unittest.TestCase):
@@ -68,6 +72,7 @@ class PublicIdNestedRouteTests(unittest.TestCase):
             public_id="pos-public-id",
             symbol="NVDA",
             exchange="NASDAQ",
+            asset_type="STOCK",
             direction=PositionDirection.LONG,
             status=PositionStatus.OPEN,
             total_quantity=1,
@@ -76,6 +81,7 @@ class PublicIdNestedRouteTests(unittest.TestCase):
         self.db.add(self.position)
         self.db.commit()
         self.db.refresh(self.position)
+        self._seed_truth_identity(self.position, market="US")
 
         self.transaction = Transaction(
             account_id=self.account.id,
@@ -108,6 +114,24 @@ class PublicIdNestedRouteTests(unittest.TestCase):
         self.engine.dispose()
         if os.path.exists(self.db_path):
             os.remove(self.db_path)
+
+    def _seed_truth_identity(self, position: Position, *, market: str) -> None:
+        identity = validate_legacy_instrument_identity(
+            position_asset_type=position.asset_type,
+            account_currency=self.account.currency,
+            symbol=position.symbol,
+            exchange_code=position.exchange,
+            metadata_core_type=position.asset_type,
+            metadata_market=market,
+            metadata_currency=self.account.currency,
+            metadata_instrument="SPOT",
+        )
+        sync_legacy_position_to_truth(
+            self.db,
+            position.id,
+            expected_identity=identity,
+        )
+        self.db.expire_all()
 
     def test_account_transactions_routes_accept_account_public_id(self):
         list_response = self.client.get(f"/api/accounts/{self.account.public_id}/transactions")
@@ -196,12 +220,76 @@ class PublicIdNestedRouteTests(unittest.TestCase):
 
     def test_positions_check_open_accepts_account_public_id(self):
         response = self.client.get(
-            f"/api/positions/check/NVDA?account_id={self.account.public_id}"
+            "/api/positions/check/open",
+            params={
+                "account_id": self.account.public_id,
+                "symbol": " nvda ",
+                "exchange_code": " nasdaq ",
+                "direction": "LONG",
+                "asset_type": "STOCK",
+                "market": "US",
+                "instrument_type": "SPOT",
+                "quote_currency": "USD",
+            },
         )
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["public_id"], self.position.public_id)
         self.assertEqual(payload["account_id"], self.account.id)
+
+        for changes in (
+            {"exchange_code": "NYSE"},
+            {"direction": "SHORT"},
+            {"asset_type": "CRYPTO", "market": "CRYPTO"},
+        ):
+            params = {
+                "account_id": self.account.public_id,
+                "symbol": "NVDA",
+                "exchange_code": "NASDAQ",
+                "direction": "LONG",
+                "asset_type": "STOCK",
+                "market": "US",
+                "instrument_type": "SPOT",
+                "quote_currency": "USD",
+            }
+            params.update(changes)
+            mismatch = self.client.get("/api/positions/check/open", params=params)
+            self.assertEqual(mismatch.status_code, 200, mismatch.text)
+            self.assertIsNone(mismatch.json())
+
+    def test_positions_check_open_accepts_symbol_with_path_separator_as_query_data(self):
+        crypto_position = Position(
+            user_id=self.user.id,
+            account_id=self.account.id,
+            public_id="crypto-pos-public-id",
+            symbol="BTC/USD",
+            exchange="COINBASE",
+            asset_type="CRYPTO",
+            direction=PositionDirection.LONG,
+            status=PositionStatus.OPEN,
+            total_quantity=1,
+            opened_at=datetime.now(timezone.utc),
+        )
+        self.db.add(crypto_position)
+        self.db.commit()
+        self._seed_truth_identity(crypto_position, market="CRYPTO")
+
+        response = self.client.get(
+            "/api/positions/check/open",
+            params={
+                "account_id": self.account.public_id,
+                "symbol": "BTC/USD",
+                "exchange_code": "COINBASE",
+                "direction": "LONG",
+                "asset_type": "CRYPTO",
+                "market": "CRYPTO",
+                "instrument_type": "SPOT",
+                "quote_currency": "USD",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["public_id"], crypto_position.public_id)
 
 
 if __name__ == "__main__":

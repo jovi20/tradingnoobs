@@ -3,14 +3,18 @@ Trading Noobs - Exchange Rate Service
 获取外汇汇率并缓存，用于 Dashboard 跨币种资产统一换算。
 
 核心规则:
-  1. USDT 固定锚定 USD (1:1)
-  2. 所有换算统一经 USD 中转: X -> USD -> target
+  1. USDT 不是 USD alias；当前 release contract 明确拒绝该换算。
+  2. 跨币种 provider 访问要求 deployment ceiling 与 runtime rollout 同时启用。
+  3. 所有已启用换算统一经 USD 中转: X -> USD -> target
 """
 from datetime import datetime
 from typing import Dict, Optional
 from fastapi.concurrency import run_in_threadpool
+from sqlalchemy.orm import Session
 
-from release_profile import RuntimeCapability, is_capability_enabled
+from app_config.release_contract import ReleaseContractViolation
+from release_profile import RuntimeCapability
+from services.capability_service import is_effective_capability_enabled
 
 # 汇率缓存 TTL (10 分钟)
 FX_CACHE_TTL_SECONDS = 600
@@ -19,27 +23,43 @@ FX_CACHE_TTL_SECONDS = 600
 _fx_cache: Dict[str, Dict] = {}
 
 
-async def get_exchange_rate(from_currency: str, to_currency: str) -> float:
+class ExchangeRateUnavailableError(RuntimeError):
+    """Raised when a cross-currency rate lacks effective Market authorization."""
+
+
+async def get_exchange_rate(
+    from_currency: str,
+    to_currency: str,
+    *,
+    db: Session | None = None,
+    actor_key: str | None = None,
+) -> float:
     """
     获取 from_currency -> to_currency 的汇率。
-    规则:
-      1. USDT 固定视为 USD (1:1)
-      2. 所有换算先转到 USD，再从 USD 转到目标币种 (X -> USD -> target)
+    Provider access requires an explicit database session so runtime rollout can
+    be proven. Without that proof, only an identical non-USDT pair is resolved.
     """
     from_c = from_currency.upper().strip()
     to_c = to_currency.upper().strip()
 
-    # USDT 固定锚定 USD
-    if from_c == 'USDT':
-        from_c = 'USD'
-    if to_c == 'USDT':
-        to_c = 'USD'
+    if "USDT" in {from_c, to_c}:
+        raise ReleaseContractViolation(
+            "UNSUPPORTED_RELEASE_CURRENCY",
+            "currency",
+            "USDT",
+        )
 
     if from_c == to_c:
         return 1.0
 
-    if not is_capability_enabled(RuntimeCapability.MARKET):
-        return _get_fallback_rate(from_c, to_c)
+    if db is None or not is_effective_capability_enabled(
+        db,
+        RuntimeCapability.MARKET,
+        actor_key=actor_key,
+    ):
+        raise ExchangeRateUnavailableError(
+            "MARKET capability is not effectively enabled for exchange-rate access"
+        )
 
     # 统一路径: from_c -> USD -> to_c
     # 1) from_c -> USD
@@ -95,8 +115,9 @@ async def _fetch_rate(from_c: str, to_c: str) -> float:
     except Exception as e:
         print(f"[FX] YFinance failed for {pair_symbol}: {e}")
 
-    # 3. 硬编码兜底 (防止外部 API 全部失败导致崩溃)
-    return _get_fallback_rate(from_c, to_c)
+    raise ExchangeRateUnavailableError(
+        f"No exchange-rate provider returned a valid rate for {from_c}->{to_c}"
+    )
 
 
 def _fetch_akshare_rate(from_c: str, to_c: str) -> Optional[float]:
@@ -153,30 +174,13 @@ def _fetch_yfinance_rate(pair_symbol: str) -> Optional[float]:
     return None
 
 
-def _get_fallback_rate(from_c: str, to_c: str) -> float:
-    """硬编码的参考汇率兜底，防止 API 全部失败"""
-    # 以 USD 为基准的近似汇率 (1 USD = X 该币种)
-    usd_rates = {
-        'USD': 1.0,
-        'USDT': 1.0,
-        'HKD': 7.80,
-        'CNY': 6.91,
-        'EUR': 0.92,
-        'GBP': 0.79,
-    }
-
-    from_usd = usd_rates.get(from_c)
-    to_usd = usd_rates.get(to_c)
-
-    if from_usd and to_usd:
-        # from_c -> USD -> to_c
-        return to_usd * from_usd
-
-    print(f"[FX] WARNING: No fallback rate for {from_c}->{to_c}, using 1.0")
-    return 1.0
-
-
-async def get_rates_batch(currencies: list, target_currency: str) -> Dict[str, float]:
+async def get_rates_batch(
+    currencies: list,
+    target_currency: str,
+    *,
+    db: Session | None = None,
+    actor_key: str | None = None,
+) -> Dict[str, float]:
     """
     批量获取多个币种到目标币种的汇率。
     返回 { "USD": 1.0, "HKD": 0.128, ... }
@@ -184,5 +188,10 @@ async def get_rates_batch(currencies: list, target_currency: str) -> Dict[str, f
     unique = set(c.upper() for c in currencies)
     result = {}
     for c in unique:
-        result[c] = await get_exchange_rate(c, target_currency)
+        result[c] = await get_exchange_rate(
+            c,
+            target_currency,
+            db=db,
+            actor_key=actor_key,
+        )
     return result
