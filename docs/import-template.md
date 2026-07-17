@@ -9,7 +9,7 @@ Release boundary 更新：2026-07-17
 ## Release boundary
 
 - 本模板只描述用户本地上传的通用 CSV/Excel，不访问 Broker 网络，也不读取或保存 Broker、Market 或 LLM 凭据。
-- `IBKR_FLEX_XML_V1` source-bound 本地文件 adapter 由 `JRN-013/JRN-014` 计划实现，截至 2026-07-17 尚未实现。它将使用稳定 execution identity 支持重复、重叠和增量文件，不使用本模板的逐行选择合同。
+- `IBKR_FLEX_XML_V1` source-bound 本地文件 adapter 由 `JRN-013` 至 `JRN-015` 计划实现，截至 2026-07-17 尚未实现。它将使用稳定 execution identity 支持重复、重叠、增量文件和 correction replay，不使用本模板的逐行选择合同。
 - 在线 Broker Sync 当前 `DISABLED / DEFERRED`。不要把本地文件导入说明理解为 IBKR Token/Query ID 配置或网络同步入口。
 - AI/Insights、PDF 导出和 risk cards 当前同样关闭；导入字段不承诺触发这些 optional capability。
 

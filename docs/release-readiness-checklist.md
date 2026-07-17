@@ -1,5 +1,7 @@
 # Trading Noobs P19 Release Readiness Checklist
 
+> **SUPERSEDED（2026-07-17）**：这是 2026-06-11 的历史 P19 staging 证据，不是当前交易日志 Beta 的 release status。当前 Beta 关闭 Broker network sync、Market、AI/Insights、PDF、risk cards 和 open registration；能力代码或旧验收存在不表示可用。JRN-000 已完成 checkpoint，JRN-001 仍在 final verification/review、尚未完成；当前门唯一以 [active trading-journal plan](./superpowers/plans/2026-07-16-dev-trading-journal-development-plan.md) 为准。
+
 更新时间：2026-06-11
 执行分支：`dev`
 P19 evidence HEAD：`cabc857 docs: record authenticated browser smoke`

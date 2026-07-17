@@ -1,5 +1,7 @@
 # Frontend Refactor QA Report - 2026-07-15
 
+> **SUPERSEDED（2026-07-17）**：本文是 2026-07-15 的历史前端回归记录，不是当前交易日志 Beta 的可用功能或验收清单。`JRN-001` 已将 arbitrary manual cash adjustment 排除在 release contract 外；当前前端不得提供该写入入口，纠错只能走关联 reversal/void。
+
 ## Summary
 
 - Environment: local Next.js 16.2.7 + FastAPI + SQLite
@@ -21,7 +23,7 @@ All nine original findings are fixed and verified on 2026-07-15.
 | Bug | Status | Verification |
 | --- | --- | --- |
 | QA-001 | Fixed | Account PATCH accepts metadata only; saving the note did not add a ledger row or change cash. A normal `+1040 USD` compensating deposit restored cash while retaining the original `-1040` audit row. |
-| QA-002 | Fixed | Truth narrative and cash adjustment dialogs both open from the truth lifecycle page and expose named close controls. |
+| QA-002 | Superseded | 当时验证了 truth narrative 与 cash adjustment dialog；JRN-001 现只保留 truth narrative，cash adjustment 写入入口已移除。 |
 | QA-003 | Fixed | List, dashboard, detail, and close form agree on AAPL remaining quantity `1` and average price `110`; the close limit is `1`. |
 | QA-004 | Fixed | Create and event flows use the legacy position public ID as the canonical browser route; truth UUIDs resolve back to it. |
 | QA-005 | Fixed | Local startup runs Alembic before the API; SQLite URLs resolve consistently from `backend/`. |
@@ -59,7 +61,7 @@ CASH_ADJUSTMENT  -1040  MANUAL_CASH_ADJUSTMENT
 Expected:
 
 - Editing name, broker, type, currency, or note must not submit or mutate cash fields.
-- Manual cash/NAV calibration must be an explicit, isolated action with confirmation.
+- 当前 Beta 不提供 manual cash/NAV calibration；资金或交易纠错必须走 release contract 允许的关联 reversal/void。
 
 Code references:
 
@@ -74,7 +76,7 @@ Steps:
 
 1. Create a new position.
 2. Open its detail page.
-3. Click `编辑 truth narrative` or `记录 cash adjustment`.
+3. Click `编辑 truth narrative`（历史版本还包含 `记录 cash adjustment`，该入口已由 JRN-001 移除）。
 
 Actual:
 
@@ -84,7 +86,7 @@ Actual:
 
 Expected:
 
-- Truth narrative and cash adjustment modals must render outside the legacy-only branch.
+- 当前只要求 truth narrative modal 在 truth lifecycle 下可用；cash adjustment modal 不得存在。
 
 Code references:
 

@@ -1,5 +1,7 @@
 # 市场数据接入附录
 
+> **Release 边界（2026-07-17）**：本文是已延期 Market capability 的内部实现附录，不代表交易日志 Beta 已开放行情能力。Beta 部署的 allowlist 为空，不导入或注册真实 Market handler，不要求 provider secret；已知 Market API 返回 `404 FEATURE_DISABLED`，worker 不领取 Market job。只有通过 active plan 中的重新启用门后，下述实现细节才可成为用户可用能力。
+
 本文档只描述当前仓库中的真实实现，对应 `backend/services/market_data_service.py`、`backend/services/market_data_orchestrator.py`、`backend/services/provider_router.py` 与 `backend/services/providers/*`。
 
 如果文档与代码不一致，以代码为准，再回头修正文档。

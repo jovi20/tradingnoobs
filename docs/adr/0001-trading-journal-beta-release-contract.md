@@ -29,7 +29,7 @@ Existing accounts with a null or non-USD currency are never converted automatica
 The adapter allowlist contains `GENERIC_BOOTSTRAP` and `IBKR_FLEX_XML_V1`.
 
 - Generic CSV/XLSX is a one-time bootstrap and does not trust arbitrary file trade IDs.
-- IBKR Flex XML is a local-file adapter. It may eventually accept duplicate, overlapping, and incremental statements for one immutable source binding using `ibExecID`; it never reads a Flex token or makes a network request.
+- IBKR Flex XML is a local-file adapter. Once JRN-013 through JRN-015 are complete, it must accept duplicate, overlapping, and incremental statements for one immutable source binding using `ibExecID`. The first binding-effective confirm establishes that binding: it either applies at least one effective execution or accepts a zero-execution statement with proven flat-boundary evidence and valid coverage. The latter completes with durable binding/coverage state but no canonical trade fact. It never reads a Flex token or makes a network request.
 
 Both adapters use a 10 MiB file limit, 5,000 rows/executions, a 24-hour preview TTL, and 30-day retention for terminal normalized preview rows. The IBKR adapter additionally limits each owner to two nonterminal sessions and ten uploads per 600 seconds. These source-specific limits do not silently constrain the generic adapter.
 

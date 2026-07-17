@@ -6,7 +6,7 @@
 
 Trading Noobs 是一个交易记录、复盘、风控和分析系统。它面向主动交易用户，核心目标是把交易从“流水记录”提升为可复盘、可审计、可导出、可追踪风险的决策工作台。
 
-当前实施以 [Trading Journal Launch-Safe Development Plan](./superpowers/plans/2026-07-16-dev-trading-journal-development-plan.md) 为准；完整 gap 文档只作为审计基线和风险登记册。
+当前实施唯一以 [Trading Journal Launch-Safe Development Plan](./superpowers/plans/2026-07-16-dev-trading-journal-development-plan.md) 为 active plan；完整 gap 文档只作为审计基线和风险登记册。
 
 ## 项目定位
 
@@ -32,7 +32,7 @@ Trading Noobs 是一个交易记录、复盘、风控和分析系统。它面向
 | Insights / AI | 代码切片存在；Beta 标记为 `DEFERRED_BY_SCOPE` 并默认关闭。 |
 | Market Data | last-known quote 与日线代码切片存在；交易日志 Beta 的按需和自动行情全部标为 `DEFERRED_BY_SCOPE`。 |
 | Admin Operations | Beta 只保留用户支持、jobs 与必要 ops；不扩完整 Admin route family。 |
-| Reporting / Import | 通用一次性 bootstrap 与 `IBKR_FLEX_XML_V1` source-bound 文件增量 Import 是 active plan 核心任务；在线 Broker Sync 与 PDF 默认关闭。 |
+| Reporting / Import | 通用一次性 bootstrap 与 `IBKR_FLEX_XML_V1` source-bound 文件增量 Import 是 active plan 后续核心任务；IBKR 重复、重叠和增量确认只在 `JRN-013` 至 `JRN-015` 实现，当前尚未开放。在线 Broker Sync 与 PDF 默认关闭。 |
 
 ## 历史阶段切片
 
@@ -49,18 +49,18 @@ P0-P19 阶段计划已经归档，详见 [superpowers/plans/archive/README.md](.
 
 | 风险 | 说明 | 当前策略 |
 |------|------|----------|
-| 当前 WIP 尚未冻结 | Broker/Market、frontend 重构、迁移和 journal 变更混在大型 dirty tree；四个新 migration 仍未跟踪。 | `JRN-000` 先分类 checkpoint，并采用 `IN_CHAIN_DISABLED` 的 `9cad10111213` migration baseline。 |
+| JRN-001 尚未关闭 | `JRN-000` 已完成逐路径 disposition、checkpoint 和 `IN_CHAIN_DISABLED` 的 `9cad10111213` migration baseline；JRN-001 实现仍在 final verification/review。 | 只在形成稳定 scoped checkpoint、完成最终验证并通过独立评审后关闭 JRN-001。 |
 | 交易日志仍有发布阻断 | 导入、账务、现金硬删除、凭据、双写和恢复证据尚未闭环。 | 只执行当前 trading-journal active plan，完成后再进入 invite-only Beta 决策。 |
 | legacy 路径仍存在 | `Position / TradeBatch / Transaction / AssetMetadata / DailySnapshot` 仍支撑部分迁移、fallback、Dashboard、导入和账户流水路径。 | 先隔离和标记边界，再逐步删除。 |
 | `backend/models.py` 仍集中 | 模型还没有物理拆分。 | `DEFERRED_BY_SCOPE`；等会计和 truth/legacy 语义稳定后再评估。 |
 | 前端 raw legacy DTO 仍有 allowlist | 部分页面还使用 legacy DTO 作为 migration/support 或 bridge。 | 新页面不继续扩张 raw DTO；逐步迁到 read-model adapter/generated contracts。 |
 | Staging 还未实际部署验证 | 历史 P19 本地证据不能证明真实 PostgreSQL/backup。 | 先完成 M0-M2；真实 staging 是 `JRN-021`。 |
-| 主应用 CI/CD 尚未建立 | 已删除旧 GitHub Pages workflow；当前还没有覆盖 backend/frontend 的真实 CI/CD。 | `JRN-002` 当前 P0 mandatory。 |
+| 主应用 CI/CD 尚未建立 | 当前没有满足 active plan 的 backend/frontend/PostgreSQL mandatory CI；工作树中部署 workflow 或脚本的用户处置不属于 JRN-001 成果。 | `JRN-002` 负责建立可复现的 mandatory CI。 |
 
 ## 后续路线图
 
-1. `WIP_BASELINE`：分类当前 dirty tree，固定 `9cad10111213` migration baseline 和 optional-code disposition，形成可复验 checkpoint。
-2. `SAFE_BASELINE`：冻结 invite-only、单币种交易日志范围，建立强制 feature gates、PostgreSQL CI 和租户/安全边界。
+1. `WIP_BASELINE`：`JRN-000` 已完成，当前 checkpoint 固定 `9cad10111213` migration baseline 和 optional-code disposition。
+2. `SAFE_BASELINE`：JRN-001 正在 final verification/review；批准后再由 JRN-002 至 JRN-004 建立 PostgreSQL CI、invite-only auth 和租户/安全边界。
 3. `DATA_SAFE`：完成单币种会计、canonical 单事务写入、不可变现金/交易纠错、通用 bootstrap 和 source-bound 重叠增量 Import。
 4. `JOURNAL_COMPLETE`：让 derived view 达到 freshness/recovery 结果门，统一 Timeline/Lifecycle/realized Dashboard，并交付 canonical 数据导出；worker 只可作为非权威加速器。
 5. `BETA_READY`：完成生产 migration gate、PostgreSQL backup/restore、真实 staging 和浏览器主链验收。

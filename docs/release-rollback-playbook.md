@@ -1,7 +1,26 @@
 # Release And Rollback Playbook
 
-更新时间：2026-06-11
+> **范围说明（2026-07-17）**：只有下面的 JRN-000/JRN-001 rollback addendum 属于当前收口边界；其余 P11-P18 内容是 `SUPERSEDED` 历史记录，不能作为当前交易日志 Beta 的启用或凭据配置 runbook。当前唯一 active plan 是 [2026-07-16 trading-journal plan](./superpowers/plans/2026-07-16-dev-trading-journal-development-plan.md)。
+
+当前 addendum 更新：2026-07-17
+历史正文更新时间：2026-06-11
 当前执行分支：`dev`
+
+## JRN-000/JRN-001 Current Rollback Addendum
+
+当前状态：`JRN-000 COMPLETE`；`JRN-001 FINAL_VERIFICATION_REVIEW`。JRN-001 尚未完成，也不表示 Beta 已可发布。
+
+- JRN-000 已固定 Alembic baseline head `9cad10111213`。JRN-001 不新增 Alembic revision，因此回退 JRN-001 不执行 schema downgrade，也不能改写 JRN-000 migration chain。
+- 回退前先让 `DEPLOYMENT_CAPABILITY_ALLOWLIST` 保持为空，并保持 Broker network sync、Market、AI/Insights、PDF、risk cards 和 open registration 全部 hard-off。runtime flag 不能作为扩大 ceiling 的回退手段。
+- JRN-001 的机器合同 `backend/app_config/journal_beta_v1.json`、严格 loader、ADR、frontend generator 与 `frontend/lib/generated/release-contract.ts` 必须锁步回退；不得只回退生成文件或只回退后端合同。
+- capability router/secret/job/outbox 与 journal-only UI/API DTO 也必须按 scoped checkpoint 边界成组回退，避免出现 API、OpenAPI、前端和 producer 半开状态。
+- 回退后至少重跑：已知 optional path 的 `404 FEATURE_DISABLED`、未知 path 普通 404、JOURNAL Beta OpenAPI 不包含 optional route/DTO、Admin 与普通 settings secret 写入拒绝、Market/optional job 不领取且零新增 job/outbox side effect，以及 frontend navigation/settings/dashboard/timeline/lifecycle hard-off smoke。
+- 工作树中 deployment workflow、migration/start/backup 脚本的用户处置不属于 JRN-001 checkpoint，不能在回退记录中宣称为 JRN-001 成果或随 JRN-001 自动还原。
+- `IBKR_FLEX_XML_V1` 的重复、重叠、增量确认和 correction replay 只在 JRN-013 至 JRN-015 实现；JRN-001 回退只处理冻结合同与 capability boundary，不回退尚不存在的 Import 实现。
+
+---
+
+## Historical P11-P18 Playbook（SUPERSEDED）
 
 本 playbook 记录 P11-P18 后的可操作发布与回滚边界。目标不是替代测试，而是在发布窗口里快速判断“正常路径是什么、先切哪个开关、最后才回滚哪段提交”。
 

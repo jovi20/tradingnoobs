@@ -9,7 +9,7 @@
 
 JOURNAL Beta 当前关闭 Broker network sync、Market、AI/Insights、PDF export、risk cards 和 open registration。历史 runbook、旧路由、页面或 service 代码仍可能存在，但不能据此判断能力已启用，也不能作为当前凭据配置或可用接口说明。
 
-`IBKR_FLEX_XML_V1` 是 active plan 中 `JRN-013/JRN-014` 计划实现的本地文件 adapter，目前尚未实现；它不等同于在线 Broker Sync，不访问网络或读取 Broker 凭据。
+`IBKR_FLEX_XML_V1` 是 active plan 中 `JRN-013` 至 `JRN-015` 计划实现的本地文件 adapter，目前尚未实现；它不等同于在线 Broker Sync，不访问网络或读取 Broker 凭据。
 
 ## 推荐阅读顺序
 
@@ -67,7 +67,7 @@ JOURNAL Beta 当前关闭 Broker network sync、Market、AI/Insights、PDF expor
 | [superpowers/specs/2026-04-13-user-trust-metadata-contract.md](./superpowers/specs/2026-04-13-user-trust-metadata-contract.md) | 用户可见 trust metadata 契约。 |
 | [superpowers/specs/2026-04-13-timeline-review-inbox-contract.md](./superpowers/specs/2026-04-13-timeline-review-inbox-contract.md) | Timeline / Review Inbox 契约。 |
 | [superpowers/specs/2026-04-13-lifecycle-detail-contract.md](./superpowers/specs/2026-04-13-lifecycle-detail-contract.md) | Lifecycle Detail 契约。 |
-| [trade-record-sync-design.md](./trade-record-sync-design.md) | 未来通用 bootstrap、IBKR Flex source-bound 文件增量导入设计；`JRN-013/JRN-014` 尚未实现，在线 sync 延期。 |
+| [trade-record-sync-design.md](./trade-record-sync-design.md) | 未来通用 bootstrap、IBKR Flex source-bound 文件增量导入与 correction replay 设计；`JRN-013` 至 `JRN-015` 尚未实现，在线 sync 延期。 |
 | [superpowers/specs/platform-foundation-spec-v1.1-patched.md](./superpowers/specs/platform-foundation-spec-v1.1-patched.md) | 平台底座补丁版规格。 |
 | [superpowers/specs/frontend-experience-redesign-spec-v1.1-patched.md](./superpowers/specs/frontend-experience-redesign-spec-v1.1-patched.md) | 前端体验补丁版规格。 |
 

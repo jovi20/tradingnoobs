@@ -86,21 +86,14 @@ git pull --ff-only origin dev
 DOMAIN=dev.example.com
 DB_PASSWORD=<dev-only-strong-password>
 SECRET_KEY=<dev-only-random-secret>
-
-LLM_API_URL=https://api.openai.com/v1
-LLM_API_KEY=
-LLM_MODEL=gpt-4-turbo
-
-FINNHUB_API_KEY=
-BINANCE_API_KEY=
-BINANCE_API_SECRET=
+DEPLOYMENT_CAPABILITY_ALLOWLIST=
 ```
 
 要求：
 
 - `DB_PASSWORD` 不要复用 main。
 - `SECRET_KEY` 不要复用 main，否则 token/cookie 边界会混乱。
-- dev 可以先不配置外部 API key；P16 已有 degraded/freshness 显示，但真实行情质量会受环境限制。
+- 交易日志 Beta 的 capability allowlist 必须保持为空，不配置或注入 Market、Broker、AI 等 provider secret。
 
 ---
 
@@ -127,12 +120,7 @@ services:
       - CORS_ORIGINS=https://${DOMAIN:-localhost},http://${DOMAIN:-localhost}
       - ENV_NAME=staging
       - AUTO_CREATE_SCHEMA=false
-      - LLM_API_KEY=${LLM_API_KEY:-}
-      - LLM_API_URL=${LLM_API_URL:-https://api.openai.com/v1}
-      - LLM_MODEL=${LLM_MODEL:-gpt-4-turbo}
-      - FINNHUB_API_KEY=${FINNHUB_API_KEY:-}
-      - BINANCE_API_KEY=${BINANCE_API_KEY:-}
-      - BINANCE_API_SECRET=${BINANCE_API_SECRET:-}
+      - DEPLOYMENT_CAPABILITY_ALLOWLIST=
     networks:
       tradingnoobs: {}
       edge:
@@ -329,7 +317,6 @@ curl -I https://dev.example.com/api/auth/me
 - `/dashboard`
 - `/positions`
 - `/positions/new`
-- `/insights`
 - `/settings`
 - `/admin/jobs`
 
@@ -446,6 +433,6 @@ docker compose \
   up -d --build backend
 ```
 
-### 需要让 dev 使用真实行情或 LLM
+### Market、Broker 或 AI 能力
 
-在 `/opt/tradingnoobs-dev/.env` 单独配置 dev 的 key。不要直接复用 main 的生产 key，除非你明确接受 dev 环境调用真实额度和真实供应商。
+当前交易日志 Beta 不提供这些能力的 dev 启用捷径，也不要向该部署注入 provider key。重新启用属于 release change，必须先满足 active plan 的 provider、secret、runtime rollout、失败降级和人工批准门。

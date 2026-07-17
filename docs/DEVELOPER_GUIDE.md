@@ -8,13 +8,15 @@
 
 ## JOURNAL Beta release boundary
 
-> 当前 release availability 以 [active trading-journal plan](./superpowers/plans/2026-07-16-dev-trading-journal-development-plan.md) 和机器可读 release contract 为准，不能根据源码、旧路由或历史阶段完成记录推断。代码存在不等于 Beta 已启用。
+> 当前 release availability 唯一以 [active trading-journal plan](./superpowers/plans/2026-07-16-dev-trading-journal-development-plan.md) 和机器可读 release contract 为准，不能根据源码、旧路由或历史阶段完成记录推断。代码存在不等于 Beta 已启用。
+
+`JRN-000` 已完成 checkpoint；`JRN-001` 当前处于 final verification/review，尚未关闭，也不表示 Beta 已可发布。
 
 - `BROKER_SYNC`、`MARKET`、`AI_INSIGHTS`、`PDF_EXPORT`、`RISK_CARDS` 和 `OPEN_REGISTRATION` 当前均为 `DISABLED / DEFERRED`。对应 API、导航、设置、凭据写入和 job/outbox producer 不属于 JOURNAL Beta 可用面。
 - 可选能力必须同时满足外部 deployment allowlist 和数据库 runtime rollout；缺失部署 allowlist 时 ceiling 为空。数据库配置不能扩大 ceiling。
 - JOURNAL Beta 不执行 Broker 网络同步，不读取或要求 Broker、行情或 LLM 凭据。
-- `IBKR_FLEX_XML_V1` 是 `JRN-013/JRN-014` 计划实现的本地文件 adapter，不是在线 Broker Sync；截至本次更新尚未实现或开放。
-- 无邀请码的公开自助注册关闭；`/register` 保留给 invite-only onboarding，缺失或无效邀请码必须拒绝。邀请码存储、兑换与审计仍由 `JRN-003` 完成发布闭环。
+- `IBKR_FLEX_XML_V1` 是 `JRN-013` 至 `JRN-015` 计划实现的本地文件 adapter，不是在线 Broker Sync；重复、重叠、增量确认和 correction replay 截至本次更新均未实现或开放。
+- `/register` 路由模块已删除，`/api/auth/register` 也未注册；硬编码共享邀请码不能作为 invite-only onboarding。一次性哈希邀请码、兑换与审计由 `JRN-003` 完成后，才重新开放受控注册路径。
 
 ---
 
@@ -28,7 +30,7 @@
 - [superpowers/plans/2026-07-16-dev-trading-journal-development-plan.md](./superpowers/plans/2026-07-16-dev-trading-journal-development-plan.md) 是当前唯一 active implementation plan。
 - [superpowers/plans/archive/2026-06-11-dev-p18-chart-renderer-migration-plan.md](./superpowers/plans/archive/2026-06-11-dev-p18-chart-renderer-migration-plan.md) 已完成并归档，剩余 Recharts renderer 已迁移到内部 SVG renderer，并保持 `chart.v1` 数据契约稳定。
 - [superpowers/plans/archive/2026-06-11-dev-p19-release-readiness-plan.md](./superpowers/plans/archive/2026-06-11-dev-p19-release-readiness-plan.md) 是历史 release evidence；当前状态已由全量 gap 审计更新为 `NOT_READY_FOR_PRODUCTION`。
-- [release-rollback-playbook.md](./release-rollback-playbook.md) 是 truth writes、Timeline snapshot、legacy mutation guard 的发布与回滚手册。
+- [release-rollback-playbook.md](./release-rollback-playbook.md) 顶部包含当前 JRN-001 窄化 rollback addendum；其余 P11-P18 内容是已 supersede 的历史记录。
 - [vps-dev-parallel-deployment.md](./vps-dev-parallel-deployment.md) 说明已有 main VPS 部署时，如何在同一台 VPS 上隔离部署 `dev` staging。
 - [current-state-baseline.md](./current-state-baseline.md) 是 2026-04-05 历史审计快照，不再作为当前实现依据。
 - `顶层设计.md` 已降级为历史草案，当前仓库未跟踪。
@@ -109,14 +111,14 @@
 - `/daily`
 - `/login`
 
-`/insights`、风险卡和 PDF 导出页面代码可能仍留在仓库中，但当前必须隐藏或不可达。`/register` 是例外：它只承载 invite-only onboarding，不得提供无邀请码注册或“立即注册”宣传。
+`/insights`、风险卡和 PDF 导出代码可能仍留在仓库中，但当前必须隐藏或不可达；`/register` 页面路由模块已删除。
 
 前端 legacy DTO 边界：
 - 新功能不应直接从 `frontend/lib/api.ts` 引入 legacy `Position` / `TradeBatch` / `BatchCreate` / `Transaction`。
 - 当前允许的 raw legacy DTO 使用范围必须落在以下 allowlist 分组。
 - `migration_ui`：`app/(product)/positions/[id]/add-batch/page.tsx`、`app/(product)/positions/page.tsx`。
 - `create_sync_bridge`：`app/(product)/positions/new/page.tsx`。
-- `legacy_analytics`：`components/dashboard/MaeMfeScatterPlot.tsx`、`lib/adapters/chart-views.ts`。
+- `legacy_analytics`：`components/dashboard/MaeMfeScatterPlot.tsx`。其数据适配器只接受 MARKET capability 的独立分析 DTO，不再依赖 journal `Position` DTO。
 - `adapter_boundary`：`lib/adapters/trading.ts`。
 - `frontend/tests/legacy-ui-boundaries.test.mts` 会阻止 raw legacy trading DTO import 继续扩散。
 
@@ -137,8 +139,8 @@
 | Insights / AI | `代码存在 / Beta hard-off` | 历史 artifact-first、LLM 和页面代码保留为 deferred implementation evidence；API、UI、凭据和 job producer 当前关闭，不能描述为 Beta 已落地能力。 |
 | 异步任务 | `基础已落地` | Job model、outbox relay、worker CLI、business lock、idempotency、admin jobs UI/API 已落地。 |
 | 管理员运维 | `P17 已落地` | `/api/admin/ops/backups`、管理员晋升、密码重置、stale/failed job recovery metadata、force-cancel typed confirmation 和 `/admin/ops` 控制台已完成；PostgreSQL backup provider 未配置时返回 `409 BACKUP_PROVIDER_NOT_CONFIGURED`。 |
-| 市场数据 | `大型 WIP / Beta hard-off` | 类型化 provider registry、报价/日线、mapping、水位、job handlers 与前端 freshness 代码存在于当前未冻结 WIP，但尚未形成 JRN-000 checkpoint；交易日志 Beta 必须由 deny stub 关闭 route/secret/job/UI，不能描述为已发布能力。 |
-| Broker 同步 | `Beta hard-off` | 在线同步、网络访问、Token/credential 保存和后台 sync job 均关闭。`IBKR_FLEX_XML_V1` 仅是 `JRN-013/JRN-014` 计划中的本地文件 adapter，目前未实现。 |
+| 市场数据 | `代码已 checkpoint / Beta hard-off` | JRN-000 已记录 optional-code disposition；类型化 provider registry、报价/日线、mapping、水位、job handlers 与前端 freshness 代码存在不表示已发布。交易日志 Beta 由 capability boundary 关闭 route/secret/job/UI。 |
+| Broker 同步 | `Beta hard-off` | 在线同步、网络访问、Token/credential 保存和后台 sync job 均关闭。`IBKR_FLEX_XML_V1` 仅是 `JRN-013` 至 `JRN-015` 计划中的本地文件 adapter，目前未实现。 |
 | 风控预警 | `代码存在 / Beta hard-off` | 历史 P13 risk card 代码不属于 JOURNAL Beta 可用面；相关 API、Dashboard/Timeline 卡片和后台 producer 必须关闭。 |
 | PDF 导出 | `代码存在 / Beta hard-off` | 历史 P14 renderer、接口、按钮和 runbook 仅作为 deferred evidence；JOURNAL Beta 不开放 PDF 下载。 |
 
@@ -163,8 +165,8 @@
 | 实体 | 当前作用 |
 |------|----------|
 | `TradingPosition` | 新交易真相聚合，承载 position-level 状态、数量、PnL、费用。 |
-| `PositionEvent` | 新交易事件流，承载 OPEN / ADD / REDUCE / CLOSE / REVERSAL / DIVIDEND / MANUAL_ADJUSTMENT 等事实。 |
-| `AccountLedgerEntry` | 账户资金真相来源，承载 opening balance、realized PnL、dividend、manual cash adjustment 等。 |
+| `PositionEvent` | 新交易事件流，承载 release contract 允许的 OPEN / ADD / REDUCE / CLOSE / REVERSAL / DIVIDEND 等事实；存量 `MANUAL_ADJUSTMENT` 只作历史兼容读取。 |
+| `AccountLedgerEntry` | 账户 journal balance 的事实来源，承载 opening balance、realized PnL、dividend 及 release contract 允许的资金事件；存量 `CASH_ADJUSTMENT` 只作历史兼容读取，Beta 不提供新增入口。 |
 | `AssetMaster` | 新资产主数据。 |
 | `TradeInstrument` | 新交易标的 / instrument 层。 |
 | `DerivedTimelineSnapshot` | 派生 Timeline 事件快照。 |
@@ -293,12 +295,11 @@ npm run build
 
 优先级以 [TODO.md](./TODO.md) 为准。当前建议顺序：
 
-1. `JRN-000`：分类并 checkpoint 当前 WIP，固定 `9cad10111213` migration baseline 与 Broker/Market default-off disposition。
-2. `JRN-001`：冻结币种/标的/事件 release contract，并建立不可由 Admin 绕过的 deployment capability ceiling。
-3. `JRN-002`：固定运行环境并建立 PostgreSQL mandatory CI。
-4. `JRN-003`：关闭硬编码邀请和明文 Broker/Market/LLM release secret，完成 invite-only auth。
-5. `JRN-004`：补齐当前 account/strategy/position/event/ledger/note/idempotency 的 owner/tenant 负向边界，关闭 legacy import 越权面并冻结 future-resource harness；Import/source 新模型由各自创建任务验证。
-6. Step 0/M0 通过后再执行会计、canonical writer、通用 bootstrap 和 source-bound Import；真实 staging 位于 `JRN-021`，不是当前第一步。
+1. `JRN-000`：已完成 checkpoint，固定 `9cad10111213` migration baseline 与 Broker/Market default-off disposition。
+2. `JRN-001`：正在 final verification/review；通过稳定 checkpoint 和独立评审前不得标记完成。
+3. JRN-001 批准后，`JRN-002` 固定运行环境并建立 PostgreSQL mandatory CI，`JRN-003` 完成 invite-only auth 与 release secret 治理。
+4. `JRN-004`：补齐当前 account/strategy/position/event/ledger/note/idempotency 的 owner/tenant 负向边界，关闭 legacy import 越权面并冻结 future-resource harness；Import/source 新模型由各自创建任务验证。
+5. Step 0/M0 通过后再执行会计、canonical writer、通用 bootstrap；IBKR source-bound 重复、重叠、增量与 correction replay 只在 `JRN-013` 至 `JRN-015` 实现。真实 staging 位于 `JRN-021`。
 
 ---
 
