@@ -49,7 +49,7 @@ P0-P19 阶段计划已经归档，详见 [superpowers/plans/archive/README.md](.
 
 | 风险 | 说明 | 当前策略 |
 |------|------|----------|
-| JRN-001 尚未关闭 | `JRN-000` 已完成逐路径 disposition、checkpoint 和 `IN_CHAIN_DISABLED` 的 `9cad10111213` migration baseline；旧 JRN-001 checkpoint 已由三路 `CHANGES_REQUIRED` supersede，修复版仍在 final verification/review。 | 只在 replacement scoped checkpoint 完成完整验证并取得同一 SHA 独立批准后关闭 JRN-001。 |
+| JRN-002 至 004 尚未关闭 | `JRN-000/001` 已完成；JRN-001 replacement checkpoint `1c382ce` 已取得同一 SHA 双路独立批准。可复现 CI、invite-only auth 和完整 tenant matrix 仍待实现。 | JRN-002/003 并行，随后收口 JRN-004；三项完成前不进入 M1 会计实现。 |
 | 交易日志仍有发布阻断 | 导入、账务、现金硬删除、凭据、双写和恢复证据尚未闭环。 | 只执行当前 trading-journal active plan，完成后再进入 invite-only Beta 决策。 |
 | legacy 路径仍存在 | `Position / TradeBatch / Transaction / AssetMetadata / DailySnapshot` 仍被部分迁移兼容读取、Dashboard 和账户流水路径引用；未注册 historical Import parser 也引用其中若干模型，但不存在可达 Import 路径。 | 先隔离和标记边界，再逐步删除。 |
 | `backend/models.py` 仍集中 | 模型还没有物理拆分。 | `DEFERRED_BY_SCOPE`；等会计和 truth/legacy 语义稳定后再评估。 |
@@ -60,7 +60,7 @@ P0-P19 阶段计划已经归档，详见 [superpowers/plans/archive/README.md](.
 ## 后续路线图
 
 1. `WIP_BASELINE`：`JRN-000` 已完成，当前 checkpoint 固定 `9cad10111213` migration baseline 和 optional-code disposition。
-2. `SAFE_BASELINE`：JRN-001 正在 final verification/review；批准后再由 JRN-002 至 JRN-004 建立 PostgreSQL CI、invite-only auth 和租户/安全边界。
+2. `SAFE_BASELINE`：JRN-001 已完成；由 JRN-002 至 JRN-004 继续建立 PostgreSQL CI、invite-only auth 和租户/安全边界。
 3. `DATA_SAFE`：完成单币种会计、canonical 单事务写入、不可变现金/交易纠错、通用 bootstrap 和 source-bound 重叠增量 Import。
 4. `JOURNAL_COMPLETE`：让 derived view 达到 freshness/recovery 结果门，统一 Timeline/Lifecycle/realized Dashboard，并交付 canonical 数据导出；worker 只可作为非权威加速器。
 5. `BETA_READY`：完成生产 migration gate、PostgreSQL backup/restore、真实 staging 和浏览器主链验收。

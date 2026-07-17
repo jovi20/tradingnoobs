@@ -3,7 +3,7 @@
 计划日期：2026-07-16
 最后修订：2026-07-17
 执行分支：`dev`
-计划状态：`REVIEW_PENDING`
+计划状态：`REVIEWED_APPROVE_WITH_BLOCKERS`
 当前发布判断：`NOT_READY_FOR_PRODUCTION`
 目标发布形态：`INVITE_ONLY_TRADING_JOURNAL_BETA`
 
@@ -16,7 +16,7 @@
 
 本文不要求逐项实现原 gap。未进入本 release profile 的能力统一记为 `DEFERRED_BY_SCOPE`，不能记为 `IMPLEMENTED` 或 `CLOSED`。
 
-`REVIEW_PENDING` 表示 2026-07-17 的 source-bound incremental Import 修订及后续首次零成交 binding-effective 澄清尚未取得覆盖当前精确 plan blob 的双路独立批准；旧版 plan verdict 不自动沿用。即使计划随后取得批准，也只批准开发计划，不表示功能已实现或产品可发布。所有 `Beta 阻断=是` 的任务与 JRN-021 人工批准仍是 release blocker。
+`REVIEWED_APPROVE_WITH_BLOCKERS` 表示 2026-07-17 的 source-bound incremental Import 修订及后续首次零成交 binding-effective 澄清，已随 JRN-001 精确 checkpoint 取得覆盖该语义 plan blob 的双路独立批准；旧版 plan verdict 不自动沿用。该状态只批准开发计划，不表示后续功能已实现或产品可发布。所有 `Beta 阻断=是` 的任务与 JRN-021 人工批准仍是 release blocker。
 
 ## 2. 目标、架构判断与原则
 
@@ -594,6 +594,6 @@ JRN-000 必须先完成；之后 JRN-001 先行，JRN-002 与 JRN-003 可并行�
 - 代码现实复核确认现有 `BrokerExecution.idempotency_key` 只在 RAW 层跳重，IBKR parser 仍有不可信 ID fallback，且没有 source binding/fingerprint/coverage/canonical application/reconciliation；不得把本轮计划批准写成已实现。
 - JRN-001 代码预审确认 legacy `Position.exchange` 曾由 broker/`Imported` 填充，且共享 `AssetMetadata(symbol)` 无 owner；计划据此冻结 default-deny identity provenance、已有 truth 只读兼容和 system-owned shared metadata。normalized symbol 上限同步现有 PostgreSQL/legacy 列宽收敛为 50，扩宽必须先 migration 后升级合同。
 
-2026-07-16 版曾经过独立 reviewer 复核并取得 `APPROVE`。2026-07-17 source-bound revision 及后续首次零成交 binding-effective 澄清改变了产品合同、任务编号和发布闭包，任何旧 verdict 都不自动覆盖当前 plan blob。当前精确版本必须随 JRN-001 稳定 checkpoint 接受两路独立只读评审；评审所绑定的 commit、plan blob、finding 与最终 verdict 只记录在 JRN-001 checkpoint record，避免由计划正文自证批准。
+2026-07-16 版曾经过独立 reviewer 复核并取得 `APPROVE`。2026-07-17 source-bound revision 及后续首次零成交 binding-effective 澄清改变了产品合同、任务编号和发布闭包，任何旧 verdict 都不自动覆盖修订后的 plan blob。修订版已随 JRN-001 稳定 checkpoint 接受两路独立只读评审；评审所绑定的 commit、获批 plan blob、finding 与最终 verdict 记录在 JRN-001 checkpoint record，避免由计划正文自证批准。
 
-当前计划状态：`REVIEW_PENDING`。当前精确 plan blob 取得双路独立批准后才可恢复为 `REVIEWED_APPROVE_WITH_BLOCKERS`；所有 `Beta 阻断=是` 的任务完成并取得 JRN-021 人工批准前，发布判断保持 `NOT_READY_FOR_PRODUCTION`。
+当前计划状态：`REVIEWED_APPROVE_WITH_BLOCKERS`。该状态转换只更新评审元数据，不改变已获批 plan blob 的产品语义；所有 `Beta 阻断=是` 的任务完成并取得 JRN-021 人工批准前，发布判断保持 `NOT_READY_FOR_PRODUCTION`。

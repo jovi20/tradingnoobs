@@ -11,7 +11,7 @@
 - 旧 P0-P19 只代表历史阶段切片归档，不代表产品或生产闭环完成。
 - 当前唯一 active lane 是 launch-safe 交易日志；source-bound IBKR statement 文件 Import 属于 M1，在线 Broker Sync、量化、Market Data、AI、PDF 和风险卡不进入首批执行。
 - 当前仍是 `NOT_READY_FOR_PRODUCTION`，不得直接部署真实用户环境。
-- `JRN-000` 已完成 checkpoint；`JRN-001` 的 `cf4766de`、`7ec29b1`、`8b5f37d`、`07d4012`、`43ecefa` 与 `4179d6c` checkpoint 均已因独立 `CHANGES_REQUIRED` supersede。新 checkpoint `1c382ce` 已完成精确归档全量、双视口浏览器与真实 PostgreSQL 16 验证，正在等待同一 SHA 的全新独立评审，尚未完成。
+- `JRN-000` 与 `JRN-001` 已完成。JRN-001 的最终 implementation checkpoint `1c382ce` 已通过精确归档全量、双视口浏览器、真实 PostgreSQL 16 验证，并取得同一 SHA 两路全新独立 `APPROVE`；六个更早 checkpoint 均已 supersede，完整历史见 checkpoint record。
 - `JRN-001` 不新增 Alembic revision，migration head 继续是 `9cad10111213`；其最终证据必须绑定稳定 scoped checkpoint。
 - IBKR 文件的重复、重叠、增量导入与 correction replay 只在 `JRN-013` 至 `JRN-015` 实现，当前合同冻结不代表功能已落地。
 - 本轮不自动 merge 到 `main`、不创建 PR、不打 tag；这些属于后续显式操作。
@@ -22,12 +22,12 @@
 | 优先级 | 状态 | 任务 | 退出条件 | 参考 |
 |--------|------|------|------|------|
 | P0 | `COMPLETE` | `JRN-000` WIP、migration chain 与 checkpoint | 已有逐路径 disposition 和 checkpoint；四个 migration 已进入 `9cad10111213` baseline；optional runtime 默认不可达。 | Active plan Step 0 |
-| P0 | `FINAL_VERIFICATION_REVIEW` | `JRN-001` release contract 与 capability ceiling | 冻结币种/标的/事件/Import gate 合同；禁用能力和未实现 Import 不可由 API、Admin flag、secret、job 或旧 UI 绕过；replacement checkpoint 必须通过完整验证、真实浏览器门禁与同 SHA 独立评审。 | Active plan M0 |
-| P0 | `PENDING_JRN_001` | `JRN-002` 可复现基线与 PostgreSQL CI | 干净环境、本地/CI 同命令、PostgreSQL 空库 migration 与 integration 可重跑。 | Active plan M0 |
-| P0 | `PENDING_JRN_001` | `JRN-003` invite-only auth 与 release secret | 一次性邀请码、限流、弱密钥 fail-fast；普通 setting 无明文 Broker/Market/LLM secret。 | Active plan M0 |
+| P0 | `COMPLETE` | `JRN-001` release contract 与 capability ceiling | `1c382ce` 已通过完整验证、真实浏览器门禁与同 SHA 双路独立评审；合同及禁用边界已冻结。 | Active plan M0 |
+| P0 | `READY_PARALLEL` | `JRN-002` 可复现基线与 PostgreSQL CI | 干净环境、本地/CI 同命令、PostgreSQL 空库 migration 与 integration 可重跑。 | Active plan M0 |
+| P0 | `READY_PARALLEL` | `JRN-003` invite-only auth 与 release secret | 一次性邀请码、限流、弱密钥 fail-fast；普通 setting 无明文 Broker/Market/LLM secret。 | Active plan M0 |
 | P0 | `PENDING_JRN_002_003` | `JRN-004` tenant/owner 边界封闭 | 当前 account/strategy/position/event/ledger/note/idempotency 两用户矩阵无越权；legacy import 已 owner-guard 或关闭；future resource harness 冻结。 | Active plan M0 |
 
-JRN-000 已完成；当前只收口 JRN-001 的稳定 checkpoint、最终验证和独立评审。JRN-001 批准后，JRN-002/003 可并行，JRN-004 后收口。五项全部通过后，按 active plan 进入会计、canonical writer、不可变纠错和通用 bootstrap；source-bound IBKR 实现仍严格等待 JRN-013 至 JRN-015。不得提前做新页面、模型拆分、在线 Broker Sync、Market、AI 或量化功能。
+JRN-000/001 已完成；当前可并行执行 JRN-002/003，JRN-004 等两者基础可用后收口。五项全部通过后，按 active plan 进入会计、canonical writer、不可变纠错和通用 bootstrap；source-bound IBKR 实现仍严格等待 JRN-013 至 JRN-015。不得提前做新页面、模型拆分、在线 Broker Sync、Market、AI 或量化功能。
 
 ## 暂不做
 

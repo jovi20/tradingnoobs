@@ -3,9 +3,10 @@
   "record_kind": "JRN_TASK_CHECKPOINT",
   "task_id": "JRN-001",
   "branch": "dev",
-  "status": "REVIEW_PENDING",
+  "status": "COMPLETE",
   "release_status": "NOT_READY_FOR_PRODUCTION",
-  "recorded_at": "2026-07-17T20:19:52+08:00",
+  "recorded_at": "2026-07-17T20:34:55+08:00",
+  "completed_at": "2026-07-17T20:34:55+08:00",
   "implementation_base_commit": "430e37ff691ad0064ef71996fe804ec26a65b1d8",
   "implementation_checkpoint_commit": "1c382ce6b1f6eaf2d18e8430400895af76482fcb",
   "record_commit_resolution": "git log -1 --format=%H -- docs/superpowers/plans/2026-07-17-jrn-001-checkpoint-record.json",
@@ -18,6 +19,13 @@
     "typed_loader_blob": "7d0348d32fbca163b118ce8bee724a3a14ab9cab",
     "adr_blob": "d0ae68b5dcc3849dd0353092e61b893ec2fb5ee5",
     "generated_frontend_contract_blob": "d49e15723648e3503f5afc8b140dc8bd60e38868"
+  },
+  "approval_metadata": {
+    "approved_semantic_plan_blob": "b5ee6c8afd8d6262231223536fc163d4ca825bbc",
+    "post_approval_status_plan_blob": "dd053322d2f3688bf32568f502d4c228ad51c375",
+    "status_transition": "REVIEW_PENDING -> REVIEWED_APPROVE_WITH_BLOCKERS",
+    "semantic_change": false,
+    "note": "The post-approval plan edit changes only review-state narration after the recorded approvals; scope, product contracts, task definitions, dependencies, and gates are unchanged."
   },
   "scope_summary": [
     "Freeze the journal Beta machine contract and typed parity checks, including repeat/overlap/incremental IBKR source-bound semantics without claiming the later implementation exists.",
@@ -404,9 +412,32 @@
   "independent_review_gate": {
     "required_approvals": 2,
     "reviewed_commit_must_equal": "1c382ce6b1f6eaf2d18e8430400895af76482fcb",
-    "status": "PENDING",
-    "reviews": [],
+    "status": "APPROVED",
+    "reviews": [
+      {
+        "reviewer": "jrn001_1c3_backend_security_review",
+        "reviewed_commit": "1c382ce6b1f6eaf2d18e8430400895af76482fcb",
+        "evidence_commit": "8a73fc344911bffb8315eaeaccb62875b84412f6",
+        "verdict": "APPROVE",
+        "findings": [],
+        "residuals": [
+          "JRN-004 owns the remaining strategy and nested-resource owner matrix.",
+          "JRN-007/JRN-008 own truth-native OPEN, same-side database uniqueness, account/position locks, event ordering, ordinary backdate, and permanent financial idempotency."
+        ]
+      },
+      {
+        "reviewer": "jrn001_1c3_crosslayer_evidence_review",
+        "reviewed_commit": "1c382ce6b1f6eaf2d18e8430400895af76482fcb",
+        "evidence_commit": "8a73fc344911bffb8315eaeaccb62875b84412f6",
+        "verdict": "APPROVE",
+        "findings": [],
+        "residuals": [
+          "The Playwright routes prove the real Next UI and network contract with mocked API responses; browser-to-PostgreSQL staging remains JRN-002/JRN-021.",
+          "Clean dependency reconstruction and separately retained command logs remain JRN-002 responsibilities."
+        ]
+      }
+    ],
     "invalidation_rule": "Any implementation or semantic plan change creates a new checkpoint SHA and invalidates every earlier verdict."
   },
-  "next_task_gate": "JRN-002 MUST NOT START until this exact replacement checkpoint receives two independent APPROVE verdicts and this record is updated."
+  "next_task_gate": "SATISFIED: JRN-002 and JRN-003 may start in parallel; JRN-004 remains gated on both."
 }
