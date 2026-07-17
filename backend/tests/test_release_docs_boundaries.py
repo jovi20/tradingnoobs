@@ -95,6 +95,18 @@ class ReleaseDocumentationBoundaryTests(unittest.TestCase):
         self.assertNotIn("`/register` 保留给 invite-only onboarding", frontend_readme)
         self.assertNotIn("`/register` 是例外", developer_guide)
 
+    def test_active_docs_do_not_offer_public_migration_fallback_headers(self):
+        developer_guide = (self.repository_root / "docs" / "DEVELOPER_GUIDE.md").read_text(
+            encoding="utf-8"
+        )
+        rollback_addendum = (
+            self.repository_root / "docs" / "release-rollback-playbook.md"
+        ).read_text(encoding="utf-8").split("## Historical P11-P18 Playbook", 1)[0]
+
+        self.assertIn("`X-Migration-Fallback` 不在 OpenAPI 中且不能授予迁移权限", developer_guide)
+        self.assertNotIn("只有显式 `X-Migration-Fallback", developer_guide)
+        self.assertIn("不得恢复普通 `/api/positions` 路由上的 `X-Migration-Fallback`", rollback_addendum)
+
 
 if __name__ == "__main__":
     unittest.main()

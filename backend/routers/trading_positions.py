@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app_config.release_contract import (
+    JOURNAL_BETA_CONTRACT,
     ReleaseContractViolation,
     release_violation_detail,
     require_release_currency,
@@ -33,6 +34,7 @@ from services.auth_service import get_current_user
 from services.capability_service import is_effective_capability_enabled
 from services.idempotency_service import begin_idempotent_request, complete_idempotent_request
 from services.outbox_service import enqueue_position_event_created_outbox
+from services.position_instrument_projection_service import project_exact_truth_instrument
 from services.trading_position_read_service import build_trading_position_lifecycle_payload, resolve_truth_position_by_public_id
 from services.trading_position_write_service import append_truth_trade_event, reverse_latest_truth_trade_event
 
@@ -74,6 +76,20 @@ def _require_same_currency_financial_fact(
             },
         )
     return normalized_currency, normalized_fee_currency
+
+
+def _require_exact_truth_instrument_provenance(truth_position) -> None:
+    if project_exact_truth_instrument(truth_position) is not None:
+        return
+    violation = ReleaseContractViolation(
+        JOURNAL_BETA_CONTRACT.instruments.legacy_unproven_error,
+        "trading_position.instrument",
+        truth_position.public_id,
+    )
+    raise HTTPException(
+        status_code=422,
+        detail=release_violation_detail(violation),
+    )
 
 
 def _lifecycle_response_content(
@@ -266,6 +282,8 @@ def create_trading_position_trade_event(
     if not truth_position:
         raise HTTPException(status_code=404, detail="Trading position not found")
 
+    _require_exact_truth_instrument_provenance(truth_position)
+
     currency, fee_currency = _require_same_currency_financial_fact(
         truth_position,
         currency=payload.currency,
@@ -333,6 +351,8 @@ def reverse_trading_position_trade_event(
     if not truth_position:
         raise HTTPException(status_code=404, detail="Trading position not found")
 
+    _require_exact_truth_instrument_provenance(truth_position)
+
     event = db.query(PositionEvent).filter(
         PositionEvent.public_id == event_public_id,
         PositionEvent.position_id == truth_position.id,
@@ -376,6 +396,8 @@ def create_trading_position_dividend(
     truth_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
     if not truth_position:
         raise HTTPException(status_code=404, detail="Trading position not found")
+
+    _require_exact_truth_instrument_provenance(truth_position)
 
     currency, _ = _require_same_currency_financial_fact(
         truth_position,

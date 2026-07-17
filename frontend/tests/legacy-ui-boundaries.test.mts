@@ -57,12 +57,13 @@ test('positions list labels expanded batch rows as migration/support context', (
   assert.match(source, /记录减仓或平仓/)
 })
 
-test('add-batch page visibly distinguishes truth writes from legacy migration fallback', () => {
+test('add-batch page exposes truth writes without a legacy migration fallback', () => {
   const source = readFrontendFile('app/(product)/positions/[id]/add-batch/page.tsx')
 
   assert.match(source, /审计事件写入/)
   assert.match(source, /权威审计生命周期/)
-  assert.match(source, /旧批次记录/)
+  assert.match(source, /旧版批次写入已从产品入口关闭/)
+  assert.doesNotMatch(source, /migrationFallback|X-Migration-Fallback|positionsAPI\.addBatch/)
 })
 
 test('raw legacy trading DTO imports stay inside migration and adapter boundaries', () => {

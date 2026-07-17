@@ -97,12 +97,12 @@ async function choose(page: Page, label: string, option: RegExp) {
 }
 
 async function fillTradeFields(page: Page, symbol: string) {
-    await page.getByPlaceholder('AAPL, SPY, BTC/USD').fill(symbol)
-    await page.getByPlaceholder('NASDAQ, NYSE, ARCA, COINBASE').fill(' coinbase ')
+    await page.getByRole('textbox', { name: '标的代码' }).fill(symbol)
+    await page.getByRole('textbox', { name: '交易所代码' }).fill(' coinbase ')
     await choose(page, '核心类型', /加密资产/)
     await choose(page, '市场', /加密市场/)
-    await page.getByPlaceholder('0.00').fill('66000')
-    await page.getByPlaceholder('0', { exact: true }).fill('0.5')
+    await page.getByRole('spinbutton', { name: '入场价格' }).fill('66000')
+    await page.getByRole('spinbutton', { name: /^数量/ }).fill('0.5')
 }
 
 async function expectNoHorizontalOverflow(page: Page) {
@@ -139,7 +139,7 @@ test('complete identity preserves hedge-by-direction and ADD writes truth only',
             await fulfillJson(route, { data: {}, meta: {} })
             return true
         }
-        if (url.pathname.includes('/batches')) {
+        if (url.pathname.includes('/batches') && route.request().method() === 'POST') {
             legacyBatchWrites.push(url.pathname)
             await fulfillJson(route, {}, 500)
             return true
@@ -153,6 +153,8 @@ test('complete identity preserves hedge-by-direction and ADD writes truth only',
 
     await page.goto('/positions/new')
     await expect(page.getByRole('heading', { name: '新增交易' })).toBeVisible()
+    await expect(page.getByRole('group', { name: '方向' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '做多' })).toHaveAttribute('aria-pressed', 'true')
     await fillTradeFields(page, ' btc/usd ')
 
     await expect.poll(() => checkRequests.length).toBeGreaterThan(0)
@@ -169,14 +171,19 @@ test('complete identity preserves hedge-by-direction and ADD writes truth only',
     await expect(page.getByRole('button', { name: '创建交易' })).toBeDisabled()
 
     const beforeShort = checkRequests.length
-    await page.getByRole('button', { name: '做空' }).click()
+    await page.getByRole('button', { name: '做空' }).focus()
+    await page.keyboard.press('Enter')
     await expect.poll(() => checkRequests.length).toBeGreaterThan(beforeShort)
+    await expect(page.getByRole('button', { name: '做空' })).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByRole('button', { name: '做多' })).toHaveAttribute('aria-pressed', 'false')
     await expect(page.getByText('检测到已有 BTC/USD 持仓')).toBeHidden()
     await expect(page.getByRole('button', { name: '创建交易' })).toBeEnabled()
 
     const beforeLong = checkRequests.length
-    await page.getByRole('button', { name: '做多' }).click()
+    await page.getByRole('button', { name: '做多' }).focus()
+    await page.keyboard.press('Space')
     await expect.poll(() => checkRequests.length).toBeGreaterThan(beforeLong)
+    await expect(page.getByRole('button', { name: '做多' })).toHaveAttribute('aria-pressed', 'true')
     await expect(page.getByText('检测到已有 BTC/USD 持仓')).toBeVisible()
 
     const beforeAdd = checkRequests.length
@@ -196,6 +203,8 @@ test('complete identity preserves hedge-by-direction and ADD writes truth only',
 test('non-ASCII is rejected and a duplicate-OPEN race recovers into ADD', async ({ page }) => {
     const checkRequests: URL[] = []
     const createBodies: unknown[] = []
+    const truthWrites: unknown[] = []
+    const legacyBatchWrites: string[] = []
     let duplicateWon = false
 
     await installApi(page, async (route, url) => {
@@ -216,6 +225,23 @@ test('non-ASCII is rejected and a duplicate-OPEN race recovers into ADD', async 
             }, 409)
             return true
         }
+        if (url.pathname === `/api/positions/${existingPosition.public_id}/truth-lifecycle`) {
+            await fulfillJson(route, {
+                data: { position_summary: { public_id: existingPosition.truth_position_public_id } },
+                meta: {},
+            })
+            return true
+        }
+        if (url.pathname === `/api/trading-positions/${existingPosition.truth_position_public_id}/events`) {
+            truthWrites.push(route.request().postDataJSON())
+            await fulfillJson(route, { data: {}, meta: {} })
+            return true
+        }
+        if (url.pathname.includes('/batches') && route.request().method() === 'POST') {
+            legacyBatchWrites.push(url.pathname)
+            await fulfillJson(route, {}, 500)
+            return true
+        }
         return false
     })
 
@@ -227,7 +253,7 @@ test('non-ASCII is rejected and a duplicate-OPEN race recovers into ADD', async 
     expect(createBodies).toEqual([])
     expect(checkRequests).toEqual([])
 
-    await page.getByPlaceholder('AAPL, SPY, BTC/USD').fill(' btc/usd ')
+    await page.getByRole('textbox', { name: '标的代码' }).fill(' btc/usd ')
     await expect.poll(() => checkRequests.length).toBeGreaterThan(0)
     await page.getByRole('button', { name: '创建交易' }).click()
 
@@ -248,5 +274,15 @@ test('non-ASCII is rejected and a duplicate-OPEN race recovers into ADD', async 
     await expect(page.getByText('检测到已有 BTC/USD 持仓')).toBeVisible()
     await expect(page.getByRole('button', { name: '加仓到此仓位' })).toBeVisible()
     await expect(page.getByText('[object Object]')).toHaveCount(0)
+    await page.getByRole('button', { name: '加仓到此仓位' }).focus()
+    await page.keyboard.press('Enter')
+    await expect.poll(() => truthWrites.length).toBe(1)
+    expect(truthWrites[0]).toMatchObject({
+        event_type: 'ADD',
+        quantity: 0.5,
+        price: 66000,
+        currency: 'USD',
+    })
+    expect(legacyBatchWrites).toEqual([])
     await expectNoHorizontalOverflow(page)
 })

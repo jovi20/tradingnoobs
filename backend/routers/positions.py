@@ -2,7 +2,7 @@
 Trading Noobs Backend - Positions Router
 Handles Position CRUD and Batch operations
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
@@ -37,7 +37,7 @@ from models import (
 from schemas import (
     PositionCreate, PositionUpdate, PositionResponse, PositionListResponse,
     TradeBatchCreate, TradeBatchUpdate, TradeBatchResponse,
-    PositionStatusEnum, BatchTypeEnum,
+    PositionStatusEnum,
 )
 from models import TradingPosition, TradingPositionStatus
 from release_profile import RuntimeCapability
@@ -68,24 +68,6 @@ from services.trading_accounting_service import (
 router = APIRouter(prefix="/api/positions", tags=["positions"])
 logger = get_structured_logger("positions")
 
-LEGACY_BATCH_WRITE_FALLBACK_DESCRIPTION = (
-    "Migration fallback only. Use X-Migration-Fallback: legacy-batch-write to allow a legacy "
-    "batch create after a TradingPosition truth lifecycle exists."
-)
-LEGACY_REVIEW_WRITE_FALLBACK_DESCRIPTION = (
-    "Migration fallback only. Use X-Migration-Fallback: legacy-review-write to allow legacy "
-    "Position review field correction after a TradingPosition truth lifecycle exists."
-)
-LEGACY_POSITION_DELETE_FALLBACK_DESCRIPTION = (
-    "Migration fallback only. Use X-Migration-Fallback: legacy-position-delete to allow legacy "
-    "position hard delete after a TradingPosition truth lifecycle exists."
-)
-LEGACY_BATCH_EDIT_FALLBACK_DESCRIPTION = (
-    "Migration fallback only. Use X-Migration-Fallback: legacy-batch-edit to allow legacy batch "
-    "edit/delete after a TradingPosition truth lifecycle exists."
-)
-
-
 def _release_contract_value(callable_, *args, **kwargs):
     try:
         return callable_(*args, **kwargs)
@@ -102,9 +84,14 @@ def _enum_value(value):
 
 def _truth_position_is_financially_open(truth_position: TradingPosition) -> bool:
     """Conservatively derive slot occupancy from canonical accounting truth."""
+    if (
+        truth_position.quantity_opened is None
+        or truth_position.quantity_closed is None
+    ):
+        return True
     try:
-        quantity_opened = Decimal(str(truth_position.quantity_opened or 0))
-        quantity_closed = Decimal(str(truth_position.quantity_closed or 0))
+        quantity_opened = Decimal(str(truth_position.quantity_opened))
+        quantity_closed = Decimal(str(truth_position.quantity_closed))
         remaining_quantity = quantity_opened - quantity_closed
         if not all(
             quantity.is_finite()
@@ -236,7 +223,10 @@ def _position_response_payload(
             "planned_take_profit": position.planned_take_profit,
             "checklist_responses": position.checklist_responses,
             "checklist_completed_at": position.checklist_completed_at,
-            "drift_analysis": calculate_drift(position),
+            "drift_analysis": calculate_drift(
+                position,
+                direction=_position_direction(position, truth_position),
+            ),
         }
     )
     return payload
@@ -389,7 +379,11 @@ def recalculate_position(position: Position, db: Session):
         position.closed_at = None
 
 
-def calculate_drift(position: Position) -> dict:
+def calculate_drift(
+    position: Position,
+    *,
+    direction: PositionDirection | None = None,
+) -> dict:
     """
     Calculate drift between planned and actual execution.
     Returns a dict with drift analysis metrics.
@@ -411,6 +405,7 @@ def calculate_drift(position: Position) -> dict:
     actual_entry = float(position.average_entry_price) if position.average_entry_price else None
     planned_entry = float(position.planned_entry_price) if position.planned_entry_price else None
     planned_stop = float(position.planned_stop_loss) if position.planned_stop_loss else None
+    effective_direction = direction or position.direction
     
     # Calculate entry drift
     if actual_entry and planned_entry and planned_entry > 0:
@@ -420,8 +415,8 @@ def calculate_drift(position: Position) -> dict:
         drift["entry_drift_direction"] = "above" if entry_diff > 0 else "below" if entry_diff < 0 else "on_target"
         
         # For LONG, buying below plan is good; for SHORT, selling above plan is good
-        is_favorable = (position.direction == PositionDirection.LONG and entry_diff < 0) or \
-                       (position.direction == PositionDirection.SHORT and entry_diff > 0)
+        is_favorable = (effective_direction == PositionDirection.LONG and entry_diff < 0) or \
+                       (effective_direction == PositionDirection.SHORT and entry_diff > 0)
         
         abs_drift = abs(entry_drift_pct)
         if abs_drift <= 0.5:
@@ -438,21 +433,13 @@ def calculate_drift(position: Position) -> dict:
     
     # Calculate stop loss risk percentage
     if actual_entry and planned_stop and actual_entry > 0:
-        if position.direction == PositionDirection.LONG:
+        if effective_direction == PositionDirection.LONG:
             risk_pct = ((actual_entry - planned_stop) / actual_entry) * 100
         else:  # SHORT
             risk_pct = ((planned_stop - actual_entry) / actual_entry) * 100
         drift["stop_loss_risk_pct"] = round(risk_pct, 2)
     
     return drift
-
-
-def _legacy_truth_lifecycle_exists(db: Session, user_id: int, position: Position) -> bool:
-    truth_public_id = legacy_position_truth_public_id(position)
-    return db.query(TradingPosition.id).filter(
-        TradingPosition.public_id == truth_public_id,
-        TradingPosition.user_id == user_id,
-    ).first() is not None
 
 
 @router.get("", response_model=List[PositionListResponse])
@@ -744,11 +731,6 @@ async def create_position(
 async def update_position(
     position_id: str,
     position_data: PositionUpdate,
-    migration_fallback: str | None = Header(
-        default=None,
-        alias="X-Migration-Fallback",
-        description=LEGACY_REVIEW_WRITE_FALLBACK_DESCRIPTION,
-    ),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -762,28 +744,19 @@ async def update_position(
 
     legacy_review_fields = {"trade_review", "lessons", "rating"}
     if legacy_review_fields.intersection(update_data):
-        if _legacy_truth_lifecycle_exists(db, current_user.id, position) and migration_fallback != "legacy-review-write":
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    "Legacy review writes are migration-only once a TradingPosition truth lifecycle exists. "
-                    "Use the TradingPosition event narrative route for ordinary review and narrative edits."
-                ),
-            )
-    
-    # Handle Asset Metadata Update
-    for key, value in update_data.items():
-        setattr(position, key, value)
-    
-    db.commit()
-    db.refresh(position)
-    return _position_response_payload(
-        db,
-        position,
-        truth_position=resolve_truth_position_for_legacy(
-            db,
-            user_id=current_user.id,
-            legacy_position=position,
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Legacy review writes are disabled on public product routes. "
+                "Use the TradingPosition event narrative route for ordinary review and narrative edits."
+            ),
+        )
+
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=(
+            "Legacy position updates are disabled on public product routes. "
+            "Use canonical event, narrative, and lifecycle commands instead."
         ),
     )
 
@@ -791,11 +764,6 @@ async def update_position(
 @router.delete("/{position_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_position(
     position_id: str,
-    migration_fallback: str | None = Header(
-        default=None,
-        alias="X-Migration-Fallback",
-        description=LEGACY_POSITION_DELETE_FALLBACK_DESCRIPTION,
-    ),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -805,19 +773,13 @@ async def delete_position(
     if not position:
         raise HTTPException(status_code=404, detail="Position not found")
 
-    if _legacy_truth_lifecycle_exists(db, current_user.id, position) and migration_fallback != "legacy-position-delete":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Legacy position hard deletes are migration-only once a TradingPosition truth lifecycle exists. "
-                "Use audited truth void/archive semantics instead of deleting the legacy row from ordinary flows."
-            ),
-        )
-    
-    # Delete all batches first
-    db.query(TradeBatch).filter(TradeBatch.position_id == position.id).delete()
-    db.delete(position)
-    db.commit()
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=(
+            "Legacy position hard deletes are disabled on public product routes. "
+            "Use audited truth void/archive semantics instead of deleting the legacy row."
+        ),
+    )
 
 
 # ============== Batch Endpoints ==============
@@ -841,11 +803,6 @@ async def list_batches(
 async def add_batch(
     position_id: str,
     batch_data: TradeBatchCreate,
-    migration_fallback: str | None = Header(
-        default=None,
-        alias="X-Migration-Fallback",
-        description=LEGACY_BATCH_WRITE_FALLBACK_DESCRIPTION,
-    ),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -855,53 +812,18 @@ async def add_batch(
     if not position:
         raise HTTPException(status_code=404, detail="Position not found")
 
-    if _legacy_truth_lifecycle_exists(db, current_user.id, position) and migration_fallback != "legacy-batch-write":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Legacy batch writes are migration-only once a TradingPosition truth lifecycle exists. "
-                "Use the TradingPosition event route for ordinary add/reduce/close actions."
-            ),
-        )
-    
-    if position.status == PositionStatus.CLOSED:
-        raise HTTPException(status_code=400, detail="Cannot add batch to closed position")
-    
-    # PnL is assigned only by the centralized FIFO recalculation below.
-    if batch_data.type == BatchTypeEnum.EXIT:
-        if batch_data.quantity > position.total_quantity:
-            raise HTTPException(status_code=400, detail="Exit quantity exceeds position quantity")
-    
-    batch = TradeBatch(
-        position_id=position.id,
-        type=BatchType[batch_data.type.value],
-        price=batch_data.price,
-        quantity=batch_data.quantity,
-        time=batch_data.time,
-        reason=batch_data.reason,
-        emotion=batch_data.emotion,
-        confidence=batch_data.confidence,
-        pnl=None
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=(
+            "Legacy batch writes are disabled on public product routes. "
+            "Use the TradingPosition event route for ordinary add/reduce/close actions."
+        ),
     )
-    db.add(batch)
-    db.flush()
-    
-    # Recalculate position aggregates
-    recalculate_position(position, db)
-    
-    db.commit()
-    db.refresh(batch)
-    return batch
 
 
 @router.delete("/batches/{batch_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_batch(
     batch_id: str,
-    migration_fallback: str | None = Header(
-        default=None,
-        alias="X-Migration-Fallback",
-        description=LEGACY_BATCH_EDIT_FALLBACK_DESCRIPTION,
-    ),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -911,40 +833,19 @@ async def delete_batch(
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
     
-    position = batch.position
-
-    if _legacy_truth_lifecycle_exists(db, current_user.id, position) and migration_fallback != "legacy-batch-edit":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Legacy batch edits are migration-only once a TradingPosition truth lifecycle exists. "
-                "Use audited truth event reversal or adjustment flows for ordinary corrections."
-            ),
-        )
-    
-    # Prevent deleting the only entry batch
-    entry_count = len([b for b in position.batches if b.type == BatchType.ENTRY])
-    if batch.type == BatchType.ENTRY and entry_count <= 1:
-        raise HTTPException(status_code=400, detail="Cannot delete the only entry batch. Delete the position instead.")
-    
-    db.delete(batch)
-    db.flush()
-    
-    # Recalculate position aggregates
-    recalculate_position(position, db)
-    
-    db.commit()
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=(
+            "Legacy batch edits are disabled on public product routes. "
+            "Use audited truth event reversal or adjustment flows for ordinary corrections."
+        ),
+    )
 
 
 @router.patch("/batches/{batch_id}", response_model=TradeBatchResponse)
 async def update_batch(
     batch_id: str,
     batch_data: TradeBatchUpdate,
-    migration_fallback: str | None = Header(
-        default=None,
-        alias="X-Migration-Fallback",
-        description=LEGACY_BATCH_EDIT_FALLBACK_DESCRIPTION,
-    ),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -954,24 +855,13 @@ async def update_batch(
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
 
-    if _legacy_truth_lifecycle_exists(db, current_user.id, batch.position) and migration_fallback != "legacy-batch-edit":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Legacy batch edits are migration-only once a TradingPosition truth lifecycle exists. "
-                "Use audited truth event reversal or adjustment flows for ordinary corrections."
-            ),
-        )
-    
-    update_data = batch_data.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(batch, key, value)
-    
-    db.flush()
-    recalculate_position(batch.position, db)
-    db.commit()
-    db.refresh(batch)
-    return batch
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=(
+            "Legacy batch edits are disabled on public product routes. "
+            "Use audited truth event reversal or adjustment flows for ordinary corrections."
+        ),
+    )
 
 
 # ============== Helper Endpoints ==============

@@ -79,7 +79,7 @@
 - `/api/auth`
 - `/api/accounts`
 - `/api/accounts/{account_id}/transactions`
-- `/api/positions`：legacy 持仓/批次路径，当前保留为迁移与 fallback 路径；新建仓位会立即同步 `TradingPosition` 并返回 `truth_position_public_id`，当 legacy position 已有 truth lifecycle 时，普通 legacy batch create 默认拒绝，只有显式 `X-Migration-Fallback: legacy-batch-write` 才允许迁移回退写入；legacy review 字段写入默认拒绝，只有显式 `X-Migration-Fallback: legacy-review-write` 才允许迁移修正；legacy position hard delete 默认拒绝，只有显式 `X-Migration-Fallback: legacy-position-delete` 才允许迁移清理；legacy batch edit/delete 默认拒绝，只有显式 `X-Migration-Fallback: legacy-batch-edit` 才允许迁移修正。
+- `/api/positions`：legacy 持仓/批次读取与 create-and-sync 过渡路径；新建仓位会立即同步 `TradingPosition` 并返回 `truth_position_public_id`。普通产品路由上的 legacy review、position hard delete、batch create/edit/delete 全部 fail-closed，`X-Migration-Fallback` 不在 OpenAPI 中且不能授予迁移权限。受审计的 admin/CLI migration namespace 尚未实现，不能用隐藏 query/header 代替。
 - `/api/trading-positions`：truth lifecycle、允许的 truth trade event write、同币种 dividend 和 latest-event reversal；`manual adjustment` 兼容路径在 Beta 稳定拒绝且不写事实。
 - `/api/timeline/home`：Timeline 首页 read model，默认 `SNAPSHOT_ONLY`，由 `DerivedTimelineSnapshot` 驱动；optional AI artifact feed 不属于当前 Beta 可用面。
 - `/api/dashboard`

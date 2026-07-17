@@ -11,11 +11,16 @@ from sqlalchemy.orm import sessionmaker
 from database import Base, get_db
 from main import app
 from models import (
+    AccountLedgerEntry,
     AssetMaster,
     AssetMetadata,
     BatchType,
+    IdempotencyKey,
+    OutboxEvent,
     Position,
     PositionDirection,
+    PositionEvent,
+    PositionEventType,
     PositionStatus,
     TradeBatch,
     TradingAccount,
@@ -373,6 +378,61 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["win_rate"], 100.0)
 
+    def test_public_legacy_mutations_fail_closed_before_truth_sync(self):
+        legacy_position = self._seed_open_legacy_position()
+        self.assertEqual(self.db.query(TradingPosition).count(), 0)
+
+        requests = (
+            (
+                "patch",
+                f"/api/positions/{legacy_position.public_id}",
+                {"json": {"trade_review": "Public legacy review write"}},
+            ),
+            (
+                "delete",
+                f"/api/positions/{legacy_position.public_id}",
+                {},
+            ),
+            (
+                "post",
+                f"/api/positions/{legacy_position.public_id}/batches",
+                {
+                    "json": {
+                        "type": "ENTRY",
+                        "price": "190",
+                        "quantity": "1",
+                        "time": "2026-04-03T15:30:00+00:00",
+                    }
+                },
+            ),
+            (
+                "patch",
+                "/api/positions/batches/batch-open-msft",
+                {"json": {"price": "181"}},
+            ),
+            (
+                "delete",
+                "/api/positions/batches/batch-open-msft",
+                {},
+            ),
+        )
+
+        for method, path, kwargs in requests:
+            with self.subTest(method=method, path=path):
+                response = self.client.request(method, path, **kwargs)
+                self.assertEqual(response.status_code, 409, response.text)
+                self.assertIn("disabled on public product routes", response.json()["detail"])
+
+        self.db.expire_all()
+        self.assertEqual(self.db.query(TradingPosition).count(), 0)
+        self.assertIsNotNone(
+            self.db.query(Position).filter(Position.id == legacy_position.id).first()
+        )
+        batch = self.db.query(TradeBatch).filter(
+            TradeBatch.public_id == "batch-open-msft"
+        ).one()
+        self.assertEqual(batch.price, Decimal("180.00000000"))
+
     def test_legacy_batch_write_is_rejected_when_truth_lifecycle_exists_without_migration_header(self):
         legacy_position = self._seed_open_legacy_position()
         sync_response = self.client.get(f"/api/positions/{legacy_position.public_id}/truth-lifecycle")
@@ -390,14 +450,14 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 409)
-        self.assertIn("Legacy batch writes are migration-only", response.json()["detail"])
+        self.assertIn("Legacy batch writes are disabled on public product routes", response.json()["detail"])
         self.db.expire_all()
         self.assertEqual(
             self.db.query(TradeBatch).filter(TradeBatch.position_id == legacy_position.id).count(),
             1,
         )
 
-    def test_legacy_batch_write_allows_explicit_migration_fallback_header(self):
+    def test_legacy_batch_write_rejects_untrusted_migration_fallback_header(self):
         legacy_position = self._seed_open_legacy_position()
         sync_response = self.client.get(f"/api/positions/{legacy_position.public_id}/truth-lifecycle")
         self.assertEqual(sync_response.status_code, 200)
@@ -414,11 +474,12 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("Legacy batch writes are disabled on public product routes", response.json()["detail"])
         self.db.expire_all()
         self.assertEqual(
             self.db.query(TradeBatch).filter(TradeBatch.position_id == legacy_position.id).count(),
-            2,
+            1,
         )
 
     def test_legacy_position_delete_is_rejected_when_truth_lifecycle_exists_without_migration_header(self):
@@ -429,7 +490,26 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         response = self.client.delete(f"/api/positions/{legacy_position.public_id}")
 
         self.assertEqual(response.status_code, 409)
-        self.assertIn("Legacy position hard deletes are migration-only", response.json()["detail"])
+        self.assertIn("Legacy position hard deletes are disabled on public product routes", response.json()["detail"])
+        self.db.expire_all()
+        self.assertIsNotNone(self.db.query(Position).filter(Position.id == legacy_position.id).first())
+        self.assertEqual(
+            self.db.query(TradeBatch).filter(TradeBatch.position_id == legacy_position.id).count(),
+            2,
+        )
+
+    def test_legacy_position_delete_rejects_untrusted_migration_fallback_header(self):
+        legacy_position = self._seed_legacy_position()
+        sync_response = self.client.get(f"/api/positions/{legacy_position.public_id}/truth-lifecycle")
+        self.assertEqual(sync_response.status_code, 200)
+
+        response = self.client.delete(
+            f"/api/positions/{legacy_position.public_id}",
+            headers={"X-Migration-Fallback": "legacy-position-delete"},
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("Legacy position hard deletes are disabled on public product routes", response.json()["detail"])
         self.db.expire_all()
         self.assertIsNotNone(self.db.query(Position).filter(Position.id == legacy_position.id).first())
         self.assertEqual(
@@ -448,7 +528,24 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 409)
-        self.assertIn("Legacy batch edits are migration-only", response.json()["detail"])
+        self.assertIn("Legacy batch edits are disabled on public product routes", response.json()["detail"])
+        self.db.expire_all()
+        batch = self.db.query(TradeBatch).filter(TradeBatch.public_id == "batch-open").one()
+        self.assertEqual(batch.price, Decimal("180.00000000"))
+
+    def test_legacy_batch_edit_rejects_untrusted_migration_fallback_header(self):
+        legacy_position = self._seed_legacy_position()
+        sync_response = self.client.get(f"/api/positions/{legacy_position.public_id}/truth-lifecycle")
+        self.assertEqual(sync_response.status_code, 200)
+
+        response = self.client.patch(
+            "/api/positions/batches/batch-open",
+            headers={"X-Migration-Fallback": "legacy-batch-edit"},
+            json={"price": "181"},
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("Legacy batch edits are disabled on public product routes", response.json()["detail"])
         self.db.expire_all()
         batch = self.db.query(TradeBatch).filter(TradeBatch.public_id == "batch-open").one()
         self.assertEqual(batch.price, Decimal("180.00000000"))
@@ -461,7 +558,26 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         response = self.client.delete("/api/positions/batches/batch-close")
 
         self.assertEqual(response.status_code, 409)
-        self.assertIn("Legacy batch edits are migration-only", response.json()["detail"])
+        self.assertIn("Legacy batch edits are disabled on public product routes", response.json()["detail"])
+        self.db.expire_all()
+        self.assertIsNotNone(self.db.query(TradeBatch).filter(TradeBatch.public_id == "batch-close").first())
+        self.assertEqual(
+            self.db.query(TradeBatch).filter(TradeBatch.position_id == legacy_position.id).count(),
+            2,
+        )
+
+    def test_legacy_batch_delete_rejects_untrusted_migration_fallback_header(self):
+        legacy_position = self._seed_legacy_position()
+        sync_response = self.client.get(f"/api/positions/{legacy_position.public_id}/truth-lifecycle")
+        self.assertEqual(sync_response.status_code, 200)
+
+        response = self.client.delete(
+            "/api/positions/batches/batch-close",
+            headers={"X-Migration-Fallback": "legacy-batch-edit"},
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("Legacy batch edits are disabled on public product routes", response.json()["detail"])
         self.db.expire_all()
         self.assertIsNotNone(self.db.query(TradeBatch).filter(TradeBatch.public_id == "batch-close").first())
         self.assertEqual(
@@ -651,10 +767,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
             "/api/positions",
             json=self._msft_open_payload(position.account_id),
         )
-        response = self.client.patch(
-            f"/api/positions/{position.public_id}",
-            json={"planned_entry_price": "181"},
-        )
+        response = self.client.get(f"/api/positions/{position.public_id}")
         open_list = self.client.get(
             "/api/positions",
             params={"account_id": position.account_id, "status": "OPEN"},
@@ -689,10 +802,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
             "/api/positions",
             json=self._msft_open_payload(position.account_id),
         )
-        response = self.client.patch(
-            f"/api/positions/{position.public_id}",
-            json={"planned_entry_price": "181"},
-        )
+        response = self.client.get(f"/api/positions/{position.public_id}")
 
         self.assertEqual(duplicate.status_code, 409, duplicate.text)
         self.assertEqual(duplicate.json()["detail"]["code"], "OPEN_POSITION_EXISTS")
@@ -703,12 +813,51 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
             1,
         )
 
+    def test_null_canonical_quantity_cannot_release_same_side_open_slot(self):
+        position = self._seed_open_legacy_position()
+        lifecycle = self.client.get(f"/api/positions/{position.public_id}/truth-lifecycle")
+        self.assertEqual(lifecycle.status_code, 200, lifecycle.text)
+
+        truth_position = self.db.query(TradingPosition).one()
+        truth_position.status = TradingPositionStatus.CLOSED
+        position.status = PositionStatus.CLOSED
+
+        for quantity_opened, quantity_closed in (
+            (None, Decimal("0")),
+            (Decimal("5"), None),
+        ):
+            with self.subTest(
+                quantity_opened=quantity_opened,
+                quantity_closed=quantity_closed,
+            ):
+                truth_position.quantity_opened = quantity_opened
+                truth_position.quantity_closed = quantity_closed
+                self.db.commit()
+
+                duplicate = self.client.post(
+                    "/api/positions",
+                    json=self._msft_open_payload(position.account_id),
+                )
+
+                self.assertEqual(duplicate.status_code, 409, duplicate.text)
+                self.assertEqual(
+                    duplicate.json()["detail"]["code"],
+                    "OPEN_POSITION_EXISTS",
+                )
+                self.assertEqual(
+                    self.db.query(Position)
+                    .filter(Position.account_id == position.account_id)
+                    .count(),
+                    1,
+                )
+
     def test_duplicate_open_and_response_use_truth_when_legacy_direction_drifts(self):
         position = self._seed_open_legacy_position()
         lifecycle = self.client.get(f"/api/positions/{position.public_id}/truth-lifecycle")
         self.assertEqual(lifecycle.status_code, 200, lifecycle.text)
 
         position.direction = PositionDirection.SHORT
+        position.planned_stop_loss = Decimal("170")
         self.db.commit()
 
         duplicate = self.client.post(
@@ -719,11 +868,15 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
             "/api/positions/check/open",
             params=self._msft_check_params(position.trading_account.public_id),
         )
+        detail = self.client.get(f"/api/positions/{position.public_id}")
 
         self.assertEqual(duplicate.status_code, 409, duplicate.text)
         self.assertEqual(duplicate.json()["detail"]["code"], "OPEN_POSITION_EXISTS")
         self.assertEqual(check.status_code, 200, check.text)
         self.assertEqual(check.json()["direction"], "LONG")
+        self.assertEqual(detail.status_code, 200, detail.text)
+        self.assertEqual(detail.json()["direction"], "LONG")
+        self.assertEqual(detail.json()["drift_analysis"]["stop_loss_risk_pct"], 5.56)
         self.assertEqual(
             self.db.query(Position).filter(Position.account_id == position.account_id).count(),
             1,
@@ -788,6 +941,61 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         )
         self.db.refresh(asset)
         self.assertEqual(asset.metadata_json, {})
+
+    def test_preupgrade_truth_rejects_direct_add_without_financial_side_effects(self):
+        position = self._seed_open_legacy_position()
+        lifecycle = self.client.get(f"/api/positions/{position.public_id}/truth-lifecycle")
+        self.assertEqual(lifecycle.status_code, 200, lifecycle.text)
+
+        truth_position = self.db.query(TradingPosition).one()
+        asset = self.db.query(AssetMaster).filter(
+            AssetMaster.canonical_code == "MSFT"
+        ).one()
+        asset.metadata_json = {}
+        self.db.commit()
+
+        baseline_counts = {
+            model: self.db.query(model).count()
+            for model in (
+                PositionEvent,
+                AccountLedgerEntry,
+                IdempotencyKey,
+                OutboxEvent,
+            )
+        }
+        baseline_quantity_opened = truth_position.quantity_opened
+
+        response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events",
+            headers={"Idempotency-Key": "preupgrade-direct-add"},
+            json={
+                "event_type": "ADD",
+                "quantity": "1",
+                "price": "190",
+                "currency": "USD",
+                "occurred_at": "2026-04-03T15:30:00+00:00",
+            },
+        )
+
+        self.assertEqual(response.status_code, 422, response.text)
+        self.assertEqual(
+            response.json()["detail"]["code"],
+            "LEGACY_INSTRUMENT_IDENTITY_UNPROVEN",
+        )
+        self.db.expire_all()
+        for model, baseline_count in baseline_counts.items():
+            self.assertEqual(self.db.query(model).count(), baseline_count)
+        self.assertEqual(
+            self.db.query(TradingPosition).one().quantity_opened,
+            baseline_quantity_opened,
+        )
+        self.assertEqual(
+            self.db.query(PositionEvent).filter(
+                PositionEvent.position_id == truth_position.id,
+                PositionEvent.event_type == PositionEventType.ADD,
+            ).count(),
+            0,
+        )
 
     def test_position_create_requires_release_asset_type_and_usd_account(self):
         usd_account = TradingAccount(
@@ -1436,12 +1644,12 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 409)
-        self.assertIn("Legacy review writes are migration-only", response.json()["detail"])
+        self.assertIn("Legacy review writes are disabled on public product routes", response.json()["detail"])
         self.db.expire_all()
         updated_position = self.db.query(Position).filter(Position.id == legacy_position.id).one()
         self.assertEqual(updated_position.trade_review, "Held plan well.")
 
-    def test_legacy_review_write_allows_explicit_migration_fallback_header(self):
+    def test_legacy_review_write_rejects_untrusted_migration_fallback_header(self):
         legacy_position = self._seed_legacy_position()
         sync_response = self.client.get(f"/api/positions/{legacy_position.public_id}/truth-lifecycle")
         self.assertEqual(sync_response.status_code, 200)
@@ -1452,10 +1660,11 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
             json={"trade_review": "Migration-only legacy review correction."},
         )
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("Legacy review writes are disabled on public product routes", response.json()["detail"])
         self.db.expire_all()
         updated_position = self.db.query(Position).filter(Position.id == legacy_position.id).one()
-        self.assertEqual(updated_position.trade_review, "Migration-only legacy review correction.")
+        self.assertEqual(updated_position.trade_review, "Held plan well.")
 
 
 if __name__ == "__main__":

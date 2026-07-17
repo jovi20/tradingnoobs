@@ -251,28 +251,8 @@ class OpenAPIContractTests(unittest.TestCase):
                     core_response,
                 )
 
-    def test_legacy_fallback_headers_are_documented_on_protected_routes(self):
-        protected_routes = (
-            ("/api/positions/{position_id}/batches", "post", "legacy-batch-write"),
-            ("/api/positions/{position_id}", "patch", "legacy-review-write"),
-            ("/api/positions/{position_id}", "delete", "legacy-position-delete"),
-        )
-
-        for path, method, allowed_value in protected_routes:
-            with self.subTest(path=path, method=method):
-                operation = self.openapi["paths"][path][method]
-                migration_header = next(
-                    (
-                        parameter
-                        for parameter in operation.get("parameters", [])
-                        if parameter.get("name") == "X-Migration-Fallback"
-                        and parameter.get("in") == "header"
-                    ),
-                    None,
-                )
-
-                self.assertIsNotNone(migration_header)
-                self.assertIn(allowed_value, migration_header.get("description", ""))
+    def test_public_openapi_does_not_publish_legacy_migration_fallback_headers(self):
+        self.assertNotIn("X-Migration-Fallback", json.dumps(self.openapi, sort_keys=True))
 
 
 if __name__ == "__main__":

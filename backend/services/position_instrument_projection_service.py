@@ -112,6 +112,56 @@ def _exact_truth_projection(
     )
 
 
+def project_exact_truth_instrument(
+    truth_position: TradingPosition,
+) -> PositionInstrumentProjection | None:
+    """Return canonical identity only when the truth graph proves every field."""
+    instrument = truth_position.instrument
+    account = truth_position.account
+    if instrument is None or account is None or account.user_id != truth_position.user_id:
+        return None
+
+    asset = instrument.asset
+    if asset is None or not isinstance(asset.metadata_json, dict):
+        return None
+
+    payload = asset.metadata_json.get(_JOURNAL_IDENTITY_METADATA_KEY)
+    if not isinstance(payload, dict) or set(payload) != _IDENTITY_FIELDS:
+        return None
+
+    try:
+        identity = validate_legacy_instrument_identity(
+            position_asset_type=payload["asset_type"],
+            account_currency=account.currency,
+            symbol=payload["normalized_symbol"],
+            exchange_code=payload["exchange_code"],
+            metadata_core_type=payload["asset_type"],
+            metadata_market=payload["market"],
+            metadata_currency=payload["quote_currency"],
+            metadata_instrument=payload["instrument_type"],
+        )
+    except (KeyError, ReleaseContractViolation):
+        return None
+
+    if payload != asdict(identity):
+        return None
+    if not _asset_has_exact_identity(asset, identity):
+        return None
+    if _enum_value(instrument.instrument_type) != identity.instrument_type:
+        return None
+    if instrument.contract_symbol != identity.normalized_symbol:
+        return None
+    if _enum_value(truth_position.base_currency) != identity.quote_currency:
+        return None
+
+    return PositionInstrumentProjection(
+        identity=identity,
+        name=asset.name,
+        sector=asset.sector,
+        source="CANONICAL_TRUTH",
+    )
+
+
 def _validated_preupgrade_truth_projection(
     db: Session,
     position: Position,

@@ -49,6 +49,23 @@ test('confirmed icon-only controls expose accessible names', () => {
   assert.match(adminShell, /aria-label=\{item\.label\}/)
 })
 
+test('new-position identity and direction controls expose programmatic semantics', () => {
+  const source = readSource('app/(product)/positions/new/page.tsx')
+
+  for (const id of [
+    'position-symbol',
+    'position-exchange-code',
+    'position-entry-price',
+    'position-quantity'
+  ]) {
+    assert.match(source, new RegExp(`htmlFor="${id}"`))
+    assert.match(source, new RegExp(`id="${id}"`))
+  }
+  assert.match(source, /role="group" aria-labelledby="position-direction-label"/)
+  assert.match(source, /aria-pressed=\{form\.direction === 'LONG'\}/)
+  assert.match(source, /aria-pressed=\{form\.direction === 'SHORT'\}/)
+})
+
 test('auth errors are announced and primary product headings do not mix English labels', () => {
   const login = readSource('app/(auth)/login/page.tsx')
   const sidebar = readSource('components/navigation/AppSidebar.tsx')

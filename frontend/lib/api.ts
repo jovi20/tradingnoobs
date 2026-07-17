@@ -1412,19 +1412,7 @@ export const positionsAPI = {
         }, token)
     },
 
-    // Batch operations
-    addBatch: (
-        token: string,
-        positionId: number | string,
-        data: BatchCreate,
-        options?: { migrationFallback?: boolean }
-    ): Promise<TradeBatch> =>
-        fetchAPI(`/api/positions/${positionId}/batches`, {
-            method: 'POST',
-            headers: options?.migrationFallback ? { 'X-Migration-Fallback': 'legacy-batch-write' } : undefined,
-            body: JSON.stringify(data)
-        }, token),
-
+    // Legacy batch mutations remain read-only on public product routes.
     updateBatch: (token: string, batchId: number | string, data: Partial<BatchCreate>): Promise<TradeBatch> =>
         fetchAPI(`/api/positions/batches/${batchId}`, {
             method: 'PATCH',

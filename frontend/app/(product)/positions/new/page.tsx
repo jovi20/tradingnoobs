@@ -20,7 +20,6 @@ import {
     adaptPosition,
     adaptTradingAccounts,
     buildTruthTradeEventFromBatchForm,
-    getTruthFirstWriteFallbackState,
     normalizeReleasePositionIdentityInput,
     PositionViewModel,
     ReleasePositionIdentityField,
@@ -434,14 +433,8 @@ export default function NewPositionPage() {
                 )
                 router.push(`/positions/${targetPosition.routeId}`)
             } else {
-                const fallbackState = getTruthFirstWriteFallbackState(false, false)
-                if (!fallbackState.canWriteLegacyFallback) {
-                    setError(fallbackState.reason)
-                    return
-                }
-
-                await positionsAPI.addBatch(token, targetPosition.routeId, batchData, { migrationFallback: true })
-                router.push(`/positions/${targetPosition.routeId}`)
+                setError('审计生命周期不可用，无法安全加仓；请刷新仓位后重试')
+                return
             }
         } catch (err: any) {
             setError(err.message || '加仓失败')
@@ -541,9 +534,10 @@ export default function NewPositionPage() {
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium mb-2">标的代码 *</label>
+                            <label htmlFor="position-symbol" className="block text-sm font-medium mb-2">标的代码 *</label>
                             <div className="relative">
                                 <input
+                                    id="position-symbol"
                                     required
                                     type="text"
                                     value={form.symbol}
@@ -557,10 +551,11 @@ export default function NewPositionPage() {
 
                     {/* Direction */}
                     <div>
-                        <label className="block text-sm font-medium mb-2">方向 *</label>
-                        <div className="grid grid-cols-2 gap-3">
+                        <span id="position-direction-label" className="block text-sm font-medium mb-2">方向 *</span>
+                        <div role="group" aria-labelledby="position-direction-label" className="grid grid-cols-2 gap-3">
                             <button
                                 type="button"
+                                aria-pressed={form.direction === 'LONG'}
                                 onClick={() => setForm({ ...form, direction: 'LONG' })}
                                 className={`p-4 rounded-md border-2 transition-all flex items-center justify-center gap-2 ${form.direction === 'LONG'
                                     ? 'border-profit/30 bg-profit/8 dark:bg-profit/8 text-profit'
@@ -572,6 +567,7 @@ export default function NewPositionPage() {
                             </button>
                             <button
                                 type="button"
+                                aria-pressed={form.direction === 'SHORT'}
                                 onClick={() => setForm({ ...form, direction: 'SHORT' })}
                                 className={`p-4 rounded-md border-2 transition-all flex items-center justify-center gap-2 ${form.direction === 'SHORT'
                                     ? 'border-loss/30 bg-loss/8 dark:bg-loss/8 text-loss'
@@ -651,8 +647,9 @@ export default function NewPositionPage() {
                                 />
                             </div>
                             <div>
-                                <label className="block text-[10px] uppercase font-bold text-ink-faint mb-1">交易所代码 *</label>
+                                <label htmlFor="position-exchange-code" className="block text-[10px] uppercase font-bold text-ink-faint mb-1">交易所代码 *</label>
                                 <input
+                                    id="position-exchange-code"
                                     required
                                     type="text"
                                     maxLength={32}
@@ -700,8 +697,9 @@ export default function NewPositionPage() {
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium mb-2">入场价格 *</label>
+                            <label htmlFor="position-entry-price" className="block text-sm font-medium mb-2">入场价格 *</label>
                             <input
+                                id="position-entry-price"
                                 required
                                 type="number"
                                 step="any"
@@ -712,8 +710,9 @@ export default function NewPositionPage() {
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium mb-2">数量 *</label>
+                            <label htmlFor="position-quantity" className="block text-sm font-medium mb-2">数量 *</label>
                             <input
+                                id="position-quantity"
                                 required
                                 type="number"
                                 step="any"
@@ -733,8 +732,9 @@ export default function NewPositionPage() {
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-xs text-ink-muted mb-1">计划入场价</label>
+                                <label htmlFor="position-planned-entry-price" className="block text-xs text-ink-muted mb-1">计划入场价</label>
                                 <input
+                                    id="position-planned-entry-price"
                                     type="number"
                                     step="any"
                                     value={form.planned_entry_price}
@@ -744,8 +744,9 @@ export default function NewPositionPage() {
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs text-ink-muted mb-1">计划止损价</label>
+                                <label htmlFor="position-planned-stop-loss" className="block text-xs text-ink-muted mb-1">计划止损价</label>
                                 <input
+                                    id="position-planned-stop-loss"
                                     type="number"
                                     step="any"
                                     value={form.planned_stop_loss}
@@ -758,17 +759,17 @@ export default function NewPositionPage() {
                         <p className="text-xs text-ink-faint mt-2">用于交易后对比计划与实际执行的偏移</p>
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium mb-2">入场时间 *</label>
-                        <DateTimePicker
-                            value={form.entry_time}
-                            onChange={(val) => setForm({ ...form, entry_time: val })}
-                        />
-                    </div>
+                    <DateTimePicker
+                        label="入场时间"
+                        required
+                        value={form.entry_time}
+                        onChange={(val) => setForm({ ...form, entry_time: val })}
+                    />
 
                     <div>
-                        <label className="block text-sm font-medium mb-2">入场理由</label>
+                        <label htmlFor="position-entry-reason" className="block text-sm font-medium mb-2">入场理由</label>
                         <textarea
+                            id="position-entry-reason"
                             value={form.entry_reason}
                             onChange={e => setForm({ ...form, entry_reason: e.target.value })}
                             className="input"

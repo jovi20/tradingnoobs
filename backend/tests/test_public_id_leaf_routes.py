@@ -145,18 +145,25 @@ class PublicIdLeafRouteTests(unittest.TestCase):
         delete_response = self.client.delete(f"/api/transactions/{self.transaction.public_id}")
         self.assertEqual(delete_response.status_code, 200)
 
-    def test_trade_batch_update_and_delete_support_public_id(self):
+    def test_public_trade_batch_mutations_fail_closed_for_public_id(self):
         update_response = self.client.patch(
             f"/api/positions/batches/{self.batch.public_id}",
             json={
                 "reason": "Updated reason",
             },
         )
-        self.assertEqual(update_response.status_code, 200)
-        self.assertEqual(update_response.json()["public_id"], self.batch.public_id)
+        self.assertEqual(update_response.status_code, 409)
+        self.assertIn("disabled on public product routes", update_response.json()["detail"])
 
         delete_response = self.client.delete(f"/api/positions/batches/{self.batch.public_id}")
-        self.assertEqual(delete_response.status_code, 204)
+        self.assertEqual(delete_response.status_code, 409)
+        self.assertIn("disabled on public product routes", delete_response.json()["detail"])
+
+        self.db.expire_all()
+        unchanged = self.db.query(TradeBatch).filter(
+            TradeBatch.public_id == self.batch.public_id
+        ).one()
+        self.assertEqual(unchanged.reason, "Partial exit")
 
 
 if __name__ == "__main__":

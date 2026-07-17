@@ -11,11 +11,14 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { positionsAPI, Position, BatchCreate } from '@/lib/api'
-import { buildTruthTradeEventFromBatchForm, getTruthFirstWriteFallbackState } from '@/lib/adapters/trading'
+import { buildTruthTradeEventFromBatchForm } from '@/lib/adapters/trading'
 import { adaptLifecycleDetail, type LifecycleDetailViewModel } from '@/lib/adapters/lifecycle'
 import { getCurrencySymbol } from '@/lib/symbolUtils'
 import DateTimePicker from '@/components/DateTimePicker'
 import CustomSelect from '@/components/CustomSelect'
+
+const TRUTH_LIFECYCLE_REQUIRED_LABEL = '审计生命周期不可用'
+const TRUTH_LIFECYCLE_REQUIRED_REASON = '普通加仓和平仓必须写入审计生命周期；旧版批次写入已从产品入口关闭。'
 
 export default function AddBatchPage() {
     const { token } = useAuth()
@@ -33,7 +36,6 @@ export default function AddBatchPage() {
 
     // Initialize type from query param
     const initType = (searchParams.get('type') === 'EXIT') ? 'EXIT' : 'ENTRY'
-    const migrationFallbackRequested = searchParams.get('migrationFallback') === '1'
     const currentOpenQuantity = truthLifecycle?.openQuantity ?? Number(position?.total_quantity || 0)
     const currentAverageOpenPrice = truthLifecycle?.averageOpenPrice ?? Number(position?.average_entry_price || 0)
     const currencySymbol = getCurrencySymbol(truthLifecycle?.baseCurrency || position?.asset_metadata?.currency)
@@ -111,14 +113,8 @@ export default function AddBatchPage() {
                 )
                 router.push(`/positions/${position.public_id}`)
             } else {
-                const fallbackState = getTruthFirstWriteFallbackState(false, migrationFallbackRequested)
-                if (!fallbackState.canWriteLegacyFallback) {
-                    setError(fallbackState.reason)
-                    return
-                }
-
-                await positionsAPI.addBatch(token, position.public_id, batchData, { migrationFallback: true })
-                router.push(`/positions/${position.public_id}`)
+                setError(TRUTH_LIFECYCLE_REQUIRED_REASON)
+                return
             }
         } catch (err: any) {
             setError(err.message || '操作失败')
@@ -177,7 +173,7 @@ export default function AddBatchPage() {
                 <div className="mb-6 rounded-md border border-cyan-200 bg-cyan-50 p-4 text-sm text-cyan-900 dark:border-cyan-900 dark:bg-cyan-950/30 dark:text-cyan-200">
                     <p className="font-semibold">审计事件写入</p>
                     <p className="mt-1">
-                        本次操作会写入权威审计生命周期。只有生命周期尚未建立且明确启用迁移模式时，才会写入旧批次记录。
+                        本次操作只会写入权威审计生命周期，不会写入旧版批次记录。
                     </p>
                 </div>
             )}
@@ -185,10 +181,10 @@ export default function AddBatchPage() {
             {!truthPositionPublicId && (
                 <div className="mb-6 rounded-md border border-warning/30 bg-warning/8 p-4 text-sm text-warning dark:border-warning/30 dark:bg-warning/8 dark:text-warning">
                     <p className="font-semibold">
-                        {getTruthFirstWriteFallbackState(false, migrationFallbackRequested).label}
+                        {TRUTH_LIFECYCLE_REQUIRED_LABEL}
                     </p>
                     <p className="mt-1">
-                        {getTruthFirstWriteFallbackState(false, migrationFallbackRequested).reason}
+                        {TRUTH_LIFECYCLE_REQUIRED_REASON}
                     </p>
                 </div>
             )}
@@ -321,7 +317,7 @@ export default function AddBatchPage() {
                 {/* Submit */}
                 <button
                     type="submit"
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || !truthPositionPublicId}
                     className={`w-full btn py-3 ${form.type === 'ENTRY'
                         ? 'bg-profit text-white hover:opacity-90'
                         : 'bg-warning text-white hover:opacity-90'
