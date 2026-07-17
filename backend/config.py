@@ -23,16 +23,6 @@ class Settings(BaseSettings):
     upload_dir: str = "./uploads"
     max_upload_size: int = 10 * 1024 * 1024  # 10MB
     
-    # LLM Settings
-    llm_api_url: str = "https://api.openai.com/v1"
-    llm_api_key: Optional[str] = None
-    llm_model: str = "gpt-4-turbo"
-    
-    # Market Data API Keys
-    finnhub_api_key: Optional[str] = None
-    binance_api_key: Optional[str] = None
-    binance_api_secret: Optional[str] = None
-    
     # Environment
     env_name: str = "development"  # development / production
     auto_create_schema: Optional[bool] = None
@@ -42,8 +32,31 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "ignore"
+
+
+class OptionalProviderSettings(BaseSettings):
+    """Provider configuration loaded only inside an enabled optional capability."""
+
+    llm_api_url: str = "https://api.openai.com/v1"
+    llm_api_key: Optional[str] = None
+    llm_model: str = "gpt-4-turbo"
+    finnhub_api_key: Optional[str] = None
+    binance_api_key: Optional[str] = None
+    binance_api_secret: Optional[str] = None
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        case_sensitive = False
+        extra = "ignore"
 
 
 @lru_cache()
 def get_settings() -> Settings:
     return Settings()
+
+
+@lru_cache()
+def get_optional_provider_settings() -> OptionalProviderSettings:
+    return OptionalProviderSettings()

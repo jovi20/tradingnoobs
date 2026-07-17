@@ -12,6 +12,7 @@ from main import app
 from models import FeatureFlag, IntegrationCredential, PlatformSetting, User
 from release_profile import DeploymentCapabilityPolicy
 from routers.admin import get_current_admin
+from services.auth_service import get_current_user
 from services.credential_service import decrypt_secret
 
 
@@ -47,6 +48,7 @@ class AdminPlatformConfigTests(unittest.TestCase):
             return self.admin_user
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_user] = override_get_current_admin
         app.dependency_overrides[get_current_admin] = override_get_current_admin
         self.client = TestClient(app)
 
@@ -139,12 +141,37 @@ class AdminPlatformConfigTests(unittest.TestCase):
             db.close()
         self.assertTrue(flag.enabled)
 
+    def test_open_registration_rejects_non_global_rollout_without_side_effects(self):
+        for payload in (
+            {"enabled": True, "actor_targets": ["anonymous-user"]},
+            {"enabled": True, "rollout_percentage": 100},
+        ):
+            with self.subTest(payload=payload):
+                response = self.client.put(
+                    "/api/admin/platform/feature-flags/capability.open_registration.v1",
+                    json=payload,
+                )
+                self.assertEqual(response.status_code, 422, response.text)
+                self.assertEqual(
+                    response.json()["detail"]["code"],
+                    "PUBLIC_CAPABILITY_ROLLOUT_INVALID",
+                )
+
+                db = self.SessionLocal()
+                try:
+                    count = db.query(FeatureFlag).filter(
+                        FeatureFlag.key == "capability.open_registration.v1"
+                    ).count()
+                finally:
+                    db.close()
+                self.assertEqual(count, 0)
+
     def test_ceiling_excluded_ai_admin_writes_have_zero_side_effects(self):
         empty_policy = DeploymentCapabilityPolicy(frozenset())
         with patch(
             "release_profile.STATIC_DEPLOYMENT_CAPABILITY_POLICY",
             empty_policy,
-        ), patch("routers.admin.httpx.AsyncClient") as http_client:
+        ), patch("routers.admin_ai.httpx.AsyncClient") as http_client:
             flag_response = self.client.put(
                 "/api/admin/platform/feature-flags/capability.ai_insights.v1",
                 json={"enabled": True},
@@ -216,7 +243,7 @@ class AdminPlatformConfigTests(unittest.TestCase):
             async def post(self, *args, **kwargs):
                 return FakeResponse()
 
-        with patch("routers.admin.httpx.AsyncClient", FakeAsyncClient):
+        with patch("routers.admin_ai.httpx.AsyncClient", FakeAsyncClient):
             response = self.client.post("/api/admin/test-llm")
 
         self.assertEqual(response.status_code, 200)

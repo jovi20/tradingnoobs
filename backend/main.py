@@ -87,19 +87,35 @@ def create_app(release_profile: ReleaseProfile | str | None = None) -> FastAPI:
         positions.router,
         journal.router,
         transactions.router,
-        timeline.router,
+        timeline.build_router(
+            include_ai_contract=False,
+            include_optional_event_contract=False,
+        ),
         trading_positions.router,
     ):
         application.include_router(router)
 
     from routers.disabled_capabilities import (
+        ADMIN_AI_DISABLED_ROUTES,
+        ADMIN_AI_LAZY_ROUTES,
         AI_INSIGHTS_DISABLED_ROUTES,
+        AI_INSIGHTS_LAZY_ROUTES,
         BROKER_SYNC_DISABLED_ROUTES,
+        BROKER_SYNC_LAZY_ROUTES,
         INSIGHT_ARTIFACTS_DISABLED_ROUTES,
+        INSIGHT_ARTIFACTS_LAZY_ROUTES,
         INSIGHT_RUNS_DISABLED_ROUTES,
+        INSIGHT_RUNS_LAZY_ROUTES,
         MARKET_DISABLED_ROUTES,
+        MARKET_LAZY_ROUTES,
+        OPEN_REGISTRATION_DISABLED_ROUTES,
+        OPEN_REGISTRATION_LAZY_ROUTES,
         PDF_EXPORT_DISABLED_ROUTES,
+        PDF_EXPORT_LAZY_ROUTES,
+        POSITION_MARKET_ANALYSIS_DISABLED_ROUTES,
+        POSITION_MARKET_ANALYSIS_LAZY_ROUTES,
         RISK_CARDS_DISABLED_ROUTES,
+        RISK_CARDS_LAZY_ROUTES,
         build_disabled_capability_router,
     )
 
@@ -107,6 +123,11 @@ def create_app(release_profile: ReleaseProfile | str | None = None) -> FastAPI:
         from routers.capability_dependencies import require_runtime_capability
 
         return [Depends(require_runtime_capability(capability))]
+
+    def public_runtime_dependencies(capability: RuntimeCapability):
+        from routers.capability_dependencies import require_public_runtime_capability
+
+        return [Depends(require_public_runtime_capability(capability))]
 
     def include_disabled_routes(
         *,
@@ -122,88 +143,140 @@ def create_app(release_profile: ReleaseProfile | str | None = None) -> FastAPI:
             )
         )
 
-    if is_capability_enabled(RuntimeCapability.AI_INSIGHTS, profile=profile):
-        from routers import insight_artifacts, insights
+    def include_runtime_guarded_router(
+        router,
+        *,
+        capability: RuntimeCapability,
+        public_route: bool = False,
+    ) -> None:
+        from routers.capability_preflight import build_runtime_guarded_router
 
-        dependencies = runtime_dependencies(RuntimeCapability.AI_INSIGHTS)
-        application.include_router(insights.router, dependencies=dependencies)
-        application.include_router(insight_artifacts.router, dependencies=dependencies)
+        dependencies = (
+            public_runtime_dependencies(capability)
+            if public_route
+            else runtime_dependencies(capability)
+        )
         application.include_router(
-            insight_artifacts.artifact_router,
+            build_runtime_guarded_router(
+                router,
+                capability,
+                public_route=public_route,
+            ),
             dependencies=dependencies,
         )
-    else:
-        include_disabled_routes(
-            prefix="/api/insights",
-            capability=RuntimeCapability.AI_INSIGHTS,
-            routes=AI_INSIGHTS_DISABLED_ROUTES,
-        )
-        include_disabled_routes(
-            prefix="/api/v1/insights/runs",
-            capability=RuntimeCapability.AI_INSIGHTS,
-            routes=INSIGHT_RUNS_DISABLED_ROUTES,
-        )
-        include_disabled_routes(
-            prefix="/api/v1/insights/artifacts",
-            capability=RuntimeCapability.AI_INSIGHTS,
-            routes=INSIGHT_ARTIFACTS_DISABLED_ROUTES,
+
+    def include_allowlisted_lazy_routes(
+        *,
+        prefix: str,
+        capability: RuntimeCapability,
+        module_name: str,
+        router_attribute: str,
+        lazy_routes,
+        disabled_routes,
+        public_route: bool = False,
+    ) -> None:
+        if not is_capability_enabled(capability, profile=profile):
+            include_disabled_routes(
+                prefix=prefix,
+                capability=capability,
+                routes=disabled_routes,
+            )
+            return
+
+        from routers.lazy_capabilities import build_lazy_capability_router
+
+        include_runtime_guarded_router(
+            build_lazy_capability_router(
+                prefix=prefix,
+                module_name=module_name,
+                router_attribute=router_attribute,
+                routes=lazy_routes,
+            ),
+            capability=capability,
+            public_route=public_route,
         )
 
-    if is_capability_enabled(RuntimeCapability.PDF_EXPORT, profile=profile):
-        from routers import pdf_export
-
-        application.include_router(
-            pdf_export.router,
-            dependencies=runtime_dependencies(RuntimeCapability.PDF_EXPORT),
-        )
-    else:
-        include_disabled_routes(
-            prefix="/api/insights",
-            capability=RuntimeCapability.PDF_EXPORT,
-            routes=PDF_EXPORT_DISABLED_ROUTES,
-        )
-
-    if is_capability_enabled(RuntimeCapability.RISK_CARDS, profile=profile):
-        from routers import risk
-
-        application.include_router(
-            risk.router,
-            dependencies=runtime_dependencies(RuntimeCapability.RISK_CARDS),
-        )
-    else:
-        include_disabled_routes(
-            prefix="/api/risk",
-            capability=RuntimeCapability.RISK_CARDS,
-            routes=RISK_CARDS_DISABLED_ROUTES,
-        )
-
-    if is_capability_enabled(RuntimeCapability.MARKET, profile=profile):
-        from routers import market
-
-        application.include_router(
-            market.router,
-            dependencies=runtime_dependencies(RuntimeCapability.MARKET),
-        )
-    else:
-        include_disabled_routes(
-            prefix="/api/market",
-            capability=RuntimeCapability.MARKET,
-            routes=MARKET_DISABLED_ROUTES,
-        )
-
-    if is_capability_enabled(RuntimeCapability.BROKER_SYNC, profile=profile):
-        from routers import broker_sync
-
-        application.include_router(
-            broker_sync.router,
-            dependencies=runtime_dependencies(RuntimeCapability.BROKER_SYNC),
-        )
-    else:
-        include_disabled_routes(
-            prefix="/api/broker-sync",
-            capability=RuntimeCapability.BROKER_SYNC,
-            routes=BROKER_SYNC_DISABLED_ROUTES,
-        )
+    include_allowlisted_lazy_routes(
+        prefix="/api/auth",
+        capability=RuntimeCapability.OPEN_REGISTRATION,
+        module_name="routers.open_registration",
+        router_attribute="router",
+        lazy_routes=OPEN_REGISTRATION_LAZY_ROUTES,
+        disabled_routes=OPEN_REGISTRATION_DISABLED_ROUTES,
+        public_route=True,
+    )
+    include_allowlisted_lazy_routes(
+        prefix="/api/admin",
+        capability=RuntimeCapability.AI_INSIGHTS,
+        module_name="routers.admin_ai",
+        router_attribute="router",
+        lazy_routes=ADMIN_AI_LAZY_ROUTES,
+        disabled_routes=ADMIN_AI_DISABLED_ROUTES,
+    )
+    include_allowlisted_lazy_routes(
+        prefix="/api/insights",
+        capability=RuntimeCapability.AI_INSIGHTS,
+        module_name="routers.insights",
+        router_attribute="router",
+        lazy_routes=AI_INSIGHTS_LAZY_ROUTES,
+        disabled_routes=AI_INSIGHTS_DISABLED_ROUTES,
+    )
+    include_allowlisted_lazy_routes(
+        prefix="/api/v1/insights/runs",
+        capability=RuntimeCapability.AI_INSIGHTS,
+        module_name="routers.insight_artifacts",
+        router_attribute="router",
+        lazy_routes=INSIGHT_RUNS_LAZY_ROUTES,
+        disabled_routes=INSIGHT_RUNS_DISABLED_ROUTES,
+    )
+    include_allowlisted_lazy_routes(
+        prefix="/api/v1/insights/artifacts",
+        capability=RuntimeCapability.AI_INSIGHTS,
+        module_name="routers.insight_artifacts",
+        router_attribute="artifact_router",
+        lazy_routes=INSIGHT_ARTIFACTS_LAZY_ROUTES,
+        disabled_routes=INSIGHT_ARTIFACTS_DISABLED_ROUTES,
+    )
+    include_allowlisted_lazy_routes(
+        prefix="/api/insights",
+        capability=RuntimeCapability.PDF_EXPORT,
+        module_name="routers.pdf_export",
+        router_attribute="router",
+        lazy_routes=PDF_EXPORT_LAZY_ROUTES,
+        disabled_routes=PDF_EXPORT_DISABLED_ROUTES,
+    )
+    include_allowlisted_lazy_routes(
+        prefix="/api/risk",
+        capability=RuntimeCapability.RISK_CARDS,
+        module_name="routers.risk",
+        router_attribute="router",
+        lazy_routes=RISK_CARDS_LAZY_ROUTES,
+        disabled_routes=RISK_CARDS_DISABLED_ROUTES,
+    )
+    include_allowlisted_lazy_routes(
+        prefix="/api/market",
+        capability=RuntimeCapability.MARKET,
+        module_name="routers.market",
+        router_attribute="router",
+        lazy_routes=MARKET_LAZY_ROUTES,
+        disabled_routes=MARKET_DISABLED_ROUTES,
+    )
+    include_allowlisted_lazy_routes(
+        prefix="/api/positions",
+        capability=RuntimeCapability.MARKET,
+        module_name="routers.position_market_analysis",
+        router_attribute="router",
+        lazy_routes=POSITION_MARKET_ANALYSIS_LAZY_ROUTES,
+        disabled_routes=POSITION_MARKET_ANALYSIS_DISABLED_ROUTES,
+    )
+    include_allowlisted_lazy_routes(
+        prefix="/api/broker-sync",
+        capability=RuntimeCapability.BROKER_SYNC,
+        module_name="routers.broker_sync",
+        router_attribute="router",
+        lazy_routes=BROKER_SYNC_LAZY_ROUTES,
+        disabled_routes=BROKER_SYNC_DISABLED_ROUTES,
+    )
 
     @application.get("/")
     async def root():

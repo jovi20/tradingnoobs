@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 from datetime import datetime, timezone
 from decimal import Decimal
 import sys
@@ -252,7 +253,7 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         self.assertEqual(float(cash_effects[0]["amount"]), 180.0)
         self.assertEqual(cash_effects[0]["currency"], "USD")
 
-    def test_lifecycle_route_includes_matching_ai_sidecar_artifacts(self):
+    def test_lifecycle_route_only_loads_ai_sidecar_with_effective_capability(self):
         truth_position = self._seed_synced_position()
         run = InsightRun(
             user_id=self.user.id,
@@ -278,7 +279,24 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         self.db.add(artifact)
         self.db.commit()
 
-        response = self.client.get(f"/api/trading-positions/{truth_position.public_id}/lifecycle")
+        with patch(
+            "services.trading_position_read_service._build_ai_sidecar_items"
+        ) as build_ai_sidecar:
+            disabled_response = self.client.get(
+                f"/api/trading-positions/{truth_position.public_id}/lifecycle"
+            )
+
+        self.assertEqual(disabled_response.status_code, 200)
+        self.assertEqual(disabled_response.json()["data"]["ai_sidecar"]["items"], [])
+        build_ai_sidecar.assert_not_called()
+
+        with patch(
+            "routers.trading_positions.is_effective_capability_enabled",
+            return_value=True,
+        ):
+            response = self.client.get(
+                f"/api/trading-positions/{truth_position.public_id}/lifecycle"
+            )
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -540,6 +558,53 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
             IdempotencyKey.scope == "trading_position.manual_adjustment.create",
         ).count(), 0)
 
+    def test_disabled_event_types_are_rejected_by_direct_api_without_side_effects(self):
+        truth_position = self._seed_open_synced_position()
+        disabled_event_types = (
+            "TRANSFER_IN",
+            "TRANSFER_OUT",
+            "STOCK_SPLIT",
+            "OPTION_EXERCISE",
+            "OPTION_ASSIGNMENT",
+            "OPTION_EXPIRY",
+            "FEE",
+            "MANUAL_ADJUSTMENT",
+            "CASH_ADJUSTMENT",
+            "SEPARATE_FEE_EVENT",
+        )
+        baseline_counts = {
+            PositionEvent: self.db.query(PositionEvent).count(),
+            AccountLedgerEntry: self.db.query(AccountLedgerEntry).count(),
+            IdempotencyKey: self.db.query(IdempotencyKey).count(),
+            OutboxEvent: self.db.query(OutboxEvent).count(),
+        }
+
+        for event_type in disabled_event_types:
+            with self.subTest(event_type=event_type):
+                response = self.client.post(
+                    f"/api/trading-positions/{truth_position.public_id}/events",
+                    json={
+                        "event_type": event_type,
+                        "quantity": "1",
+                        "price": "210",
+                        "currency": "USD",
+                        "occurred_at": "2026-04-03T15:30:00+00:00",
+                    },
+                    headers={"Idempotency-Key": f"disabled-{event_type.lower()}"},
+                )
+
+                self.assertEqual(response.status_code, 422, response.text)
+                self.assertEqual(
+                    response.json()["error"]["code"],
+                    "VALIDATION_REQUEST_INVALID",
+                )
+                for model, baseline_count in baseline_counts.items():
+                    self.assertEqual(
+                        self.db.query(model).count(),
+                        baseline_count,
+                        f"{event_type} changed {model.__tablename__}",
+                    )
+
     def test_trade_event_rejects_foreign_currency_before_idempotency_or_outbox(self):
         truth_position = self._seed_open_synced_position()
         before_outbox = self.db.query(OutboxEvent).count()
@@ -697,6 +762,17 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
             json=request_body,
             headers=headers,
         )
+        self.db.expire_all()
+        idempotency_record = self.db.query(IdempotencyKey).filter(
+            IdempotencyKey.scope == "trading_position.trade_event.create",
+        ).one()
+        historical_response = first_response.json()
+        historical_response["data"]["ai_sidecar"]["items"] = [
+            {"conclusion": "historical-ai-secret"}
+        ]
+        idempotency_record.response_json = historical_response
+        self.db.commit()
+
         second_response = self.client.post(
             f"/api/trading-positions/{truth_position.public_id}/events",
             json=request_body,
@@ -706,6 +782,7 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         self.assertEqual(first_response.status_code, 201)
         self.assertEqual(second_response.status_code, 201)
         self.assertEqual(second_response.json(), first_response.json())
+        self.assertNotIn("historical-ai-secret", second_response.text)
 
         self.db.expire_all()
         add_events = self.db.query(PositionEvent).filter(
@@ -719,6 +796,10 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         ).one()
         self.assertEqual(idempotency_record.status, "COMPLETED")
         self.assertIsNotNone(idempotency_record.response_json)
+        self.assertEqual(
+            idempotency_record.response_json["data"]["ai_sidecar"]["items"][0]["conclusion"],
+            "historical-ai-secret",
+        )
 
     def test_trade_event_write_rejects_idempotency_key_reuse_with_different_payload(self):
         truth_position = self._seed_open_synced_position()

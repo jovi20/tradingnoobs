@@ -138,6 +138,9 @@ class IbkrFlexContract(_FrozenModel):
     network_access: Literal[False]
     credential_access: Literal[False]
     repeat_overlap_incremental: Literal[True]
+    first_binding_effect: Literal["EFFECTIVE_EXECUTION_OR_PROVEN_FLAT_COVERAGE"]
+    proven_flat_empty_statement_can_bind: Literal[True]
+    proven_flat_empty_binding_session_state: Literal["COMPLETED"]
     execution_identity_field: Literal["ibExecID"]
     provider_contract_gate_required: Literal[True]
     implementation_gate: Literal["JRN_013_THROUGH_JRN_015"]
@@ -374,7 +377,8 @@ class JournalBetaReleaseContract(_FrozenModel):
             ),
             (
                 ("CLEAN", "MANUAL", "FIRST_MANUAL_TRADE_OR_GENERIC_NON_NOOP_CONFIRM"),
-                ("CLEAN", "SOURCE_BOUND", "FIRST_IBKR_FLEX_NON_NOOP_CONFIRM"),
+                ("CLEAN", "SOURCE_BOUND", "FIRST_IBKR_FLEX_BINDING_EFFECTIVE_CONFIRM"),
+                ("SOURCE_BOUND", "SOURCE_BOUND", "SAME_BINDING_REPEAT_OVERLAP_OR_INCREMENTAL_CONFIRM"),
             ),
             "trade source transitions",
         )

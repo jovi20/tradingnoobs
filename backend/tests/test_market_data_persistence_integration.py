@@ -12,6 +12,7 @@ from models import (
     AssetCurrency,
     AssetMarket,
     AssetMetadata,
+    FeatureFlag,
     JobRun,
     JobRunStatus,
     LatestMarketQuote,
@@ -19,6 +20,8 @@ from models import (
     PriceBarDaily,
     ProviderSymbolMapping,
 )
+from release_profile import RuntimeCapability
+from services.capability_service import capability_rollout_flag_key
 from services.derived_refresh_handlers import build_default_job_handlers
 from services.job_service import run_next_due_job
 from services.market_data_job_service import enqueue_quote_refresh
@@ -32,6 +35,13 @@ class MarketDataPersistenceIntegrationTests(unittest.TestCase):
         Base.metadata.create_all(bind=self.engine)
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
         self.db = self.SessionLocal()
+        self.db.add(
+            FeatureFlag(
+                key=capability_rollout_flag_key(RuntimeCapability.MARKET),
+                enabled=True,
+            )
+        )
+        self.db.flush()
 
     def tearDown(self):
         self.db.close()

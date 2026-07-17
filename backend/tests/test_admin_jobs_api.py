@@ -2,6 +2,7 @@ import os
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -41,7 +42,10 @@ class AdminJobsApiTests(unittest.TestCase):
                 db.close()
 
         def override_get_current_admin():
-            return self.admin_user
+            return SimpleNamespace(
+                public_id="admin-jobs-public-id",
+                role="admin",
+            )
 
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides[get_current_admin] = override_get_current_admin
@@ -267,6 +271,54 @@ class AdminJobsApiTests(unittest.TestCase):
         response = self.client.post("/api/admin/jobs/job-succeeded/requeue")
 
         self.assertEqual(response.status_code, 409)
+
+    def test_admin_cannot_requeue_market_job_without_runtime_rollout(self):
+        db = self.SessionLocal()
+        try:
+            db.add(self.admin_user)
+            db.flush()
+            definition = JobDefinition(
+                key="market.quote.refresh",
+                display_name="Refresh Market Quote",
+                queue_name="market",
+                retry_policy={"max_attempts": 3},
+                timeout_seconds=300,
+                is_active=True,
+            )
+            db.add(definition)
+            db.flush()
+            db.add(
+                JobRun(
+                    user_id=self.admin_user.id,
+                    job_definition_id=definition.id,
+                    public_id="market-job-failed",
+                    status=JobRunStatus.FAILED,
+                    payload={"symbol": "AAPL"},
+                    max_attempts=3,
+                    attempt_count=3,
+                    queue_name="market",
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        response = self.client.post(
+            "/api/admin/jobs/market-job-failed/requeue"
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["error"]["code"], "FEATURE_DISABLED")
+        self.assertEqual(response.json()["detail"]["capability"], "MARKET")
+        db = self.SessionLocal()
+        try:
+            job_run = db.query(JobRun).filter(
+                JobRun.public_id == "market-job-failed"
+            ).one()
+            self.assertEqual(job_run.status, JobRunStatus.FAILED)
+            self.assertEqual(job_run.attempt_count, 3)
+        finally:
+            db.close()
 
     def test_admin_can_cancel_queued_job(self):
         db = self.SessionLocal()

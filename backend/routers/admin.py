@@ -9,6 +9,7 @@ from models import (
     BusinessLockStatus,
     FeatureFlag,
     IntegrationCredential,
+    JobDefinition,
     JobRun,
     JobRunStatus,
     PlatformSetting,
@@ -37,7 +38,6 @@ from schemas import (
 from routers.auth import get_current_user
 from release_profile import RuntimeCapability, is_capability_enabled
 from routers.disabled_capabilities import raise_feature_disabled
-import httpx
 from observability import get_structured_logger, log_event
 from services.admin_user_service import (
     AdminUserNotFound,
@@ -54,7 +54,6 @@ from services.capability_service import (
     CAPABILITY_ROLLOUT_FLAG_KEYS,
     is_effective_capability_enabled,
 )
-from services.platform_config_service import get_llm_runtime_config
 
 router = APIRouter(
     prefix="/api/admin",
@@ -67,28 +66,125 @@ DEFAULT_JOB_STALE_TIMEOUT_SECONDS = 30 * 60
 FORCE_CANCEL_WARNING = "Force-cancel releases active business locks owned by this job and may leave partial work behind."
 _BROKER_IDENTIFIER_ALIASES = (
     "ibkr",
+    "interactive_broker",
+    "interactive_brokers",
     "interactivebroker",
+    "interactivebrokers",
     "binance",
+    "broker_sync",
     "brokersync",
 )
 _MARKET_IDENTIFIER_ALIASES = (
     "finnhub",
     "yfinance",
+    "y_finance",
+    "yahoo_finance",
     "yahoofinance",
     "akshare",
+    "polygon",
+    "alpha_vantage",
+    "alphavantage",
+    "market_data",
     "marketdata",
 )
 _BROKER_IDENTIFIER_TOKENS = {"broker", "brokers", "brokerage"}
 _MARKET_IDENTIFIER_TOKENS = {"market", "markets"}
 _AI_IDENTIFIER_ALIASES = (
     "openai",
+    "azure_openai",
+    "azureopenai",
+    "anthropic",
+    "claude",
+    "deep_seek",
+    "deepseek",
+    "gemini",
+    "google_gemini",
+    "googlegemini",
+    "groq",
+    "mistral",
+    "cohere",
+    "ollama",
     "llm",
+    "ai_insights",
     "aiinsights",
     "insights",
 )
 _AI_IDENTIFIER_TOKENS = {"ai", "llm", "insight", "insights"}
+_SECRET_IDENTIFIER_ALIASES = (
+    "api_key",
+    "apikey",
+    "api_token",
+    "access_token",
+    "refresh_token",
+    "client_secret",
+    "access_key",
+    "access_key_id",
+    "service_account_key",
+    "service_account_json",
+    "signing_key",
+    "encryption_key",
+    "connection_string",
+    "database_url",
+    "private_key",
+    "token",
+    "secret",
+    "password",
+    "credential",
+    "credentials",
+)
+_SECRET_COMPACT_MARKERS = (
+    "apikey",
+    "token",
+    "secret",
+    "password",
+    "credential",
+    "privatekey",
+    "accesskey",
+    "serviceaccountkey",
+    "serviceaccountjson",
+    "signingkey",
+    "encryptionkey",
+    "connectionstring",
+    "databaseurl",
+)
+_PROVIDER_KEY_QUALIFIER_TOKENS = {
+    "api",
+    "dev",
+    "development",
+    "flex",
+    "prod",
+    "production",
+    "sandbox",
+    "test",
+}
+_CAPABILITY_IDENTIFIER_ALIASES = (
+    (RuntimeCapability.BROKER_SYNC, _BROKER_IDENTIFIER_ALIASES),
+    (RuntimeCapability.MARKET, _MARKET_IDENTIFIER_ALIASES),
+    (RuntimeCapability.AI_INSIGHTS, _AI_IDENTIFIER_ALIASES),
+)
+_REGISTERED_CREDENTIAL_KEYS = {
+    RuntimeCapability.BROKER_SYNC: frozenset({"api_key", "api_secret", "flex_token"}),
+    RuntimeCapability.MARKET: frozenset({"api_key", "api_token", "access_token"}),
+    RuntimeCapability.AI_INSIGHTS: frozenset({"api_key", "access_token"}),
+}
 _CAPABILITY_BY_ROLLOUT_FLAG_KEY = {
     key: capability for capability, key in CAPABILITY_ROLLOUT_FLAG_KEYS.items()
+}
+_CAPABILITY_ROLLOUT_FLAG_PREFIX = "capability."
+_DEPLOYMENT_OWNED_SETTING_KEYS = frozenset(
+    {"deployment_capability_allowlist", "release_profile"}
+)
+_SECRET_CONFIGURATION_UNAVAILABLE_DETAIL = {
+    "code": "SECRET_CONFIGURATION_UNAVAILABLE",
+    "message": "Secret configuration is unavailable",
+}
+_CONFIGURATION_KEY_UNAVAILABLE_DETAIL = {
+    "code": "CONFIGURATION_KEY_UNAVAILABLE",
+    "message": "Configuration key is unavailable",
+}
+_PUBLIC_CAPABILITY_ROLLOUT_INVALID_DETAIL = {
+    "code": "PUBLIC_CAPABILITY_ROLLOUT_INVALID",
+    "message": "Public capabilities require a global runtime rollout",
 }
 
 
@@ -96,39 +192,146 @@ def _enum_value(value):
     return value.value if hasattr(value, "value") else value
 
 
-def _identifier_parts(value: str) -> tuple[set[str], str]:
+def _identifier_tokens(value: str) -> tuple[str, ...]:
     with_word_boundaries = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", value.strip())
-    token_list = [
+    return tuple(
         token
         for token in re.sub(r"[^A-Za-z0-9]+", "_", with_word_boundaries)
         .lower()
         .strip("_")
         .split("_")
         if token
-    ]
+    )
+
+
+def _identifier_parts(value: str) -> tuple[set[str], str]:
+    token_list = _identifier_tokens(value)
     return set(token_list), "".join(token_list)
+
+
+def _identifier_contains_alias(value: str, aliases: tuple[str, ...]) -> bool:
+    tokens = _identifier_tokens(value)
+    if not tokens:
+        return False
+
+    for alias in aliases:
+        alias_tokens = _identifier_tokens(alias)
+        if not alias_tokens:
+            continue
+        width = len(alias_tokens)
+        if any(
+            tokens[index:index + width] == alias_tokens
+            for index in range(len(tokens) - width + 1)
+        ):
+            return True
+        if width > 1 and "".join(alias_tokens) in tokens:
+            return True
+    return False
+
+
+def _identifier_starts_with_alias(value: str, aliases: tuple[str, ...]) -> bool:
+    tokens = _identifier_tokens(value)
+    if not tokens:
+        return False
+
+    for alias in aliases:
+        alias_tokens = _identifier_tokens(alias)
+        if not alias_tokens:
+            continue
+        if tokens[:len(alias_tokens)] == alias_tokens:
+            remaining_tokens = tokens[len(alias_tokens):]
+        elif len(alias_tokens) > 1 and tokens[0] == "".join(alias_tokens):
+            remaining_tokens = tokens[1:]
+        else:
+            continue
+        if all(
+            token in _PROVIDER_KEY_QUALIFIER_TOKENS
+            for token in remaining_tokens
+        ):
+            return True
+    return False
+
+
+def _registered_capability_for_identifier(
+    identifier: str,
+    *,
+    provider_prefix_only: bool,
+) -> RuntimeCapability | None:
+    matcher = (
+        _identifier_starts_with_alias
+        if provider_prefix_only
+        else _identifier_contains_alias
+    )
+    for capability, aliases in _CAPABILITY_IDENTIFIER_ALIASES:
+        if matcher(identifier, aliases):
+            return capability
+    return None
+
+
+def _is_secret_identifier(identifier: str) -> bool:
+    _, compact = _identifier_parts(identifier)
+    return _identifier_contains_alias(
+        identifier,
+        _SECRET_IDENTIFIER_ALIASES,
+    ) or any(marker in compact for marker in _SECRET_COMPACT_MARKERS)
+
+
+def _normalized_identifier_key(identifier: str) -> str:
+    return "_".join(_identifier_tokens(identifier))
+
+
+def _is_deployment_owned_setting_key(identifier: str) -> bool:
+    return _normalized_identifier_key(identifier) in _DEPLOYMENT_OWNED_SETTING_KEYS
+
+
+def _is_capability_namespace_key(identifier: str) -> bool:
+    return identifier.strip().lower().startswith(_CAPABILITY_ROLLOUT_FLAG_PREFIX)
+
+
+def _is_registered_credential_key(
+    capability: RuntimeCapability,
+    credential_key: str,
+) -> bool:
+    normalized_key = "_".join(_identifier_tokens(credential_key))
+    return normalized_key in _REGISTERED_CREDENTIAL_KEYS.get(capability, frozenset())
 
 
 def _optional_capability_for_identifiers(
     *identifiers: str,
 ) -> RuntimeCapability | None:
-    parts = [_identifier_parts(identifier) for identifier in identifiers if identifier]
+    identifiers_with_tokens = [
+        (identifier, _identifier_parts(identifier)[0])
+        for identifier in identifiers
+        if identifier
+    ]
 
-    for tokens, compact in parts:
-        if _BROKER_IDENTIFIER_TOKENS.intersection(tokens) or any(
-            alias in compact for alias in _BROKER_IDENTIFIER_ALIASES
+    for identifier, tokens in identifiers_with_tokens:
+        if _BROKER_IDENTIFIER_TOKENS.intersection(tokens) or (
+            _registered_capability_for_identifier(
+                identifier,
+                provider_prefix_only=False,
+            )
+            == RuntimeCapability.BROKER_SYNC
         ):
             return RuntimeCapability.BROKER_SYNC
 
-    for tokens, compact in parts:
-        if _MARKET_IDENTIFIER_TOKENS.intersection(tokens) or any(
-            alias in compact for alias in _MARKET_IDENTIFIER_ALIASES
+    for identifier, tokens in identifiers_with_tokens:
+        if _MARKET_IDENTIFIER_TOKENS.intersection(tokens) or (
+            _registered_capability_for_identifier(
+                identifier,
+                provider_prefix_only=False,
+            )
+            == RuntimeCapability.MARKET
         ):
             return RuntimeCapability.MARKET
 
-    for tokens, compact in parts:
-        if _AI_IDENTIFIER_TOKENS.intersection(tokens) or any(
-            alias in compact for alias in _AI_IDENTIFIER_ALIASES
+    for identifier, tokens in identifiers_with_tokens:
+        if _AI_IDENTIFIER_TOKENS.intersection(tokens) or (
+            _registered_capability_for_identifier(
+                identifier,
+                provider_prefix_only=False,
+            )
+            == RuntimeCapability.AI_INSIGHTS
         ):
             return RuntimeCapability.AI_INSIGHTS
 
@@ -144,46 +347,233 @@ def _require_optional_capability(capability: RuntimeCapability | None) -> None:
         raise_feature_disabled(capability.value)
 
 
-def _require_effective_optional_capability(
-    db: Session,
-    capability: RuntimeCapability,
-    *,
-    actor_key: str,
-) -> None:
-    _require_optional_capability(capability)
-    if not is_effective_capability_enabled(
-        db,
-        capability,
-        actor_key=actor_key,
-    ):
-        raise_feature_disabled(capability.value)
-
-
 def _require_provider_capability(
     provider_key: str,
     credential_key: str | None = None,
 ) -> None:
-    _require_optional_capability(
-        _optional_capability_for_identifiers(provider_key, credential_key or "")
+    capability = _registered_capability_for_identifier(
+        provider_key,
+        provider_prefix_only=True,
     )
+    if capability is None or (
+        credential_key is not None
+        and not _is_registered_credential_key(capability, credential_key)
+    ):
+        _raise_secret_configuration_unavailable()
+    _require_optional_capability(capability)
 
 
 def _require_setting_capability(key: str) -> None:
-    _require_optional_capability(_optional_capability_for_identifiers(key))
+    if _is_deployment_owned_setting_key(key) or _is_capability_namespace_key(key):
+        _raise_configuration_key_unavailable()
+    if _is_secret_identifier(key):
+        capability = _registered_capability_for_identifier(
+            key,
+            provider_prefix_only=False,
+        )
+        if capability is None:
+            _raise_secret_configuration_unavailable()
+    else:
+        capability = _optional_capability_for_identifiers(key)
+    _require_optional_capability(capability)
 
 
-def _require_job_capability(job_run: JobRun) -> None:
-    job_key = (job_run.definition.key if job_run.definition else "").lower()
-    if job_key.startswith("market.") and not is_capability_enabled(RuntimeCapability.MARKET):
-        raise_feature_disabled(RuntimeCapability.MARKET.value)
-    if job_key.startswith("broker.") and not is_capability_enabled(
-        RuntimeCapability.BROKER_SYNC
+def _raise_secret_configuration_unavailable() -> None:
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=_SECRET_CONFIGURATION_UNAVAILABLE_DETAIL,
+    )
+
+
+def _raise_configuration_key_unavailable() -> None:
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=_CONFIGURATION_KEY_UNAVAILABLE_DETAIL,
+    )
+
+
+def _setting_key_is_visible(key: str) -> bool:
+    if _is_deployment_owned_setting_key(key) or _is_capability_namespace_key(key):
+        return False
+    if _is_secret_identifier(key):
+        capability = _registered_capability_for_identifier(
+            key,
+            provider_prefix_only=False,
+        )
+        return capability is not None and is_capability_enabled(capability)
+    return _capability_is_visible(_optional_capability_for_identifiers(key))
+
+
+def _provider_credential_is_visible(
+    provider_key: str,
+    credential_key: str,
+) -> bool:
+    capability = _registered_capability_for_identifier(
+        provider_key,
+        provider_prefix_only=True,
+    )
+    return (
+        capability is not None
+        and _is_registered_credential_key(capability, credential_key)
+        and is_capability_enabled(capability)
+    )
+
+
+def _job_runtime_capabilities(
+    *,
+    job_key: str,
+    definition_queue_name: str,
+    run_queue_name: str,
+) -> frozenset[RuntimeCapability]:
+    capabilities: set[RuntimeCapability] = set()
+    for identifier in (job_key, definition_queue_name, run_queue_name):
+        capability = _optional_capability_for_identifiers(identifier)
+        if capability is not None:
+            capabilities.add(capability)
+
+        tokens, compact = _identifier_parts(identifier)
+        if "pdf" in tokens or compact.startswith("pdf"):
+            capabilities.add(RuntimeCapability.PDF_EXPORT)
+        if "risk" in tokens or compact.startswith("risk"):
+            capabilities.add(RuntimeCapability.RISK_CARDS)
+    return frozenset(capabilities)
+
+
+def _job_identity_query(db: Session):
+    return db.query(
+        JobRun.id.label("job_run_id"),
+        JobRun.public_id.label("job_public_id"),
+        JobRun.queue_name.label("run_queue_name"),
+        JobDefinition.key.label("definition_key"),
+        JobDefinition.queue_name.label("definition_queue_name"),
+    ).join(JobDefinition, JobDefinition.id == JobRun.job_definition_id)
+
+
+def _job_identity_or_404(db: Session, job_public_id: str):
+    identity = _job_identity_query(db).filter(
+        JobRun.public_id == job_public_id
+    ).first()
+    if identity is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job run not found",
+        )
+    return identity
+
+
+def _job_run_for_identity(db: Session, identity) -> JobRun:
+    job_run = db.query(JobRun).filter(JobRun.id == identity.job_run_id).first()
+    if job_run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job run not found",
+        )
+    return job_run
+
+
+def _job_runtime_capabilities_for_identity(identity) -> frozenset[RuntimeCapability]:
+    return _job_runtime_capabilities(
+        job_key=identity.definition_key,
+        definition_queue_name=identity.definition_queue_name,
+        run_queue_name=identity.run_queue_name,
+    )
+
+
+def _require_job_deployment_capabilities(identity) -> None:
+    for capability in sorted(
+        _job_runtime_capabilities_for_identity(identity),
+        key=lambda item: item.value,
     ):
-        raise_feature_disabled(RuntimeCapability.BROKER_SYNC.value)
-    if job_key.startswith(("ai.", "insight.")) and not is_capability_enabled(
-        RuntimeCapability.AI_INSIGHTS
+        _require_optional_capability(capability)
+
+
+def _require_job_capability(
+    db: Session,
+    identity,
+    *,
+    actor_key: str,
+) -> None:
+    for capability in sorted(
+        _job_runtime_capabilities_for_identity(identity),
+        key=lambda item: item.value,
     ):
-        raise_feature_disabled(RuntimeCapability.AI_INSIGHTS.value)
+        if not is_effective_capability_enabled(
+            db,
+            capability,
+            actor_key=actor_key,
+        ):
+            raise_feature_disabled(capability.value)
+
+
+def _visible_job_run_query(db: Session):
+    visible_definition_ids = [
+        definition_id
+        for definition_id, key, queue_name in db.query(
+            JobDefinition.id,
+            JobDefinition.key,
+            JobDefinition.queue_name,
+        ).all()
+        if all(
+            is_capability_enabled(capability)
+            for capability in _job_runtime_capabilities(
+                job_key=key,
+                definition_queue_name=queue_name,
+                run_queue_name="",
+            )
+        )
+    ]
+    visible_run_queue_names = [
+        queue_name
+        for (queue_name,) in db.query(JobRun.queue_name).distinct().all()
+        if all(
+            is_capability_enabled(capability)
+            for capability in _job_runtime_capabilities(
+                job_key="",
+                definition_queue_name="",
+                run_queue_name=queue_name,
+            )
+        )
+    ]
+    return db.query(JobRun).filter(
+        JobRun.job_definition_id.in_(visible_definition_ids),
+        JobRun.queue_name.in_(visible_run_queue_names),
+    )
+
+
+def _hidden_optional_job_public_ids(db: Session) -> list[str]:
+    return [
+        identity.job_public_id
+        for identity in _job_identity_query(db).all()
+        if any(
+            not is_capability_enabled(capability)
+            for capability in _job_runtime_capabilities_for_identity(identity)
+        )
+    ]
+
+
+def _visible_business_lock_count(
+    db: Session,
+    *,
+    lock_status: BusinessLockStatus,
+    hidden_job_public_ids: list[str],
+) -> int:
+    total = (
+        db.query(BusinessLock.id)
+        .filter(BusinessLock.status == lock_status)
+        .count()
+    )
+    if not hidden_job_public_ids:
+        return total
+    hidden_optional_job_locks = (
+        db.query(BusinessLock.id)
+        .filter(
+            BusinessLock.status == lock_status,
+            BusinessLock.owner_type == "job_run",
+            BusinessLock.owner_id.in_(hidden_job_public_ids),
+        )
+        .count()
+    )
+    return total - hidden_optional_job_locks
 
 
 def _business_lock_detail(business_lock: BusinessLock) -> dict:
@@ -351,6 +741,88 @@ def _is_integration_configured(credential: IntegrationCredential) -> bool:
         return False
 
 
+def _visible_system_settings(db: Session) -> list[SystemSetting]:
+    visible_keys = [
+        key
+        for (key,) in db.query(SystemSetting.key).all()
+        if _setting_key_is_visible(key)
+    ]
+    if not visible_keys:
+        return []
+    return (
+        db.query(SystemSetting)
+        .filter(SystemSetting.key.in_(visible_keys))
+        .order_by(SystemSetting.key.asc())
+        .all()
+    )
+
+
+def _visible_platform_settings(db: Session) -> list[PlatformSetting]:
+    visible_ids = [
+        setting_id
+        for setting_id, key in db.query(PlatformSetting.id, PlatformSetting.key).all()
+        if _setting_key_is_visible(key)
+    ]
+    if not visible_ids:
+        return []
+    return (
+        db.query(PlatformSetting)
+        .filter(PlatformSetting.id.in_(visible_ids))
+        .order_by(PlatformSetting.key.asc())
+        .all()
+    )
+
+
+def _visible_integration_credentials(db: Session) -> list[IntegrationCredential]:
+    visible_ids = [
+        credential_id
+        for credential_id, provider_key, credential_key in db.query(
+            IntegrationCredential.id,
+            IntegrationCredential.provider_key,
+            IntegrationCredential.credential_key,
+        ).all()
+        if _provider_credential_is_visible(provider_key, credential_key)
+    ]
+    if not visible_ids:
+        return []
+    return (
+        db.query(IntegrationCredential)
+        .filter(IntegrationCredential.id.in_(visible_ids))
+        .order_by(
+            IntegrationCredential.provider_key.asc(),
+            IntegrationCredential.credential_key.asc(),
+        )
+        .all()
+    )
+
+
+def _visible_feature_flag_ids(db: Session) -> list[int]:
+    visible_ids = []
+    for flag_id, key in db.query(FeatureFlag.id, FeatureFlag.key).all():
+        if _is_deployment_owned_setting_key(key):
+            continue
+        capability = _CAPABILITY_BY_ROLLOUT_FLAG_KEY.get(key)
+        if capability is not None:
+            if is_capability_enabled(capability):
+                visible_ids.append(flag_id)
+            continue
+        if not key.strip().lower().startswith(_CAPABILITY_ROLLOUT_FLAG_PREFIX):
+            visible_ids.append(flag_id)
+    return visible_ids
+
+
+def _visible_feature_flags(db: Session) -> list[FeatureFlag]:
+    visible_ids = _visible_feature_flag_ids(db)
+    if not visible_ids:
+        return []
+    return (
+        db.query(FeatureFlag)
+        .filter(FeatureFlag.id.in_(visible_ids))
+        .order_by(FeatureFlag.key.asc())
+        .all()
+    )
+
+
 @router.get("/ops/summary", response_model=AdminOpsSummaryResponse)
 async def get_admin_ops_summary(
     db: Session = Depends(get_db),
@@ -358,28 +830,18 @@ async def get_admin_ops_summary(
 ):
     database_backend = detect_database_backend(resolve_database_url_for_backup(db))
     backup_items = list_database_backups(backup_dir=ADMIN_BACKUP_DIR, limit=100)
-    platform_settings = [
-        setting
-        for setting in db.query(PlatformSetting).all()
-        if _capability_is_visible(_optional_capability_for_identifiers(setting.key))
-    ]
-    integration_credentials = [
-        credential
-        for credential in db.query(IntegrationCredential).all()
-        if _capability_is_visible(
-            _optional_capability_for_identifiers(
-                credential.provider_key,
-                credential.credential_key,
-            )
-        )
-    ]
+    platform_settings = _visible_platform_settings(db)
+    integration_credentials = _visible_integration_credentials(db)
     now = datetime.now(timezone.utc)
+    visible_job_runs = _visible_job_run_query(db)
+    hidden_optional_job_public_ids = _hidden_optional_job_public_ids(db)
+    visible_feature_flag_ids = _visible_feature_flag_ids(db)
     job_counts = {
-        status_item.value: db.query(JobRun).filter(JobRun.status == status_item).count()
+        status_item.value: visible_job_runs.filter(JobRun.status == status_item).count()
         for status_item in JobRunStatus
     }
     running_job_runs = (
-        db.query(JobRun)
+        visible_job_runs
         .filter(JobRun.status == JobRunStatus.RUNNING, JobRun.locked_at.is_not(None))
         .all()
     )
@@ -396,14 +858,33 @@ async def get_admin_ops_summary(
         platform_setting_count=len(platform_settings),
         configured_integration_count=sum(1 for credential in integration_credentials if _is_integration_configured(credential)),
         active_integration_count=sum(1 for credential in integration_credentials if credential.is_active),
-        enabled_feature_flag_count=db.query(FeatureFlag).filter(FeatureFlag.enabled == True).count(),
-        expired_feature_flag_count=(
-            db.query(FeatureFlag)
-            .filter(FeatureFlag.expires_at.is_not(None), FeatureFlag.expires_at < now)
+        enabled_feature_flag_count=(
+            db.query(FeatureFlag.id)
+            .filter(
+                FeatureFlag.id.in_(visible_feature_flag_ids),
+                FeatureFlag.enabled == True,
+            )
             .count()
         ),
-        active_business_lock_count=db.query(BusinessLock).filter(BusinessLock.status == BusinessLockStatus.ACTIVE).count(),
-        expired_business_lock_count=db.query(BusinessLock).filter(BusinessLock.status == BusinessLockStatus.EXPIRED).count(),
+        expired_feature_flag_count=(
+            db.query(FeatureFlag.id)
+            .filter(
+                FeatureFlag.id.in_(visible_feature_flag_ids),
+                FeatureFlag.expires_at.is_not(None),
+                FeatureFlag.expires_at < now,
+            )
+            .count()
+        ),
+        active_business_lock_count=_visible_business_lock_count(
+            db,
+            lock_status=BusinessLockStatus.ACTIVE,
+            hidden_job_public_ids=hidden_optional_job_public_ids,
+        ),
+        expired_business_lock_count=_visible_business_lock_count(
+            db,
+            lock_status=BusinessLockStatus.EXPIRED,
+            hidden_job_public_ids=hidden_optional_job_public_ids,
+        ),
     )
 
 
@@ -573,9 +1054,9 @@ async def get_job_run_detail(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin)
 ):
-    job_run = db.query(JobRun).filter(JobRun.public_id == job_public_id).first()
-    if not job_run:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job run not found")
+    identity = _job_identity_or_404(db, job_public_id)
+    _require_job_deployment_capabilities(identity)
+    job_run = _job_run_for_identity(db, identity)
     return _job_run_detail(job_run, business_locks=_business_locks_for_job_run(db, job_run))
 
 
@@ -585,10 +1066,13 @@ async def requeue_job_run_endpoint(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin)
 ):
-    job_run = db.query(JobRun).filter(JobRun.public_id == job_public_id).first()
-    if not job_run:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job run not found")
-    _require_job_capability(job_run)
+    identity = _job_identity_or_404(db, job_public_id)
+    _require_job_capability(
+        db,
+        identity,
+        actor_key=current_admin.public_id,
+    )
+    job_run = _job_run_for_identity(db, identity)
     try:
         requeued = requeue_job_run(db, job_run=job_run)
     except ValueError as exc:
@@ -604,9 +1088,9 @@ async def cancel_job_run_endpoint(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin)
 ):
-    job_run = db.query(JobRun).filter(JobRun.public_id == job_public_id).first()
-    if not job_run:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job run not found")
+    identity = _job_identity_or_404(db, job_public_id)
+    _require_job_deployment_capabilities(identity)
+    job_run = _job_run_for_identity(db, identity)
     try:
         cancelled = cancel_job_run(db, job_run=job_run)
     except ValueError as exc:
@@ -622,9 +1106,9 @@ async def force_cancel_job_run_endpoint(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin)
 ):
-    job_run = db.query(JobRun).filter(JobRun.public_id == job_public_id).first()
-    if not job_run:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job run not found")
+    identity = _job_identity_or_404(db, job_public_id)
+    _require_job_deployment_capabilities(identity)
+    job_run = _job_run_for_identity(db, identity)
     try:
         cancelled = force_cancel_running_job_run(db, job_run=job_run)
     except ValueError as exc:
@@ -642,7 +1126,7 @@ async def list_job_runs(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin)
 ):
-    query = db.query(JobRun)
+    query = _visible_job_run_query(db)
     if status_filter is not None:
         query = query.filter(JobRun.status == status_filter)
     if queue_name:
@@ -667,12 +1151,7 @@ async def list_system_settings(
     current_admin: User = Depends(get_current_admin)
 ):
     """Get all system settings"""
-    settings = db.query(SystemSetting).order_by(SystemSetting.key.asc()).all()
-    return [
-        setting
-        for setting in settings
-        if _capability_is_visible(_optional_capability_for_identifiers(setting.key))
-    ]
+    return _visible_system_settings(db)
 
 
 @router.get("/platform/settings", response_model=List[PlatformSettingResponse])
@@ -680,12 +1159,7 @@ async def list_platform_settings(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin)
 ):
-    settings = db.query(PlatformSetting).order_by(PlatformSetting.key.asc()).all()
-    return [
-        setting
-        for setting in settings
-        if _capability_is_visible(_optional_capability_for_identifiers(setting.key))
-    ]
+    return _visible_platform_settings(db)
 
 
 @router.put("/platform/settings/{key}", response_model=PlatformSettingResponse)
@@ -716,19 +1190,10 @@ async def list_integration_credentials(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin)
 ):
-    credentials = db.query(IntegrationCredential).order_by(
-        IntegrationCredential.provider_key.asc(),
-        IntegrationCredential.credential_key.asc(),
-    ).all()
+    credentials = _visible_integration_credentials(db)
 
     result = []
     for credential in credentials:
-        capability = _optional_capability_for_identifiers(
-            credential.provider_key,
-            credential.credential_key,
-        )
-        if not _capability_is_visible(capability):
-            continue
         secret_value = decrypt_secret(credential.secret_ciphertext)
         result.append(
             IntegrationCredentialResponse(
@@ -829,7 +1294,7 @@ async def list_feature_flags(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin)
 ):
-    return db.query(FeatureFlag).order_by(FeatureFlag.key.asc()).all()
+    return _visible_feature_flags(db)
 
 
 @router.put("/platform/feature-flags/{key}", response_model=FeatureFlagResponse)
@@ -839,7 +1304,20 @@ async def upsert_feature_flag(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin)
 ):
-    _require_optional_capability(_CAPABILITY_BY_ROLLOUT_FLAG_KEY.get(key))
+    if _is_deployment_owned_setting_key(key):
+        _raise_configuration_key_unavailable()
+    capability = _CAPABILITY_BY_ROLLOUT_FLAG_KEY.get(key)
+    if _is_capability_namespace_key(key) and capability is None:
+        _raise_configuration_key_unavailable()
+    _require_optional_capability(capability)
+    if capability == RuntimeCapability.OPEN_REGISTRATION and (
+        feature_flag_in.actor_targets
+        or feature_flag_in.rollout_percentage is not None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_PUBLIC_CAPABILITY_ROLLOUT_INVALID_DETAIL,
+        )
     feature_flag = db.query(FeatureFlag).filter(FeatureFlag.key == key).first()
     if not feature_flag:
         feature_flag = FeatureFlag(key=key)
@@ -878,70 +1356,3 @@ async def update_system_setting(
     db.commit()
     db.refresh(setting)
     return setting
-
-
-@router.post("/test-llm", status_code=status.HTTP_200_OK)
-async def test_llm_connection(
-    db: Session = Depends(get_db),
-    current_admin: User = Depends(get_current_admin)
-):
-    """Test LLM API connection with current system settings"""
-    _require_effective_optional_capability(
-        db,
-        RuntimeCapability.AI_INSIGHTS,
-        actor_key=current_admin.public_id,
-    )
-    llm_config = get_llm_runtime_config(db)
-
-    if not llm_config["api_url"]:
-        raise HTTPException(status_code=400, detail="LLM API URL not configured")
-    if not llm_config["api_key"]:
-        raise HTTPException(status_code=400, detail="LLM API Key not configured")
-
-    llm_api_url = llm_config["api_url"]
-    llm_api_key = llm_config["api_key"]
-    llm_model = llm_config["model"] or "gpt-4"
-
-    # Construct URL
-    api_endpoint = llm_api_url.strip().rstrip('/')
-    if not api_endpoint.endswith('/chat/completions'):
-        api_endpoint = f"{api_endpoint}/chat/completions"
-
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                api_endpoint,
-                headers={
-                    "Authorization": f"Bearer {llm_api_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": llm_model,
-                    "messages": [
-                        {"role": "user", "content": "Hello"}
-                    ],
-                    "max_tokens": 5
-                }
-            )
-            
-            if response.status_code == 200:
-                log_event(logger, "info", "llm_test_success", response_body=response.json())
-                return {"status": "success", "message": "Connection successful"}
-            else:
-                error_msg = response.text
-                try:
-                    error_json = response.json()
-                    if "error" in error_json:
-                        msg = error_json["error"].get("message")
-                        if msg:
-                            error_msg = msg
-                except:
-                    pass
-                raise HTTPException(status_code=400, detail=f"API Error ({response.status_code}): {error_msg}")
-                
-    except httpx.ConnectTimeout:
-         raise HTTPException(status_code=504, detail="Connection Timed Out (30s). Check your network or API URL.")
-    except httpx.RequestError as e:
-        raise HTTPException(status_code=502, detail=f"Network Error: {str(e)}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Test Failed: {str(e)}")

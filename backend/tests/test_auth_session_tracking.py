@@ -1,18 +1,25 @@
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from database import Base, get_db
-from main import app
-from models import AuthToken, User, UserCredential, UserSession
+from main import create_app
+from models import AuthToken, FeatureFlag, User, UserCredential, UserSession
+from release_profile import DeploymentCapabilityPolicy, ReleaseProfile, RuntimeCapability
 
 
 class AuthSessionTrackingTests(unittest.TestCase):
     def setUp(self):
+        self.ceiling_patch = patch(
+            "release_profile.STATIC_DEPLOYMENT_CAPABILITY_POLICY",
+            DeploymentCapabilityPolicy(frozenset({RuntimeCapability.OPEN_REGISTRATION})),
+        )
+        self.ceiling_patch.start()
         fd, self.db_path = tempfile.mkstemp(suffix=".db")
         os.close(fd)
         self.engine = create_engine(
@@ -21,6 +28,20 @@ class AuthSessionTrackingTests(unittest.TestCase):
         )
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
         Base.metadata.create_all(bind=self.engine)
+        db = self.SessionLocal()
+        try:
+            db.add(
+                FeatureFlag(
+                    key="capability.open_registration.v1",
+                    enabled=True,
+                    actor_targets=[],
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        self.app = create_app(ReleaseProfile.DEVELOPMENT_FULL)
 
         def override_get_db():
             db = self.SessionLocal()
@@ -29,14 +50,16 @@ class AuthSessionTrackingTests(unittest.TestCase):
             finally:
                 db.close()
 
-        app.dependency_overrides[get_db] = override_get_db
-        self.client = TestClient(app)
+        self.app.dependency_overrides[get_db] = override_get_db
+        self.client = TestClient(self.app)
 
     def tearDown(self):
-        app.dependency_overrides.clear()
+        self.client.close()
+        self.app.dependency_overrides.clear()
         self.engine.dispose()
         if os.path.exists(self.db_path):
             os.remove(self.db_path)
+        self.ceiling_patch.stop()
 
     def test_login_creates_user_credential_session_and_token_records(self):
         register_response = self.client.post(

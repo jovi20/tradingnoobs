@@ -207,6 +207,9 @@
       "network_access": false,
       "credential_access": false,
       "repeat_overlap_incremental": true,
+      "first_binding_effect": "EFFECTIVE_EXECUTION_OR_PROVEN_FLAT_COVERAGE",
+      "proven_flat_empty_statement_can_bind": true,
+      "proven_flat_empty_binding_session_state": "COMPLETED",
       "execution_identity_field": "ibExecID",
       "provider_contract_gate_required": true,
       "implementation_gate": "JRN_013_THROUGH_JRN_015",
@@ -294,7 +297,12 @@
       {
         "from_state": "CLEAN",
         "to_state": "SOURCE_BOUND",
-        "trigger": "FIRST_IBKR_FLEX_NON_NOOP_CONFIRM"
+        "trigger": "FIRST_IBKR_FLEX_BINDING_EFFECTIVE_CONFIRM"
+      },
+      {
+        "from_state": "SOURCE_BOUND",
+        "to_state": "SOURCE_BOUND",
+        "trigger": "SAME_BINDING_REPEAT_OVERLAP_OR_INCREMENTAL_CONFIRM"
       }
     ]
   },

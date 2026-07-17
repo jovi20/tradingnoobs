@@ -8,7 +8,9 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from models import DerivedTimelineSnapshot, JobRun
-from release_profile import RuntimeCapability, is_capability_enabled
+from release_profile import RuntimeCapability
+from routers.disabled_capabilities import raise_feature_disabled
+from services.capability_service import is_effective_capability_enabled
 from services.trading_position_read_service import (
     build_trading_position_lifecycle_payload,
     resolve_truth_position_by_public_id,
@@ -83,8 +85,14 @@ def build_default_job_handlers(db: Session):
     handlers = {
         "derived.timeline.refresh": lambda job_run: refresh_timeline_read_model(db, job_run),
     }
-    if is_capability_enabled(RuntimeCapability.MARKET):
+    if is_effective_capability_enabled(db, RuntimeCapability.MARKET):
         from services.market_data_job_handlers import build_market_data_job_handlers
 
-        handlers.update(build_market_data_job_handlers(db))
+        for key, handler in build_market_data_job_handlers(db).items():
+            def guarded_market_handler(job_run, *, _handler=handler):
+                if not is_effective_capability_enabled(db, RuntimeCapability.MARKET):
+                    raise_feature_disabled(RuntimeCapability.MARKET.value)
+                return _handler(job_run)
+
+            handlers[key] = guarded_market_handler
     return handlers

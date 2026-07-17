@@ -3,6 +3,8 @@ Trading Noobs Backend - TradingPosition Truth Read Router
 """
 from __future__ import annotations
 
+from copy import deepcopy
+
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
@@ -15,6 +17,7 @@ from app_config.release_contract import (
 )
 from database import get_db
 from models import PositionEvent, PositionEventType, User
+from release_profile import RuntimeCapability
 from schemas import (
     TradingPositionDividendCreate,
     TradingPositionEventNarrativeUpdate,
@@ -27,6 +30,7 @@ from services.account_ledger_service import (
     sync_dividend_event_to_account_ledger,
 )
 from services.auth_service import get_current_user
+from services.capability_service import is_effective_capability_enabled
 from services.idempotency_service import begin_idempotent_request, complete_idempotent_request
 from services.outbox_service import enqueue_position_event_created_outbox
 from services.trading_position_read_service import build_trading_position_lifecycle_payload, resolve_truth_position_by_public_id
@@ -72,8 +76,25 @@ def _require_same_currency_financial_fact(
     return normalized_currency, normalized_fee_currency
 
 
-def _lifecycle_response_content(db: Session, truth_position, source: str = "DERIVED") -> dict:
-    data = build_trading_position_lifecycle_payload(db, truth_position)
+def _lifecycle_response_content(
+    db: Session,
+    truth_position,
+    *,
+    actor_key: str,
+    source: str = "DERIVED",
+    include_ai_sidecar: bool | None = None,
+) -> dict:
+    if include_ai_sidecar is None:
+        include_ai_sidecar = is_effective_capability_enabled(
+            db,
+            RuntimeCapability.AI_INSIGHTS,
+            actor_key=actor_key,
+        )
+    data = build_trading_position_lifecycle_payload(
+        db,
+        truth_position,
+        include_ai_sidecar=include_ai_sidecar,
+    )
     return {
         "data": data,
         "meta": {
@@ -87,10 +108,24 @@ def _lifecycle_response_content(db: Session, truth_position, source: str = "DERI
     }
 
 
-def _lifecycle_response(db: Session, truth_position, source: str = "DERIVED", status_code: int = 200) -> JSONResponse:
+def _lifecycle_response(
+    db: Session,
+    truth_position,
+    *,
+    actor_key: str,
+    source: str = "DERIVED",
+    status_code: int = 200,
+) -> JSONResponse:
     return JSONResponse(
         status_code=status_code,
-        content=jsonable_encoder(_lifecycle_response_content(db, truth_position, source=source))
+        content=jsonable_encoder(
+            _lifecycle_response_content(
+                db,
+                truth_position,
+                actor_key=actor_key,
+                source=source,
+            )
+        ),
     )
 
 
@@ -127,7 +162,19 @@ def _begin_idempotent_lifecycle_write(
         return record, None
 
     if record.status == "COMPLETED" and record.response_json is not None:
-        return record, JSONResponse(status_code=201, content=jsonable_encoder(record.response_json))
+        response_json = deepcopy(record.response_json)
+        if not is_effective_capability_enabled(
+            db,
+            RuntimeCapability.AI_INSIGHTS,
+            actor_key=current_user.public_id,
+        ):
+            ai_sidecar = response_json.get("data", {}).get("ai_sidecar")
+            if isinstance(ai_sidecar, dict):
+                ai_sidecar["items"] = []
+        return record, JSONResponse(
+            status_code=201,
+            content=jsonable_encoder(response_json),
+        )
 
     raise HTTPException(status_code=409, detail="Idempotent request is already in progress.")
 
@@ -152,7 +199,11 @@ def get_trading_position_lifecycle(
     if not truth_position:
         raise HTTPException(status_code=404, detail="Trading position not found")
 
-    return _lifecycle_response(db, truth_position)
+    return _lifecycle_response(
+        db,
+        truth_position,
+        actor_key=current_user.public_id,
+    )
 
 
 @router.patch(
@@ -191,7 +242,12 @@ def update_trading_position_event_narrative(
     db.commit()
 
     updated_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
-    return _lifecycle_response(db, updated_position, source="MANUAL")
+    return _lifecycle_response(
+        db,
+        updated_position,
+        actor_key=current_user.public_id,
+        source="MANUAL",
+    )
 
 
 @router.post(
@@ -253,7 +309,13 @@ def create_trading_position_trade_event(
     db.flush()
     db.expire_all()
     updated_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
-    response_content = _lifecycle_response_content(db, updated_position, source="MANUAL")
+    response_content = _lifecycle_response_content(
+        db,
+        updated_position,
+        actor_key=current_user.public_id,
+        source="MANUAL",
+        include_ai_sidecar=False,
+    )
     _complete_idempotent_lifecycle_write(db, record=idempotency_record, response_content=response_content)
     db.commit()
     return JSONResponse(status_code=201, content=jsonable_encoder(response_content))
@@ -294,7 +356,13 @@ def reverse_trading_position_trade_event(
     db.commit()
 
     updated_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
-    return _lifecycle_response(db, updated_position, source="MANUAL", status_code=201)
+    return _lifecycle_response(
+        db,
+        updated_position,
+        actor_key=current_user.public_id,
+        source="MANUAL",
+        status_code=201,
+    )
 
 
 @router.post("/{position_public_id}/dividends", status_code=201)
@@ -347,13 +415,23 @@ def create_trading_position_dividend(
     db.flush()
     db.expire_all()
     updated_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
-    response_content = _lifecycle_response_content(db, updated_position, source="MANUAL")
+    response_content = _lifecycle_response_content(
+        db,
+        updated_position,
+        actor_key=current_user.public_id,
+        source="MANUAL",
+        include_ai_sidecar=False,
+    )
     _complete_idempotent_lifecycle_write(db, record=idempotency_record, response_content=response_content)
     db.commit()
     return JSONResponse(status_code=201, content=jsonable_encoder(response_content))
 
 
-@router.post("/{position_public_id}/adjustments", status_code=201)
+@router.post(
+    "/{position_public_id}/adjustments",
+    status_code=201,
+    include_in_schema=False,
+)
 def create_trading_position_manual_adjustment(
     position_public_id: str,
     payload: TradingPositionManualAdjustmentCreate,

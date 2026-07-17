@@ -7,8 +7,9 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from models import JobDefinition, JobRun, JobRunStatus
-from release_profile import RuntimeCapability, is_capability_enabled
+from release_profile import RuntimeCapability
 from routers.disabled_capabilities import raise_feature_disabled
+from services.capability_service import is_effective_capability_enabled
 
 
 MARKET_QUEUE = "market"
@@ -19,8 +20,8 @@ ACTIVE_JOB_STATUSES = (
 )
 
 
-def _require_market_capability() -> None:
-    if not is_capability_enabled(RuntimeCapability.MARKET):
+def _require_market_capability(db: Session) -> None:
+    if not is_effective_capability_enabled(db, RuntimeCapability.MARKET):
         raise_feature_disabled(RuntimeCapability.MARKET.value)
 
 
@@ -32,7 +33,7 @@ def _ensure_definition(
     description: str,
     timeout_seconds: int,
 ) -> JobDefinition:
-    _require_market_capability()
+    _require_market_capability(db)
     definition = db.query(JobDefinition).filter(JobDefinition.key == key).first()
     if definition is not None:
         return definition
@@ -178,7 +179,7 @@ def enqueue_quote_refresh(
     priority: int = 0,
     now: datetime | None = None,
 ) -> JobRun:
-    _require_market_capability()
+    _require_market_capability(db)
     normalized_symbol = _symbol(symbol)
     payload = {
         "symbol": normalized_symbol,
@@ -221,7 +222,7 @@ def enqueue_daily_backfill(
     priority: int = 0,
     now: datetime | None = None,
 ) -> JobRun:
-    _require_market_capability()
+    _require_market_capability(db)
     normalized_symbol = _symbol(symbol)
     normalized_start = _utc_datetime(start, field="start")
     normalized_end = _utc_datetime(end, field="end")

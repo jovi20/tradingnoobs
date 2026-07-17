@@ -8,6 +8,8 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from release_profile import RuntimeCapability
+from services.capability_service import is_effective_capability_enabled
 from models import (
     IdempotencyKey,
     JobDefinition,
@@ -27,6 +29,8 @@ OUTBOX_JOB_DEFINITIONS = {
         "key": "derived.timeline.refresh",
         "display_name": "Refresh Timeline Read Model",
         "description": "Refresh derived timeline/lifecycle read models after truth position events change.",
+        "queue_name": "derived",
+        "capability": None,
     },
 }
 
@@ -66,15 +70,29 @@ def enqueue_position_event_created_outbox(
     return outbox_event
 
 
+def _authorized_job_config(
+    db: Session,
+    *,
+    event_type: str,
+    queue_name: str,
+) -> dict | None:
+    config = OUTBOX_JOB_DEFINITIONS.get(event_type)
+    if config is None or config["queue_name"] != queue_name:
+        return None
+    capability: RuntimeCapability | None = config["capability"]
+    if capability is not None and not is_effective_capability_enabled(db, capability):
+        return None
+    return config
+
+
 def _get_or_create_job_definition(db: Session, *, event_type: str, queue_name: str) -> JobDefinition:
-    config = OUTBOX_JOB_DEFINITIONS.get(
-        event_type,
-        {
-            "key": f"outbox.{event_type}",
-            "display_name": event_type,
-            "description": "Generic outbox-dispatched job.",
-        },
+    config = _authorized_job_config(
+        db,
+        event_type=event_type,
+        queue_name=queue_name,
     )
+    if config is None:
+        raise ValueError("Outbox event is not authorized for relay")
     definition = db.query(JobDefinition).filter(JobDefinition.key == config["key"]).first()
     if definition:
         return definition
@@ -220,6 +238,12 @@ def relay_pending_outbox_events(
     relayed_count = 0
     for outbox_event in pending_events:
         if outbox_event.available_at and _as_utc(outbox_event.available_at) > now:
+            continue
+        if _authorized_job_config(
+            db,
+            event_type=outbox_event.event_type,
+            queue_name=outbox_event.queue_name,
+        ) is None:
             continue
 
         try:

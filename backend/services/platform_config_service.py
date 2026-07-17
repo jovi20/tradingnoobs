@@ -8,12 +8,9 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from config import get_settings
+from config import get_optional_provider_settings
 from models import FeatureFlag, IntegrationCredential, PlatformSetting, SystemSetting
 from services.credential_service import decrypt_secret
-
-
-settings = get_settings()
 
 
 def _stable_rollout_bucket(key: str, actor_key: str) -> int:
@@ -98,6 +95,7 @@ def get_feature_flag_enabled(db: Session, key: str, *, actor_key: str | None = N
 
 
 def get_llm_runtime_config(db: Session) -> dict[str, Optional[str]]:
+    settings = get_optional_provider_settings()
     api_url = get_platform_setting_value(db, "llm_api_url") or os.getenv("LLM_API_URL") or settings.llm_api_url
     model = get_platform_setting_value(db, "llm_model") or os.getenv("LLM_MODEL") or settings.llm_model
     api_key = (
@@ -115,6 +113,7 @@ def get_llm_runtime_config(db: Session) -> dict[str, Optional[str]]:
 
 
 def get_finnhub_api_key(db: Session) -> Optional[str]:
+    settings = get_optional_provider_settings()
     return (
         get_integration_credential_secret(db, "finnhub", "api_key")
         or get_platform_setting_value(db, "finnhub_api_key")

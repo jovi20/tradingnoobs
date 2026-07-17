@@ -56,12 +56,7 @@ services:
       - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-postgres}@db:5432/tradingnoobs
       - SECRET_KEY=${SECRET_KEY}
       - CORS_ORIGINS=https://${DOMAIN:-localhost},http://${DOMAIN:-localhost},http://localhost:3000
-      - LLM_API_KEY=${LLM_API_KEY:-}
-      - LLM_API_URL=${LLM_API_URL:-https://api.openai.com/v1}
-      - LLM_MODEL=${LLM_MODEL:-gpt-4-turbo}
-      - FINNHUB_API_KEY=${FINNHUB_API_KEY:-}
-      - BINANCE_API_KEY=${BINANCE_API_KEY:-}
-      - BINANCE_API_SECRET=${BINANCE_API_SECRET:-}
+      - DEPLOYMENT_CAPABILITY_ALLOWLIST=
     depends_on:
       db:
         condition: service_healthy

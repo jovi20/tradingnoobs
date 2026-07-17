@@ -32,9 +32,10 @@ from schemas import (
     PositionStatusEnum, BatchTypeEnum, AssetMetadataUpdate,
     ImportPreviewResponse, ImportConfirmRequest
 )
-from models import AssetCoreType, AssetMarket, AssetRiskLevel, AssetCurrency
+from models import AssetCoreType, AssetMarket, AssetCurrency
 from models import TradingPosition
-from services.market_data_access import MarketDataService
+from release_profile import RuntimeCapability
+from services.capability_service import is_effective_capability_enabled
 from services.public_id_service import resolve_position, resolve_trade_batch, resolve_trading_account
 from services.legacy_truth_sync_service import legacy_position_truth_public_id, sync_legacy_position_to_truth
 from services.trading_position_read_service import build_trading_position_lifecycle_payload
@@ -47,9 +48,7 @@ from services.truth_legacy_projection_service import (
 from services.trading_accounting_service import (
     AccountingEvent,
     calculate_fifo_position_accounting,
-    calculate_mark_to_market_position,
 )
-import asyncio
 
 router = APIRouter(prefix="/api/positions", tags=["positions"])
 logger = get_structured_logger("positions")
@@ -209,7 +208,7 @@ def _legacy_truth_lifecycle_exists(db: Session, user_id: int, position: Position
     ).first() is not None
 
 
-@router.get("")
+@router.get("", response_model=List[PositionListResponse])
 async def list_positions(
     status: Optional[PositionStatusEnum] = None,
     symbol: Optional[str] = None,
@@ -217,7 +216,6 @@ async def list_positions(
     asset_type: Optional[str] = None, # Stock, Crypto
     core_type: Optional[str] = None,
     market: Optional[str] = None,
-    risk_level: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -243,42 +241,13 @@ async def list_positions(
         query = query.filter(AssetMetadata.core_type == core_type)
     if market:
         query = query.filter(AssetMetadata.market == market)
-    if risk_level:
-        query = query.filter(AssetMetadata.risk_level == risk_level)
-    
+
     positions = query.order_by(desc(Position.opened_at)).all()
-    
-    # Get market data service for current prices
-    market_service = MarketDataService(db)
-    
-    # Batch fetch quotes for open positions (PARALLEL FETCH)
-    open_positions = [p for p in positions if p.status == PositionStatus.OPEN]
-    quote_results = {}
-    quote_results = {}
-    if open_positions:
-        # Use metadata hints for more accurate quote
-        quote_tasks = []
-        for p in open_positions:
-            meta = p.asset_metadata
-            task = market_service.get_quote(
-                p.symbol, 
-                p.exchange,
-                core_type=meta.core_type.value if meta and meta.core_type else None,
-                market=meta.market.value if meta and meta.market else None,
-                instrument=meta.instrument if meta else None
-            )
-            quote_tasks.append(task)
-            
-        quotes = await asyncio.gather(*quote_tasks, return_exceptions=True)
-        for p, q in zip(open_positions, quotes):
-            if not isinstance(q, Exception):
-                quote_results[p.id] = q
     
     # Build response
     result = []
     for pos in positions:
         pos_dict = {
-
             'id': pos.id,
             'public_id': pos.public_id,
             'truth_position_public_id': (
@@ -298,10 +267,6 @@ async def list_positions(
             'opened_at': pos.opened_at,
             'closed_at': pos.closed_at,
             'created_at': pos.created_at,
-            'current_price': None,
-            'created_at': pos.created_at,
-            'current_price': None,
-            'unrealized_pnl': None,
             'asset_metadata': None
         }
 
@@ -315,8 +280,6 @@ async def list_positions(
                 'market': meta.market,
                 'currency': meta.currency,
                 'sector': meta.sector,
-                'risk_level': meta.risk_level,
-                'risk_level': meta.risk_level,
                 'instrument': meta.instrument
             }
 
@@ -324,6 +287,7 @@ async def list_positions(
         pos_dict['batches'] = [
             {
                 'id': b.id,
+                'public_id': b.public_id,
                 'position_id': b.position_id,
                 'type': b.type.value,
                 'price': b.price,
@@ -337,37 +301,12 @@ async def list_positions(
             } for b in pos.batches
         ]
         
-        if pos.status == PositionStatus.OPEN:
-            quote = quote_results.get(pos.id)
-            if quote and quote.get('c') is not None:
-                current_price = float(quote['c'])
-                pos_dict['current_price'] = current_price
-                if pos.average_entry_price:
-                    mark = calculate_mark_to_market_position(
-                        open_quantity=pos.total_quantity,
-                        avg_open_price=pos.average_entry_price,
-                        current_price=current_price,
-                        side=_enum_value(pos.direction),
-                    )
-                    pos_dict['unrealized_pnl'] = float(mark.unrealized_pnl)
-        else:
-            # For closed positions, calculate weighted average exit price from EXIT batches
-            if pos.batches:
-                exit_batches = [b for b in pos.batches if b.type == BatchType.EXIT]
-                if exit_batches:
-                    total_exit_qty = sum(float(b.quantity) for b in exit_batches)
-                    if total_exit_qty > 0:
-                        weighted_exit_price = sum(
-                            float(b.price) * float(b.quantity) for b in exit_batches
-                        ) / total_exit_qty
-                        pos_dict['current_price'] = weighted_exit_price
-        
         result.append(pos_dict)
         
 
         
         
-    return JSONResponse(content=jsonable_encoder(result))
+    return result
 
 
 @router.get("/{position_id}", response_model=PositionResponse)
@@ -404,36 +343,6 @@ async def get_position(
         )
         db.flush()
     
-    # Enrich with market data if open
-    if position.status == PositionStatus.OPEN:
-        market_service = MarketDataService(db)
-        # Use metadata hints for more accurate quote
-        meta = position.asset_metadata
-        try:
-            quote = await market_service.get_quote(
-                position.symbol, 
-                position.exchange,
-                core_type=meta.core_type.value if meta and meta.core_type else None,
-                market=meta.market.value if meta and meta.market else None,
-                instrument=meta.instrument if meta else None
-            )
-            
-            if quote and quote.get('c') is not None:
-                current_price = float(quote['c'])
-                position.current_price = current_price
-                if position.average_entry_price:
-                    mark = calculate_mark_to_market_position(
-                        open_quantity=position.total_quantity,
-                        avg_open_price=position.average_entry_price,
-                        current_price=current_price,
-                        side=_enum_value(position.direction),
-                    )
-                    position.unrealized_pnl = float(mark.unrealized_pnl)
-        except Exception as e:
-            log_event(logger, "warning", "quote_fetch_failed", symbol=position.symbol, error=str(e))
-            # Continue without real-time price
-            pass
-    
     # Phase 1: Calculate drift analysis
     drift_analysis = calculate_drift(position)
     
@@ -453,8 +362,6 @@ async def get_position(
         "total_quantity": position.total_quantity,
         "average_entry_price": position.average_entry_price,
         "realized_pnl": position.realized_pnl,
-        "current_price": getattr(position, 'current_price', None),
-        "unrealized_pnl": getattr(position, 'unrealized_pnl', None),
         "opened_at": position.opened_at,
         "closed_at": position.closed_at,
         "trade_review": position.trade_review,
@@ -473,11 +380,9 @@ async def get_position(
         "checklist_responses": position.checklist_responses,
         "checklist_completed_at": position.checklist_completed_at,
         "drift_analysis": drift_analysis,
-        "max_price_during_hold": position.max_price_during_hold,
-        "min_price_during_hold": position.min_price_during_hold
     }
     
-    return JSONResponse(content=jsonable_encoder(response))
+    return response
 
 
 @router.get("/{position_id}/truth-lifecycle")
@@ -508,7 +413,15 @@ async def get_position_truth_lifecycle(
             truth_position=truth_position,
             legacy_position=legacy_position,
         )
-    data = build_trading_position_lifecycle_payload(db, truth_position)
+    data = build_trading_position_lifecycle_payload(
+        db,
+        truth_position,
+        include_ai_sidecar=is_effective_capability_enabled(
+            db,
+            RuntimeCapability.AI_INSIGHTS,
+            actor_key=current_user.public_id,
+        ),
+    )
     return JSONResponse(
         content=jsonable_encoder(
             {
@@ -659,8 +572,6 @@ async def update_position(
                     setattr(asset_meta, key, AssetCoreType[value])
                 elif key == 'market' and value:
                     setattr(asset_meta, key, AssetMarket[value])
-                elif key == 'risk_level' and value:
-                    setattr(asset_meta, key, AssetRiskLevel[value])
                 else:
                     setattr(asset_meta, key, value)
         
@@ -885,106 +796,6 @@ async def check_open_position(
     ).first()
     
     return position
-
-
-    return position
-
-
-@router.post("/{position_id}/analyze", response_model=PositionResponse)
-async def analyze_position(
-    position_id: str,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Analyze position for MAE/MFE using historical data"""
-    position = resolve_position(db, current_user.id, position_id)
-    
-    if not position:
-        raise HTTPException(status_code=404, detail="Position not found")
-        
-    # Get history
-    market_service = MarketDataService(db)
-    
-    # Determine result time range
-    start_date = position.opened_at
-    # If open, use now
-    # If closed, use closed_at
-    end_date = position.closed_at or datetime.now()
-    
-    # Safety: ensure start < end
-    if start_date and end_date and start_date > end_date:
-        end_date = start_date + timedelta(minutes=1) # Minimal range
-        
-    if not start_date:
-        return position # Should not happen for valid position
-        
-    log_event(
-        logger,
-        "info",
-        "position_history_analysis_started",
-        position_id=position.id,
-        symbol=position.symbol,
-        start_date=start_date,
-        end_date=end_date,
-    )
-    
-    history = await market_service.get_price_history(position.symbol, start_date, end_date)
-    
-    if history:
-        # Calculate Max/Min from HISTORY
-        highs = [item['high'] for item in history if item.get('high') is not None]
-        lows = [item['low'] for item in history if item.get('low') is not None]
-        
-        if highs:
-            position.max_price_during_hold = max(highs)
-        if lows:
-            position.min_price_during_hold = min(lows)
-            
-        db.commit()
-        db.refresh(position)
-    else:
-        log_event(logger, "info", "position_history_missing", position_id=position.id, symbol=position.symbol)
-        
-    # Construct Response (Similar to get_position)
-    drift_analysis = calculate_drift(position)
-    
-    response = {
-        "id": position.id,
-        "public_id": position.public_id,
-        "user_id": position.user_id,
-        "account_id": position.account_id,
-        "strategy_id": position.strategy_id,
-        "symbol": position.symbol,
-        "exchange": position.exchange,
-        "asset_type": position.asset_type,
-        "direction": position.direction.value,
-        "status": position.status.value,
-        "total_quantity": position.total_quantity,
-        "average_entry_price": position.average_entry_price,
-        "realized_pnl": position.realized_pnl,
-        "current_price": getattr(position, 'current_price', None),
-        "unrealized_pnl": getattr(position, 'unrealized_pnl', None),
-        "opened_at": position.opened_at,
-        "closed_at": position.closed_at,
-        "trade_review": position.trade_review,
-        "screenshots": position.screenshots or [],
-        "lessons": position.lessons or [],
-        "rating": position.rating,
-        "created_at": position.created_at,
-        "updated_at": position.updated_at,
-        "asset_metadata": position.asset_metadata,
-        "batches": position.batches,
-        "planned_entry_price": position.planned_entry_price,
-        "planned_stop_loss": position.planned_stop_loss,
-        "planned_take_profit": position.planned_take_profit,
-        "checklist_responses": position.checklist_responses,
-        "checklist_completed_at": position.checklist_completed_at,
-        "drift_analysis": drift_analysis,
-        "max_price_during_hold": position.max_price_during_hold,
-        "min_price_during_hold": position.min_price_during_hold
-    }
-    
-    return JSONResponse(content=jsonable_encoder(response))
 
 
 # ============== Export Endpoints ==============

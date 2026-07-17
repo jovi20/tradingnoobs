@@ -32,7 +32,6 @@ class TimelineContractSchemaTests(unittest.TestCase):
                         "period_label": "THIS_WEEK",
                         "trade_count": 0,
                         "review_completion_rate": None,
-                        "net_equity_change": None,
                         "priority_alert_count": 0,
                     },
                     "review_inbox": {

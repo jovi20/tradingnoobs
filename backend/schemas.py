@@ -2,7 +2,7 @@
 Trading Noobs Backend - Pydantic Schemas
 """
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
-from typing import Any, Dict, Generic, List, Optional, TypeVar
+from typing import Any, Dict, Generic, List, Literal, Optional, TypeVar
 from datetime import datetime, date
 from decimal import Decimal
 from enum import Enum
@@ -229,7 +229,6 @@ class SummaryBar(BaseModel):
     period_label: str
     trade_count: int
     review_completion_rate: Optional[float] = None
-    net_equity_change: Optional[float] = None
     priority_alert_count: int
     trust: Optional[TrustMeta] = None
 
@@ -380,6 +379,153 @@ class TimelineHomeData(BaseModel):
 
 class TimelineHomeResponse(ReadModelEnvelope[TimelineHomeData]):
     pass
+
+
+JournalTimelineView = Literal["ALL", "TRADING", "REVIEW", "EXCEPTION"]
+JournalTimelineEventType = Literal[
+    "OPEN",
+    "ADD",
+    "REDUCE",
+    "CLOSE",
+    "REVIEW_COMPLETED",
+    "CHECKLIST_MISS",
+    "LOSING_STREAK_ALERT",
+]
+JournalTimelineDataSource = Literal["MANUAL", "IMPORTED", "DERIVED"]
+JournalReviewInboxKind = Literal[
+    "MISSING_THESIS",
+    "MISSING_REVIEW",
+    "CHECKLIST_MISS",
+    "LOSING_STREAK",
+]
+JournalRecommendedActionKind = Literal[
+    "OPEN_POSITION_DETAIL",
+    "START_REVIEW",
+    "COMPLETE_THESIS",
+]
+JournalLinkedObjectType = Literal["TRADING_POSITION", "POSITION_EVENT", "ACCOUNT"]
+
+
+class JournalTrustMeta(BaseModel):
+    as_of: str
+    generated_at: Optional[str] = None
+    freshness: FreshnessStatusEnum
+    source: JournalTimelineDataSource
+    maturity: Optional[MaturityEnum] = None
+    value_status: Optional[ValueStatusEnum] = None
+    source_refs: List[str] = Field(default_factory=list)
+    note: Optional[str] = None
+
+
+class JournalSummaryBar(BaseModel):
+    period_label: str
+    trade_count: int
+    review_completion_rate: Optional[float] = None
+    priority_alert_count: int
+    trust: Optional[JournalTrustMeta] = None
+
+
+class JournalReviewInboxAction(BaseModel):
+    kind: JournalRecommendedActionKind
+    label: str
+    href: str
+
+
+class JournalLinkedObjectRef(BaseModel):
+    object_type: JournalLinkedObjectType
+    public_id: str
+    label: str
+    href: str
+
+
+class JournalReviewInboxItem(BaseModel):
+    public_id: str
+    kind: JournalReviewInboxKind
+    severity: InboxSeverityEnum
+    summary: str
+    reason: str
+    recommended_action: JournalReviewInboxAction
+    linked_object: JournalLinkedObjectRef
+    due_at: Optional[str] = None
+    occurred_at: str
+    trust: Optional[JournalTrustMeta] = None
+
+
+class JournalReviewInbox(BaseModel):
+    counts: ReviewInboxCounts
+    items: List[JournalReviewInboxItem] = Field(default_factory=list)
+    trust: Optional[JournalTrustMeta] = None
+
+
+class JournalTimelineEventCard(BaseModel):
+    """Timeline event contract published when AI is outside the deployment ceiling."""
+
+    event_public_id: str
+    thread_public_id: str
+    event_type: JournalTimelineEventType
+    occurred_at: str
+    headline: str
+    summary: str
+    impact_value: Optional[TimelineImpactValue] = None
+    instrument: TimelineInstrumentRef
+    account: Optional[TimelineAccountRef] = None
+    tags: List[str] = Field(default_factory=list)
+    emotion: Optional[str] = None
+    confidence: Optional[float] = None
+    checklist_summary: Optional[str] = None
+    thesis_excerpt: Optional[str] = None
+    invalidation_excerpt: Optional[str] = None
+    execution_drift: Optional[ExecutionDriftSummary] = None
+    href: str
+    trust: Optional[JournalTrustMeta] = None
+
+
+class JournalTimelineGroup(BaseModel):
+    group_key: str
+    group_label: str
+    group_type: TimelineGroupTypeEnum
+    items: List[JournalTimelineEventCard] = Field(default_factory=list)
+
+
+class JournalTimelineFeed(BaseModel):
+    active_view: JournalTimelineView
+    next_cursor: Optional[str] = None
+    groups: List[JournalTimelineGroup] = Field(default_factory=list)
+    trust: Optional[JournalTrustMeta] = None
+
+
+class JournalWeeklyDisciplineSnapshot(BaseModel):
+    headline: str
+    summary: str
+    trust: Optional[JournalTrustMeta] = None
+
+
+class JournalContextRailSelectedObject(BaseModel):
+    object_type: JournalLinkedObjectType
+    public_id: str
+    title: str
+    subtitle: Optional[str] = None
+    href: str
+
+
+class JournalContextRail(BaseModel):
+    selected_object: Optional[JournalContextRailSelectedObject] = None
+    weekly_discipline_snapshot: Optional[JournalWeeklyDisciplineSnapshot] = None
+    quick_filters: List[ContextRailQuickFilter] = Field(default_factory=list)
+    related_items: List[RelatedContextItem] = Field(default_factory=list)
+    trust: Optional[JournalTrustMeta] = None
+
+
+class JournalTimelineHomeData(BaseModel):
+    page_state: TimelineHomePageStateEnum
+    summary_bar: JournalSummaryBar
+    review_inbox: JournalReviewInbox
+    timeline: JournalTimelineFeed
+    context_rail: JournalContextRail
+
+
+class JournalTimelineHomeResponse(ReadModelEnvelope[JournalTimelineHomeData]):
+    meta: JournalTrustMeta
 
 
 class TradingPositionLifecycleResponse(ReadModelEnvelope[Dict[str, Any]]):
@@ -551,10 +697,48 @@ class AISummaryResponse(BaseModel):
 # ============== User Settings Schemas ==============
 
 
+_USER_SETTINGS_OPTIONAL_SCHEMA_FIELDS = {
+    "BROKER_SYNC": {
+        "ibkr_flex_query_id",
+        "ibkr_flex_token",
+        "ibkr_flex_start_date",
+        "binance_api_key",
+        "binance_api_secret",
+        "binance_api_secret_configured",
+        "binance_market_type",
+        "binance_symbols",
+    },
+    "MARKET": {"finnhub_api_key"},
+    "AI_INSIGHTS": {"llm_api_url", "llm_api_key", "llm_model"},
+}
+
+
+def _prune_disabled_user_settings_schema(
+    schema: Dict[str, Any],
+    _model: type[BaseModel],
+) -> None:
+    """Keep optional secret fields out of the journal Beta OpenAPI artifact."""
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        return
+
+    required = schema.get("required")
+    for fields in _USER_SETTINGS_OPTIONAL_SCHEMA_FIELDS.values():
+        for field in fields:
+            properties.pop(field, None)
+        if isinstance(required, list):
+            required[:] = [field for field in required if field not in fields]
+
+
 class UserSettingsUpdate(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra=_prune_disabled_user_settings_schema,
+    )
+
     theme: Optional[str] = Field(None, pattern="^(light|dark|system)$")
     up_color: Optional[str] = Field(None, pattern="^(GREEN|RED)$")
-    display_currency: Optional[str] = Field(None, pattern="^(USD|HKD|CNY|EUR|GBP)$")
+    display_currency: Literal["USD"] = "USD"
     ibkr_flex_query_id: Optional[str] = None
     ibkr_flex_token: Optional[str] = None
     ibkr_flex_start_date: Optional[date] = None
@@ -569,24 +753,26 @@ class UserSettingsUpdate(BaseModel):
 
 
 class UserSettingsResponse(BaseModel):
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra=_prune_disabled_user_settings_schema,
+    )
+
     id: int
     user_id: int
     theme: str
     up_color: str = "GREEN"
-    display_currency: str = "USD"
-    ibkr_flex_query_id: Optional[str]
-    ibkr_flex_token: Optional[str]  # Will be masked in response
-    ibkr_flex_start_date: Optional[date]
-    binance_api_key: Optional[str]  # Will be masked in response
+    display_currency: Literal["USD"] = "USD"
+    ibkr_flex_query_id: Optional[str] = None
+    ibkr_flex_token: Optional[str] = None  # Will be masked in response
+    ibkr_flex_start_date: Optional[date] = None
+    binance_api_key: Optional[str] = None  # Will be masked in response
     binance_api_secret_configured: bool = False
-    binance_market_type: Optional[str]
-    binance_symbols: Optional[List[str]]
-    finnhub_api_key: Optional[str]  # Will be masked
-    llm_api_url: Optional[str]
-    llm_model: Optional[str]
-    
-    class Config:
-        from_attributes = True
+    binance_market_type: Optional[str] = None
+    binance_symbols: Optional[List[str]] = None
+    finnhub_api_key: Optional[str] = None  # Will be masked
+    llm_api_url: Optional[str] = None
+    llm_model: Optional[str] = None
 
 
 class BrokerSyncRequest(BaseModel):
@@ -744,109 +930,34 @@ class WeeklyReportResponse(BaseModel):
 
 # ============== Dashboard Schemas ==============
 
-class AssetAllocation(BaseModel):
-    name: str # 'Stocks', 'Crypto', 'Cash'
-    value: float
-    percent: float 
 
-class PositionMover(BaseModel):
-    id: int
-    symbol: str
-    asset_type: Optional[str] = None
-    currency: Optional[str] = None  # 标的原生币种
-    change_percent: float
-    current_price: float
-
-class SankeyNode(BaseModel):
+class DashboardAccountBalance(BaseModel):
     name: str
+    broker: str
+    journal_balance: float
 
-class SankeyLink(BaseModel):
-    source: int
-    target: int
-    value: float
-
-class PortfolioFlow(BaseModel):
-    nodes: List[SankeyNode]
-    links: List[SankeyLink]
-
-class ChartDimensionRef(BaseModel):
-    field: str
-    label: str
-
-class ChartSeriesRef(BaseModel):
-    field: str
-    label: str
-    color: Optional[str] = None
-
-class ChartSchema(BaseModel):
-    schema_version: str
-    chart_type: str
-    series: List[ChartSeriesRef]
-    dimensions: List[ChartDimensionRef] = Field(default_factory=list)
-    data_path: Optional[str] = None
-    options: Dict[str, Any] = Field(default_factory=dict)
-
-class ChartEmptyState(BaseModel):
-    is_empty: bool
-    reason: Optional[str] = None
-
-class ChartTrustMeta(BaseModel):
-    freshness: Optional[str] = None
-    source: Optional[str] = None
-    source_refs: List[str] = Field(default_factory=list)
-
-class DashboardChartPayload(BaseModel):
-    chart_schema: ChartSchema
-    data: List[Dict[str, Any]] = Field(default_factory=list)
-    empty_state: ChartEmptyState
-    trust_meta: ChartTrustMeta
 
 class DashboardStats(BaseModel):
-    total_assets: float = 0.0  # Added for frontend percentage calculation
-    total_pnl: float
+    journal_balance: float
+    realized_pnl: float
     win_rate: float
     avg_pnl_ratio: float
     total_trades: int
     open_positions: int
     closed_trades: int
-    asset_allocation: List[AssetAllocation] = []
-    core_type_allocation: List[AssetAllocation] = []
-    market_allocation: List[AssetAllocation] = []
-    risk_level_allocation: List[AssetAllocation] = []
-    account_allocation: List['AccountAllocation'] = []
-    top_movers: List[PositionMover] = []
-    bottom_movers: List[PositionMover] = []
-    portfolio_flow: Optional[PortfolioFlow] = None
-    chart_payloads: Dict[str, DashboardChartPayload] = Field(default_factory=dict)
-    
-    # Risk Metrics
-    sharpe_ratio: Optional[float] = None
-    sortino_ratio: Optional[float] = None
-    calmar_ratio: Optional[float] = None
-    max_drawdown: Optional[float] = None
-    risk_summary: Optional[RiskSummaryResponse] = None
-
-
-class AccountAllocation(BaseModel):
-    name: str 
-    broker: str
-    value: float
-    percent: float
+    account_balances: List[DashboardAccountBalance] = Field(default_factory=list)
 
 
 # ============== Trading Account Schemas ==============
 
 class TradingAccountCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str = Field(..., max_length=100)
     broker: str = Field(..., max_length=50)
     account_type: Optional[str] = Field(None, max_length=50)
     currency: str = Field(default="USD", max_length=10)
     initial_balance: Optional[Decimal] = None
-    initial_balance: Optional[Decimal] = None
-    cash_balance: Optional[Decimal] = None
-    current_balance: Optional[Decimal] = None
-    total_assets: Optional[Decimal] = None
-    total_liabilities: Optional[Decimal] = None
     description: Optional[str] = None
 
 
@@ -869,10 +980,7 @@ class TradingAccountResponse(BaseModel):
     account_type: Optional[str]
     currency: str
     initial_balance: Optional[Decimal]
-    cash_balance: Optional[Decimal]
-    current_balance: Optional[Decimal]
-    market_value: Optional[Decimal] = None
-    total_equity: Optional[Decimal] = None
+    journal_balance: Decimal
     description: Optional[str]
     is_active: bool
     created_at: datetime
@@ -1176,7 +1284,6 @@ class AssetMetadataResponse(BaseModel):
     market: Optional[AssetMarketEnum]
     currency: Optional[AssetCurrencyEnum]
     sector: Optional[str]
-    risk_level: Optional[AssetRiskLevelEnum]
     instrument: Optional[str]
     
     class Config:
@@ -1189,7 +1296,6 @@ class AssetMetadataUpdate(BaseModel):
     market: Optional[str] = None
     currency: Optional[str] = None
     sector: Optional[str] = None
-    risk_level: Optional[str] = None
     instrument: Optional[str] = None
 
 
@@ -1244,8 +1350,6 @@ class PositionResponse(BaseModel):
     total_quantity: Decimal
     average_entry_price: Optional[Decimal]
     realized_pnl: Decimal
-    current_price: Optional[float] = None
-    unrealized_pnl: Optional[float] = None
     opened_at: datetime
     closed_at: Optional[datetime]
     trade_review: Optional[str]
@@ -1266,10 +1370,6 @@ class PositionResponse(BaseModel):
     # Phase 1: Plan Drift Analysis (computed from planned vs actual)
     drift_analysis: Optional[dict] = None  # {"entry_drift_pct": 1.5, "has_drift": True, ...}
     
-    # Phase 2: MAE/MFE
-    max_price_during_hold: Optional[float] = None
-    min_price_during_hold: Optional[float] = None
-    
     class Config:
         from_attributes = True
 
@@ -1278,6 +1378,7 @@ class PositionListResponse(BaseModel):
     """Lighter response for list view (without batches)"""
     id: int
     public_id: str
+    truth_position_public_id: Optional[str] = None
     account_id: Optional[int]
     symbol: str
     exchange: str
@@ -1287,8 +1388,6 @@ class PositionListResponse(BaseModel):
     total_quantity: Decimal
     average_entry_price: Optional[Decimal]
     realized_pnl: Decimal
-    current_price: Optional[float] = None  # Live price for open positions
-    unrealized_pnl: Optional[float] = None  # Unrealized P&L
     opened_at: datetime
     closed_at: Optional[datetime]
     created_at: datetime
@@ -1297,6 +1396,15 @@ class PositionListResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class PositionMarketAnalysisResponse(PositionResponse):
+    """Optional MARKET capability DTO, never published by the journal router."""
+
+    current_price: Optional[float] = None
+    unrealized_pnl: Optional[float] = None
+    max_price_during_hold: Optional[float] = None
+    min_price_during_hold: Optional[float] = None
 
 
 # ============== Import Schemas ==============

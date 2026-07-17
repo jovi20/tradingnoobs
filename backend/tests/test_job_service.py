@@ -2,13 +2,15 @@ import os
 import tempfile
 import unittest
 from datetime import datetime, timezone
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from database import Base
-from models import BusinessLock, BusinessLockStatus, JobDefinition, JobRun, JobRunEvent, JobRunEventType, JobRunStatus
+from models import BusinessLock, BusinessLockStatus, FeatureFlag, JobDefinition, JobRun, JobRunEvent, JobRunEventType, JobRunStatus
+from release_profile import DeploymentCapabilityPolicy, RuntimeCapability
+from services.capability_service import capability_rollout_flag_key
 from services.job_service import (
     _claim_candidate_cas,
     cancel_job_run,
@@ -53,6 +55,28 @@ class JobServiceTests(unittest.TestCase):
         self.db.add(definition)
         self.db.flush()
         return definition
+
+    def _market_definition(self) -> JobDefinition:
+        definition = JobDefinition(
+            key="market.quote.refresh",
+            display_name="Refresh Market Quote",
+            queue_name="market",
+            retry_policy={"max_attempts": 3},
+            timeout_seconds=60,
+            is_active=True,
+        )
+        self.db.add(definition)
+        self.db.flush()
+        return definition
+
+    def _enable_market(self) -> FeatureFlag:
+        flag = FeatureFlag(
+            key=capability_rollout_flag_key(RuntimeCapability.MARKET),
+            enabled=True,
+        )
+        self.db.add(flag)
+        self.db.flush()
+        return flag
 
     def test_claim_next_due_job_locks_highest_priority_queued_run(self):
         definition = self._definition()
@@ -130,13 +154,135 @@ class JobServiceTests(unittest.TestCase):
 
         claimed = claim_next_due_job(
             db,
-            queue_name="market",
+            queue_name="derived",
             worker_id="worker-a",
             now=datetime(2026, 5, 3, 10, 1, tzinfo=timezone.utc),
         )
 
         self.assertIsNone(claimed)
         query.with_for_update.assert_called_once_with(skip_locked=True)
+
+    def test_enabled_market_queue_claims_and_executes_job(self):
+        self._enable_market()
+        definition = self._market_definition()
+        run = JobRun(
+            job_definition_id=definition.id,
+            status=JobRunStatus.QUEUED,
+            payload={"symbol": "AAPL"},
+            max_attempts=3,
+            queue_name="market",
+            next_run_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+        )
+        self.db.add(run)
+        self.db.commit()
+        handler = Mock(return_value={"price": 200})
+
+        processed = run_next_due_job(
+            self.db,
+            queue_name="market",
+            worker_id="market-worker",
+            handlers={"market.quote.refresh": handler},
+            now=datetime(2026, 5, 3, 10, 1, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(processed.id, run.id)
+        self.assertEqual(processed.status, JobRunStatus.SUCCEEDED)
+        handler.assert_called_once_with(processed)
+
+    def test_market_flag_closed_after_enqueue_does_not_claim_or_call_handler(self):
+        flag = self._enable_market()
+        definition = self._market_definition()
+        run = JobRun(
+            job_definition_id=definition.id,
+            status=JobRunStatus.QUEUED,
+            payload={"symbol": "AAPL"},
+            max_attempts=3,
+            queue_name="market",
+            next_run_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+        )
+        self.db.add(run)
+        self.db.commit()
+        flag.enabled = False
+        self.db.commit()
+        handler = Mock(side_effect=AssertionError("provider must not run"))
+
+        processed = run_next_due_job(
+            self.db,
+            queue_name="market",
+            worker_id="market-worker",
+            handlers={"market.quote.refresh": handler},
+            now=datetime(2026, 5, 3, 10, 1, tzinfo=timezone.utc),
+        )
+
+        self.assertIsNone(processed)
+        handler.assert_not_called()
+        self.db.refresh(run)
+        self.assertEqual(run.status, JobRunStatus.QUEUED)
+        self.assertEqual(run.attempt_count, 0)
+        self.assertIsNone(run.locked_by)
+        self.assertIsNone(run.locked_at)
+        self.assertIsNone(run.started_at)
+        self.assertEqual(
+            self.db.query(JobRunEvent).filter(JobRunEvent.job_run_id == run.id).count(),
+            0,
+        )
+
+    def test_empty_ceiling_leaves_historical_market_jobs_untouched(self):
+        self._enable_market()
+        definition = self._market_definition()
+        queued = JobRun(
+            job_definition_id=definition.id,
+            status=JobRunStatus.QUEUED,
+            payload={"symbol": "AAPL"},
+            max_attempts=3,
+            queue_name="market",
+            next_run_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
+        )
+        stale = JobRun(
+            job_definition_id=definition.id,
+            status=JobRunStatus.RUNNING,
+            payload={"symbol": "MSFT"},
+            max_attempts=3,
+            attempt_count=1,
+            queue_name="market",
+            locked_by="old-market-worker",
+            locked_at=datetime(2026, 5, 3, 9, 0, tzinfo=timezone.utc),
+            started_at=datetime(2026, 5, 3, 9, 0, tzinfo=timezone.utc),
+        )
+        self.db.add_all([queued, stale])
+        self.db.commit()
+        handler = Mock(side_effect=AssertionError("provider must not run"))
+
+        with patch(
+            "release_profile.STATIC_DEPLOYMENT_CAPABILITY_POLICY",
+            DeploymentCapabilityPolicy(frozenset()),
+        ):
+            processed = run_next_due_job(
+                self.db,
+                queue_name="market",
+                worker_id="market-worker",
+                handlers={"market.quote.refresh": handler},
+                now=datetime(2026, 5, 3, 10, 1, tzinfo=timezone.utc),
+            )
+            recovered = recover_stale_running_jobs(
+                self.db,
+                queue_name="market",
+                stale_after_seconds=300,
+                now=datetime(2026, 5, 3, 10, 1, tzinfo=timezone.utc),
+            )
+
+        self.assertIsNone(processed)
+        self.assertEqual(recovered, 0)
+        handler.assert_not_called()
+        self.db.refresh(queued)
+        self.db.refresh(stale)
+        self.assertEqual(queued.status, JobRunStatus.QUEUED)
+        self.assertEqual(queued.attempt_count, 0)
+        self.assertEqual(stale.status, JobRunStatus.RUNNING)
+        self.assertEqual(stale.attempt_count, 1)
+        self.assertEqual(stale.locked_by, "old-market-worker")
+        self.assertIsNone(stale.error_message)
+        self.assertEqual(self.db.query(JobRunEvent).count(), 0)
 
     def test_stale_second_session_cannot_claim_job_after_cas_wins(self):
         definition = self._definition()

@@ -143,8 +143,14 @@ class PublicIdRouteTests(unittest.TestCase):
 
         self.assertEqual(get_response.status_code, 200)
         payload = get_response.json()
-        self.assertIsNone(payload["market_value"])
-        self.assertIsNone(payload["total_equity"])
+        self.assertEqual(Decimal(str(payload["journal_balance"])), Decimal("1000"))
+        for legacy_or_market_field in (
+            "cash_balance",
+            "current_balance",
+            "market_value",
+            "total_equity",
+        ):
+            self.assertNotIn(legacy_or_market_field, payload)
 
     def test_account_cash_balance_prefers_ledger_derived_read_model(self):
         self.account.initial_balance = Decimal("1000")
@@ -168,8 +174,9 @@ class PublicIdRouteTests(unittest.TestCase):
 
         self.assertEqual(get_response.status_code, 200)
         payload = get_response.json()
-        self.assertEqual(Decimal(str(payload["cash_balance"])), Decimal("975"))
-        self.assertIsNone(payload["total_equity"])
+        self.assertEqual(Decimal(str(payload["journal_balance"])), Decimal("975"))
+        self.assertNotIn("cash_balance", payload)
+        self.assertNotIn("total_equity", payload)
 
     def test_account_create_and_update_reject_non_usd_currency(self):
         create_response = self.client.post(
@@ -220,7 +227,7 @@ class PublicIdRouteTests(unittest.TestCase):
         ).one()
         self.assertEqual(ledger_entry.entry_type, AccountLedgerEntryType.CASH_ADJUSTMENT)
         self.assertEqual(ledger_entry.amount, Decimal("1000"))
-        self.assertEqual(Decimal(str(payload["cash_balance"])), Decimal("1000"))
+        self.assertEqual(Decimal(str(payload["journal_balance"])), Decimal("1000"))
 
     def test_account_metadata_update_rejects_cash_balance_mutation(self):
         create_response = self.client.post(
@@ -251,18 +258,26 @@ class PublicIdRouteTests(unittest.TestCase):
         get_response = self.client.get(f"/api/accounts/{account_public_id}")
         self.assertEqual(get_response.status_code, 200)
         self.assertEqual(get_response.json()["name"], "Cash Adjustment")
-        self.assertEqual(Decimal(str(get_response.json()["cash_balance"])), Decimal("1000"))
+        self.assertEqual(
+            Decimal(str(get_response.json()["journal_balance"])),
+            Decimal("1000"),
+        )
+        self.assertNotIn("cash_balance", get_response.json())
 
     def test_positions_list_and_get_include_and_accept_public_id(self):
         list_response = self.client.get("/api/positions")
         self.assertEqual(list_response.status_code, 200)
         payload = list_response.json()
         self.assertEqual(payload[0]["public_id"], "pos-public-id")
+        self.assertNotIn("current_price", payload[0])
+        self.assertNotIn("unrealized_pnl", payload[0])
 
         get_response = self.client.get("/api/positions/pos-public-id")
         self.assertEqual(get_response.status_code, 200)
         self.assertEqual(get_response.json()["id"], self.position.id)
         self.assertEqual(get_response.json()["public_id"], "pos-public-id")
+        self.assertNotIn("current_price", get_response.json())
+        self.assertNotIn("unrealized_pnl", get_response.json())
 
 
 if __name__ == "__main__":

@@ -260,6 +260,55 @@ class OutboxModelTests(unittest.TestCase):
         self.assertIn("job definition unavailable", event.last_error)
         self.assertGreater(event.available_at, datetime(2026, 5, 3, 9, 1))
 
+    def test_unknown_or_optional_outbox_events_cannot_create_generic_jobs(self):
+        events = (
+            OutboxEvent(
+                aggregate_type="AssetMaster",
+                aggregate_public_id="asset-aapl",
+                event_type="market.quote.refresh",
+                queue_name="market",
+                dedupe_key="market.quote.refresh:AAPL",
+                payload={"symbol": "AAPL"},
+                available_at=datetime(2026, 5, 3, 9, 0, tzinfo=timezone.utc),
+            ),
+            OutboxEvent(
+                aggregate_type="Unknown",
+                aggregate_public_id="unknown-1",
+                event_type="custom.unregistered.event",
+                queue_name="derived",
+                dedupe_key="custom.unregistered.event:1",
+                payload={"secret": "must-not-enter-job-payload"},
+                available_at=datetime(2026, 5, 3, 9, 0, tzinfo=timezone.utc),
+            ),
+            OutboxEvent(
+                aggregate_type="TradingPosition",
+                aggregate_public_id="tp-wrong-queue",
+                event_type="truth.position_event.created",
+                queue_name="market",
+                dedupe_key="truth.position_event.created:wrong-queue",
+                payload={"position_event_public_id": "wrong-queue"},
+                available_at=datetime(2026, 5, 3, 9, 0, tzinfo=timezone.utc),
+            ),
+        )
+        self.db.add_all(events)
+        self.db.commit()
+
+        relayed = relay_pending_outbox_events(
+            self.db,
+            now=datetime(2026, 5, 3, 9, 1, tzinfo=timezone.utc),
+        )
+        self.db.commit()
+
+        self.assertEqual(relayed, 0)
+        self.assertEqual(self.db.query(JobDefinition).count(), 0)
+        self.assertEqual(self.db.query(JobRun).count(), 0)
+        self.assertEqual(self.db.query(JobRunEvent).count(), 0)
+        self.assertEqual(self.db.query(IdempotencyKey).count(), 0)
+        for event in events:
+            self.db.refresh(event)
+            self.assertEqual(event.status, OutboxEventStatus.PENDING)
+            self.assertEqual(event.attempt_count, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

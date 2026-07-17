@@ -2,6 +2,8 @@ import unittest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock, patch
 
+from fastapi import HTTPException
+
 from services.derived_refresh_handlers import build_default_job_handlers
 from services.market_data_job_handlers import backfill_market_daily, refresh_market_quote
 
@@ -15,11 +17,43 @@ class MarketDataJobHandlerTests(unittest.TestCase):
         self.db = Mock()
 
     def test_default_registry_includes_market_handlers(self):
-        handlers = build_default_job_handlers(self.db)
+        with patch(
+            "services.derived_refresh_handlers.is_effective_capability_enabled",
+            return_value=True,
+        ):
+            handlers = build_default_job_handlers(self.db)
 
         self.assertIn("derived.timeline.refresh", handlers)
         self.assertIn("market.quote.refresh", handlers)
         self.assertIn("market.daily_backfill", handlers)
+
+    def test_default_registry_omits_market_handlers_when_runtime_rollout_is_disabled(self):
+        with patch(
+            "services.derived_refresh_handlers.is_effective_capability_enabled",
+            return_value=False,
+        ):
+            handlers = build_default_job_handlers(self.db)
+
+        self.assertEqual(set(handlers), {"derived.timeline.refresh"})
+
+    def test_registered_market_handler_rechecks_rollout_before_provider_call(self):
+        with patch(
+            "services.derived_refresh_handlers.is_effective_capability_enabled",
+            side_effect=[True, False],
+        ):
+            handlers = build_default_job_handlers(self.db)
+            with patch(
+                "services.market_data_job_handlers.MarketDataService.get_quote",
+                new=AsyncMock(side_effect=AssertionError("provider must not run")),
+            ) as get_quote:
+                with self.assertRaises(HTTPException) as raised:
+                    handlers["market.quote.refresh"](
+                        _job_run("market.quote.refresh", {"symbol": "MSFT"})
+                    )
+
+        self.assertEqual(raised.exception.status_code, 404)
+        self.assertEqual(raised.exception.detail["code"], "FEATURE_DISABLED")
+        get_quote.assert_not_awaited()
 
     def test_quote_refresh_validates_payload_and_returns_summary(self):
         quote = {

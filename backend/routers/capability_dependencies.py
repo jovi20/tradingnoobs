@@ -31,3 +31,15 @@ def require_runtime_capability(capability: RuntimeCapability):
 
     dependency.__name__ = f"require_{capability.value.lower()}_capability"
     return dependency
+
+
+@lru_cache(maxsize=None)
+def require_public_runtime_capability(capability: RuntimeCapability):
+    """Fail closed for an unauthenticated optional route such as registration."""
+
+    def dependency(db: Session = Depends(get_db)) -> None:
+        if not is_effective_capability_enabled(db, capability):
+            raise_feature_disabled(capability.value)
+
+    dependency.__name__ = f"require_public_{capability.value.lower()}_capability"
+    return dependency

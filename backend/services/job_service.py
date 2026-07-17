@@ -10,15 +10,26 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from models import BusinessLock, BusinessLockStatus, JobRun, JobRunEvent, JobRunEventType, JobRunStatus
+from release_profile import RuntimeCapability
 from services.business_lock_service import acquire_business_lock, release_business_lock
+from services.capability_service import is_effective_capability_enabled
 
 JobHandler = Callable[[JobRun], dict | None]
+
+_QUEUE_CAPABILITIES = {
+    "market": RuntimeCapability.MARKET,
+}
 
 
 def _as_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
+
+
+def _is_queue_capability_enabled(db: Session, queue_name: str) -> bool:
+    capability = _QUEUE_CAPABILITIES.get(queue_name)
+    return capability is None or is_effective_capability_enabled(db, capability)
 
 
 def _claim_candidate_cas(
@@ -67,6 +78,9 @@ def claim_next_due_job(
     worker_id: str,
     now: datetime | None = None,
 ) -> JobRun | None:
+    if not _is_queue_capability_enabled(db, queue_name):
+        return None
+
     now = _as_utc(now or datetime.now(timezone.utc))
     candidate_query = (
         db.query(JobRun)
@@ -233,6 +247,9 @@ def recover_stale_running_jobs(
     retry_delay_seconds: int = 60,
     now: datetime | None = None,
 ) -> int:
+    if not _is_queue_capability_enabled(db, queue_name):
+        return 0
+
     now = _as_utc(now or datetime.now(timezone.utc))
     stale_before = now - timedelta(seconds=stale_after_seconds)
     stale_runs = (

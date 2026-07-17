@@ -5,12 +5,13 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from database import Base, get_db
-from main import app
+from main import app, create_app
 from models import (
     AIAnalysisResult,
     DailySnapshot,
@@ -24,6 +25,8 @@ from models import (
     TradingAccount,
     User,
 )
+from release_profile import DeploymentCapabilityPolicy
+from routers.timeline import build_router as build_timeline_router
 from services.auth_service import get_current_user
 
 
@@ -65,8 +68,11 @@ class TimelineHomeRouterTests(unittest.TestCase):
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides[get_current_user] = override_get_current_user
         self.client = TestClient(app)
+        self.extra_clients = []
 
     def tearDown(self):
+        for client in self.extra_clients:
+            client.close()
         app.dependency_overrides.clear()
         self.session.close()
         self.engine.dispose()
@@ -76,6 +82,37 @@ class TimelineHomeRouterTests(unittest.TestCase):
     def enable_legacy_mixed_feed(self):
         self.session.add(FeatureFlag(key="timeline_legacy_mixed_feed_enabled", enabled=True))
         self.session.commit()
+
+    def allow_capabilities(self, *capabilities: str):
+        allowed = set(capabilities)
+        return patch(
+            "routers.timeline.is_effective_capability_enabled",
+            side_effect=lambda _db, capability, **_kwargs: capability.value in allowed,
+        )
+
+    def build_optional_timeline_client(self):
+        optional_app = FastAPI()
+        optional_app.include_router(
+            build_timeline_router(include_ai_contract=True)
+        )
+
+        def override_get_db():
+            db = self.SessionLocal()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        async def override_get_current_user():
+            return self.user
+
+        optional_app.dependency_overrides[get_db] = override_get_db
+        optional_app.dependency_overrides[
+            get_current_user
+        ] = override_get_current_user
+        client = TestClient(optional_app)
+        self.extra_clients.append(client)
+        return client
 
     def add_daily_snapshot(self, snapshot_date: date, total_equity: str) -> None:
         self.session.add(
@@ -101,6 +138,51 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.assertEqual(payload["meta"]["freshness"], "FRESH")
         self.assertEqual(payload["meta"]["source"], "DERIVED")
         self.assertEqual(payload["meta"]["note"], "审计快照视图")
+        self.assertEqual(
+            [item["key"] for item in payload["data"]["context_rail"]["quick_filters"]],
+            ["ALL", "TRADING", "REVIEW", "EXCEPTION"],
+        )
+
+    def test_timeline_ai_view_is_disabled_without_effective_capability(self):
+        response = self.client.get("/api/timeline/home?view=AI")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["error"]["code"], "FEATURE_DISABLED")
+        self.assertEqual(response.json()["detail"]["capability"], "AI_INSIGHTS")
+
+    def test_empty_deployment_ceiling_uses_journal_timeline_response_contract(self):
+        def override_get_db():
+            db = self.SessionLocal()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        async def override_get_current_user():
+            return self.user
+
+        with patch(
+            "release_profile.STATIC_DEPLOYMENT_CAPABILITY_POLICY",
+            DeploymentCapabilityPolicy(frozenset()),
+        ):
+            baseline_app = create_app()
+            baseline_app.dependency_overrides[get_db] = override_get_db
+            baseline_app.dependency_overrides[get_current_user] = override_get_current_user
+            baseline_client = TestClient(baseline_app)
+
+            response = baseline_client.get("/api/timeline/home")
+            ai_response = baseline_client.get("/api/timeline/home?view=AI")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()["data"]
+        self.assertEqual(
+            [item["key"] for item in payload["context_rail"]["quick_filters"]],
+            ["ALL", "TRADING", "REVIEW", "EXCEPTION"],
+        )
+        self.assertNotIn("net_equity_change", payload["summary_bar"])
+        self.assertNotIn("ai_annotation", str(payload))
+        self.assertEqual(ai_response.status_code, 404)
+        self.assertEqual(ai_response.json()["error"]["code"], "FEATURE_DISABLED")
 
     def test_timeline_home_returns_small_data_when_user_has_account_and_position(self):
         account = TradingAccount(
@@ -325,6 +407,7 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.assertTrue(items[0]["event_public_id"].startswith("derived-timeline:"))
 
     def test_timeline_home_snapshot_only_flag_includes_artifact_backed_ai_events(self):
+        optional_client = self.build_optional_timeline_client()
         self.session.add(
             DerivedTimelineSnapshot(
                 user_id=self.user.id,
@@ -374,7 +457,8 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.session.add(FeatureFlag(key="timeline_snapshot_only_enabled", enabled=True))
         self.session.commit()
 
-        response = self.client.get("/api/timeline/home?view=AI")
+        with self.allow_capabilities("AI_INSIGHTS"):
+            response = optional_client.get("/api/timeline/home?view=AI")
 
         self.assertEqual(response.status_code, 200)
         items = [
@@ -389,11 +473,11 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.assertEqual(items[0]["ai_annotation"]["href"], "/insights/artifact-timeline-ai")
         self.assertEqual(items[0]["trust"]["source"], "AI_GENERATED")
 
-    def test_timeline_home_snapshot_only_flag_skips_legacy_exception_builders(self):
+    def test_journal_timeline_skips_optional_reads_and_dtos_in_legacy_feed(self):
         account = TradingAccount(
             user_id=self.user.id,
-            public_id="acct-snapshot-only-side-effects",
-            name="Snapshot Only Side Effects Account",
+            public_id="acct-empty-ceiling",
+            name="Empty Ceiling Account",
             broker="IBKR",
             currency="USD",
             is_active=True,
@@ -404,7 +488,7 @@ class TimelineHomeRouterTests(unittest.TestCase):
             Position(
                 user_id=self.user.id,
                 account_id=account.id,
-                public_id="pos-snapshot-only-side-effects",
+                public_id="pos-empty-ceiling",
                 symbol="AAPL",
                 exchange="NASDAQ",
                 direction=PositionDirection.LONG,
@@ -417,14 +501,14 @@ class TimelineHomeRouterTests(unittest.TestCase):
             AIAnalysisResult(
                 user_id=self.user.id,
                 analysis_type="strategy_health",
-                ai_insights="Legacy AI signal should not be consulted for snapshot-only feed.",
+                ai_insights="Legacy AI signal must not bypass the capability ceiling.",
                 raw_data={"scope": "weekly"},
             )
         )
         self.session.add(
             DerivedTimelineSnapshot(
                 user_id=self.user.id,
-                trading_position_public_id="tp-snapshot-only-side-effects",
+                trading_position_public_id="tp-empty-ceiling",
                 source="truth.lifecycle.bridge",
                 snapshot_json={
                     "position_title": "AAPL",
@@ -435,18 +519,72 @@ class TimelineHomeRouterTests(unittest.TestCase):
                 refreshed_at=datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc),
             )
         )
-        self.session.add(FeatureFlag(key="timeline_snapshot_only_enabled", enabled=True))
+        self.session.add(FeatureFlag(key="timeline_legacy_mixed_feed_enabled", enabled=True))
         self.session.commit()
+        self.add_daily_snapshot(date(2026, 6, 10), "100000")
+        self.add_daily_snapshot(date(2026, 6, 11), "94000")
 
         with (
-            patch("routers.timeline.MarketDataService.get_quote", new_callable=AsyncMock) as get_quote,
-            patch("routers.timeline.get_llm_runtime_config", return_value={"api_url": None, "api_key": None, "model": None}) as get_llm_config,
+            patch(
+                "routers.timeline.is_effective_capability_enabled",
+                return_value=False,
+            ) as capability_enabled,
+            patch("routers.timeline._list_ai_summaries") as list_ai_summaries,
+            patch("routers.timeline._list_ai_analysis_results") as list_ai_results,
+            patch("routers.timeline._list_insight_runs") as list_insight_runs,
+            patch("routers.timeline._load_llm_runtime_config") as load_llm_config,
+            patch("routers.timeline._load_portfolio_risk_summary") as load_risk_summary,
+            patch("routers.timeline._build_data_stale_items") as build_data_stale_items,
+            patch("routers.timeline._build_ai_insight_events") as build_ai_events,
+            patch("routers.timeline._build_ai_insight_events_from_runs") as build_artifact_events,
+            patch("routers.timeline._build_sync_exception_events") as build_sync_events,
+            patch("routers.timeline._build_risk_review_inbox_items") as build_risk_items,
+            patch("routers.timeline._build_data_stale_events") as build_data_stale_events,
+            patch("services.platform_config_service.get_llm_runtime_config") as read_llm_secret,
+            patch(
+                "services.market_data_access.MarketDataService.get_quote",
+                new_callable=AsyncMock,
+            ) as market_quote,
+            patch("services.risk_alert_service.build_portfolio_risk_summary") as build_risk_summary,
         ):
             response = self.client.get("/api/timeline/home")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(get_quote.await_count, 0)
-        get_llm_config.assert_not_called()
+        capability_enabled.assert_not_called()
+        for optional_access in (
+            list_ai_summaries,
+            list_ai_results,
+            list_insight_runs,
+            load_llm_config,
+            load_risk_summary,
+            build_data_stale_items,
+            build_ai_events,
+            build_artifact_events,
+            build_sync_events,
+            build_risk_items,
+            build_data_stale_events,
+        ):
+            optional_access.assert_not_called()
+        read_llm_secret.assert_not_called()
+        market_quote.assert_not_awaited()
+        build_risk_summary.assert_not_called()
+
+        payload = response.json()["data"]
+        event_types = {
+            item["event_type"]
+            for group in payload["timeline"]["groups"]
+            for item in group["items"]
+        }
+        self.assertTrue({"AI_INSIGHT", "DATA_STALE", "SYNC_EXCEPTION"}.isdisjoint(event_types))
+        inbox_kinds = {item["kind"] for item in payload["review_inbox"]["items"]}
+        self.assertTrue(
+            {
+                "DATA_STALE",
+                "DAILY_LOSS_LIMIT",
+                "PORTFOLIO_CONCENTRATION",
+                "DRAWDOWN_ALERT",
+            }.isdisjoint(inbox_kinds)
+        )
 
     def test_timeline_home_defaults_to_snapshot_only_even_when_old_positive_flag_expires(self):
         account = TradingAccount(
@@ -636,10 +774,12 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.assertEqual(payload["data"]["summary_bar"]["priority_alert_count"], 1)
 
     def test_timeline_home_adds_daily_loss_risk_alert_to_review_inbox(self):
+        optional_client = self.build_optional_timeline_client()
         self.add_daily_snapshot(date(2026, 6, 10), "100000")
         self.add_daily_snapshot(date(2026, 6, 11), "94000")
 
-        response = self.client.get("/api/timeline/home")
+        with self.allow_capabilities("RISK_CARDS"):
+            response = optional_client.get("/api/timeline/home")
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -656,10 +796,12 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.assertEqual(payload["data"]["summary_bar"]["priority_alert_count"], 1)
 
     def test_timeline_home_exception_view_counts_risk_review_inbox_alert(self):
+        optional_client = self.build_optional_timeline_client()
         self.add_daily_snapshot(date(2026, 6, 10), "100000")
         self.add_daily_snapshot(date(2026, 6, 11), "96500")
 
-        response = self.client.get("/api/timeline/home?view=EXCEPTION")
+        with self.allow_capabilities("RISK_CARDS"):
+            response = optional_client.get("/api/timeline/home?view=EXCEPTION")
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -669,7 +811,8 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.assertEqual(payload["data"]["summary_bar"]["priority_alert_count"], 1)
 
     def test_timeline_home_does_not_add_risk_alert_for_empty_portfolio(self):
-        response = self.client.get("/api/timeline/home")
+        with self.allow_capabilities("RISK_CARDS"):
+            response = self.client.get("/api/timeline/home")
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -806,6 +949,7 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.assertEqual(selected["title"], "MSFT")
 
     def test_timeline_home_surfaces_ai_insight_events(self):
+        optional_client = self.build_optional_timeline_client()
         self.enable_legacy_mixed_feed()
 
         ai_result = AIAnalysisResult(
@@ -817,7 +961,8 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.session.add(ai_result)
         self.session.commit()
 
-        response = self.client.get("/api/timeline/home?view=AI")
+        with self.allow_capabilities("AI_INSIGHTS"):
+            response = optional_client.get("/api/timeline/home?view=AI")
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -946,6 +1091,7 @@ class TimelineHomeRouterTests(unittest.TestCase):
         )
 
     def test_timeline_home_surfaces_data_stale_when_quote_fetch_fails_for_open_position(self):
+        optional_client = self.build_optional_timeline_client()
         self.enable_legacy_mixed_feed()
 
         account = TradingAccount(
@@ -974,13 +1120,14 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.session.add(position)
         self.session.commit()
 
-        from unittest.mock import patch
-
         async def failing_quote(*args, **kwargs):
             raise Exception("Market data request timed out (5s)")
 
-        with patch("routers.timeline.MarketDataService.get_quote", failing_quote):
-            response = self.client.get("/api/timeline/home")
+        with (
+            self.allow_capabilities("MARKET"),
+            patch("services.market_data_access.MarketDataService.get_quote", failing_quote),
+        ):
+            response = optional_client.get("/api/timeline/home")
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -994,6 +1141,7 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.assertIn("DATA_STALE", inbox_kinds)
 
     def test_timeline_home_surfaces_sync_exception_for_missing_llm_config_with_ai_signal(self):
+        optional_client = self.build_optional_timeline_client()
         self.enable_legacy_mixed_feed()
 
         ai_result = AIAnalysisResult(
@@ -1005,10 +1153,14 @@ class TimelineHomeRouterTests(unittest.TestCase):
         self.session.add(ai_result)
         self.session.commit()
 
-        from unittest.mock import patch
-
-        with patch("routers.timeline.get_llm_runtime_config", return_value={"api_url": None, "api_key": None, "model": None}):
-            response = self.client.get("/api/timeline/home")
+        with (
+            self.allow_capabilities("AI_INSIGHTS"),
+            patch(
+                "routers.timeline._load_llm_runtime_config",
+                return_value={"api_url": None, "api_key": None, "model": None},
+            ),
+        ):
+            response = optional_client.get("/api/timeline/home")
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()

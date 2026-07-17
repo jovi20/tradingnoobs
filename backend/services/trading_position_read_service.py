@@ -8,7 +8,6 @@ from decimal import Decimal
 from sqlalchemy.orm import Session, joinedload
 
 from models import AccountLedgerEntry, AccountLedgerEntryType, PositionEventType, TradeInstrument, TradingPosition, TradingPositionStatus
-from services.insight_artifact_service import InsightArtifactService
 from services.truth_legacy_projection_service import resolve_legacy_position_for_truth
 
 
@@ -82,6 +81,8 @@ def _ledger_total(truth_position: TradingPosition, entry_type: AccountLedgerEntr
 
 
 def _build_ai_sidecar_items(db: Session, truth_position: TradingPosition) -> list[dict]:
+    from services.insight_artifact_service import InsightArtifactService
+
     artifacts = InsightArtifactService(db).list_artifacts_for_object(
         user_id=truth_position.user_id,
         linked_object_public_id=truth_position.public_id,
@@ -111,7 +112,12 @@ def _build_ai_sidecar_items(db: Session, truth_position: TradingPosition) -> lis
     return items
 
 
-def build_trading_position_lifecycle_payload(db: Session, truth_position: TradingPosition) -> dict:
+def build_trading_position_lifecycle_payload(
+    db: Session,
+    truth_position: TradingPosition,
+    *,
+    include_ai_sidecar: bool = False,
+) -> dict:
     opening_event = next((event for event in truth_position.events if event.event_type == PositionEventType.OPEN), None)
     checklist_snapshot = opening_event.checklist_snapshot or {} if opening_event else {}
     cash_effects = _ledger_cash_effects(truth_position)
@@ -260,5 +266,11 @@ def build_trading_position_lifecycle_payload(db: Session, truth_position: Tradin
                 for event in truth_position.events
             ]
         },
-        "ai_sidecar": {"items": _build_ai_sidecar_items(db, truth_position)},
+        "ai_sidecar": {
+            "items": (
+                _build_ai_sidecar_items(db, truth_position)
+                if include_ai_sidecar
+                else []
+            )
+        },
     }

@@ -1,17 +1,21 @@
 """
 Trading Noobs Backend - Timeline Home Router
 """
+from __future__ import annotations
+
 import asyncio
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from collections import defaultdict
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import AIAnalysisResult, AISummary, DerivedTimelineSnapshot, Position, PositionStatus, TradingAccount, User
+from models import DerivedTimelineSnapshot, Position, PositionStatus, TradingAccount, User
+from release_profile import RuntimeCapability, is_capability_enabled
 from schemas import (
     ContextRail,
     ContextRailSelectedObject,
@@ -20,6 +24,7 @@ from schemas import (
     ExecutionDriftSummary,
     FreshnessStatusEnum,
     InboxSeverityEnum,
+    JournalTimelineHomeResponse,
     LinkedObjectRef,
     LinkedObjectTypeEnum,
     MaturityEnum,
@@ -48,14 +53,17 @@ from schemas import (
     WeeklyDisciplineSnapshot,
 )
 from services.auth_service import get_current_user
+from services.capability_service import is_effective_capability_enabled
 from services.derived_timeline_read_service import list_recent_timeline_snapshots
-from services.insight_artifact_service import InsightArtifactService
-from services.market_data_access import MarketDataService
-from services.platform_config_service import get_feature_flag_enabled, get_llm_runtime_config
-from services.risk_alert_service import build_portfolio_risk_summary
+from services.platform_config_service import get_feature_flag_enabled
 from services.timeline_source_policy import get_timeline_source_mode
+from routers.disabled_capabilities import raise_feature_disabled
 
-router = APIRouter(prefix="/api/timeline", tags=["Timeline"])
+if TYPE_CHECKING:
+    from models import AIAnalysisResult, AISummary
+
+TIMELINE_PREFIX = "/api/timeline"
+TIMELINE_TAGS = ["Timeline"]
 
 
 def _utc_now_iso() -> str:
@@ -336,6 +344,8 @@ def _build_data_stale_items(positions: list[Position], db: Session, as_of: str) 
     if not open_positions:
         return items
 
+    from services.market_data_access import MarketDataService
+
     market_service = MarketDataService(db)
     for position in open_positions:
         try:
@@ -443,6 +453,48 @@ def _build_risk_review_inbox_items(
             )
         )
     return items
+
+
+def _list_ai_summaries(db: Session, *, user_id: int) -> list[AISummary]:
+    from models import AISummary
+
+    return (
+        db.query(AISummary)
+        .filter(AISummary.user_id == user_id)
+        .order_by(AISummary.created_at.desc())
+        .limit(5)
+        .all()
+    )
+
+
+def _list_ai_analysis_results(db: Session, *, user_id: int) -> list[AIAnalysisResult]:
+    from models import AIAnalysisResult
+
+    return (
+        db.query(AIAnalysisResult)
+        .filter(AIAnalysisResult.user_id == user_id)
+        .order_by(AIAnalysisResult.created_at.desc())
+        .limit(5)
+        .all()
+    )
+
+
+def _list_insight_runs(db: Session, *, user_id: int) -> list[dict]:
+    from services.insight_artifact_service import InsightArtifactService
+
+    return InsightArtifactService(db).list_runs(user_id=user_id, limit=5)
+
+
+def _load_llm_runtime_config(db: Session) -> dict[str, str | None]:
+    from services.platform_config_service import get_llm_runtime_config
+
+    return get_llm_runtime_config(db)
+
+
+def _load_portfolio_risk_summary(db: Session, *, user_id: int) -> dict:
+    from services.risk_alert_service import build_portfolio_risk_summary
+
+    return build_portfolio_risk_summary(db, user_id)
 
 
 def _build_timeline_events(positions: list[Position], ai_summaries: list[AISummary]) -> list[TimelineEventCard]:
@@ -823,6 +875,7 @@ def _build_context_rail(
     closed_count: int,
     selected_object_public_id: str | None,
     as_of: str,
+    include_ai_view: bool,
 ) -> ContextRail:
     selected_object = None
     if selected_object_public_id:
@@ -842,6 +895,7 @@ def _build_context_rail(
     quick_filters = [
         ContextRailQuickFilter(key=option.value, label=option.value.title(), active=option == view)
         for option in TimelineViewEnum
+        if include_ai_view or option != TimelineViewEnum.AI
     ]
 
     weekly_snapshot = None
@@ -872,14 +926,15 @@ def _build_context_rail(
     )
 
 
-@router.get("/home", response_model=TimelineHomeResponse)
-def get_timeline_home(
-    view: TimelineViewEnum = TimelineViewEnum.ALL,
-    cursor: str | None = Query(default=None),
-    limit: int | None = Query(default=None, ge=1, le=100),
-    selected_object_public_id: str | None = Query(default=None),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+def _get_timeline_home(
+    *,
+    view: TimelineViewEnum,
+    cursor: str | None,
+    limit: int | None,
+    selected_object_public_id: str | None,
+    current_user: User,
+    db: Session,
+    include_optional_capabilities: bool,
 ):
     active_account_count = (
         db.query(func.count(TradingAccount.id))
@@ -907,25 +962,38 @@ def get_timeline_home(
         sum(1 for position in positions if position.closed_at)
     )
 
-    ai_summaries = (
-        db.query(AISummary)
-        .filter(AISummary.user_id == current_user.id)
-        .order_by(AISummary.created_at.desc())
-        .limit(5)
-        .all()
-    )
-
     page_state = _determine_page_state(active_account_count, position_count)
     review_completion_rate = None
     if closed_count > 0:
         review_completion_rate = reviewed_closed_count / closed_count
 
     as_of = _utc_now_iso()
-    risk_summary = build_portfolio_risk_summary(db, current_user.id)
+    actor_key = current_user.public_id
+    ai_insights_enabled = False
+    market_enabled = False
+    risk_cards_enabled = False
+    if include_optional_capabilities:
+        ai_insights_enabled = is_effective_capability_enabled(
+            db,
+            RuntimeCapability.AI_INSIGHTS,
+            actor_key=actor_key,
+        )
+        market_enabled = is_effective_capability_enabled(
+            db,
+            RuntimeCapability.MARKET,
+            actor_key=actor_key,
+        )
+        risk_cards_enabled = is_effective_capability_enabled(
+            db,
+            RuntimeCapability.RISK_CARDS,
+            actor_key=actor_key,
+        )
+    if view == TimelineViewEnum.AI and not ai_insights_enabled:
+        raise_feature_disabled(RuntimeCapability.AI_INSIGHTS.value)
     legacy_mixed_feed_enabled = get_feature_flag_enabled(
         db,
         "timeline_legacy_mixed_feed_enabled",
-        actor_key=current_user.public_id,
+        actor_key=actor_key,
     )
     source_mode = get_timeline_source_mode(legacy_mixed_feed_enabled=legacy_mixed_feed_enabled)
     snapshot_only_enabled = source_mode == "SNAPSHOT_ONLY"
@@ -950,15 +1018,17 @@ def get_timeline_home(
         review_inbox = _build_review_inbox(positions, as_of)
         inbox_items = list(review_inbox.items)
         _append_losing_streak_inbox_item(inbox_items, positions, as_of)
-        inbox_items.extend(_build_data_stale_items(positions, db, as_of))
+        if market_enabled:
+            inbox_items.extend(_build_data_stale_items(positions, db, as_of))
 
-    inbox_items.extend(
-        _build_risk_review_inbox_items(
-            risk_summary=risk_summary,
-            user=current_user,
-            as_of=as_of,
+    if risk_cards_enabled:
+        inbox_items.extend(
+            _build_risk_review_inbox_items(
+                risk_summary=_load_portfolio_risk_summary(db, user_id=current_user.id),
+                user=current_user,
+                as_of=as_of,
+            )
         )
-    )
 
     review_inbox = ReviewInbox(
         counts=ReviewInboxCounts(
@@ -975,27 +1045,59 @@ def get_timeline_home(
         timeline_snapshots,
         as_of=as_of,
     )
-    insight_runs = InsightArtifactService(db).list_runs(user_id=current_user.id, limit=5)
-    artifact_events = _build_ai_insight_events_from_runs(insight_runs)
+    artifact_events: list[TimelineEventCard] = []
+    if ai_insights_enabled:
+        insight_runs = _list_insight_runs(db, user_id=current_user.id)
+        artifact_events = _build_ai_insight_events_from_runs(insight_runs)
+
     if snapshot_only_enabled:
         timeline_events = materialized_timeline_events + artifact_events
     else:
-        ai_results = (
-            db.query(AIAnalysisResult)
-            .filter(AIAnalysisResult.user_id == current_user.id)
-            .order_by(AIAnalysisResult.created_at.desc())
-            .limit(5)
-            .all()
+        ai_summaries: list[AISummary] = []
+        optional_ai_events: list[TimelineEventCard] = []
+        sync_exception_events: list[TimelineEventCard] = []
+        if ai_insights_enabled:
+            ai_summaries = _list_ai_summaries(db, user_id=current_user.id)
+            ai_results = _list_ai_analysis_results(db, user_id=current_user.id)
+            optional_ai_events = artifact_events or _build_ai_insight_events(ai_results)
+            if ai_results:
+                sync_exception_events = _build_sync_exception_events(
+                    ai_results,
+                    _load_llm_runtime_config(db),
+                )
+
+        data_stale_events = (
+            _build_data_stale_events(inbox_items, positions)
+            if market_enabled
+            else []
         )
-        llm_config = get_llm_runtime_config(db)
         timeline_events = (
             _build_timeline_events(positions, ai_summaries)
             + materialized_timeline_events
-            + (artifact_events if artifact_events else _build_ai_insight_events(ai_results))
+            + optional_ai_events
             + _build_losing_streak_events(positions)
-            + _build_data_stale_events(inbox_items, positions)
-            + _build_sync_exception_events(ai_results, llm_config)
+            + data_stale_events
+            + sync_exception_events
         )
+    if not ai_insights_enabled:
+        timeline_events = [
+            event
+            for event in timeline_events
+            if event.event_type != TimelineEventTypeEnum.AI_INSIGHT
+        ]
+    if not include_optional_capabilities:
+        journal_event_types = {
+            TimelineEventTypeEnum.OPEN,
+            TimelineEventTypeEnum.ADD,
+            TimelineEventTypeEnum.REDUCE,
+            TimelineEventTypeEnum.CLOSE,
+            TimelineEventTypeEnum.REVIEW_COMPLETED,
+            TimelineEventTypeEnum.CHECKLIST_MISS,
+            TimelineEventTypeEnum.LOSING_STREAK_ALERT,
+        }
+        timeline_events = [
+            event for event in timeline_events if event.event_type in journal_event_types
+        ]
     filtered_events = _filter_events(timeline_events, view)
     paged_events, next_cursor = _paginate_timeline_events(filtered_events, cursor=cursor, limit=limit)
     grouped_events = _group_events(paged_events)
@@ -1006,6 +1108,7 @@ def get_timeline_home(
         closed_count=closed_count,
         selected_object_public_id=selected_object_public_id,
         as_of=as_of,
+        include_ai_view=ai_insights_enabled,
     )
 
     return TimelineHomeResponse(
@@ -1015,7 +1118,6 @@ def get_timeline_home(
                 period_label="THIS_WEEK",
                 trade_count=position_count,
                 review_completion_rate=review_completion_rate,
-                net_equity_change=None,
                 priority_alert_count=review_inbox.counts.high_priority,
                 trust=meta,
             ),
@@ -1036,3 +1138,97 @@ def get_timeline_home(
         ),
         meta=meta,
     )
+
+
+def get_timeline_home(
+    view: TimelineViewEnum = TimelineViewEnum.ALL,
+    cursor: str | None = Query(default=None),
+    limit: int | None = Query(default=None, ge=1, le=100),
+    selected_object_public_id: str | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return _get_timeline_home(
+        view=view,
+        cursor=cursor,
+        limit=limit,
+        selected_object_public_id=selected_object_public_id,
+        current_user=current_user,
+        db=db,
+        include_optional_capabilities=True,
+    )
+
+
+def get_journal_timeline_home(
+    view: str = Query(
+        default=TimelineViewEnum.ALL.value,
+        json_schema_extra={"enum": ["ALL", "TRADING", "REVIEW", "EXCEPTION"]},
+    ),
+    cursor: str | None = Query(default=None),
+    limit: int | None = Query(default=None, ge=1, le=100),
+    selected_object_public_id: str | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Journal-only contract that still returns the stable hard-off for AI."""
+    normalized_view = view.strip().upper()
+    if normalized_view == TimelineViewEnum.AI.value:
+        raise_feature_disabled(RuntimeCapability.AI_INSIGHTS.value)
+    try:
+        parsed_view = TimelineViewEnum(normalized_view)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Unsupported timeline view") from exc
+    return _get_timeline_home(
+        view=parsed_view,
+        cursor=cursor,
+        limit=limit,
+        selected_object_public_id=selected_object_public_id,
+        current_user=current_user,
+        db=db,
+        include_optional_capabilities=False,
+    )
+
+
+def build_router(
+    *,
+    include_ai_contract: bool,
+    include_optional_event_contract: bool = False,
+) -> APIRouter:
+    """Publish a deployment-owned Timeline schema without runtime schema drift."""
+    published_router = APIRouter(prefix=TIMELINE_PREFIX, tags=TIMELINE_TAGS)
+    if include_ai_contract:
+        published_router.add_api_route(
+            "/home",
+            get_timeline_home,
+            methods=["GET"],
+            response_model=TimelineHomeResponse,
+        )
+    elif include_optional_event_contract:
+        published_router.add_api_route(
+            "/home",
+            get_journal_timeline_home,
+            methods=["GET"],
+            response_model=TimelineHomeResponse,
+            response_model_exclude_none=True,
+        )
+    else:
+        published_router.add_api_route(
+            "/home",
+            get_journal_timeline_home,
+            methods=["GET"],
+            response_model=JournalTimelineHomeResponse,
+            response_model_exclude_none=True,
+        )
+    return published_router
+
+
+router = build_router(
+    include_ai_contract=is_capability_enabled(RuntimeCapability.AI_INSIGHTS),
+    include_optional_event_contract=any(
+        is_capability_enabled(capability)
+        for capability in (
+            RuntimeCapability.MARKET,
+            RuntimeCapability.RISK_CARDS,
+        )
+    ),
+)

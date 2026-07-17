@@ -14,10 +14,13 @@ from release_profile import DeploymentCapabilityPolicy, ReleaseProfile
 
 
 KNOWN_DISABLED_ROUTES = (
+    ("POST", "/api/auth/register", "OPEN_REGISTRATION"),
+    ("POST", "/api/admin/test-llm", "AI_INSIGHTS"),
     ("GET", "/api/market/validate/AAPL", "MARKET"),
     ("GET", "/api/market/quote/AAPL", "MARKET"),
     ("GET", "/api/market/detect/AAPL", "MARKET"),
     ("GET", "/api/market/calendar", "MARKET"),
+    ("POST", "/api/positions/position-public-id/analyze", "MARKET"),
     ("POST", "/api/broker-sync/ibkr/test", "BROKER_SYNC"),
     ("POST", "/api/broker-sync/binance/test", "BROKER_SYNC"),
     ("POST", "/api/broker-sync/ibkr/sync", "BROKER_SYNC"),
@@ -74,8 +77,10 @@ class DisabledCapabilityRouteContractTests(unittest.TestCase):
     def test_unknown_paths_under_disabled_prefixes_remain_normal_404(self):
         paths = (
             "/api/market/not-a-real-route",
+            "/api/admin/test-llm/extra",
             "/api/market/quote",
             "/api/market/quote/AAPL/extra",
+            "/api/positions/position-public-id/analyze/extra",
             "/api/broker-sync/not-a-real-route",
             "/api/broker-sync/runs/extra",
             "/api/insights/not-a-report",
@@ -109,6 +114,8 @@ class DisabledCapabilityRouteContractTests(unittest.TestCase):
     def test_wrong_methods_do_not_return_feature_disabled(self):
         requests = (
             ("POST", "/api/market/quote/AAPL"),
+            ("GET", "/api/admin/test-llm"),
+            ("GET", "/api/positions/position-public-id/analyze"),
             ("GET", "/api/broker-sync/ibkr/test"),
             ("POST", "/api/broker-sync/runs"),
             ("PUT", "/api/insights/analyze"),
@@ -129,6 +136,8 @@ class DisabledCapabilityRouteContractTests(unittest.TestCase):
         self.assertFalse(any(path.startswith("/api/insights") for path in paths))
         self.assertFalse(any(path.startswith("/api/v1/insights") for path in paths))
         self.assertFalse(any(path.startswith("/api/risk") for path in paths))
+        self.assertNotIn("/api/admin/test-llm", paths)
+        self.assertNotIn("/api/auth/register", paths)
 
     def test_clean_baseline_process_does_not_import_real_optional_routers(self):
         backend_dir = Path(__file__).resolve().parents[1]
@@ -138,6 +147,8 @@ class DisabledCapabilityRouteContractTests(unittest.TestCase):
                 "import main",
                 "forbidden = [",
                 "    'routers.market',",
+                "    'routers.admin_ai',",
+                "    'routers.position_market_analysis',",
                 "    'routers.broker_sync',",
                 "    'routers.insights',",
                 "    'routers.insight_artifacts',",
@@ -145,6 +156,7 @@ class DisabledCapabilityRouteContractTests(unittest.TestCase):
                 "    'routers.risk',",
                 "    'services.market_data_service',",
                 "    'services.broker_sync.service',",
+                "    'services.insight_artifact_service',",
                 "    'services.llm_service',",
                 "    'services.report_export_service',",
                 "]",

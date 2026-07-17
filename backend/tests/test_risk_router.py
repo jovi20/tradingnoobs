@@ -111,7 +111,7 @@ class RiskRouterTests(unittest.TestCase):
             ["TradingPosition", "AccountLedgerEntry", "DailySnapshot"],
         )
 
-    def test_dashboard_stats_include_risk_summary_alerts(self):
+    def test_core_dashboard_does_not_embed_optional_risk_summary(self):
         self._add_snapshot(date(2026, 6, 10), "100000")
         self._add_snapshot(date(2026, 6, 11), "94000")
 
@@ -119,9 +119,19 @@ class RiskRouterTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertIn("risk_summary", payload)
-        self.assertEqual(payload["risk_summary"]["alerts"][0]["kind"], "DAILY_LOSS_LIMIT")
-        self.assertEqual(payload["risk_summary"]["alerts"][0]["severity"], "CRITICAL")
+        self.assertEqual(
+            set(payload),
+            {
+                "journal_balance",
+                "realized_pnl",
+                "win_rate",
+                "avg_pnl_ratio",
+                "total_trades",
+                "open_positions",
+                "closed_trades",
+                "account_balances",
+            },
+        )
 
 
 if __name__ == "__main__":

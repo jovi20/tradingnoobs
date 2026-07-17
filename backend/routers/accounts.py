@@ -32,13 +32,26 @@ def _require_release_currency(value: object, *, field: str = "currency") -> str:
         ) from violation
 
 
-def _attach_journal_balance(db: Session, account: TradingAccount) -> TradingAccount:
-    """Expose the ledger-derived journal balance without inventing a market mark."""
-    journal_balance = calculate_account_cash_balance_read_model(db, account=account)
-    setattr(account, "cash_balance", journal_balance)
-    setattr(account, "market_value", None)
-    setattr(account, "total_equity", None)
-    return account
+def _journal_account_response(
+    db: Session,
+    account: TradingAccount,
+) -> TradingAccountResponse:
+    """Serialize the journal read model without relabeling it as cash or NAV."""
+    return TradingAccountResponse(
+        id=account.id,
+        public_id=account.public_id,
+        user_id=account.user_id,
+        name=account.name,
+        broker=account.broker,
+        account_type=account.account_type,
+        currency=account.currency,
+        initial_balance=account.initial_balance,
+        journal_balance=calculate_account_cash_balance_read_model(db, account=account),
+        description=account.description,
+        is_active=account.is_active,
+        created_at=account.created_at,
+        updated_at=account.updated_at,
+    )
 
 
 @router.get("", response_model=List[TradingAccountResponse])
@@ -50,7 +63,7 @@ async def list_accounts(
     accounts = db.query(TradingAccount).filter(
         TradingAccount.user_id == current_user.id
     ).order_by(TradingAccount.created_at.desc()).all()
-    return [_attach_journal_balance(db, account) for account in accounts]
+    return [_journal_account_response(db, account) for account in accounts]
 
 
 @router.post("", response_model=TradingAccountResponse, status_code=status.HTTP_201_CREATED)
@@ -88,7 +101,7 @@ async def get_account(
     account = resolve_trading_account(db, current_user.id, account_id)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
-    return _attach_journal_balance(db, account)
+    return _journal_account_response(db, account)
 
 
 @router.patch("/{account_id}", response_model=TradingAccountResponse)

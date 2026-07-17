@@ -1,11 +1,15 @@
 import unittest
 from datetime import datetime, timezone
+from unittest.mock import patch
 
+from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from database import Base
-from models import JobDefinition, JobRun, JobRunStatus
+from models import FeatureFlag, JobDefinition, JobRun, JobRunStatus, OutboxEvent
+from release_profile import RuntimeCapability
+from services.capability_service import capability_rollout_flag_key
 from services.market_data_job_service import (
     enqueue_daily_backfill,
     enqueue_quote_refresh,
@@ -22,6 +26,20 @@ class MarketDataJobServiceTests(unittest.TestCase):
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
         self.db = self.SessionLocal()
         self.addCleanup(self.db.close)
+        self.db.add(
+            FeatureFlag(
+                key=capability_rollout_flag_key(RuntimeCapability.MARKET),
+                enabled=True,
+            )
+        )
+        self.db.flush()
+
+    def _market_persistence_counts(self) -> tuple[int, int, int]:
+        return (
+            self.db.query(JobDefinition).filter(JobDefinition.key.like("market.%")).count(),
+            self.db.query(JobRun).count(),
+            self.db.query(OutboxEvent).count(),
+        )
 
     def test_ensure_definitions_are_idempotent_and_use_market_queue(self):
         quote_first = ensure_quote_refresh(self.db)
@@ -157,6 +175,55 @@ class MarketDataJobServiceTests(unittest.TestCase):
                 start="2026-07-01",
                 end="2026-01-01",
             )
+
+    def test_runtime_rollout_denials_do_not_persist_market_work(self):
+        flag_key = capability_rollout_flag_key(RuntimeCapability.MARKET)
+        cases = (
+            ("missing", None),
+            ("disabled", {"enabled": False}),
+            (
+                "expired",
+                {
+                    "enabled": True,
+                    "expires_at": datetime(2000, 1, 1, tzinfo=timezone.utc),
+                },
+            ),
+            ("malformed", {"enabled": True, "actor_targets": {}}),
+        )
+
+        for label, flag_values in cases:
+            with self.subTest(label=label):
+                self.db.query(FeatureFlag).delete()
+                if flag_values is not None:
+                    self.db.add(FeatureFlag(key=flag_key, **flag_values))
+                self.db.flush()
+                before = self._market_persistence_counts()
+
+                with self.assertRaises(HTTPException) as raised:
+                    enqueue_quote_refresh(self.db, symbol="AAPL")
+
+                self.assertEqual(raised.exception.status_code, 404)
+                self.assertEqual(raised.exception.detail["code"], "FEATURE_DISABLED")
+                self.assertEqual(self._market_persistence_counts(), before)
+
+    def test_runtime_rollout_database_error_does_not_persist_market_work(self):
+        before = self._market_persistence_counts()
+
+        with patch(
+            "services.capability_service.get_feature_flag_enabled",
+            side_effect=RuntimeError("flag database unavailable"),
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                enqueue_daily_backfill(
+                    self.db,
+                    symbol="AAPL",
+                    start="2026-01-01",
+                    end="2026-02-01",
+                )
+
+        self.assertEqual(raised.exception.status_code, 404)
+        self.assertEqual(raised.exception.detail["code"], "FEATURE_DISABLED")
+        self.assertEqual(self._market_persistence_counts(), before)
 
 
 if __name__ == "__main__":

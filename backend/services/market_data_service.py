@@ -24,7 +24,6 @@ from services.market_provider_registry import MarketDataCapability
 from services.market_session_calendar import expected_daily_sessions
 from services.provider_router import detect_asset_route
 from services.providers import yfinance_provider
-from services.llm_service import classify_asset, classify_asset_rich
 from services.platform_config_service import get_finnhub_api_key
 
 # Cache TTL in seconds (1 minute)
@@ -504,7 +503,7 @@ class MarketDataService:
 
     async def get_or_create_asset_metadata(self, symbol: str, name: Optional[str] = None, exchange: Optional[str] = None) -> AssetMetadata:
         """
-        Get asset metadata from DB, or create/detect it using rules and LLM.
+        Get asset metadata from DB, or create/detect it using deterministic rules.
         """
         symbol_upper = symbol.upper()
         
@@ -544,23 +543,7 @@ class MarketDataService:
             metadata.core_type = AssetCoreType.FX
             # Currency depends on the pair, LLM is better here
             
-        # 3. LLM Classification for missing/nuanced fields
-        try:
-            rich_info = await classify_asset_rich(self.db, symbol_upper, name, exchange)
-            if rich_info:
-                # Only fill if not already set by rules, or override if needed
-                if not metadata.core_type: metadata.core_type = AssetCoreType(rich_info['core_type'])
-                if not metadata.market: metadata.market = AssetMarket(rich_info['market'])
-                if not metadata.currency: metadata.currency = AssetCurrency(rich_info['currency'])
-                if not metadata.risk_level: metadata.risk_level = AssetRiskLevel(rich_info['risk_level'])
-                
-                metadata.sector = rich_info.get('sector', 'General')
-                metadata.instrument = rich_info.get('instrument', 'Spot')
-                
-        except Exception as e:
-            log_event(logger, "warning", "rich_llm_detection_failed", symbol=symbol, error=str(e))
-            
-        # 4. Final Fallbacks
+        # 3. Deterministic final fallbacks
         if not metadata.core_type:
              metadata.core_type = AssetCoreType.STOCK if base_type == 'US_STOCK' else AssetCoreType.STOCK
         if not metadata.market:

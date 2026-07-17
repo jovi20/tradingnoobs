@@ -74,6 +74,15 @@ class JournalBetaReleaseContractTests(unittest.TestCase):
         self.assertFalse(contract.imports.ibkr_flex_xml_v1.network_access)
         self.assertFalse(contract.imports.ibkr_flex_xml_v1.credential_access)
         self.assertTrue(contract.imports.ibkr_flex_xml_v1.repeat_overlap_incremental)
+        self.assertEqual(
+            contract.imports.ibkr_flex_xml_v1.first_binding_effect,
+            "EFFECTIVE_EXECUTION_OR_PROVEN_FLAT_COVERAGE",
+        )
+        self.assertTrue(contract.imports.ibkr_flex_xml_v1.proven_flat_empty_statement_can_bind)
+        self.assertEqual(
+            contract.imports.ibkr_flex_xml_v1.proven_flat_empty_binding_session_state,
+            "COMPLETED",
+        )
         self.assertTrue(contract.imports.ibkr_flex_xml_v1.provider_contract_gate_required)
         self.assertEqual(contract.imports.common_limits.max_file_bytes, 10 * 1024 * 1024)
         self.assertEqual(contract.imports.common_limits.max_rows_or_executions, 5000)
@@ -94,6 +103,17 @@ class JournalBetaReleaseContractTests(unittest.TestCase):
         self.assertEqual(
             tuple(item.from_state for item in contract.source_states.import_session_transitions),
             ("UPLOADING", "PREVIEW_READY", "CONFIRMING"),
+        )
+        self.assertEqual(
+            tuple(
+                (item.from_state, item.to_state, item.trigger)
+                for item in contract.source_states.trade_source_transitions
+            ),
+            (
+                ("CLEAN", "MANUAL", "FIRST_MANUAL_TRADE_OR_GENERIC_NON_NOOP_CONFIRM"),
+                ("CLEAN", "SOURCE_BOUND", "FIRST_IBKR_FLEX_BINDING_EFFECTIVE_CONFIRM"),
+                ("SOURCE_BOUND", "SOURCE_BOUND", "SAME_BINDING_REPEAT_OVERLAP_OR_INCREMENTAL_CONFIRM"),
+            ),
         )
 
     def test_fee_time_idempotency_and_capability_contracts_are_exact(self):
