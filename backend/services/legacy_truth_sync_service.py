@@ -3,11 +3,19 @@ Trading Noobs Backend - Legacy to Truth Sync Service
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from decimal import Decimal
 import uuid
 
 from sqlalchemy.orm import Session
 
+from app_config.release_contract import (
+    JOURNAL_BETA_CONTRACT,
+    ReleaseContractViolation,
+    normalize_contract_token,
+    require_allowed_asset_type,
+    require_release_currency,
+)
 from models import (
     AccountLedgerEntry,
     AccountLedgerEntryType,
@@ -28,6 +36,18 @@ from services.trading_accounting_service import AccountingEvent, calculate_fifo_
 
 
 LEGACY_TRUTH_NAMESPACE = uuid.UUID("7db5f25d-3f43-4e32-a8e3-bd245f7d7001")
+_ALLOWED_INSTRUMENT_COMBINATIONS = frozenset(
+    (item.asset_type, item.instrument_type, item.market)
+    for item in JOURNAL_BETA_CONTRACT.instruments.allowed_combinations
+)
+
+
+@dataclass(frozen=True)
+class LegacyInstrumentIdentity:
+    asset_type: str
+    market: str
+    instrument_type: str
+    quote_currency: str
 
 
 def _deterministic_public_id(kind: str, source: str) -> str:
@@ -52,10 +72,100 @@ def _enum_value(value, default: str) -> str:
     return value.value if hasattr(value, "value") else str(value)
 
 
-def _ensure_asset_master(db: Session, legacy_position: Position) -> AssetMaster:
+def validate_legacy_instrument_identity(
+    *,
+    position_asset_type: object,
+    account_currency: object,
+    metadata_core_type: object | None = None,
+    metadata_market: object | None = None,
+    metadata_currency: object | None = None,
+    metadata_instrument: object | None = None,
+) -> LegacyInstrumentIdentity:
+    """Resolve and validate the legacy fields used to create canonical instrument truth."""
+    position_asset_type = require_allowed_asset_type(position_asset_type)
+    asset_type = (
+        require_allowed_asset_type(metadata_core_type)
+        if metadata_core_type is not None
+        else position_asset_type
+    )
+    if asset_type != position_asset_type:
+        raise ReleaseContractViolation(
+            "INSTRUMENT_IDENTITY_MISMATCH",
+            "asset_metadata.core_type",
+            metadata_core_type,
+        )
+
+    account_currency = require_release_currency(account_currency, field="account.currency")
+    raw_quote_currency = (
+        metadata_currency if metadata_currency is not None else account_currency
+    )
+    quote_currency = require_release_currency(
+        getattr(raw_quote_currency, "value", raw_quote_currency),
+        field="asset_metadata.currency",
+    )
+    if quote_currency != account_currency:
+        raise ReleaseContractViolation(
+            "INSTRUMENT_IDENTITY_MISMATCH",
+            "asset_metadata.currency",
+            metadata_currency,
+        )
+
+    market = (
+        normalize_contract_token(getattr(metadata_market, "value", metadata_market))
+        if metadata_market is not None
+        else ("CRYPTO" if asset_type == "CRYPTO" else "US")
+    )
+    if market not in JOURNAL_BETA_CONTRACT.instruments.markets:
+        raise ReleaseContractViolation("UNSUPPORTED_MARKET", "asset_metadata.market", metadata_market)
+
+    instrument_type = (
+        normalize_contract_token(metadata_instrument)
+        if metadata_instrument is not None and str(metadata_instrument).strip()
+        else TradeInstrumentType.SPOT.value
+    )
+    if instrument_type not in JOURNAL_BETA_CONTRACT.instruments.instrument_types:
+        raise ReleaseContractViolation(
+            "UNSUPPORTED_INSTRUMENT_TYPE",
+            "asset_metadata.instrument",
+            metadata_instrument,
+        )
+    if (asset_type, instrument_type, market) not in _ALLOWED_INSTRUMENT_COMBINATIONS:
+        raise ReleaseContractViolation(
+            "UNSUPPORTED_INSTRUMENT_COMBINATION",
+            "asset_metadata.market",
+            metadata_market,
+        )
+
+    return LegacyInstrumentIdentity(
+        asset_type=asset_type,
+        market=market,
+        instrument_type=instrument_type,
+        quote_currency=quote_currency,
+    )
+
+
+def _ensure_asset_master(
+    db: Session,
+    legacy_position: Position,
+    identity: LegacyInstrumentIdentity,
+) -> AssetMaster:
     canonical_code = legacy_position.symbol.upper()
     asset = db.query(AssetMaster).filter(AssetMaster.canonical_code == canonical_code).first()
     if asset:
+        existing_asset_type = require_allowed_asset_type(asset.asset_type)
+        existing_quote_currency = require_release_currency(
+            asset.quote_currency,
+            field="asset_master.quote_currency",
+        )
+        if (
+            existing_asset_type != identity.asset_type
+            or existing_quote_currency != identity.quote_currency
+        ):
+            raise ReleaseContractViolation(
+                "INSTRUMENT_IDENTITY_MISMATCH",
+                "asset_master.canonical_code",
+                canonical_code,
+            )
         return asset
 
     metadata = legacy_position.asset_metadata
@@ -64,16 +174,8 @@ def _ensure_asset_master(db: Session, legacy_position: Position) -> AssetMaster:
         canonical_code=canonical_code,
         display_symbol=canonical_code,
         name=metadata.name if metadata and metadata.name else canonical_code,
-        asset_type=(
-            _enum_value(metadata.core_type, "")
-            if metadata and metadata.core_type
-            else (legacy_position.asset_type or "STOCK")
-        ),
-        quote_currency=(
-            _enum_value(metadata.currency, "")
-            if metadata and metadata.currency
-            else (legacy_position.trading_account.currency if legacy_position.trading_account else "USD")
-        ),
+        asset_type=identity.asset_type,
+        quote_currency=identity.quote_currency,
         status="ACTIVE",
         sector=metadata.sector if metadata else None,
         industry=None,
@@ -282,7 +384,20 @@ def sync_legacy_position_to_truth(db: Session, legacy_position_id: int) -> Tradi
     if not legacy_position:
         raise ValueError(f"Legacy position {legacy_position_id} not found")
 
-    asset = _ensure_asset_master(db, legacy_position)
+    metadata = legacy_position.asset_metadata
+    identity = validate_legacy_instrument_identity(
+        position_asset_type=legacy_position.asset_type,
+        account_currency=(
+            legacy_position.trading_account.currency
+            if legacy_position.trading_account
+            else None
+        ),
+        metadata_core_type=metadata.core_type if metadata else None,
+        metadata_market=metadata.market if metadata else None,
+        metadata_currency=metadata.currency if metadata else None,
+        metadata_instrument=metadata.instrument if metadata else None,
+    )
+    asset = _ensure_asset_master(db, legacy_position, identity)
     instrument = _ensure_trade_instrument(db, asset, legacy_position)
 
     truth_public_id = legacy_position_truth_public_id(legacy_position)
@@ -299,11 +414,7 @@ def sync_legacy_position_to_truth(db: Session, legacy_position_id: int) -> Tradi
     truth_position.side = _map_position_side(legacy_position.direction)
     truth_position.opened_at = legacy_position.opened_at
     truth_position.closed_at = legacy_position.closed_at
-    truth_position.base_currency = (
-        _enum_value(legacy_position.asset_metadata.currency, "")
-        if legacy_position.asset_metadata and legacy_position.asset_metadata.currency
-        else (legacy_position.trading_account.currency if legacy_position.trading_account else "USD")
-    )
+    truth_position.base_currency = identity.quote_currency
     truth_position.cost_basis_method = "FIFO"
     if legacy_position.closed_at and legacy_position.opened_at:
         truth_position.holding_period_seconds = int((legacy_position.closed_at - legacy_position.opened_at).total_seconds())

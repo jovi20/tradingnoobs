@@ -5,7 +5,7 @@ from typing import Any, Callable
 
 from sqlalchemy.orm import Session
 
-from config import get_optional_provider_settings
+from config import get_market_provider_settings
 from observability import get_structured_logger, log_event
 from services.market_data_types import MarketDataRequest, ProviderRoute
 from services.market_provider_registry import MarketDataCapability
@@ -44,7 +44,7 @@ def _cache_key(request: MarketDataRequest, route: ProviderRoute) -> str:
 def _resolve_finnhub_api_key(db: Session | None) -> str | None:
     if db is not None:
         return get_finnhub_api_key(db)
-    return get_optional_provider_settings().finnhub_api_key
+    return get_market_provider_settings().finnhub_api_key
 
 
 def _provider_credential_availability(db: Session | None) -> dict[str, bool]:

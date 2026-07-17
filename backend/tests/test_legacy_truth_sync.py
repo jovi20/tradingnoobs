@@ -8,6 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from database import Base
+from app_config.release_contract import ReleaseContractViolation
 from models import (
     AccountLedgerEntry,
     AccountLedgerEntryType,
@@ -207,6 +208,19 @@ class LegacyTruthSyncTests(unittest.TestCase):
         self.assertEqual(self.db.query(TradeInstrument).count(), 1)
         self.assertEqual(self.db.query(PositionEvent).count(), 3)
         self.assertEqual(self.db.query(AccountLedgerEntry).count(), 1)
+
+    def test_sync_rejects_nonconforming_metadata_before_canonical_writes(self):
+        legacy_position = self._seed_legacy_position()
+        metadata = self.db.query(AssetMetadata).filter(AssetMetadata.symbol == "AAPL").one()
+        metadata.currency = "HKD"
+        self.db.commit()
+
+        with self.assertRaises(ReleaseContractViolation) as raised:
+            sync_legacy_position_to_truth(self.db, legacy_position.id)
+
+        self.assertEqual(raised.exception.code, "UNSUPPORTED_RELEASE_CURRENCY")
+        self.assertEqual(self.db.query(TradingPosition).count(), 0)
+        self.assertEqual(self.db.query(TradeInstrument).count(), 0)
 
     def test_sync_legacy_position_derives_truth_pnl_from_fifo_events(self):
         legacy_position = self._seed_legacy_position(realized_pnl=Decimal("999"))

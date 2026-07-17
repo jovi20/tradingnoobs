@@ -35,15 +35,8 @@ class Settings(BaseSettings):
         extra = "ignore"
 
 
-class OptionalProviderSettings(BaseSettings):
-    """Provider configuration loaded only inside an enabled optional capability."""
-
-    llm_api_url: str = "https://api.openai.com/v1"
-    llm_api_key: Optional[str] = None
-    llm_model: str = "gpt-4-turbo"
-    finnhub_api_key: Optional[str] = None
-    binance_api_key: Optional[str] = None
-    binance_api_secret: Optional[str] = None
+class _OptionalCapabilitySettings(BaseSettings):
+    """Environment-backed settings loaded only by one optional capability."""
 
     class Config:
         env_file = ".env"
@@ -52,11 +45,36 @@ class OptionalProviderSettings(BaseSettings):
         extra = "ignore"
 
 
+class AIProviderSettings(_OptionalCapabilitySettings):
+    llm_api_url: str = "https://api.openai.com/v1"
+    llm_api_key: Optional[str] = None
+    llm_model: str = "gpt-4-turbo"
+
+
+class MarketProviderSettings(_OptionalCapabilitySettings):
+    finnhub_api_key: Optional[str] = None
+
+
+class BrokerProviderSettings(_OptionalCapabilitySettings):
+    binance_api_key: Optional[str] = None
+    binance_api_secret: Optional[str] = None
+
+
 @lru_cache()
 def get_settings() -> Settings:
     return Settings()
 
 
 @lru_cache()
-def get_optional_provider_settings() -> OptionalProviderSettings:
-    return OptionalProviderSettings()
+def get_ai_provider_settings() -> AIProviderSettings:
+    return AIProviderSettings()
+
+
+@lru_cache()
+def get_market_provider_settings() -> MarketProviderSettings:
+    return MarketProviderSettings()
+
+
+@lru_cache()
+def get_broker_provider_settings() -> BrokerProviderSettings:
+    return BrokerProviderSettings()

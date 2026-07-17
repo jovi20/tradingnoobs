@@ -70,6 +70,8 @@ test('account and lifecycle surfaces avoid unsupported valuation claims', () => 
     assert.doesNotMatch(source, /handleAnalyze|onAnalyze|isAnalyzing|分析历史价格/)
     assert.doesNotMatch(source, /max_price_during_hold|min_price_during_hold|editingExtremes|onEditExtremes|MAE\/MFE/)
   }
+  assert.doesNotMatch(position, /ALL_ASSET_CORE_TYPES|ALL_ASSET_MARKETS|现货、ETF、期货/)
+  assert.match(position, /asset_metadata:\s*\{\s*sector: metadataForm\.sector/)
   assert.doesNotMatch(workbench, /onAnalyze|isAnalyzing/)
   for (const source of [position, workbench, actionPanel, lifecycleModals, lifecycleAdapter, api]) {
     assert.doesNotMatch(source, /createTradingPositionManualAdjustment|onManualAdjustment|cashAdjustment|editingManualAdjustment|\/adjustments/)

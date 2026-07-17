@@ -25,6 +25,14 @@ export default function DashboardPage() {
         )
     }
 
+    if (error && !stats) {
+        return (
+            <Callout kind="error">
+                日志看板数据加载失败：{error}
+            </Callout>
+        )
+    }
+
     if (!stats) return null
 
     return (

@@ -10,7 +10,17 @@ from sqlalchemy.orm import sessionmaker
 
 from database import Base, get_db
 from main import app
-from models import AssetMetadata, BatchType, Position, PositionDirection, PositionStatus, TradeBatch, TradingAccount, User
+from models import (
+    AssetMaster,
+    AssetMetadata,
+    BatchType,
+    Position,
+    PositionDirection,
+    PositionStatus,
+    TradeBatch,
+    TradingAccount,
+    User,
+)
 from services.auth_service import get_current_user
 
 
@@ -499,6 +509,172 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
             ).count(),
             0,
         )
+
+    def test_position_create_revalidates_reused_metadata_before_truth_sync(self):
+        account = TradingAccount(
+            user_id=self.user.id,
+            public_id="acct-metadata-reuse",
+            name="Metadata Reuse",
+            broker="IBKR",
+            currency="USD",
+            is_active=True,
+        )
+        self.db.add_all([
+            account,
+            AssetMetadata(
+                symbol="BADBOND",
+                core_type="BOND",
+                market="US",
+                currency="USD",
+            ),
+            AssetMetadata(
+                symbol="BADCCY",
+                core_type="STOCK",
+                market="US",
+                currency="HKD",
+            ),
+            AssetMetadata(
+                symbol="BADINSTR",
+                core_type="STOCK",
+                market="US",
+                currency="USD",
+                instrument="Future",
+            ),
+            AssetMetadata(
+                symbol="BADMISMATCH",
+                core_type="FUND",
+                market="US",
+                currency="USD",
+                instrument="Spot",
+            ),
+            AssetMetadata(
+                symbol="GOODMETA",
+                core_type="STOCK",
+                market="US",
+                currency="USD",
+                instrument="Spot",
+            ),
+            AssetMetadata(
+                symbol="BADMASTER",
+                core_type="STOCK",
+                market="US",
+                currency="USD",
+                instrument="Spot",
+            ),
+            AssetMaster(
+                public_id="bad-master-public-id",
+                canonical_code="BADMASTER",
+                display_symbol="BADMASTER",
+                name="Conflicting master",
+                asset_type="CRYPTO",
+                quote_currency="USD",
+                status="ACTIVE",
+                metadata_json={},
+            ),
+        ])
+        self.db.commit()
+        self.db.refresh(account)
+
+        def request(symbol):
+            return self.client.post(
+                "/api/positions",
+                json={
+                    "account_id": account.id,
+                    "symbol": symbol,
+                    "asset_type": "EQUITY",
+                    "direction": "LONG",
+                    "entry_price": "100",
+                    "quantity": "1",
+                    "entry_time": "2026-04-03T15:30:00+00:00",
+                },
+            )
+
+        bad_type_response = request("BADBOND")
+        bad_currency_response = request("BADCCY")
+        bad_instrument_response = request("BADINSTR")
+        mismatch_response = request("BADMISMATCH")
+        bad_master_response = request("BADMASTER")
+        valid_response = request("GOODMETA")
+
+        self.assertEqual(bad_type_response.status_code, 422)
+        self.assertEqual(bad_type_response.json()["detail"]["code"], "UNSUPPORTED_ASSET_TYPE")
+        self.assertEqual(bad_currency_response.status_code, 422)
+        self.assertEqual(
+            bad_currency_response.json()["detail"]["code"],
+            "UNSUPPORTED_RELEASE_CURRENCY",
+        )
+        self.assertEqual(bad_instrument_response.status_code, 422)
+        self.assertEqual(
+            bad_instrument_response.json()["detail"]["code"],
+            "UNSUPPORTED_INSTRUMENT_TYPE",
+        )
+        self.assertEqual(mismatch_response.status_code, 422)
+        self.assertEqual(
+            mismatch_response.json()["detail"]["code"],
+            "INSTRUMENT_IDENTITY_MISMATCH",
+        )
+        self.assertEqual(bad_master_response.status_code, 422)
+        self.assertEqual(
+            bad_master_response.json()["detail"]["code"],
+            "INSTRUMENT_IDENTITY_MISMATCH",
+        )
+        self.assertEqual(valid_response.status_code, 201)
+        self.assertEqual(
+            self.db.query(Position).filter(
+                Position.symbol.in_([
+                    "BADBOND",
+                    "BADCCY",
+                    "BADINSTR",
+                    "BADMISMATCH",
+                    "BADMASTER",
+                ])
+            ).count(),
+            0,
+        )
+        asset = self.db.query(AssetMaster).filter(AssetMaster.canonical_code == "GOODMETA").one()
+        self.assertEqual(asset.asset_type, "STOCK")
+        self.assertEqual(asset.quote_currency, "USD")
+
+    def test_asset_metadata_patch_is_release_guarded_and_never_raises_unknown_enum(self):
+        legacy_position = self._seed_legacy_position()
+
+        cases = (
+            ({"core_type": "BOND"}, "UNSUPPORTED_ASSET_TYPE"),
+            ({"core_type": "NOT_A_TYPE"}, "UNSUPPORTED_ASSET_TYPE"),
+            ({"market": "HK"}, "UNSUPPORTED_MARKET"),
+            ({"market": "NOT_A_MARKET"}, "UNSUPPORTED_MARKET"),
+            ({"market": "CRYPTO"}, "UNSUPPORTED_INSTRUMENT_COMBINATION"),
+            ({"currency": "HKD"}, "UNSUPPORTED_RELEASE_CURRENCY"),
+            ({"instrument": "Future"}, "UNSUPPORTED_INSTRUMENT_TYPE"),
+            ({"core_type": "FUND"}, "INSTRUMENT_IDENTITY_MISMATCH"),
+        )
+        for metadata_update, expected_code in cases:
+            with self.subTest(metadata_update=metadata_update):
+                response = self.client.patch(
+                    f"/api/positions/{legacy_position.public_id}",
+                    json={"asset_metadata": metadata_update},
+                )
+                self.assertEqual(response.status_code, 422)
+                self.assertEqual(response.json()["detail"]["code"], expected_code)
+
+        valid_response = self.client.patch(
+            f"/api/positions/{legacy_position.public_id}",
+            json={
+                "asset_metadata": {
+                    "core_type": "equity",
+                    "market": "us",
+                    "currency": "usd",
+                    "sector": "Technology",
+                }
+            },
+        )
+        self.assertEqual(valid_response.status_code, 200)
+        self.db.expire_all()
+        metadata = self.db.query(AssetMetadata).filter(AssetMetadata.symbol == "AAPL").one()
+        self.assertEqual(metadata.core_type.value, "STOCK")
+        self.assertEqual(metadata.market.value, "US")
+        self.assertEqual(metadata.currency.value, "USD")
+        self.assertEqual(metadata.sector, "Technology")
 
     def test_legacy_review_write_is_rejected_when_truth_lifecycle_exists_without_migration_header(self):
         legacy_position = self._seed_legacy_position()

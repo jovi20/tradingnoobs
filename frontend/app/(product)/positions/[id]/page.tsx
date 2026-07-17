@@ -41,8 +41,6 @@ import {
     getMarketLabel,
     AssetCoreType,
     AssetMarket,
-    ALL_ASSET_CORE_TYPES,
-    ALL_ASSET_MARKETS,
     getCurrencySymbol
 } from '@/lib/symbolUtils'
 import CustomSelect from '@/components/CustomSelect'
@@ -87,12 +85,8 @@ export default function PositionDetailPage() {
     // Metadata Edit State
     const [editingMetadata, setEditingMetadata] = useState(false)
     const [isSavingMetadata, setIsSavingMetadata] = useState(false)
-    const [hasAttemptedSave, setHasAttemptedSave] = useState(false) // New: Fix potential infinite loop or double submission
     const [metadataForm, setMetadataForm] = useState({
-        core_type: 'STOCK',
-        market: 'US',
         sector: '',
-        instrument: 'Spot'
     })
 
     const [editingTruthNarrative, setEditingTruthNarrative] = useState(false)
@@ -188,10 +182,7 @@ export default function PositionDetailPage() {
     const openMetadataModal = () => {
         if (!position?.asset_metadata) return
         setMetadataForm({
-            core_type: position.asset_metadata.core_type || 'STOCK',
-            market: position.asset_metadata.market || 'US',
             sector: position.asset_metadata.sector || '',
-            instrument: position.asset_metadata.instrument || 'Spot'
         })
         setEditingMetadata(true)
     }
@@ -209,10 +200,7 @@ export default function PositionDetailPage() {
 
             await positionsAPI.update(token, position.routeId, {
                 asset_metadata: {
-                    core_type: metadataForm.core_type,
-                    market: metadataForm.market,
                     sector: metadataForm.sector,
-                    instrument: metadataForm.instrument
                 }
             })
 
@@ -450,9 +438,9 @@ export default function PositionDetailPage() {
                 <div className="card p-5 relative group">
                     <button
                         onClick={openMetadataModal}
-                        aria-label="编辑资产属性"
+                        aria-label="编辑行业板块"
                         className="absolute top-4 right-4 p-2 rounded-lg bg-panel hover:bg-panel-subtle text-ink-muted transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-                        title="编辑属性"
+                        title="编辑行业板块"
                     >
                         <Edit3 className="w-4 h-4" />
                     </button>
@@ -798,62 +786,24 @@ export default function PositionDetailPage() {
                     </div>
                 </div>
             )}
-            {/* Edit Metadata Modal */}
+            {/* Descriptive metadata only; financial identity remains frozen. */}
             {editingMetadata && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/50 backdrop-blur-sm">
                     <div className="card w-full max-w-lg shadow-2xl animate-in zoom-in duration-200">
                         <div className="p-6 border-b border-line flex items-center justify-between">
-                            <h3 className="text-lg font-bold">编辑资产属性</h3>
+                            <h3 className="text-lg font-bold">编辑行业板块</h3>
                             <button
                                 type="button"
                                 onClick={() => setEditingMetadata(false)}
-                                aria-label="关闭编辑资产属性对话框"
-                                title="关闭编辑资产属性对话框"
+                                aria-label="关闭编辑行业板块对话框"
+                                title="关闭编辑行业板块对话框"
                                 className="p-2 hover:bg-panel-subtle rounded-lg transition-colors"
                             >
                                 <Plus className="w-5 h-5 rotate-45" />
                             </button>
                         </div>
-                        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="p-6">
                             <div>
-                                <label className="block text-sm font-medium mb-1">底层资产</label>
-                                <select
-                                    value={metadataForm.core_type}
-                                    onChange={e => setMetadataForm({ ...metadataForm, core_type: e.target.value })}
-                                    className="input"
-                                >
-                                    {ALL_ASSET_CORE_TYPES.map(type => (
-                                        <option key={type} value={type}>
-                                            {getCoreTypeLabel(type)} ({type})
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">交易工具</label>
-                                <input
-                                    type="text"
-                                    value={metadataForm.instrument}
-                                    onChange={e => setMetadataForm({ ...metadataForm, instrument: e.target.value })}
-                                    className="input"
-                                    placeholder="例如：现货、ETF、期货"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">所属市场</label>
-                                <select
-                                    value={metadataForm.market}
-                                    onChange={e => setMetadataForm({ ...metadataForm, market: e.target.value })}
-                                    className="input"
-                                >
-                                    {ALL_ASSET_MARKETS.map(market => (
-                                        <option key={market} value={market}>
-                                            {getMarketLabel(market)} ({market as string})
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="md:col-span-2">
                                 <label className="block text-sm font-medium mb-1">行业 / 板块</label>
                                 <input
                                     type="text"
@@ -877,7 +827,7 @@ export default function PositionDetailPage() {
                                 className="btn btn-primary flex items-center space-x-2"
                             >
                                 {isSavingMetadata && <Loader2 className="w-4 h-4 animate-spin" />}
-                                <span>保存属性</span>
+                                <span>保存板块</span>
                             </button>
                         </div>
                     </div>

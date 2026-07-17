@@ -37,7 +37,11 @@ from models import TradingPosition
 from release_profile import RuntimeCapability
 from services.capability_service import is_effective_capability_enabled
 from services.public_id_service import resolve_position, resolve_trade_batch, resolve_trading_account
-from services.legacy_truth_sync_service import legacy_position_truth_public_id, sync_legacy_position_to_truth
+from services.legacy_truth_sync_service import (
+    legacy_position_truth_public_id,
+    sync_legacy_position_to_truth,
+    validate_legacy_instrument_identity,
+)
 from services.trading_position_read_service import build_trading_position_lifecycle_payload
 from services.trading_position_read_service import resolve_truth_position_by_public_id
 from services.truth_legacy_projection_service import (
@@ -468,6 +472,15 @@ async def create_position(
     # Ensure AssetMetadata exists for this symbol
     symbol_upper = position_data.symbol.upper()
     asset_meta = db.query(AssetMetadata).filter(AssetMetadata.symbol == symbol_upper).first()
+    _release_contract_value(
+        validate_legacy_instrument_identity,
+        position_asset_type=detected_type,
+        account_currency=account.currency,
+        metadata_core_type=asset_meta.core_type if asset_meta else None,
+        metadata_market=asset_meta.market if asset_meta else None,
+        metadata_currency=asset_meta.currency if asset_meta else None,
+        metadata_instrument=asset_meta.instrument if asset_meta else None,
+    )
     if not asset_meta:
         # Create basic metadata - will be enriched via API or manual update
         asset_meta = AssetMetadata(symbol=symbol_upper, name=symbol_upper)
@@ -511,10 +524,14 @@ async def create_position(
         confidence=position_data.entry_confidence
     )
     db.add(first_batch)
-    db.commit()
-    db.refresh(position)
+    db.flush()
 
-    truth_position = sync_legacy_position_to_truth(db, position.id)
+    truth_position = _release_contract_value(
+        sync_legacy_position_to_truth,
+        db,
+        position.id,
+    )
+    db.refresh(position)
     position.truth_position_public_id = truth_position.public_id
     
     return position
@@ -562,16 +579,44 @@ async def update_position(
         if not asset_meta:
             asset_meta = AssetMetadata(symbol=position.symbol)
             db.add(asset_meta)
-            
+
+        identity = _release_contract_value(
+            validate_legacy_instrument_identity,
+            position_asset_type=position.asset_type,
+            account_currency=(
+                position.trading_account.currency
+                if position.trading_account
+                else None
+            ),
+            metadata_core_type=metadata_update.get(
+                "core_type",
+                asset_meta.core_type,
+            ),
+            metadata_market=metadata_update.get(
+                "market",
+                asset_meta.market,
+            ),
+            metadata_currency=metadata_update.get(
+                "currency",
+                asset_meta.currency,
+            ),
+            metadata_instrument=metadata_update.get(
+                "instrument",
+                asset_meta.instrument,
+            ),
+        )
+
         # Update fields
         for key, value in metadata_update.items():
             if value is not None:
-                # Handle Enums if necessary (SQLAlchemy might handle string->Enum if valid)
-                # But manual mapping helps avoid errors if strings don't match exactly or empty
                 if key == 'core_type' and value:
-                    setattr(asset_meta, key, AssetCoreType[value])
+                    setattr(asset_meta, key, AssetCoreType(identity.asset_type))
                 elif key == 'market' and value:
-                    setattr(asset_meta, key, AssetMarket[value])
+                    setattr(asset_meta, key, AssetMarket(identity.market))
+                elif key == 'currency' and value:
+                    setattr(asset_meta, key, AssetCurrency(identity.quote_currency))
+                elif key == 'instrument' and value:
+                    setattr(asset_meta, key, identity.instrument_type)
                 else:
                     setattr(asset_meta, key, value)
         

@@ -44,6 +44,18 @@ test('dashboard data hook requests only stats, realized history, and open positi
   assert.doesNotMatch(hook, /positionsAPI\.list\(token\)\s*$/m)
 })
 
+test('dashboard renders the stats error before its missing-data guard', () => {
+  const page = readSource('app/(product)/dashboard/page.tsx')
+  const errorBranch = page.indexOf('if (error && !stats)')
+  const missingStatsGuard = page.indexOf('if (!stats) return null')
+
+  assert.notEqual(errorBranch, -1)
+  assert.notEqual(missingStatsGuard, -1)
+  assert.ok(errorBranch < missingStatsGuard)
+  assert.match(page.slice(errorBranch, missingStatsGuard), /<Callout kind="error">/)
+  assert.match(page.slice(errorBranch, missingStatsGuard), /日志看板数据加载失败：\{error\}/)
+})
+
 test('open-position cards do not coerce unavailable valuation fields to zero', () => {
   const card = readSource('components/dashboard/PositionCard.tsx')
 
