@@ -49,6 +49,7 @@ def provider_contract() -> VerifiedIbkrFlexProviderContract:
             "price_field": "tradePrice",
             "trade_time_field": "dateTime",
             "open_close_field": "openCloseIndicator",
+            "execution_status_source": "ATTRIBUTE_VALUE",
             "execution_status_field": "tradeStatus",
             "commission_field": "ibCommission",
             "commission_currency_field": "ibCommissionCurrency",
@@ -59,8 +60,10 @@ def provider_contract() -> VerifiedIbkrFlexProviderContract:
             "open_value": "OPEN",
             "close_value": "CLOSE",
             "statement_to_date_inclusive": True,
+            "statement_date_semantics": "SOURCE_TIMEZONE_LOCAL_DATE",
             "statement_date_format": "%Y%m%d",
             "generation_time_format": "%Y%m%d;%H%M%S",
+            "generation_time_semantics": "SOURCE_TIMEZONE_NAIVE",
             "generation_ordering": "UTC_INSTANT_ASC",
             "generation_tie_policy": (
                 "SAME_MARKER_DIFFERENT_FILE_CONFLICT"
@@ -70,6 +73,7 @@ def provider_contract() -> VerifiedIbkrFlexProviderContract:
             "event_kind_source": "ELEMENT_NAME",
             "correction_element": "TradeCorrection",
             "cancel_bust_element": "TradeCancel",
+            "change_identity_semantics": "DISTINCT_EVENT_AND_TARGET",
             "change_event_id_field": "sourceEventID",
             "affected_execution_id_field": "affectedIBExecID",
             "account_inception_date_field": "accountInceptionDate",
@@ -265,6 +269,54 @@ def test_attribute_event_discriminator_and_wire_enums_are_contract_driven(
     assert failure.value.code == "IBKR_EVENT_KIND_UNSUPPORTED"
 
 
+def test_event_kind_status_and_same_id_change_target_are_contract_driven(
+    tmp_path,
+    provider_contract,
+):
+    payload = provider_contract.field_contract.model_dump()
+    payload.update(
+        {
+            "execution_status_source": "EVENT_KIND",
+            "execution_status_field": None,
+            "change_identity_semantics": "EVENT_ID_IS_TARGET",
+            "affected_execution_id_field": None,
+        }
+    )
+    contract = VerifiedIbkrFlexProviderContract(
+        query_template_id="SYNTHETIC_SAME_ID_TEST_ONLY",
+        query_template_sha256=f"sha256:{'d' * 64}",
+        field_contract=IbkrFlexFieldContract.model_validate(payload),
+        official_sources=(),
+        fixtures=(),
+    )
+    ordinary = trade().replace(' tradeStatus="EXECUTED"', "")
+    correction = (
+        '<TradeCorrection accountId="U1234567" sourceEventID="EXEC-1" '
+        'transactionID="102" assetCategory="STK" conid="265598" '
+        'symbol="AAPL" listingExchange="NASDAQ" currency="USD" '
+        'buySell="BUY" quantity="2" tradePrice="201" '
+        'dateTime="20260725;110000" openCloseIndicator="OPEN" '
+        'ibCommission="-1.25" ibCommissionCurrency="USD" />'
+    )
+
+    parsed = parse_ibkr_flex_xml(
+        write_xml(
+            tmp_path,
+            document(ordinary + correction),
+            "same-id-change.xml",
+        ),
+        source_timezone="UTC",
+        provider_contract=contract,
+    )
+
+    assert [event.execution_status for event in parsed.events] == [
+        "TRADE",
+        "CORRECTION",
+    ]
+    assert parsed.events[1].external_source_event_id == "EXEC-1"
+    assert parsed.events[1].affected_external_execution_id == "EXEC-1"
+
+
 @pytest.mark.parametrize(
     "overrides",
     (
@@ -288,6 +340,14 @@ def test_attribute_event_discriminator_and_wire_enums_are_contract_driven(
             "ordinary_trade_kind_value": "Trade",
         },
         {"open_value": "O", "close_value": "O"},
+        {
+            "execution_status_source": "EVENT_KIND",
+            "execution_status_field": "tradeStatus",
+        },
+        {
+            "change_identity_semantics": "EVENT_ID_IS_TARGET",
+            "affected_execution_id_field": "affectedIBExecID",
+        },
     ),
 )
 def test_invalid_event_and_enum_contracts_fail_at_manifest_boundary(

@@ -90,6 +90,7 @@ def provider_contract() -> VerifiedIbkrFlexProviderContract:
             "price_field": "tradePrice",
             "trade_time_field": "dateTime",
             "open_close_field": "openCloseIndicator",
+            "execution_status_source": "ATTRIBUTE_VALUE",
             "execution_status_field": "tradeStatus",
             "commission_field": "ibCommission",
             "commission_currency_field": "ibCommissionCurrency",
@@ -100,8 +101,10 @@ def provider_contract() -> VerifiedIbkrFlexProviderContract:
             "open_value": "OPEN",
             "close_value": "CLOSE",
             "statement_to_date_inclusive": True,
+            "statement_date_semantics": "SOURCE_TIMEZONE_LOCAL_DATE",
             "statement_date_format": "%Y%m%d",
             "generation_time_format": "%Y%m%d;%H%M%S",
+            "generation_time_semantics": "SOURCE_TIMEZONE_NAIVE",
             "generation_ordering": "UTC_INSTANT_ASC",
             "generation_tie_policy": (
                 "SAME_MARKER_DIFFERENT_FILE_CONFLICT"
@@ -111,6 +114,7 @@ def provider_contract() -> VerifiedIbkrFlexProviderContract:
             "event_kind_source": "ELEMENT_NAME",
             "correction_element": "TradeCorrection",
             "cancel_bust_element": "TradeCancel",
+            "change_identity_semantics": "DISTINCT_EVENT_AND_TARGET",
             "change_event_id_field": "sourceEventID",
             "affected_execution_id_field": "affectedIBExecID",
             "account_inception_date_field": "accountInceptionDate",

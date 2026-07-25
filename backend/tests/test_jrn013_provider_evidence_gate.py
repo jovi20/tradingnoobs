@@ -38,6 +38,7 @@ def field_contract() -> dict:
         "price_field": "tradePrice",
         "trade_time_field": "dateTime",
         "open_close_field": "openCloseIndicator",
+        "execution_status_source": "ATTRIBUTE_VALUE",
         "execution_status_field": "tradeStatus",
         "commission_field": "ibCommission",
         "commission_currency_field": "ibCommissionCurrency",
@@ -48,8 +49,10 @@ def field_contract() -> dict:
         "open_value": "OPEN",
         "close_value": "CLOSE",
         "statement_to_date_inclusive": True,
+        "statement_date_semantics": "SOURCE_TIMEZONE_LOCAL_DATE",
         "statement_date_format": "%Y%m%d",
         "generation_time_format": "%Y%m%d;%H%M%S",
+        "generation_time_semantics": "SOURCE_TIMEZONE_NAIVE",
         "generation_ordering": "UTC_INSTANT_ASC",
         "generation_tie_policy": "SAME_MARKER_DIFFERENT_FILE_CONFLICT",
         "execution_time_format": "%Y%m%d;%H%M%S",
@@ -57,6 +60,7 @@ def field_contract() -> dict:
         "event_kind_source": "ELEMENT_NAME",
         "correction_element": "TradeCorrection",
         "cancel_bust_element": "TradeCancel",
+        "change_identity_semantics": "DISTINCT_EVENT_AND_TARGET",
         "change_event_id_field": "sourceEventID",
         "affected_execution_id_field": "affectedIBExecID",
         "account_inception_date_field": "accountInceptionDate",
@@ -98,6 +102,10 @@ def statement_xml(*, generation: str, to_date: str) -> bytes:
         />
         <TradeCorrection
           sourceEventID="REDACTED-CORRECTION-1"
+          affectedIBExecID="REDACTED-EXEC-1"
+        />
+        <TradeCancel
+          sourceEventID="REDACTED-CANCEL-1"
           affectedIBExecID="REDACTED-EXEC-1"
         />
       </Trades>
@@ -260,6 +268,25 @@ def test_required_wire_tokens_follow_the_selected_event_contract():
     assert 'openCloseIndicator="CLOSE"' not in tokens
 
 
+def test_optional_status_and_same_id_target_remove_unconsumed_wire_tokens():
+    payload = field_contract()
+    payload.update(
+        {
+            "execution_status_source": "EVENT_KIND",
+            "execution_status_field": None,
+            "change_identity_semantics": "EVENT_ID_IS_TARGET",
+            "affected_execution_id_field": None,
+        }
+    )
+    contract = IbkrFlexFieldContract.model_validate(payload)
+
+    tokens = required_provider_wire_tokens(contract)
+
+    assert "tradeStatus" not in tokens
+    assert "affectedIBExecID" not in tokens
+    assert "sourceEventID" in tokens
+
+
 def test_complete_official_and_real_fixture_evidence_can_verify(tmp_path):
     template = tmp_path / "query-template.json"
     template.write_bytes(b'{"query":"JOURNAL_FLEX_V1"}')
@@ -345,11 +372,11 @@ def test_fixture_wire_enum_values_must_match_the_frozen_contract(tmp_path):
 
 
 @pytest.mark.parametrize(
-    ("replacements", "missing_semantic"),
+    ("replacements", "expected_reason"),
     (
         (
             ((b'ibCommission="-1"', b'ibCommission="1"'),),
-            "COMMISSION_SIGN_CURRENCY",
+            "does not prove COMMISSION_SIGN_CURRENCY",
         ),
         (
             (
@@ -358,7 +385,7 @@ def test_fixture_wire_enum_values_must_match_the_frozen_contract(tmp_path):
                     b'accountInceptionDate="20200101"',
                 ),
             ),
-            "FLAT_BOUNDARY",
+            "does not prove FLAT_BOUNDARY",
         ),
         (
             (
@@ -370,14 +397,31 @@ def test_fixture_wire_enum_values_must_match_the_frozen_contract(tmp_path):
                     b"</OpenPositions>",
                 ),
             ),
-            "FLAT_BOUNDARY",
+            "does not prove FLAT_BOUNDARY",
+        ),
+        (
+            ((b'toDate="20260701"', b'toDate="20260702"'),),
+            "does not prove COVERAGE_INCLUSIVITY_TIMEZONE",
+        ),
+        (
+            (
+                (
+                    b'affectedIBExecID="REDACTED-EXEC-1"',
+                    b'affectedIBExecID="UNKNOWN-EXEC"',
+                ),
+            ),
+            "do not prove correction/cancel target identity and linkage",
+        ),
+        (
+            ((b"<TradeCancel", b"<IgnoredCancel"),),
+            "do not prove correction/cancel target identity and linkage",
         ),
     ),
 )
-def test_fixture_financial_and_boundary_values_must_prove_the_contract(
+def test_fixture_values_must_prove_the_claimed_contract(
     tmp_path,
     replacements,
-    missing_semantic,
+    expected_reason,
 ):
     template = tmp_path / "query-template.json"
     template.write_bytes(b'{"query":"JOURNAL_FLEX_V1"}')
@@ -405,7 +449,7 @@ def test_fixture_financial_and_boundary_values_must_prove_the_contract(
     with pytest.raises(IbkrProviderEvidenceError) as failure:
         verify_provider_evidence(manifest, fixture_root=tmp_path)
 
-    assert f"does not prove {missing_semantic}" in str(failure.value)
+    assert expected_reason in str(failure.value)
 
 
 def test_declared_wire_token_must_exist_in_bound_official_quote(tmp_path):

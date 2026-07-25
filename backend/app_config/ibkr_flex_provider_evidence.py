@@ -64,7 +64,8 @@ class IbkrFlexFieldContract(_EvidenceModel):
     price_field: str
     trade_time_field: str
     open_close_field: str
-    execution_status_field: str
+    execution_status_source: Literal["ATTRIBUTE_VALUE", "EVENT_KIND"]
+    execution_status_field: str | None = None
     commission_field: str
     commission_currency_field: str
     commission_charge_sign: Literal["NEGATIVE", "POSITIVE"]
@@ -76,8 +77,10 @@ class IbkrFlexFieldContract(_EvidenceModel):
     open_value: str
     close_value: str
     statement_to_date_inclusive: bool
+    statement_date_semantics: Literal["SOURCE_TIMEZONE_LOCAL_DATE"]
     statement_date_format: str
     generation_time_format: str
+    generation_time_semantics: Literal["SOURCE_TIMEZONE_NAIVE"]
     generation_ordering: Literal["UTC_INSTANT_ASC"]
     generation_tie_policy: Literal[
         "SAME_MARKER_DIFFERENT_FILE_CONFLICT"
@@ -91,8 +94,12 @@ class IbkrFlexFieldContract(_EvidenceModel):
     cancel_bust_kind_value: str | None = None
     correction_element: str | None
     cancel_bust_element: str | None
+    change_identity_semantics: Literal[
+        "DISTINCT_EVENT_AND_TARGET",
+        "EVENT_ID_IS_TARGET",
+    ]
     change_event_id_field: str
-    affected_execution_id_field: str
+    affected_execution_id_field: str | None
     account_inception_date_field: str
     open_positions_element: str
     open_position_element: str
@@ -165,6 +172,24 @@ class IbkrFlexFieldContract(_EvidenceModel):
             raise ValueError("Provider buy/sell values must be distinct")
         if self.open_value == self.close_value:
             raise ValueError("Provider open/close values must be distinct")
+        if self.execution_status_source == "ATTRIBUTE_VALUE":
+            if not self.execution_status_field:
+                raise ValueError(
+                    "Attribute execution status requires a field"
+                )
+        elif self.execution_status_field is not None:
+            raise ValueError(
+                "Event-kind execution status cannot declare a field"
+            )
+        if self.change_identity_semantics == "DISTINCT_EVENT_AND_TARGET":
+            if not self.affected_execution_id_field:
+                raise ValueError(
+                    "Distinct change identity requires a target field"
+                )
+        elif self.affected_execution_id_field is not None:
+            raise ValueError(
+                "Same-ID change identity cannot declare a target field"
+            )
         return self
 
 
@@ -386,6 +411,8 @@ class _FixtureShape:
     generation: datetime | None
     coverage_start: date | None
     coverage_end: date | None
+    trade_execution_ids: frozenset[str]
+    change_identities: tuple[tuple[str, str, str], ...]
 
 
 def _validate_fixture_semantics(
@@ -396,7 +423,14 @@ def _validate_fixture_semantics(
     contract: IbkrFlexFieldContract,
 ) -> tuple[list[str], _FixtureShape]:
     reasons: list[str] = []
-    empty_shape = _FixtureShape(relative_path, None, None, None)
+    empty_shape = _FixtureShape(
+        relative_path,
+        None,
+        None,
+        None,
+        frozenset(),
+        (),
+    )
     try:
         parser = etree.XMLParser(
             resolve_entities=False,
@@ -428,6 +462,32 @@ def _validate_fixture_semantics(
     cancels = [
         element for element, kind in events if kind == "CANCEL_BUST"
     ]
+    trade_execution_ids = frozenset(
+        value
+        for trade in trades
+        if (
+            value := (
+                trade.attrib.get(contract.execution_id_field) or ""
+            ).strip()
+        )
+    )
+    change_identities: list[tuple[str, str, str]] = []
+    for change, kind in (
+        *((element, "CORRECTION") for element in corrections),
+        *((element, "CANCEL_BUST") for element in cancels),
+    ):
+        source_id = (
+            change.attrib.get(contract.change_event_id_field) or ""
+        ).strip()
+        if contract.change_identity_semantics == "EVENT_ID_IS_TARGET":
+            target_id = source_id
+        else:
+            assert contract.affected_execution_id_field is not None
+            target_id = (
+                change.attrib.get(contract.affected_execution_id_field) or ""
+            ).strip()
+        if source_id and target_id:
+            change_identities.append((kind, source_id, target_id))
 
     generation: datetime | None = None
     coverage_start: date | None = None
@@ -468,8 +528,10 @@ def _validate_fixture_semantics(
             contract.price_field,
             contract.trade_time_field,
             contract.open_close_field,
-            contract.execution_status_field,
         )
+        if contract.execution_status_source == "ATTRIBUTE_VALUE":
+            assert contract.execution_status_field is not None
+            required_trade_fields += (contract.execution_status_field,)
         if not trades or not any(
             _required_attributes(trade, required_trade_fields)
             and trade.attrib[contract.side_field]
@@ -508,15 +570,9 @@ def _validate_fixture_semantics(
             )
     if "CORRECTION_CANCEL_TARGETS" in claimed:
         changes = corrections + cancels
-        if not changes or not all(
-            _required_attributes(
-                change,
-                (
-                    contract.change_event_id_field,
-                    contract.affected_execution_id_field,
-                ),
-            )
-            for change in changes
+        if (
+            not changes
+            or len(change_identities) != len(changes)
         ):
             reasons.append(
                 f"Fixture does not prove CORRECTION_CANCEL_TARGETS: {relative_path}"
@@ -531,19 +587,51 @@ def _validate_fixture_semantics(
             reasons.append(
                 f"Fixture does not prove FLAT_BOUNDARY: {relative_path}"
             )
-    if "COVERAGE_INCLUSIVITY_TIMEZONE" in claimed and (
-        coverage_start is None or coverage_end is None
-    ):
-        reasons.append(
-            "Fixture does not prove COVERAGE_INCLUSIVITY_TIMEZONE: "
-            f"{relative_path}"
-        )
+    if "COVERAGE_INCLUSIVITY_TIMEZONE" in claimed:
+        covered_boundary_dates: set[date] = set()
+        for trade in trades:
+            raw_trade_time = (
+                trade.attrib.get(contract.trade_time_field) or ""
+            ).strip()
+            try:
+                covered_boundary_dates.add(
+                    datetime.strptime(
+                        raw_trade_time,
+                        contract.execution_time_format,
+                    ).date()
+                )
+            except ValueError:
+                continue
+        expected_end = coverage_end
+        if (
+            coverage_end is not None
+            and not contract.statement_to_date_inclusive
+        ):
+            expected_end = (
+                None
+                if coverage_end == date.min
+                else date.fromordinal(coverage_end.toordinal() - 1)
+            )
+        if (
+            coverage_start is None
+            or coverage_end is None
+            or expected_end is None
+            or coverage_start > expected_end
+            or coverage_start not in covered_boundary_dates
+            or expected_end not in covered_boundary_dates
+        ):
+            reasons.append(
+                "Fixture does not prove COVERAGE_INCLUSIVITY_TIMEZONE: "
+                f"{relative_path}"
+            )
 
     return reasons, _FixtureShape(
         relative_path,
         generation,
         coverage_start,
         coverage_end,
+        trade_execution_ids,
+        tuple(change_identities),
     )
 
 
@@ -695,11 +783,9 @@ def required_provider_wire_tokens(
         contract.price_field,
         contract.trade_time_field,
         contract.open_close_field,
-        contract.execution_status_field,
         contract.commission_field,
         contract.commission_currency_field,
         contract.change_event_id_field,
-        contract.affected_execution_id_field,
         contract.account_inception_date_field,
         contract.open_positions_element,
         contract.open_position_element,
@@ -733,6 +819,12 @@ def required_provider_wire_tokens(
             ),
         )
     )
+    if contract.execution_status_source == "ATTRIBUTE_VALUE":
+        assert contract.execution_status_field is not None
+        tokens.add(contract.execution_status_field)
+    if contract.change_identity_semantics == "DISTINCT_EVENT_AND_TARGET":
+        assert contract.affected_execution_id_field is not None
+        tokens.add(contract.affected_execution_id_field)
     tokens.update(token for token in event_tokens if token is not None)
     return tokens
 
@@ -843,6 +935,44 @@ def verify_provider_evidence(
         reasons.append(
             "Real fixtures do not include an overlapping pair with distinct "
             "generation markers"
+        )
+
+    target_shapes = [
+        shape
+        for fixture, shape in fixture_shapes
+        if "CORRECTION_CANCEL_TARGETS" in fixture.semantics
+    ]
+    evidence_trade_ids = set().union(
+        *(shape.trade_execution_ids for _, shape in fixture_shapes)
+    )
+    target_identities = [
+        identity
+        for shape in target_shapes
+        for identity in shape.change_identities
+    ]
+    target_kinds = {kind for kind, _, _ in target_identities}
+    targets_resolve = all(
+        target_id in evidence_trade_ids
+        for _, _, target_id in target_identities
+    )
+    identity_relation_matches = all(
+        (
+            source_id != target_id
+            if manifest.field_contract is not None
+            and manifest.field_contract.change_identity_semantics
+            == "DISTINCT_EVENT_AND_TARGET"
+            else source_id == target_id
+        )
+        for _, source_id, target_id in target_identities
+    )
+    if "CORRECTION_CANCEL_TARGETS" in fixture_semantics and (
+        target_kinds != {"CORRECTION", "CANCEL_BUST"}
+        or not targets_resolve
+        or not identity_relation_matches
+    ):
+        reasons.append(
+            "Real fixtures do not prove correction/cancel target identity "
+            "and linkage"
         )
 
     missing_official = sorted(REQUIRED_SEMANTICS - official_semantics)

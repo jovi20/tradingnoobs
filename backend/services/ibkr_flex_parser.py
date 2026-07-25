@@ -587,16 +587,20 @@ def parse_ibkr_flex_xml(
                 max_length=MAX_SOURCE_EVENT_ID_LENGTH,
             )
             external_execution_id = None
-            affected_execution_id = _optional_attribute(
-                element,
-                fields.affected_execution_id_field,
-            )
-            if affected_execution_id is not None:
-                affected_execution_id = _require_max_length(
-                    affected_execution_id,
-                    field_name=fields.affected_execution_id_field,
-                    max_length=MAX_SOURCE_EVENT_ID_LENGTH,
+            if fields.change_identity_semantics == "EVENT_ID_IS_TARGET":
+                affected_execution_id = source_event_id
+            else:
+                assert fields.affected_execution_id_field is not None
+                affected_execution_id = _optional_attribute(
+                    element,
+                    fields.affected_execution_id_field,
                 )
+                if affected_execution_id is not None:
+                    affected_execution_id = _require_max_length(
+                        affected_execution_id,
+                        field_name=fields.affected_execution_id_field,
+                        max_length=MAX_SOURCE_EVENT_ID_LENGTH,
+                    )
 
         transaction_id = _require_max_length(
             _required_attribute(
@@ -680,14 +684,18 @@ def parse_ibkr_flex_xml(
             timezone_name=source_timezone,
             field_name=fields.trade_time_field,
         )
-        status = _require_max_length(
-            _required_attribute(
-                element,
-                fields.execution_status_field,
-            ).upper(),
-            field_name=fields.execution_status_field,
-            max_length=MAX_EXECUTION_STATUS_LENGTH,
-        )
+        if fields.execution_status_source == "ATTRIBUTE_VALUE":
+            assert fields.execution_status_field is not None
+            status = _require_max_length(
+                _required_attribute(
+                    element,
+                    fields.execution_status_field,
+                ).upper(),
+                field_name=fields.execution_status_field,
+                max_length=MAX_EXECUTION_STATUS_LENGTH,
+            )
+        else:
+            status = kind
         fee = _parse_fee(
             _optional_attribute(element, fields.commission_field),
             field_name=fields.commission_field,
