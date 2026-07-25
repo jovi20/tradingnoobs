@@ -1,7 +1,7 @@
 # JRN-013 进度与设计评审
 
 日期：2026-07-26
-评审范围：`0b03f85..33b5131` 的 JRN-013 实现，以及 active plan 中
+评审范围：`0b03f85..87970b7` 的 JRN-013 实现，以及 active plan 中
 `JRN-013` 至 `JRN-015` 的 IBKR Flex 文件导入设计。
 
 ## 结论
@@ -56,6 +56,10 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
 - binding、observation、sighting、execution 与 reconciliation case 的 owner
   graph 由数据库复合外键兜底；逐表跨用户改写均被拒绝，公开 ImportSession ID
   继续使用 owner-first 404。
+- bound preview digest 已升级到 schema version 2，canonical payload 直接覆盖
+  accepted execution disposition、current/canceled observation fingerprint 和
+  active application；revision、authority、tombstone 或 group boundary 改变均会
+  使旧 preview digest 失效。
 - source identity、fingerprint、flat-boundary、coverage、bootstrap change-chain、
   bound preview、冲突 episode 和生命周期模拟基础。
 - operation idempotency、owner/account 绑定、并发 session/rate limit、临时文件
@@ -81,7 +85,7 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
 - JRN-014 的 source-bound canonical confirm、coverage acceptance/frontier
   推进与“只应用新增 execution”尚未实现。
 - JRN-015 的人工 correction/cancel-bust resolution 与 versioned replay 尚未实现。
-- `33b5131` 已通过当前工作树完整统一 gate 与真实 PostgreSQL migration gate；
+- `87970b7` 已通过当前工作树完整统一 gate 与真实 PostgreSQL migration gate；
   尚未取得远端 CI 和绑定该 SHA 的独立 review，因此仍只能视为进度 checkpoint。
 
 ## 设计必要性评估
