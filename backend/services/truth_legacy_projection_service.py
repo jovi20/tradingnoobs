@@ -3,11 +3,13 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from models import (
     Position,
     PositionStatus,
+    Strategy,
     TradingAccount,
     TradingPosition,
     TradingPositionStatus,
@@ -27,11 +29,18 @@ def resolve_truth_position_for_legacy(
     return db.query(TradingPosition).join(
         TradingAccount,
         TradingPosition.account_id == TradingAccount.id,
+    ).outerjoin(
+        Strategy,
+        TradingPosition.strategy_id == Strategy.id,
     ).filter(
         TradingPosition.public_id == legacy_position_truth_public_id(legacy_position),
         TradingPosition.user_id == user_id,
         TradingPosition.account_id == legacy_position.account_id,
         TradingAccount.user_id == user_id,
+        or_(
+            TradingPosition.strategy_id.is_(None),
+            Strategy.user_id == user_id,
+        ),
     ).first()
 
 
@@ -43,10 +52,17 @@ def resolve_legacy_position_for_truth(
     candidates = db.query(Position).join(
         TradingAccount,
         Position.account_id == TradingAccount.id,
+    ).outerjoin(
+        Strategy,
+        Position.strategy_id == Strategy.id,
     ).filter(
         Position.user_id == truth_position.user_id,
         Position.account_id == truth_position.account_id,
         TradingAccount.user_id == truth_position.user_id,
+        or_(
+            Position.strategy_id.is_(None),
+            Strategy.user_id == truth_position.user_id,
+        ),
     ).all()
     return next(
         (
@@ -104,9 +120,13 @@ def resolve_user_truth_positions_for_legacy(
     legacy_positions = db.query(Position).join(
         TradingAccount,
         Position.account_id == TradingAccount.id,
+    ).outerjoin(
+        Strategy,
+        Position.strategy_id == Strategy.id,
     ).filter(
         Position.user_id == user_id,
         TradingAccount.user_id == user_id,
+        or_(Position.strategy_id.is_(None), Strategy.user_id == user_id),
     ).all()
     legacy_by_truth_public_id = {
         legacy_position_truth_public_id(position): position
@@ -115,9 +135,16 @@ def resolve_user_truth_positions_for_legacy(
     truth_positions = db.query(TradingPosition).join(
         TradingAccount,
         TradingPosition.account_id == TradingAccount.id,
+    ).outerjoin(
+        Strategy,
+        TradingPosition.strategy_id == Strategy.id,
     ).filter(
         TradingPosition.user_id == user_id,
         TradingAccount.user_id == user_id,
+        or_(
+            TradingPosition.strategy_id.is_(None),
+            Strategy.user_id == user_id,
+        ),
     ).all()
 
     return {

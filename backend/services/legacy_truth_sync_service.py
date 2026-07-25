@@ -28,6 +28,7 @@ from models import (
     PositionEvent,
     PositionEventType,
     PositionStatus,
+    Strategy,
     TradeBatch,
     TradeInstrument,
     TradeInstrumentType,
@@ -468,6 +469,16 @@ def sync_legacy_position_to_truth(
             f"Legacy position {legacy_position_id} and trading account "
             f"{account.id} have different owners"
         )
+    if legacy_position.strategy_id is not None:
+        strategy = db.query(Strategy).filter(
+            Strategy.id == legacy_position.strategy_id,
+            Strategy.user_id == legacy_position.user_id,
+        ).first()
+        if strategy is None:
+            raise ValueError(
+                f"Legacy position {legacy_position_id} and strategy "
+                f"{legacy_position.strategy_id} have different owners"
+            )
 
     metadata = legacy_position.asset_metadata
     identity = validate_legacy_instrument_identity(

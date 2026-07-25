@@ -97,6 +97,8 @@
 
 普通用户设置仅保留主题、涨跌色和 USD 展示币种，不接受 Flex Query/Token、Broker API key、行情 key 或 LLM 配置。平台 secret 只能进入加密 `IntegrationCredential` 或受管环境，`SystemSetting`/`PlatformSetting` 的明文 secret key 写入稳定拒绝。
 
+Owner/tenant 边界遵循同一合同：普通 API 对非当前用户的 public ID、内部 ID 和嵌套资源稳定返回 `404`，响应不得泄露资源内容且不得产生写入副作用。`Position / TradingPosition / PositionEvent / AccountLedgerEntry` 必须同时满足自身 `user_id`、账户 owner、可选策略 owner、父持仓和事件关联；任何不一致都 fail-closed，不能只信任子表自身的 `user_id`。`IdempotencyKey` 以 `(user_id, scope, key)` 唯一，system-owned key 由独立 partial unique index 约束；同一 client key 可由不同用户独立使用，同一用户的并发首次请求必须串行化。管理员当前没有隐式跨 owner journal CRUD 通道；未来若增加，必须使用独立路由并写安全审计。新建 Import/source/reconciliation 等 owner-scoped 模型时，必须扩展 `backend/tests/test_jrn004_owner_boundaries.py` 的 `OwnerBoundaryProbe` 两用户交换矩阵，不能把尚不存在的模型宣称已验证。
+
 前端当前主要页面：
 - `/`：默认入口，已转向 timeline-first，而不是旧 Dashboard-first。
 - `/timeline`：Timeline / Review Inbox 决策工作台。
@@ -132,7 +134,7 @@
 
 | 模块 | 状态 | 当前说明 |
 |------|------|----------|
-| 认证与用户基础 | `部分实现 / invite-only 收敛中` | 登录、JWT、session/token 跟踪和 public_id 代码已落地；公开注册为 `DISABLED`，invite-only 与 recovery 发布闭环由 `JRN-003` 完成。 |
+| 认证与用户基础 | `invite-only 本地 checkpoint 已通过` | 登录、JWT、session/token、public_id、一次性邀请码、IANA 时区 gate 和最小 IP/account 限流已落地；公开注册仍为 `DISABLED`。JRN-003 远端 CI/required-check 证据仍待补。 |
 | 平台配置 | `核心存在 / optional secret hard-off` | FeatureFlag 等基础代码存在；Broker、Market、LLM 的普通设置、凭据写入与测试入口在 JOURNAL Beta 关闭。 |
 | 交易账户与资金记录 | `桥接完成 / 继续收敛` | `AccountLedgerEntry` 已落地，账户现金读模型已优先使用 ledger；legacy transaction 路径仍存在。 |
 | Trading truth model | `桥接完成 / 硬切推进中` | `TradingPosition / PositionEvent / AccountLedgerEntry`、FIFO、truth lifecycle、truth-first add/reduce/close、truth narrative、latest active event reversal 已落地；新建仓位会 create-and-sync 到 truth lifecycle，已有仓位的普通加仓/减仓/平仓/复盘/叙事不再静默写 legacy 字段。 |
@@ -141,7 +143,7 @@
 | Lifecycle Detail | `truth-first 已落地` | 单笔详情展示 truth lifecycle、evidence 和 ledger cash effects；AI sidecar 代码在 JOURNAL Beta 隐藏。canonical review lives in `PositionEvent` narrative，legacy review 只作为 migration context 展示；latest active event reversal 会追加 `REVERSAL`，非最新 reversal 和 `OPEN` reversal 暂拒绝，直到补偿事件或 void/archive UX 明确。 |
 | Dashboard | `宏观视图已重构` | 已从默认首页退到宏观视图；chart schema/freshness/trust 包装已接入。 |
 | Insights / AI | `代码存在 / Beta hard-off` | 历史 artifact-first、LLM 和页面代码保留为 deferred implementation evidence；API、UI、凭据和 job producer 当前关闭，不能描述为 Beta 已落地能力。 |
-| 异步任务 | `基础已落地` | Job model、outbox relay、worker CLI、business lock、idempotency、admin jobs UI/API 已落地。 |
+| 异步任务 | `基础已落地` | Job model、outbox relay、worker CLI、business lock、owner-scoped idempotency、admin jobs UI/API 已落地。 |
 | 管理员运维 | `P17 已落地` | `/api/admin/ops/backups`、管理员晋升、密码重置、stale/failed job recovery metadata、force-cancel typed confirmation 和 `/admin/ops` 控制台已完成；PostgreSQL backup provider 未配置时返回 `409 BACKUP_PROVIDER_NOT_CONFIGURED`。 |
 | 市场数据 | `代码已 checkpoint / Beta hard-off` | JRN-000 已记录 optional-code disposition；类型化 provider registry、报价/日线、mapping、水位、job handlers 与前端 freshness 代码存在不表示已发布。交易日志 Beta 由 capability boundary 关闭 route/secret/job/UI。 |
 | Broker 同步 | `Beta hard-off` | 在线同步、网络访问、Token/credential 保存和后台 sync job 均关闭。`IBKR_FLEX_XML_V1` 仅是 `JRN-013` 至 `JRN-015` 计划中的本地文件 adapter，目前未实现。 |
@@ -297,11 +299,10 @@ backend/venv/bin/python backend/scripts/generate_openapi_snapshot.py
 
 优先级以 [TODO.md](./TODO.md) 为准。当前建议顺序：
 
-1. `JRN-000`：已完成 checkpoint，固定 `9cad10111213` migration baseline 与 Broker/Market default-off disposition。
-2. `JRN-001`：正在 final verification/review；通过稳定 checkpoint 和独立评审前不得标记完成。
-3. JRN-001 批准后，`JRN-002` 固定运行环境并建立 PostgreSQL mandatory CI，`JRN-003` 完成 invite-only auth 与 release secret 治理。
-4. `JRN-004`：补齐当前 account/strategy/position/event/ledger/note/idempotency 的 owner/tenant 负向边界，关闭 legacy import 越权面并冻结 future-resource harness；Import/source 新模型由各自创建任务验证。
-5. Step 0/M0 通过后再执行会计、canonical writer、通用 bootstrap；IBKR source-bound 重复、重叠、增量与 correction replay 只在 `JRN-013` 至 `JRN-015` 实现。真实 staging 位于 `JRN-021`。
+1. `JRN-000/001`：已完成；JRN-000 固定 `9cad10111213` baseline，后续 migration 从该 head 线性追加。
+2. `JRN-002/003`：本地 scoped checkpoint 和评审已通过，远端 CI/required-check 证据仍待补。
+3. `JRN-004`：当前执行项；完成 account/strategy/position/event/ledger/note/idempotency 两用户矩阵、关闭 legacy import 越权面并冻结 future-resource harness。Import/source 新模型仍由各自创建任务验证。
+4. Step 0/M0 通过后再执行会计、canonical writer、通用 bootstrap；IBKR source-bound 重复、重叠、增量与 correction replay 只在 `JRN-013` 至 `JRN-015` 实现。真实 staging 位于 `JRN-021`。
 
 ---
 

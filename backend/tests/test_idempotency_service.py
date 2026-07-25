@@ -120,3 +120,25 @@ class IdempotencyServiceTests(unittest.TestCase):
 
         self.assertEqual(completed.status, "COMPLETED")
         self.assertEqual(completed.response_json, {"imported_rows": 12})
+
+    def test_same_scope_and_key_are_isolated_by_user_owner(self):
+        first_user = begin_idempotent_request(
+            self.db,
+            scope="journal.write",
+            key="same-client-key",
+            request_payload={"position": "owner-one"},
+            user_id=101,
+        )
+        second_user = begin_idempotent_request(
+            self.db,
+            scope="journal.write",
+            key="same-client-key",
+            request_payload={"position": "owner-two"},
+            user_id=202,
+        )
+        self.db.commit()
+
+        self.assertTrue(first_user.created)
+        self.assertTrue(second_user.created)
+        self.assertNotEqual(first_user.record.id, second_user.record.id)
+        self.assertEqual(self.db.query(IdempotencyKey).count(), 2)

@@ -10,11 +10,18 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import DerivedTimelineSnapshot, Position, PositionStatus, TradingAccount, User
+from models import (
+    DerivedTimelineSnapshot,
+    Position,
+    PositionStatus,
+    Strategy,
+    TradingAccount,
+    User,
+)
 from release_profile import RuntimeCapability, is_capability_enabled
 from schemas import (
     ContextRail,
@@ -958,9 +965,17 @@ def _get_timeline_home(
             TradingAccount,
             Position.account_id == TradingAccount.id,
         )
+        .outerjoin(
+            Strategy,
+            Position.strategy_id == Strategy.id,
+        )
         .filter(
             Position.user_id == current_user.id,
             TradingAccount.user_id == current_user.id,
+            or_(
+                Position.strategy_id.is_(None),
+                Strategy.user_id == current_user.id,
+            ),
         )
         .order_by(Position.opened_at.desc())
         .all()

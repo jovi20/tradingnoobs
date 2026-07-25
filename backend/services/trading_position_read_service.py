@@ -5,12 +5,14 @@ from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from models import (
     AccountLedgerEntry,
     AccountLedgerEntryType,
     PositionEventType,
+    Strategy,
     TradeInstrument,
     TradingAccount,
     TradingPosition,
@@ -89,14 +91,61 @@ def resolve_truth_position_by_public_id(db: Session, user_id: int, public_id: st
         joinedload(TradingPosition.ledger_entries).joinedload(AccountLedgerEntry.position_event),
     )
 
-    return query.join(
+    truth_position = query.join(
         TradingAccount,
         TradingPosition.account_id == TradingAccount.id,
+    ).outerjoin(
+        Strategy,
+        TradingPosition.strategy_id == Strategy.id,
     ).filter(
         TradingPosition.public_id == public_id,
         TradingPosition.user_id == user_id,
         TradingAccount.user_id == user_id,
+        or_(
+            TradingPosition.strategy_id.is_(None),
+            Strategy.user_id == user_id,
+        ),
     ).first()
+    if truth_position is None:
+        return None
+
+    if any(
+        event.user_id != user_id
+        or event.position_id != truth_position.id
+        or event.account_id != truth_position.account_id
+        for event in truth_position.events
+    ):
+        return None
+    event_ids = {event.id for event in truth_position.events}
+    if (
+        truth_position.opening_event_id is not None
+        and truth_position.opening_event_id not in event_ids
+    ) or (
+        truth_position.closing_event_id is not None
+        and truth_position.closing_event_id not in event_ids
+    ):
+        return None
+    if any(
+        event.reverses_event_id is not None
+        and event.reverses_event_id not in event_ids
+        for event in truth_position.events
+    ):
+        return None
+    if any(
+        entry.user_id != user_id
+        or entry.account_id != truth_position.account_id
+        or (
+            entry.position_id is not None
+            and entry.position_id != truth_position.id
+        )
+        or (
+            entry.position_event_id is not None
+            and entry.position_event_id not in event_ids
+        )
+        for entry in truth_position.ledger_entries
+    ):
+        return None
+    return truth_position
 
 
 def _node_type(event_type: PositionEventType) -> str:

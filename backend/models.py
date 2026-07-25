@@ -3,7 +3,7 @@ Trading Noobs Backend - Database Models
 """
 from sqlalchemy import (
     Column, Integer, String, Text, Boolean, DateTime, Date,
-    ForeignKey, Numeric, JSON, Enum as SQLEnum, Index, UniqueConstraint
+    ForeignKey, Numeric, JSON, Enum as SQLEnum, Index, UniqueConstraint, text
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -1005,7 +1005,20 @@ class JobRunEvent(Base):
 class IdempotencyKey(Base):
     __tablename__ = "idempotency_keys"
     __table_args__ = (
-        UniqueConstraint("scope", "key", name="uq_idempotency_keys_scope_key"),
+        UniqueConstraint(
+            "user_id",
+            "scope",
+            "key",
+            name="uq_idempotency_keys_user_scope_key",
+        ),
+        Index(
+            "uq_idempotency_keys_system_scope_key",
+            "scope",
+            "key",
+            unique=True,
+            postgresql_where=text("user_id IS NULL"),
+            sqlite_where=text("user_id IS NULL"),
+        ),
     )
 
     id = Column(Integer, primary_key=True, index=True)

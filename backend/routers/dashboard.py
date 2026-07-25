@@ -10,7 +10,7 @@ from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -20,8 +20,10 @@ from models import (
     PositionEvent,
     PositionEventType,
     PositionStatus,
+    Strategy,
     TradeBatch,
     TradingAccount,
+    TradingPosition,
     User,
 )
 from schemas import DashboardAccountBalance, DashboardStats
@@ -57,14 +59,46 @@ def _active_truth_exit_events(
 ) -> list[PositionEvent]:
     reversed_event_ids = {
         row[0]
-        for row in db.query(PositionEvent.reverses_event_id).filter(
+        for row in db.query(PositionEvent.reverses_event_id).join(
+            TradingPosition,
+            PositionEvent.position_id == TradingPosition.id,
+        ).join(
+            TradingAccount,
+            PositionEvent.account_id == TradingAccount.id,
+        ).outerjoin(
+            Strategy,
+            TradingPosition.strategy_id == Strategy.id,
+        ).filter(
             PositionEvent.user_id == user_id,
+            TradingPosition.user_id == user_id,
+            TradingPosition.account_id == PositionEvent.account_id,
+            TradingAccount.user_id == user_id,
+            or_(
+                TradingPosition.strategy_id.is_(None),
+                Strategy.user_id == user_id,
+            ),
             PositionEvent.event_type == PositionEventType.REVERSAL,
             PositionEvent.reverses_event_id.isnot(None),
         ).all()
     }
-    query = db.query(PositionEvent).filter(
+    query = db.query(PositionEvent).join(
+        TradingPosition,
+        PositionEvent.position_id == TradingPosition.id,
+    ).join(
+        TradingAccount,
+        PositionEvent.account_id == TradingAccount.id,
+    ).outerjoin(
+        Strategy,
+        TradingPosition.strategy_id == Strategy.id,
+    ).filter(
         PositionEvent.user_id == user_id,
+        TradingPosition.user_id == user_id,
+        TradingPosition.account_id == PositionEvent.account_id,
+        TradingAccount.user_id == user_id,
+        or_(
+            TradingPosition.strategy_id.is_(None),
+            Strategy.user_id == user_id,
+        ),
         PositionEvent.event_type.in_({PositionEventType.REDUCE, PositionEventType.CLOSE}),
     )
     if reversed_event_ids:
@@ -87,8 +121,16 @@ def _legacy_exit_batches(
     start_date: date | None = None,
     end_date: date | None = None,
 ) -> list[TradeBatch]:
-    query = db.query(TradeBatch).join(Position).filter(
+    query = db.query(TradeBatch).join(Position).join(
+        TradingAccount,
+        Position.account_id == TradingAccount.id,
+    ).outerjoin(
+        Strategy,
+        Position.strategy_id == Strategy.id,
+    ).filter(
         Position.user_id == user_id,
+        TradingAccount.user_id == user_id,
+        or_(Position.strategy_id.is_(None), Strategy.user_id == user_id),
         TradeBatch.type == BatchType.EXIT,
     )
     if truth_legacy_ids:
@@ -167,7 +209,20 @@ def get_dashboard_stats(
         func.count(Position.id).filter(
             Position.status == PositionStatus.OPEN
         ).label("open_positions"),
-    ).filter(Position.user_id == current_user.id)
+    ).join(
+        TradingAccount,
+        Position.account_id == TradingAccount.id,
+    ).outerjoin(
+        Strategy,
+        Position.strategy_id == Strategy.id,
+    ).filter(
+        Position.user_id == current_user.id,
+        TradingAccount.user_id == current_user.id,
+        or_(
+            Position.strategy_id.is_(None),
+            Strategy.user_id == current_user.id,
+        ),
+    )
     if start_date:
         position_query = position_query.filter(Position.opened_at >= start_date)
     if end_date:

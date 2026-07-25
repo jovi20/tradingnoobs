@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from models import IdempotencyKey
@@ -42,11 +43,36 @@ def begin_idempotent_request(
 ) -> IdempotencyBeginResult:
     now = _as_utc(now or datetime.now(timezone.utc))
     hashed_request = request_hash(request_payload)
-    existing = (
-        db.query(IdempotencyKey)
-        .filter(IdempotencyKey.scope == scope, IdempotencyKey.key == key)
-        .first()
+    owner_filter = (
+        IdempotencyKey.user_id.is_(None)
+        if user_id is None
+        else IdempotencyKey.user_id == user_id
     )
+    def query_existing():
+        return db.query(IdempotencyKey).filter(
+            owner_filter,
+            IdempotencyKey.scope == scope,
+            IdempotencyKey.key == key,
+        ).with_for_update()
+
+    existing = query_existing().first()
+    if existing is None:
+        record = IdempotencyKey(
+            user_id=user_id,
+            scope=scope,
+            key=key,
+            request_hash=hashed_request,
+            status="IN_PROGRESS",
+            expires_at=now + timedelta(seconds=ttl_seconds) if ttl_seconds else None,
+        )
+        try:
+            with db.begin_nested():
+                db.add(record)
+                db.flush()
+            return IdempotencyBeginResult(record=record, created=True)
+        except IntegrityError:
+            existing = query_existing().one()
+
     if existing:
         if existing.expires_at and _as_utc(existing.expires_at) <= now:
             existing.request_hash = hashed_request
@@ -62,17 +88,7 @@ def begin_idempotent_request(
             raise ValueError("Idempotency key reuse with a different request payload.")
         return IdempotencyBeginResult(record=existing, created=False)
 
-    record = IdempotencyKey(
-        user_id=user_id,
-        scope=scope,
-        key=key,
-        request_hash=hashed_request,
-        status="IN_PROGRESS",
-        expires_at=now + timedelta(seconds=ttl_seconds) if ttl_seconds else None,
-    )
-    db.add(record)
-    db.flush()
-    return IdempotencyBeginResult(record=record, created=True)
+    raise RuntimeError("Idempotency record resolution failed")
 
 
 def complete_idempotent_request(

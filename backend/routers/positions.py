@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, or_
 from typing import List, Optional
 from decimal import Decimal, InvalidOperation
 import csv
@@ -31,7 +31,7 @@ from database import get_db
 from observability import get_structured_logger, log_event
 from routers.auth import get_current_user
 from models import (
-    User, Position, TradeBatch, TradingAccount,
+    User, Position, Strategy, TradeBatch, TradingAccount,
     PositionStatus, PositionDirection, BatchType
 )
 from schemas import (
@@ -279,9 +279,19 @@ def _matching_open_positions(
 ) -> list[Position]:
     candidates = (
         db.query(Position)
+        .join(
+            TradingAccount,
+            Position.account_id == TradingAccount.id,
+        )
+        .outerjoin(
+            Strategy,
+            Position.strategy_id == Strategy.id,
+        )
         .filter(
             Position.user_id == user_id,
             Position.account_id == account.id,
+            TradingAccount.user_id == user_id,
+            or_(Position.strategy_id.is_(None), Strategy.user_id == user_id),
         )
         .order_by(Position.id.asc())
         .all()
@@ -499,9 +509,13 @@ async def list_positions(
     ).join(
         TradingAccount,
         Position.account_id == TradingAccount.id,
+    ).outerjoin(
+        Strategy,
+        Position.strategy_id == Strategy.id,
     ).filter(
         Position.user_id == current_user.id,
         TradingAccount.user_id == current_user.id,
+        or_(Position.strategy_id.is_(None), Strategy.user_id == current_user.id),
     )
     
     if account_id:
@@ -579,10 +593,17 @@ async def get_position(
         ).join(
             TradingAccount,
             Position.account_id == TradingAccount.id,
+        ).outerjoin(
+            Strategy,
+            Position.strategy_id == Strategy.id,
         ).filter(
             Position.id == position.id,
             Position.user_id == current_user.id,
             TradingAccount.user_id == current_user.id,
+            or_(
+                Position.strategy_id.is_(None),
+                Strategy.user_id == current_user.id,
+            ),
         ).first()
     
     if not position:
@@ -676,7 +697,15 @@ async def create_position(
     ).first()
     
     if not account:
-        raise HTTPException(status_code=400, detail="Invalid account_id")
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    if position_data.strategy_id is not None:
+        strategy = db.query(Strategy).filter(
+            Strategy.id == position_data.strategy_id,
+            Strategy.user_id == current_user.id,
+        ).first()
+        if not strategy:
+            raise HTTPException(status_code=404, detail="Strategy not found")
     
     _release_contract_value(
         require_release_currency,
@@ -1024,9 +1053,13 @@ async def export_positions_csv(
     ).join(
         TradingAccount,
         Position.account_id == TradingAccount.id,
+    ).outerjoin(
+        Strategy,
+        Position.strategy_id == Strategy.id,
     ).filter(
         Position.user_id == current_user.id,
         TradingAccount.user_id == current_user.id,
+        or_(Position.strategy_id.is_(None), Strategy.user_id == current_user.id),
     ).order_by(desc(Position.opened_at)).all()
     
     # Create CSV in memory

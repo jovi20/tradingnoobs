@@ -41,12 +41,65 @@ def _transaction_entry_type(transaction_type: TransactionType) -> AccountLedgerE
     return AccountLedgerEntryType.CASH_ADJUSTMENT
 
 
+def _require_event_owner_graph(db: Session, event: PositionEvent) -> None:
+    account_matches = db.query(TradingAccount.id).filter(
+        TradingAccount.id == event.account_id,
+        TradingAccount.user_id == event.user_id,
+    ).first()
+    position_matches = db.query(TradingPosition.id).filter(
+        TradingPosition.id == event.position_id,
+        TradingPosition.user_id == event.user_id,
+        TradingPosition.account_id == event.account_id,
+    ).first()
+    if account_matches is None or position_matches is None:
+        raise ValueError("Position event owner graph is inconsistent")
+
+
+def _ledger_entry_owner_graph_is_consistent(
+    db: Session,
+    *,
+    entry: AccountLedgerEntry,
+    account: TradingAccount,
+) -> bool:
+    if entry.user_id != account.user_id or entry.account_id != account.id:
+        return False
+    if entry.position_id is not None:
+        position = db.query(TradingPosition).filter(
+            TradingPosition.id == entry.position_id,
+            TradingPosition.user_id == account.user_id,
+            TradingPosition.account_id == account.id,
+        ).first()
+        if position is None:
+            return False
+    if entry.position_event_id is not None:
+        event = db.query(PositionEvent).filter(
+            PositionEvent.id == entry.position_event_id,
+            PositionEvent.user_id == account.user_id,
+            PositionEvent.account_id == account.id,
+        ).first()
+        if event is None or (
+            entry.position_id is not None
+            and event.position_id != entry.position_id
+        ):
+            return False
+    if entry.transaction_id is not None:
+        transaction = db.query(Transaction).filter(
+            Transaction.id == entry.transaction_id,
+            Transaction.account_id == account.id,
+        ).first()
+        if transaction is None:
+            return False
+    return True
+
+
 def sync_transaction_to_account_ledger(
     db: Session,
     *,
     transaction: Transaction,
     account: TradingAccount,
 ) -> AccountLedgerEntry:
+    if transaction.account_id != account.id:
+        raise ValueError("Transaction and account have different owners")
     if transaction.id is None:
         db.flush()
 
@@ -55,6 +108,11 @@ def sync_transaction_to_account_ledger(
         .filter(AccountLedgerEntry.transaction_id == transaction.id)
         .first()
     )
+    if ledger_entry is not None and (
+        ledger_entry.user_id != account.user_id
+        or ledger_entry.account_id != account.id
+    ):
+        raise ValueError("Transaction ledger entry owner graph is inconsistent")
     if not ledger_entry:
         ledger_entry = AccountLedgerEntry(
             public_id=_deterministic_ledger_public_id(f"transaction:{transaction.public_id}")
@@ -94,6 +152,7 @@ def sync_opening_balance_to_account_ledger(
         db.query(AccountLedgerEntry)
         .filter(
             AccountLedgerEntry.account_id == account.id,
+            AccountLedgerEntry.user_id == account.user_id,
             AccountLedgerEntry.source == "OPENING_BALANCE",
         )
         .first()
@@ -159,6 +218,7 @@ def sync_dividend_event_to_account_ledger(
     *,
     event: PositionEvent,
 ) -> AccountLedgerEntry:
+    _require_event_owner_graph(db, event)
     if event.id is None:
         db.flush()
 
@@ -167,6 +227,12 @@ def sync_dividend_event_to_account_ledger(
         .filter(AccountLedgerEntry.position_event_id == event.id)
         .first()
     )
+    if ledger_entry is not None and (
+        ledger_entry.user_id != event.user_id
+        or ledger_entry.account_id != event.account_id
+        or ledger_entry.position_id != event.position_id
+    ):
+        raise ValueError("Dividend ledger entry owner graph is inconsistent")
     if not ledger_entry:
         ledger_entry = AccountLedgerEntry(
             public_id=_deterministic_ledger_public_id(f"position_event:{event.public_id}:dividend")
@@ -196,6 +262,7 @@ def sync_manual_adjustment_event_to_account_ledger(
     *,
     event: PositionEvent,
 ) -> AccountLedgerEntry:
+    _require_event_owner_graph(db, event)
     if event.id is None:
         db.flush()
 
@@ -207,6 +274,12 @@ def sync_manual_adjustment_event_to_account_ledger(
         )
         .first()
     )
+    if ledger_entry is not None and (
+        ledger_entry.user_id != event.user_id
+        or ledger_entry.account_id != event.account_id
+        or ledger_entry.position_id != event.position_id
+    ):
+        raise ValueError("Adjustment ledger entry owner graph is inconsistent")
     if not ledger_entry:
         ledger_entry = AccountLedgerEntry(
             public_id=_deterministic_ledger_public_id(f"position_event:{event.public_id}:manual_adjustment")
@@ -238,6 +311,13 @@ def sync_realized_pnl_event_to_account_ledger(
     event: PositionEvent,
     position: TradingPosition,
 ) -> AccountLedgerEntry | None:
+    if (
+        event.user_id != position.user_id
+        or event.position_id != position.id
+        or event.account_id != position.account_id
+    ):
+        raise ValueError("Position event and position have different owners")
+    _require_event_owner_graph(db, event)
     if event.id is None:
         db.flush()
 
@@ -249,6 +329,12 @@ def sync_realized_pnl_event_to_account_ledger(
         )
         .first()
     )
+    if ledger_entry is not None and (
+        ledger_entry.user_id != event.user_id
+        or ledger_entry.account_id != event.account_id
+        or ledger_entry.position_id != position.id
+    ):
+        raise ValueError("Realized PnL ledger entry owner graph is inconsistent")
     realized_pnl = Decimal(str(event.realized_pnl_net or 0))
 
     if realized_pnl == 0:
@@ -297,9 +383,21 @@ def calculate_account_cash_balance_read_model(db: Session, *, account: TradingAc
     """
     ledger_entries = (
         db.query(AccountLedgerEntry)
-        .filter(AccountLedgerEntry.account_id == account.id)
+        .filter(
+            AccountLedgerEntry.account_id == account.id,
+            AccountLedgerEntry.user_id == account.user_id,
+        )
         .all()
     )
+    ledger_entries = [
+        entry
+        for entry in ledger_entries
+        if _ledger_entry_owner_graph_is_consistent(
+            db,
+            entry=entry,
+            account=account,
+        )
+    ]
     has_opening_balance_ledger = any(entry.source == "OPENING_BALANCE" for entry in ledger_entries)
     ledger_total = sum(
         (

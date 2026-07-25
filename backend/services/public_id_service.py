@@ -1,9 +1,17 @@
 """
 Trading Noobs Backend - Public ID Resolution Helpers
 """
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from models import Position, TradeBatch, TradingAccount, TradingPosition, Transaction
+from models import (
+    Position,
+    Strategy,
+    TradeBatch,
+    TradingAccount,
+    TradingPosition,
+    Transaction,
+)
 from services.truth_legacy_projection_service import resolve_legacy_position_for_truth
 
 
@@ -26,10 +34,14 @@ def resolve_position(db: Session, user_id: int, identifier: str):
     position = db.query(Position).join(
         TradingAccount,
         Position.account_id == TradingAccount.id,
+    ).outerjoin(
+        Strategy,
+        Position.strategy_id == Strategy.id,
     ).filter(
         Position.public_id == identifier,
         Position.user_id == user_id,
         TradingAccount.user_id == user_id,
+        or_(Position.strategy_id.is_(None), Strategy.user_id == user_id),
     ).first()
     if position:
         return position
@@ -37,10 +49,14 @@ def resolve_position(db: Session, user_id: int, identifier: str):
         position = db.query(Position).join(
             TradingAccount,
             Position.account_id == TradingAccount.id,
+        ).outerjoin(
+            Strategy,
+            Position.strategy_id == Strategy.id,
         ).filter(
             Position.id == int(identifier),
             Position.user_id == user_id,
             TradingAccount.user_id == user_id,
+            or_(Position.strategy_id.is_(None), Strategy.user_id == user_id),
         ).first()
         if position:
             return position
@@ -48,10 +64,17 @@ def resolve_position(db: Session, user_id: int, identifier: str):
     truth_position = db.query(TradingPosition).join(
         TradingAccount,
         TradingPosition.account_id == TradingAccount.id,
+    ).outerjoin(
+        Strategy,
+        TradingPosition.strategy_id == Strategy.id,
     ).filter(
         TradingPosition.public_id == identifier,
         TradingPosition.user_id == user_id,
         TradingAccount.user_id == user_id,
+        or_(
+            TradingPosition.strategy_id.is_(None),
+            Strategy.user_id == user_id,
+        ),
     ).first()
     if truth_position:
         return resolve_legacy_position_for_truth(db, truth_position=truth_position)

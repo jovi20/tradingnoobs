@@ -22,6 +22,7 @@ from models import (
     AccountLedgerEntry,
     AssetMaster,
     AuthRateLimitBucket,
+    IdempotencyKey,
     PositionEvent,
     PositionEventType,
     TradeInstrument,
@@ -35,6 +36,7 @@ from models import (
 from services.account_ledger_service import sync_opening_balance_to_account_ledger
 from services.auth_rate_limit_service import consume_auth_attempt
 from services.auth_service import authenticate_user, create_user
+from services.idempotency_service import begin_idempotent_request
 from services.trading_position_write_service import append_truth_trade_event
 
 
@@ -437,3 +439,80 @@ def test_postgresql_auth_rate_limit_first_attempt_is_concurrency_safe(
     with SessionLocal() as db:
         bucket = db.execute(select(AuthRateLimitBucket)).scalar_one()
         assert bucket.attempt_count == 8
+
+
+def test_postgresql_idempotency_keys_are_owner_scoped_and_concurrency_safe(
+    postgres_database: tuple[Engine, str],
+) -> None:
+    engine, database_url = postgres_database
+    _run_alembic(database_url, "upgrade", "head")
+    SessionLocal = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=engine,
+    )
+    with SessionLocal() as db:
+        first_user = create_user(
+            db,
+            "idempotency-one@example.com",
+            "StrongPassword-123",
+        )
+        second_user = create_user(
+            db,
+            "idempotency-two@example.com",
+            "StrongPassword-123",
+        )
+        first_user_id = first_user.id
+        second_user_id = second_user.id
+
+        begin_idempotent_request(
+            db,
+            scope="owner-boundary",
+            key="same-client-key",
+            request_payload={"owner": "one"},
+            user_id=first_user_id,
+        )
+        begin_idempotent_request(
+            db,
+            scope="owner-boundary",
+            key="same-client-key",
+            request_payload={"owner": "two"},
+            user_id=second_user_id,
+        )
+        db.commit()
+
+    def begin_and_commit() -> bool:
+        with SessionLocal() as db:
+            result = begin_idempotent_request(
+                db,
+                scope="concurrent-owner-boundary",
+                key="same-owner-key",
+                request_payload={"position": "one"},
+                user_id=first_user_id,
+            )
+            db.commit()
+            return result.created
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        created_results = list(executor.map(lambda _: begin_and_commit(), range(8)))
+
+    with SessionLocal() as db:
+        owner_scoped_rows = db.execute(
+            select(IdempotencyKey).where(
+                IdempotencyKey.scope == "owner-boundary",
+                IdempotencyKey.key == "same-client-key",
+            )
+        ).scalars().all()
+        concurrent_rows = db.execute(
+            select(IdempotencyKey).where(
+                IdempotencyKey.scope == "concurrent-owner-boundary",
+                IdempotencyKey.key == "same-owner-key",
+            )
+        ).scalars().all()
+
+        assert {row.user_id for row in owner_scoped_rows} == {
+            first_user_id,
+            second_user_id,
+        }
+        assert len(concurrent_rows) == 1
+        assert created_results.count(True) == 1
