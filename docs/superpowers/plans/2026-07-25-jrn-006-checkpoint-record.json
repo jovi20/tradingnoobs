@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "record_kind": "JRN_TASK_CHECKPOINT",
+  "task_id": "JRN-006",
+  "branch": "dev",
+  "status": "COMPLETE",
+  "release_status": "NOT_READY_FOR_PRODUCTION",
+  "recorded_at": "2026-07-25T18:28:23+08:00",
+  "implementation_base_commit": "d5dfec0f0c5d16df1b69d2e9b0fdcb67912eb1cd",
+  "implementation_checkpoint_commit": "4b350d97d2e06d8744fa41290fa18b9a31f43069",
+  "implementation_commits": [
+    "4b350d97d2e06d8744fa41290fa18b9a31f43069"
+  ],
+  "record_commit_resolution": "git log -1 --format=%H -- docs/superpowers/plans/2026-07-25-jrn-006-checkpoint-record.json",
+  "review_subject": {
+    "commit": "4b350d97d2e06d8744fa41290fa18b9a31f43069",
+    "migration_head": "c3d4e5f6a7b8",
+    "accounting_contract_blob": "18018eda5ef55e5687120de09f168ded03ba452b",
+    "migration_blob": "5976017906906f2fbf2e591c6bdccbe80c85868b",
+    "implementation_test_blob": "42a15f227825092b77056718bea9f6bea624f75d",
+    "ledger_service_blob": "8112193e374aaaff9a42247e4564afb9a4432041",
+    "reconciliation_service_blob": "53c58239820c4a206e0953b8aaf29b5d306147de",
+    "adr_blob": "d7c811c3bff3398c22c7069beb48642c3868f645"
+  },
+  "scope_summary": [
+    "Implement JOURNAL_ACCOUNTING_V1 with Decimal FIFO opening-fee allocation, realized-gross and trade-fee postings, exact replay, and all JRN-005 golden vectors.",
+    "Add explicit posting kinds, source-fact uniqueness, deterministic posting IDs, stable position-event sequence numbers, and PostgreSQL/SQLite/ORM append-only guards.",
+    "Make ledger replay the only journal-balance authority and remove cash_balance/current_balance fallback or NAV labeling from journal surfaces.",
+    "Quarantine unresolved, duplicate, owner-invalid, currency-invalid, and account-currency-invalid legacy postings without guessing repairs.",
+    "Add accounting health, reconciliation cases, audited compensation, financial-mutation blocking, trusted aggregate exclusion, warnings, and repair tooling.",
+    "Prove empty and populated PostgreSQL upgrades, downgrade/re-upgrade, append-only triggers, concurrent identical posting races, API rollback, and degraded UI contracts."
+  ],
+  "verification_environment": {
+    "python": "3.13.5",
+    "node": "24.18.0",
+    "npm": "11.16.0",
+    "postgresql_server": "16.14 (Homebrew)"
+  },
+  "verification": [
+    {
+      "command": "backend/venv/bin/python scripts/run_journal_baseline_gate.py",
+      "result": "PASS on exact commit 4b350d97d2e06d8744fa41290fa18b9a31f43069: 491 backend tests including PostgreSQL, current OpenAPI and release contracts, 160 frontend tests, typecheck, lint, and 15-page production build."
+    },
+    {
+      "command": "python scripts/check_added_secrets.py --base d5dfec0 --head 4b350d9",
+      "result": "PASS: ruleset added-secrets-v1, 2671 added lines, 0 findings."
+    },
+    {
+      "command": "PYTHONPATH=backend backend/venv/bin/python -m pytest backend/tests/test_jrn005_accounting_contract.py backend/tests/test_jrn006_append_only_ledger.py -q",
+      "result": "PASS: 13 contract and implementation suites."
+    },
+    {
+      "command": "git diff --cached --check",
+      "result": "PASS before implementation commit; scoped staged paths excluded all recorded user WIP."
+    }
+  ],
+  "review": {
+    "disposition": "APPROVE_REMOTE_CI_CLOSED",
+    "blocking_findings_after_fix": [],
+    "fixed_findings": [
+      {
+        "severity": "P1",
+        "finding": "The first migration draft quarantined only LEGACY_UNRESOLVED rows, so duplicate legacy posting keys could abort unique-key creation and owner/currency/account-amount divergence could remain trusted.",
+        "resolution": "The migration now assigns every unsafe row a unique LEGACY_UNRESOLVED source fact, creates reconciliation cases, degrades the account, and proves downgrade/re-upgrade on PostgreSQL."
+      },
+      {
+        "severity": "P2",
+        "finding": "The lifecycle router contained a duplicate exception branch for accounting conflicts.",
+        "resolution": "The duplicate branch was removed before the checkpoint."
+      }
+    ],
+    "residual_risks": [
+      "JRN-007/JRN-008 still own account/position row locking, durable financial-command idempotency, and truth-native transactional OPEN/lifecycle writers.",
+      "JRN-009/JRN-010 still own product-complete immutable cash, dividend, trade reversal, and whole-position void commands.",
+      "Legacy accounts quarantined for structural owner or account-currency divergence may require an audited runbook rather than automatic compensation; the implementation deliberately keeps them degraded instead of guessing.",
+      "The product remains NOT_READY_FOR_PRODUCTION until the remaining active-plan exit gates are closed."
+    ]
+  },
+  "remote_ci": {
+    "status": "PASS",
+    "required_workflow": ".github/workflows/journal-baseline.yml",
+    "required_job": "journal-baseline",
+    "verified_commit": "4b350d97d2e06d8744fa41290fa18b9a31f43069",
+    "workflow_run_id": 30154375511,
+    "workflow_run_url": "https://github.com/jovi20/tradingnoobs/actions/runs/30154375511",
+    "workflow_run_conclusion": "success",
+    "job_id": 89669918956,
+    "job_url": "https://github.com/jovi20/tradingnoobs/actions/runs/30154375511/job/89669918956",
+    "job_conclusion": "success",
+    "artifact": {
+      "id": 8618591633,
+      "name": "jrn002-gate-summary",
+      "digest": "sha256:098d10fd619f94418f8388c0796905cb4061fd44bb13f8e76fb71dcdb4d56e4f",
+      "expired": false
+    }
+  },
+  "required_check_enforcement": {
+    "ruleset_id": 19728078,
+    "ruleset_name": "main-journal-baseline",
+    "ruleset_url": "https://github.com/jovi20/tradingnoobs/settings/rules/19728078",
+    "enforcement": "active",
+    "target_ref": "refs/heads/main",
+    "required_check": "journal-baseline",
+    "integration": "GitHub Actions",
+    "dev_is_targeted": false
+  },
+  "next_task_gate": "SATISFIED: JRN-006 is closed; JRN-007 may start from migration head c3d4e5f6a7b8 and the implemented JOURNAL_ACCOUNTING_V1 oracle."
+}
