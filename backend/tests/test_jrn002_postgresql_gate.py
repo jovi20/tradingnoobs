@@ -6,6 +6,7 @@ import subprocess
 import sys
 import uuid
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -20,6 +21,7 @@ from sqlalchemy.orm import sessionmaker
 from models import (
     AccountLedgerEntry,
     AssetMaster,
+    AuthRateLimitBucket,
     PositionEvent,
     PositionEventType,
     TradeInstrument,
@@ -31,6 +33,7 @@ from models import (
     User,
 )
 from services.account_ledger_service import sync_opening_balance_to_account_ledger
+from services.auth_rate_limit_service import consume_auth_attempt
 from services.auth_service import authenticate_user, create_user
 from services.trading_position_write_service import append_truth_trade_event
 
@@ -251,6 +254,51 @@ def test_populated_pre_extension_fixture_upgrades_without_data_loss(
         ).scalar_one() == _alembic_head()
 
 
+def test_postgresql_secret_governance_migration_downgrades_and_reupgrades(
+    postgres_database: tuple[Engine, str],
+) -> None:
+    engine, database_url = postgres_database
+    _run_alembic(database_url, "upgrade", "head")
+    _run_alembic(database_url, "downgrade", "9cad10111213")
+
+    downgraded_columns = {
+        column["name"] for column in inspect(engine).get_columns("user_settings")
+    }
+    assert {
+        "ibkr_flex_query_id",
+        "ibkr_flex_token",
+        "binance_api_key",
+        "binance_api_secret",
+        "finnhub_api_key",
+        "llm_api_url",
+        "llm_api_key",
+    } <= downgraded_columns
+
+    _run_alembic(database_url, "upgrade", "head")
+
+    upgraded_columns = {
+        column["name"] for column in inspect(engine).get_columns("user_settings")
+    }
+    assert {
+        "ibkr_flex_query_id",
+        "ibkr_flex_token",
+        "binance_api_key",
+        "binance_api_secret",
+        "finnhub_api_key",
+        "llm_api_url",
+        "llm_api_key",
+    }.isdisjoint(upgraded_columns)
+    assert {
+        "invitations",
+        "security_audit_events",
+        "auth_rate_limit_buckets",
+    } <= set(inspect(engine).get_table_names())
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT version_num FROM alembic_version")
+        ).scalar_one() == _alembic_head()
+
+
 def test_postgresql_auth_account_timezone_and_canonical_write_integration(
     postgres_database: tuple[Engine, str],
 ) -> None:
@@ -359,3 +407,33 @@ def test_postgresql_auth_account_timezone_and_canonical_write_integration(
         assert persisted_event.quantity == Decimal("10.00000000")
         assert position.quantity_opened == Decimal("10.00000000")
         assert persisted_ledger.amount == Decimal("10000.00000000")
+
+
+def test_postgresql_auth_rate_limit_first_attempt_is_concurrency_safe(
+    postgres_database: tuple[Engine, str],
+) -> None:
+    engine, database_url = postgres_database
+    _run_alembic(database_url, "upgrade", "head")
+    SessionLocal = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=engine,
+    )
+
+    def consume_and_commit() -> None:
+        with SessionLocal() as db:
+            consume_auth_attempt(
+                db,
+                action="LOGIN",
+                dimension="IP",
+                value="203.0.113.10",
+                limit=20,
+            )
+            db.commit()
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        list(executor.map(lambda _: consume_and_commit(), range(8)))
+
+    with SessionLocal() as db:
+        bucket = db.execute(select(AuthRateLimitBucket)).scalar_one()
+        assert bucket.attempt_count == 8

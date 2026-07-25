@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from models import AuthRateLimitBucket
@@ -35,28 +36,45 @@ def consume_auth_attempt(
     now: datetime | None = None,
 ) -> None:
     current_time = now or datetime.now(timezone.utc)
+    key_hash = _key_hash(value)
     bucket = (
         db.query(AuthRateLimitBucket)
         .filter(
             AuthRateLimitBucket.action == action,
             AuthRateLimitBucket.dimension == dimension,
-            AuthRateLimitBucket.key_hash == _key_hash(value),
+            AuthRateLimitBucket.key_hash == key_hash,
         )
         .with_for_update()
         .first()
     )
     if bucket is None:
-        db.add(
-            AuthRateLimitBucket(
-                action=action,
-                dimension=dimension,
-                key_hash=_key_hash(value),
-                window_started_at=current_time,
-                attempt_count=1,
+        try:
+            with db.begin_nested():
+                db.add(
+                    AuthRateLimitBucket(
+                        action=action,
+                        dimension=dimension,
+                        key_hash=key_hash,
+                        window_started_at=current_time,
+                        attempt_count=1,
+                    )
+                )
+                db.flush()
+            return
+        except IntegrityError:
+            # A concurrent first attempt created the same unique bucket. The
+            # savepoint keeps the caller transaction usable so we can lock and
+            # increment the row that won the race.
+            bucket = (
+                db.query(AuthRateLimitBucket)
+                .filter(
+                    AuthRateLimitBucket.action == action,
+                    AuthRateLimitBucket.dimension == dimension,
+                    AuthRateLimitBucket.key_hash == key_hash,
+                )
+                .with_for_update()
+                .one()
             )
-        )
-        db.flush()
-        return
 
     if bucket.blocked_until is not None and _as_utc(bucket.blocked_until) > current_time:
         retry_after = int((_as_utc(bucket.blocked_until) - current_time).total_seconds())
