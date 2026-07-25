@@ -64,6 +64,7 @@ CONFLICT_CLASSIFICATIONS = frozenset(
         "CORRECTION",
         "CANCEL_BUST",
         "TARGET_UNRESOLVED",
+        "SOURCE_GENERATION_CONFLICT",
         "UNSUPPORTED_CROSS_ZERO",
         "UNSUPPORTED_ORDER_CONFLICT",
     }
@@ -281,6 +282,26 @@ def _get_or_create_statement(
     db.add(statement)
     db.flush()
     return statement
+
+
+def _has_conflicting_generation(
+    db: Session,
+    *,
+    binding: ImportSourceBinding,
+    statement: SourceStatement,
+) -> bool:
+    return (
+        db.query(SourceStatement.id)
+        .filter(
+            SourceStatement.binding_id == binding.id,
+            SourceStatement.generation_order_key
+            == statement.generation_order_key,
+            SourceStatement.id != statement.id,
+            SourceStatement.file_hash != statement.file_hash,
+        )
+        .first()
+        is not None
+    )
 
 
 def _get_or_create_observation(
@@ -818,6 +839,11 @@ def preview_bound_ibkr_statement(
         session=session,
         parsed=parsed,
     )
+    generation_conflict = _has_conflicting_generation(
+        db,
+        binding=binding,
+        statement=statement,
+    )
     persisted_events: list[_PersistedEvent] = []
     statement_seen: set[tuple[str, str]] = set()
     for event in parsed.events:
@@ -898,13 +924,17 @@ def preview_bound_ibkr_statement(
             binding=binding,
             observation=persisted.observation,
         )
-        classification = _classify(
-            db,
-            binding=binding,
-            persisted=persisted,
-            target=target,
-            group_boundary=boundaries.get(key),
-            statement_event_fingerprints=statement_fingerprints,
+        classification = (
+            "SOURCE_GENERATION_CONFLICT"
+            if generation_conflict
+            else _classify(
+                db,
+                binding=binding,
+                persisted=persisted,
+                target=target,
+                group_boundary=boundaries.get(key),
+                statement_event_fingerprints=statement_fingerprints,
+            )
         )
         if (
             classification == "NEW"
@@ -1000,7 +1030,13 @@ def preview_bound_ibkr_statement(
     session.source_preview_schema_version = projection.schema_version
     session.source_preview_digest = projection.digest
 
-    if projection.coverage_gap:
+    if generation_conflict:
+        status = ImportSessionStatus.CONFLICTED.value
+        session.error_code = "SOURCE_GENERATION_CONFLICT"
+        session.error_message = (
+            "Different source files use the same statement generation marker"
+        )
+    elif projection.coverage_gap:
         status = ImportSessionStatus.CONFLICTED.value
         session.error_code = "SOURCE_COVERAGE_GAP"
         session.error_message = (

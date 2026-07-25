@@ -96,6 +96,10 @@ def provider_contract():
             "statement_to_date_inclusive": True,
             "statement_date_format": "%Y%m%d",
             "generation_time_format": "%Y%m%d;%H%M%S",
+            "generation_ordering": "UTC_INSTANT_ASC",
+            "generation_tie_policy": (
+                "SAME_MARKER_DIFFERENT_FILE_CONFLICT"
+            ),
             "execution_time_format": "%Y%m%d;%H%M%S",
             "execution_time_semantics": "SOURCE_TIMEZONE_NAIVE",
             "ordinary_trade_kind_from_element": True,
@@ -428,6 +432,107 @@ def test_bound_preview_persists_new_statement_evidence_and_derives_add(
     assert db.query(SourceReconciliationCase).count() == 0
 
 
+def test_same_generation_different_files_create_persistent_conflict(
+    db,
+    source_graph,
+    provider_contract,
+):
+    user, _, account, _, binding = source_graph
+    generation = "2026-07-27T22:00:00+00:00"
+    first_session = make_session(
+        db,
+        user=user,
+        account=account,
+        suffix="generation-first",
+    )
+    first = preview_bound_ibkr_statement(
+        db,
+        account=account,
+        binding=binding,
+        session=first_session,
+        parsed=parsed_statement(
+            source_event(event_id="EXEC-GEN-1", transaction_id="201"),
+            generation=generation,
+        ),
+        provider_contract=provider_contract,
+    )
+    assert first.items[0].classification == "NEW"
+    assert first_session.error_code == "SOURCE_COVERAGE_GAP"
+
+    second_session = make_session(
+        db,
+        user=user,
+        account=account,
+        suffix="generation-second",
+    )
+    second = preview_bound_ibkr_statement(
+        db,
+        account=account,
+        binding=binding,
+        session=second_session,
+        parsed=parsed_statement(
+            source_event(event_id="EXEC-GEN-2", transaction_id="202"),
+            generation=generation,
+        ),
+        provider_contract=provider_contract,
+    )
+
+    assert second.status == "CONFLICTED"
+    assert second_session.error_code == "SOURCE_GENERATION_CONFLICT"
+    assert second.items[0].classification == "SOURCE_GENERATION_CONFLICT"
+    assert db.query(SourceStatement).count() == 2
+    assert db.query(SourceReconciliationCase).filter_by(
+        case_kind="SOURCE_GENERATION_CONFLICT",
+    ).count() == 1
+    assert binding.source_health == "RECONCILIATION_REQUIRED"
+
+
+def test_same_generation_empty_files_are_statement_level_conflict(
+    db,
+    source_graph,
+    provider_contract,
+):
+    user, _, account, _, binding = source_graph
+    generation = "2026-07-27T23:00:00+00:00"
+    first_session = make_session(
+        db,
+        user=user,
+        account=account,
+        suffix="empty-generation-first",
+    )
+    first = preview_bound_ibkr_statement(
+        db,
+        account=account,
+        binding=binding,
+        session=first_session,
+        parsed=parsed_statement(generation=generation),
+        provider_contract=provider_contract,
+    )
+    assert first_session.error_code == "SOURCE_COVERAGE_GAP"
+
+    second_session = make_session(
+        db,
+        user=user,
+        account=account,
+        suffix="empty-generation-second",
+    )
+    second = preview_bound_ibkr_statement(
+        db,
+        account=account,
+        binding=binding,
+        session=second_session,
+        parsed=parsed_statement(generation=generation),
+        provider_contract=provider_contract,
+    )
+
+    assert second.status == "CONFLICTED"
+    assert second.items == ()
+    assert second_session.error_code == "SOURCE_GENERATION_CONFLICT"
+    assert db.query(SourceStatement).count() == 2
+    assert db.query(SourceReconciliationCase).count() == 0
+    assert binding.source_completeness == "PENDING_IMPORT"
+
+
 def test_exact_repeat_is_already_imported_with_new_generation_sighting(
     db,
     source_graph,
@@ -596,7 +701,10 @@ def test_correction_never_becomes_new_and_missing_target_is_case(
         account=account,
         binding=binding,
         session=missing_target_session,
-        parsed=parsed_statement(missing_target),
+        parsed=parsed_statement(
+            missing_target,
+            generation="2026-07-26T22:00:01+00:00",
+        ),
         provider_contract=provider_contract,
     )
     db.commit()
@@ -639,6 +747,7 @@ def test_late_new_and_coverage_gap_are_fail_closed(
         binding=binding,
         session=gap_session,
         parsed=parsed_statement(
+            generation="2026-07-26T22:00:01+00:00",
             coverage_start=date(2026, 8, 1),
             coverage_end=date(2026, 8, 2),
         ),
@@ -851,7 +960,10 @@ def test_binding_wide_projection_digest_is_stable_and_tracks_pending_truth(
         account=account,
         binding=binding,
         session=second_session,
-        parsed=parsed_statement(second_event),
+        parsed=parsed_statement(
+            second_event,
+            generation="2026-07-26T22:00:01+00:00",
+        ),
         provider_contract=provider_contract,
     )
 
@@ -999,7 +1111,10 @@ def test_prior_unconfirmed_observation_survives_session_expiry(
         account=account,
         binding=binding,
         session=second_session,
-        parsed=parsed_statement(new),
+        parsed=parsed_statement(
+            new,
+            generation="2026-07-26T22:00:01+00:00",
+        ),
         provider_contract=provider_contract,
     )
 

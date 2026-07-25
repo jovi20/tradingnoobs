@@ -42,6 +42,8 @@ def field_contract() -> dict:
         "statement_to_date_inclusive": True,
         "statement_date_format": "%Y%m%d",
         "generation_time_format": "%Y%m%d;%H%M%S",
+        "generation_ordering": "UTC_INSTANT_ASC",
+        "generation_tie_policy": "SAME_MARKER_DIFFERENT_FILE_CONFLICT",
         "execution_time_format": "%Y%m%d;%H%M%S",
         "execution_time_semantics": "SOURCE_TIMEZONE_NAIVE",
         "ordinary_trade_kind_from_element": True,

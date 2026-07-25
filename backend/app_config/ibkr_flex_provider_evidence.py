@@ -67,6 +67,10 @@ class IbkrFlexFieldContract(_EvidenceModel):
     statement_to_date_inclusive: bool
     statement_date_format: str
     generation_time_format: str
+    generation_ordering: Literal["UTC_INSTANT_ASC"]
+    generation_tie_policy: Literal[
+        "SAME_MARKER_DIFFERENT_FILE_CONFLICT"
+    ]
     execution_time_format: str
     execution_time_semantics: Literal["SOURCE_TIMEZONE_NAIVE"]
     ordinary_trade_kind_from_element: Literal[True]

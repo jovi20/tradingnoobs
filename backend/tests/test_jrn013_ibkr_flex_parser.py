@@ -10,7 +10,9 @@ from app_config.ibkr_flex_provider_evidence import (
 )
 from services.ibkr_flex_parser import (
     IbkrFlexParseError,
+    MAX_ATTRIBUTES_PER_NODE,
     MAX_EXECUTIONS,
+    MAX_XML_NODES,
     parse_ibkr_flex_xml,
 )
 
@@ -44,6 +46,10 @@ def provider_contract() -> VerifiedIbkrFlexProviderContract:
             "statement_to_date_inclusive": True,
             "statement_date_format": "%Y%m%d",
             "generation_time_format": "%Y%m%d;%H%M%S",
+            "generation_ordering": "UTC_INSTANT_ASC",
+            "generation_tie_policy": (
+                "SAME_MARKER_DIFFERENT_FILE_CONFLICT"
+            ),
             "execution_time_format": "%Y%m%d;%H%M%S",
             "execution_time_semantics": "SOURCE_TIMEZONE_NAIVE",
             "ordinary_trade_kind_from_element": True,
@@ -172,6 +178,71 @@ def test_fingerprint_excludes_statement_generation_and_file_provenance(
         == second.events[0].source_payload_fingerprint
     )
     assert first.generation_order_key != second.generation_order_key
+
+
+@pytest.mark.parametrize(
+    ("content", "source_timezone", "code"),
+    (
+        (
+            document(trade()).replace(
+                ' whenGenerated="20260725;180000"',
+                "",
+            ),
+            "UTC",
+            "IBKR_REQUIRED_FIELD_MISSING",
+        ),
+        (
+            document(trade(), generation="not-a-time"),
+            "UTC",
+            "IBKR_INVALID_DATETIME",
+        ),
+        (
+            document(trade()).replace(
+                'fromDate="20260701"',
+                'fromDate="not-a-date"',
+            ),
+            "UTC",
+            "IBKR_INVALID_STATEMENT_DATE",
+        ),
+        (
+            document(trade()).replace(
+                'fromDate="20260701"',
+                'fromDate="20260726"',
+            ),
+            "UTC",
+            "IBKR_STATEMENT_COVERAGE_INVALID",
+        ),
+        (
+            document(trade()),
+            "Not/A_Timezone",
+            "IBKR_SOURCE_TIMEZONE_INVALID",
+        ),
+        (
+            document(trade(), generation="20261101;013000"),
+            "America/New_York",
+            "AMBIGUOUS_LOCAL_TIME",
+        ),
+        (
+            document(trade(), generation="20260308;023000"),
+            "America/New_York",
+            "NONEXISTENT_LOCAL_TIME",
+        ),
+    ),
+)
+def test_statement_time_and_coverage_metadata_fail_closed(
+    tmp_path,
+    provider_contract,
+    content,
+    source_timezone,
+    code,
+):
+    with pytest.raises(IbkrFlexParseError) as failure:
+        parse_ibkr_flex_xml(
+            write_xml(tmp_path, content),
+            source_timezone=source_timezone,
+            provider_contract=provider_contract,
+        )
+    assert failure.value.code == code
 
 
 def test_flat_boundary_is_proven_by_account_inception(
@@ -471,6 +542,17 @@ def test_execution_count_depth_and_field_limits(
     tmp_path,
     provider_contract,
 ):
+    exact_limit = "".join(
+        trade(execution_id=f"EXACT-{index}", transaction_id=str(index))
+        for index in range(MAX_EXECUTIONS)
+    )
+    parsed = parse_ibkr_flex_xml(
+        write_xml(tmp_path, document(exact_limit), "exact-limit.xml"),
+        source_timezone="UTC",
+        provider_contract=provider_contract,
+    )
+    assert len(parsed.events) == MAX_EXECUTIONS
+
     too_many = "".join(
         trade(execution_id=f"EXEC-{index}", transaction_id=str(index))
         for index in range(MAX_EXECUTIONS + 1)
@@ -498,8 +580,40 @@ def test_execution_count_depth_and_field_limits(
             write_xml(tmp_path, document(long_symbol), "long.xml"),
             source_timezone="UTC",
             provider_contract=provider_contract,
-        )
+    )
     assert field_failure.value.code == "IBKR_FIELD_TOO_LONG"
+
+    too_many_nodes = "<n/>" * MAX_XML_NODES
+    with pytest.raises(IbkrFlexParseError) as node_failure:
+        parse_ibkr_flex_xml(
+            write_xml(
+                tmp_path,
+                f"<root>{too_many_nodes}</root>",
+                "nodes.xml",
+            ),
+            source_timezone="UTC",
+            provider_contract=provider_contract,
+        )
+    assert node_failure.value.code == "IBKR_XML_NODE_LIMIT_EXCEEDED"
+
+    attributes = " ".join(
+        f'a{index}="{index}"'
+        for index in range(MAX_ATTRIBUTES_PER_NODE + 1)
+    )
+    with pytest.raises(IbkrFlexParseError) as attribute_failure:
+        parse_ibkr_flex_xml(
+            write_xml(
+                tmp_path,
+                f"<root {attributes}/>",
+                "attributes.xml",
+            ),
+            source_timezone="UTC",
+            provider_contract=provider_contract,
+        )
+    assert (
+        attribute_failure.value.code
+        == "IBKR_XML_ATTRIBUTE_LIMIT_EXCEEDED"
+    )
 
 
 def test_dst_fold_and_gap_are_rejected(tmp_path, provider_contract):
