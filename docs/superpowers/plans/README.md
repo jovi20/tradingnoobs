@@ -13,6 +13,7 @@
 | [2026-07-17-jrn-000-checkpoint-record.json](./2026-07-17-jrn-000-checkpoint-record.json) | JRN-000 checkpoint commit、逐文件清单、验证结果和排除项记录。 |
 | [2026-07-17-jrn-001-checkpoint-record.json](./2026-07-17-jrn-001-checkpoint-record.json) | JRN-001 精确 implementation checkpoint、验证证据、排除项和双路独立评审状态。 |
 | [2026-07-25-jrn-002-checkpoint-record.json](./2026-07-25-jrn-002-checkpoint-record.json) | JRN-002 精确 implementation checkpoint、干净重建、统一 gate、本地评审与远端 CI 待办记录。 |
+| [2026-07-26-jrn-012-checkpoint-record.json](./2026-07-26-jrn-012-checkpoint-record.json) | JRN-012 精确 implementation checkpoint、通用 bootstrap confirm、本地统一 gate、双视口浏览器验收与远端 CI 闭环记录。 |
 
 P10 legacy inventory 与 model modularization reference 已移入 [archive/](./archive/)；模型拆分在交易语义稳定前保持延期。
 

@@ -1,0 +1,122 @@
+{
+  "schema_version": 1,
+  "record_kind": "JRN_TASK_CHECKPOINT",
+  "task_id": "JRN-012",
+  "branch": "dev",
+  "status": "COMPLETE",
+  "release_status": "NOT_READY_FOR_PRODUCTION",
+  "recorded_at": "2026-07-26T00:12:19+08:00",
+  "implementation_base_commit": "ba66fcbe5baa56b636fa7447db7f82708d5dc4b2",
+  "implementation_checkpoint_commit": "b7907b4015e3496f1b281d6b76f3c4c48a373e99",
+  "implementation_commits": [
+    "b7907b4015e3496f1b281d6b76f3c4c48a373e99"
+  ],
+  "record_commit_resolution": "git log -1 --format=%H -- docs/superpowers/plans/2026-07-26-jrn-012-checkpoint-record.json",
+  "review_subject": {
+    "commit": "b7907b4015e3496f1b281d6b76f3c4c48a373e99",
+    "migration_head": "b8c9d0e1f2a3",
+    "migration_blob": "986501b96a1f64b825c7586809002d2e7342ebab",
+    "models_blob": "8da02d9413bc33ead3812651b049dc8c75f4b4cb",
+    "confirm_service_blob": "71d09db027db4a5086147924300dcb070656a5da",
+    "import_router_blob": "94aca6aa6062bf7bb694206b89fa20a44e151095",
+    "confirm_test_blob": "b3fff85a2408486803ae321ba82f4209029087e9",
+    "postgresql_test_blob": "46aeb99b0fae8ca28ec84775d869f344192e6c32",
+    "openapi_blob": "7886a9afcf9c2657852198d3ef2370351c6dccdf",
+    "frontend_import_page_blob": "b3a4b548fc8c7d5f4417bbc2fcf912210de8f737"
+  },
+  "scope_summary": [
+    "Enable owner-bound generic bootstrap confirm for eligible CLEAN accounts while keeping all source-bound and online broker adapters fail-closed.",
+    "Serialize confirm with manual writes and account lifecycle changes through account-first PostgreSQL locking and a fresh eligibility read inside the transaction.",
+    "Provide permanent operation-scoped confirm idempotency, exact terminal response replay, single-consumption CAS, and stable conflict behavior across preview expiry and normalized-row cleanup.",
+    "Revalidate only selected rows, reject stale previews, group by deterministic instrument identity and direction, and replay each group in UTC timestamp and source-row order.",
+    "Support complete multi-lifecycle OPEN/REDUCE/CLOSE replay and independent opposite-side positions without implicit netting or duplicate-row suppression.",
+    "Apply instrument creation, canonical position events, aggregated event fees, append-only ledger postings, outbox facts, import-row audit links, session completion, and CLEAN-to-MANUAL transition in one transaction.",
+    "Return COMPLETED_NOOP for an empty selected set without consuming account eligibility, while consuming the session and permanently preserving its response.",
+    "Expose responsive row selection, stable retry identity, confirm controls, and selected-row, position, event, and posting counts in the import UI."
+  ],
+  "verification_environment": {
+    "python": "3.13.5",
+    "node": "24.18.0",
+    "npm": "11.16.0",
+    "postgresql_server": "16.14 (Homebrew)"
+  },
+  "verification": [
+    {
+      "command": "backend/venv/bin/python scripts/run_journal_baseline_gate.py",
+      "result": "PASS on the final pre-commit worktree matching b7907b4: 539 backend tests including PostgreSQL empty migration, locking, concurrency, eligibility, idempotency, lifecycle replay, rollback, and owner isolation; current OpenAPI and release contracts; 165 frontend tests; typecheck; lint; and production build with 15 pages generated."
+    },
+    {
+      "command": "Alembic empty upgrade and migration-chain validation through scripts/run_journal_baseline_gate.py",
+      "result": "PASS against PostgreSQL 16.14 and SQLite-compatible batch constraint changes at migration head b8c9d0e1f2a3."
+    },
+    {
+      "command": "Browser validation at 1280x720 and 390x844 using a real three-row CSV",
+      "result": "PASS: selection toggled correctly; OPEN, REDUCE, and CLOSE confirmed as one position, three events, and five postings; no browser errors, document-level horizontal overflow, or mobile overlap; the preview table scrolled internally."
+    },
+    {
+      "command": "backend/venv/bin/python scripts/check_added_secrets.py --base ba66fcbe5baa56b636fa7447db7f82708d5dc4b2 --head b7907b4015e3496f1b281d6b76f3c4c48a373e99",
+      "result": "PASS: ruleset added-secrets-v1, 1,840 added lines, 0 findings."
+    },
+    {
+      "command": "git diff --cached --check",
+      "result": "PASS before implementation commit; the 33 explicitly staged JRN-012 paths excluded all recorded user WIP."
+    }
+  ],
+  "review": {
+    "disposition": "APPROVE_REMOTE_CI_CLOSED",
+    "blocking_findings_after_fix": [],
+    "fixed_findings": [
+      {
+        "severity": "P1",
+        "finding": "The initial migration used direct ALTER TABLE ADD CONSTRAINT statements that broke empty SQLite upgrade validation.",
+        "resolution": "Both affected tables now use Alembic batch_alter_table for upgrade and downgrade; the complete migration gate passes."
+      },
+      {
+        "severity": "P1",
+        "finding": "Historical disabled-confirm and migration-head assertions still encoded the JRN-011 contract after generic confirm was enabled.",
+        "resolution": "The tests now require owner-first IMPORT_SESSION_NOT_FOUND behavior and migration head b8c9d0e1f2a3."
+      },
+      {
+        "severity": "P1",
+        "finding": "The checked-in OpenAPI baseline did not include the enabled generic confirm contract.",
+        "resolution": "The snapshot was regenerated from the final application and both local and remote contract checks pass."
+      }
+    ],
+    "residual_risks": [
+      "Generic CSV/XLSX remains a one-time bootstrap path; repeat, overlap, incremental, and correction-aware IBKR imports remain assigned to JRN-013 through JRN-015.",
+      "A non-noop generic confirm permanently transitions the account from CLEAN to MANUAL; void, archive, or preview cleanup intentionally does not restore bootstrap eligibility.",
+      "Online broker synchronization and all source-bound adapters remain hard-off even though generic confirm is enabled.",
+      "GitHub Actions reports that v4/v5 setup and artifact actions still target deprecated Node.js 20 internally and are currently forced onto Node.js 24 by the runner.",
+      "The product remains NOT_READY_FOR_PRODUCTION until the remaining active-plan exit gates are closed."
+    ]
+  },
+  "remote_ci": {
+    "status": "PASS",
+    "required_workflow": ".github/workflows/journal-baseline.yml",
+    "required_job": "journal-baseline",
+    "verified_commit": "b7907b4015e3496f1b281d6b76f3c4c48a373e99",
+    "workflow_run_id": 30164943748,
+    "workflow_run_url": "https://github.com/jovi20/tradingnoobs/actions/runs/30164943748",
+    "workflow_run_conclusion": "success",
+    "job_id": 89696243794,
+    "job_url": "https://github.com/jovi20/tradingnoobs/actions/runs/30164943748/job/89696243794",
+    "job_conclusion": "success",
+    "artifact": {
+      "id": 8621327988,
+      "name": "jrn002-gate-summary",
+      "digest": "sha256:0f32198e5fbd233697da24710bfffe51edb57ea7a2d2db9596924f83f9cdb73c",
+      "expired": false
+    }
+  },
+  "required_check_enforcement": {
+    "ruleset_id": 19728078,
+    "ruleset_name": "main-journal-baseline",
+    "ruleset_url": "https://github.com/jovi20/tradingnoobs/settings/rules/19728078",
+    "enforcement": "active",
+    "target_ref": "refs/heads/main",
+    "required_check": "journal-baseline",
+    "integration": "GitHub Actions",
+    "dev_is_targeted": false
+  },
+  "next_task_gate": "SATISFIED: JRN-012 is closed; JRN-013 may start from migration head b8c9d0e1f2a3 and the owner-bound generic bootstrap, canonical lifecycle replay, permanent idempotency, and atomic ledger application contracts."
+}
