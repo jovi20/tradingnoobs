@@ -1,7 +1,7 @@
 # JRN-013 进度与设计评审
 
 日期：2026-07-26
-评审范围：`0b03f85..c691edb` 的 JRN-013 实现，以及 active plan 中
+评审范围：`0b03f85..7bd90fd` 的 JRN-013 实现，以及 active plan 中
 `JRN-013` 至 `JRN-015` 的 IBKR Flex 文件导入设计。
 
 ## 结论
@@ -29,6 +29,10 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
   hash 或必需语义缺失时稳定拒绝。官方来源必须属于 IBKR 官方站点、guides、
   campus 或官方 GitHub，并留存 UTF-8 artifact、SHA-256、locator 和逐字引用；
   只填写 URL/semantic 标签不能通过。
+- IBKR 官方 Trades Flex Reference 已作为 hash-bound UTF-8 artifact 入库，并以
+  精确 field-table 引用覆盖 `BASIC_EXECUTION_FIELDS`；测试证明 artifact/hash/quote
+  完整，且缺失语义列表不再误报该项。该部分证据不证明 execution identity 稳定性、
+  generation、coverage、correction target 或 commission sign。
 - 禁止 DTD/entity/XInclude 的受限 XML parser，以及文件、execution、节点、
   属性、深度和字段长度限制；5,000 execution 边界接受，5,001 拒绝。
 - provider contract 固定 generation 按 UTC instant 升序；同一 binding 下同一
@@ -73,8 +77,8 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
 - upload 编排在读取或暂存文件前先锁定 owner-scoped account；不存在或跨 owner
   account 均返回 `404 IMPORT_ACCOUNT_NOT_FOUND`，不调用上传读取、不创建临时文件、
   `IdempotencyKey` 或 `ImportSession`，并始终关闭上传句柄。
-- 本次复验的全部 `test_jrn013_*.py` 共 116 项测试通过；完整统一
-  gate 在 PostgreSQL 16.14 上通过 657 个后端测试、165 个前端测试、OpenAPI、
+- 本次复验的全部 `test_jrn013_*.py` 共 117 项测试通过；完整统一
+  gate 在 PostgreSQL 16.14 上通过 658 个后端测试、165 个前端测试、OpenAPI、
   release contract、typecheck、lint 和 production build。
 
 ## 尚未实现或未满足
@@ -83,15 +87,17 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
 - 没有同时来自该模板的脱敏真实 statement pairs，无法证明跨 generation
   overlap、flat boundary、correction/cancel target、commission 与 coverage
   语义。
-- 已查阅的公开 IBKR 材料只能证明 Flex Query 的字段和生成方式取决于 Client
-  Portal 中保存的模板；当前没有保留下足以逐字段证明 `ibExecID`、generation
-  严格顺序、change target 和日期包含性的官方合同。不能据此猜测。
+- 已保留的官方 Trades Flex Reference 能证明基础字段的存在和含义；Flex Web
+  Service 文档还能证明报告由 Client Portal 中预配置模板生成。但当前仍没有足以
+  证明 `ibExecID` 唯一稳定性、generation 严格顺序/tie、数值 transaction order、
+  correction/cancel target、commission sign/currency、flat boundary 和 coverage
+  inclusivity/timezone 的完整官方合同。不能用字段存在替代这些语义证明。
 - `backend/app_config/ibkr_flex_v1_provider_evidence.json` 因而保持
   `UNVERIFIED`；已发布 route 因 evidence-first gate 保持不可用。
 - JRN-014 的 source-bound canonical confirm、coverage acceptance/frontier
   推进与“只应用新增 execution”尚未实现。
 - JRN-015 的人工 correction/cancel-bust resolution 与 versioned replay 尚未实现。
-- `c691edb` 已通过当前工作树完整统一 gate 与真实 PostgreSQL migration gate；
+- `7bd90fd` 已通过当前工作树完整统一 gate 与真实 PostgreSQL migration gate；
   尚未取得远端 CI 和绑定该 SHA 的独立 review，因此仍只能视为进度 checkpoint。
 
 ## 设计必要性评估
