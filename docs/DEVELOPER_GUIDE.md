@@ -1,6 +1,6 @@
 # Trading Noobs 当前代码库指南
 
-更新时间：2026-07-25
+更新时间：2026-07-26
 当前执行分支：`dev`
 当前 HEAD：以当前 `dev` 最新提交为准；阶段状态见 [TODO.md](./TODO.md)。
 
@@ -259,6 +259,38 @@ npm run dev
 
 Broker、Market 和 LLM provider 的历史环境变量仍可能被代码识别，但不属于 JOURNAL Beta 配置合同；不要为当前 profile 配置或分发这些凭据。
 
+### 8.5 IBKR 真实 fixture 脱敏
+
+只在受控本地环境中处理真实 Flex XML。先用拟冻结的 field contract 或包含
+`field_contract` 的 draft manifest 生成候选 fixture；输出目录必须尚不存在，
+source 和输出父目录不能是符号链接：
+
+```bash
+backend/venv/bin/python backend/scripts/redact_ibkr_flex_evidence.py \
+  --field-contract /private/draft-provider-manifest.json \
+  --output-dir /private/ibkr-redacted-review \
+  /private/statement-1.xml /private/statement-2.xml
+```
+
+工具按同一批文件一致替换 account、execution/change/target ID、transaction ID、
+conid 和 symbol；只输出合同消费的单个 statement 子树，删除注释、PI、文本、
+未消费属性和未知子树。新目录权限固定为 `0700`，fixture/report 固定为 `0600`；
+任何写入失败都会删除本次产生的部分输出。report 永远标记
+`NOT_PROVIDER_VERIFICATION` 和 `human_review_required=true`，不能自行把 manifest
+改为 `VERIFIED`。
+
+提交 fixture 前必须逐文件人工复核：
+
+- 搜索账户号、姓名、地址、原 symbol/conid、原 execution/transaction ID、
+  Query ID、Token、源文件名及其他自由文本，确认均未泄漏。
+- 确认跨 statement 的 execution/change/target alias 仍保持真实引用关系，
+  transaction alias 保持数值顺序。
+- 确认保留的日期、价格、数量、费用、币种和 provider 枚举确为证明所需；不需要的
+  敏感事实应从最小 evidence set 中移除，而不是扩大 fixture。
+- 将通过人工复核的 fixture 绑定到同一个已冻结 Query 模板 hash；另行补齐官方
+  raw-wire artifact、quote、locator 和 SHA-256。脱敏成功本身不构成 provider
+  contract 或 release evidence。
+
 ---
 
 ## 9. 常用验证命令
@@ -305,8 +337,9 @@ backend/venv/bin/python backend/scripts/generate_openapi_snapshot.py
 
 1. `JRN-000/001`：已完成；JRN-000 固定 `9cad10111213` baseline，后续 migration 从该 head 线性追加。
 2. `JRN-002/003`：本地 scoped checkpoint 和评审已通过，远端 CI/required-check 证据仍待补。
-3. `JRN-004`：当前执行项；完成 account/strategy/position/event/ledger/note/idempotency 两用户矩阵、关闭 legacy import 越权面并冻结 future-resource harness。Import/source 新模型仍由各自创建任务验证。
-4. Step 0/M0 通过后再执行会计、canonical writer、通用 bootstrap；IBKR source-bound 重复、重叠、增量与 correction replay 只在 `JRN-013` 至 `JRN-015` 实现。真实 staging 位于 `JRN-021`。
+3. `JRN-004` 至 `JRN-012`：本地实现 checkpoint 已完成，状态和外部证据边界以 active plan 为准。
+4. `JRN-013`：当前执行项；内部 source schema/parser/preview 已基本完成，继续收集并验证真实 provider evidence。证据满足前 route 和前端入口保持关闭，不进入 `JRN-014`。
+5. `JRN-014/015`：provider evidence 通过后依次实现同 binding 重复/重叠/增量 canonical confirm 和 correction/cancel replay。真实 staging 位于 `JRN-021`。
 
 ---
 

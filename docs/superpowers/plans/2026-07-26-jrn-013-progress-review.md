@@ -111,8 +111,17 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
 - upload 编排在读取或暂存文件前先锁定 owner-scoped account；不存在或跨 owner
   account 均返回 `404 IMPORT_ACCOUNT_NOT_FOUND`，不调用上传读取、不创建临时文件、
   `IdempotencyKey` 或 `ImportSession`，并始终关闭上传句柄。
-- 本次复验的全部 `test_jrn013_*.py` 共 142 项测试通过；完整统一
-  gate 在 PostgreSQL 16.14 上通过 683 个后端测试、165 个前端测试、OpenAPI、
+- 新增真实 Flex fixture 脱敏工具：按 draft field contract 做跨 statement 一致
+  identity alias，只保留合同消费的 statement 子树与属性，删除自由文本、注释、
+  PI、未知子树及未消费属性；拒绝 DTD/entity/XInclude、XML namespace、符号链接、
+  非普通文件和超限输入。输出目录/文件固定为 `0700/0600`，exclusive create，
+  中途失败不遗留 partial output。
+- 脱敏报告固定为 `NOT_PROVIDER_VERIFICATION`、`REDACTED_REAL_CANDIDATE` 和
+  `human_review_required=true`，不保存源文件名、源 hash 或 alias mapping，也没有
+  能将 provider manifest 升为 `VERIFIED` 的路径。开发者指南已增加命令和提交前
+  人工隐私复核清单。
+- 实现 checkpoint `ba490a4` 的全部 `test_jrn013_*.py` 共 152 项通过；完整统一
+  gate 在 PostgreSQL 16.14 上通过 693 个后端测试、165 个前端测试、OpenAPI、
   release contract、typecheck、lint 和 production build。
 
 ## 尚未实现或未满足
@@ -144,8 +153,9 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
 - JRN-014 的 source-bound canonical confirm、coverage acceptance/frontier
   推进与“只应用新增 execution”尚未实现。
 - JRN-015 的人工 correction/cancel-bust resolution 与 versioned replay 尚未实现。
-- `03632e1` 已通过完整统一 gate 与真实 PostgreSQL migration gate；尚未取得
-  远端 CI 和绑定该 SHA 的独立 review，因此仍只能视为进度 checkpoint。
+- `ba490a4` 已通过完整统一 gate 与真实 PostgreSQL migration gate；尚未取得
+  远端 CI、真实 provider evidence 和绑定该 SHA 的独立 review，因此仍只能视为
+  进度 checkpoint。
 
 ## 设计必要性评估
 
@@ -179,7 +189,9 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
    记录 hash；不要提交 Token、Query ID secret 或未脱敏账户信息。
 2. 从同一模板取得最小脱敏 fixture 集：基础成交、两个有重叠区间且 generation
    不同的 statement、账户 inception 或完整空 OpenPositions、correction/cancel
-   样本、commission/currency 和无成交 coverage 样本。
+   样本、commission/currency 和无成交 coverage 样本。先用
+   `backend/scripts/redact_ibkr_flex_evidence.py` 生成候选，再按开发者指南逐文件
+   人工检查；工具报告不等于 provider verification。
 3. 为每项必需语义保留 IBKR 官方字段合同的 URL、取得日期、UTF-8 artifact、
    SHA-256、locator 与逐字引用，并把 parser 实际消费的 element/attribute 名和
    枚举值绑定为 exact `wire_tokens`；重点先冻结 correction/cancel 的真实元素/
