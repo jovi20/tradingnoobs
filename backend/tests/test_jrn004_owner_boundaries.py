@@ -474,6 +474,59 @@ class JRN004OwnerBoundaryTests(unittest.TestCase):
         self.assertEqual(owner_account.json()["journal_balance"], "0")
         self.assertEqual(dashboard.json()["total_trades"], 0)
 
+    def test_direct_batch_ids_fail_closed_for_cross_owner_strategy_graph(self):
+        mixed_position = Position(
+            public_id="mixed-batch-position-public-id",
+            user_id=self.owner.id,
+            account_id=self.owner_account.id,
+            strategy_id=self.foreign_strategy.id,
+            symbol="MIXEDBATCH",
+            exchange="NASDAQ",
+            asset_type="EQUITY",
+            direction=PositionDirection.LONG,
+            status=PositionStatus.OPEN,
+            total_quantity=Decimal("1"),
+            average_entry_price=Decimal("10"),
+            opened_at=datetime(2026, 7, 24, 9, 30, tzinfo=timezone.utc),
+        )
+        self.db.add(mixed_position)
+        self.db.flush()
+        mixed_batch = TradeBatch(
+            public_id="mixed-batch-public-id",
+            position_id=mixed_position.id,
+            type=BatchType.ENTRY,
+            price=Decimal("10"),
+            quantity=Decimal("1"),
+            time=datetime(2026, 7, 24, 9, 30, tzinfo=timezone.utc),
+        )
+        self.db.add(mixed_batch)
+        self.db.commit()
+
+        probes = (
+            OwnerBoundaryProbe(
+                "PATCH",
+                f"/api/positions/batches/{mixed_batch.public_id}",
+                {"price": "99"},
+            ),
+            OwnerBoundaryProbe(
+                "PATCH",
+                f"/api/positions/batches/{mixed_batch.id}",
+                {"price": "99"},
+            ),
+        )
+        assert_owner_boundary_probes(
+            self,
+            self.client,
+            probes,
+            forbidden_values=("MIXEDBATCH",),
+        )
+
+        self.db.expire_all()
+        self.assertEqual(
+            self.db.query(TradeBatch).filter(TradeBatch.id == mixed_batch.id).one().price,
+            Decimal("10"),
+        )
+
     def test_position_create_rejects_foreign_strategy_without_side_effects(self):
         counts_before = {
             model: self.db.query(model).count()

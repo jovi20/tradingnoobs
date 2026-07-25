@@ -88,10 +88,14 @@ def resolve_trade_batch(db: Session, user_id: int, identifier: str):
     ).join(
         TradingAccount,
         Position.account_id == TradingAccount.id,
+    ).outerjoin(
+        Strategy,
+        Position.strategy_id == Strategy.id,
     ).filter(
         TradeBatch.public_id == identifier,
         Position.user_id == user_id,
         TradingAccount.user_id == user_id,
+        or_(Position.strategy_id.is_(None), Strategy.user_id == user_id),
     ).first()
     if batch:
         return batch
@@ -102,10 +106,14 @@ def resolve_trade_batch(db: Session, user_id: int, identifier: str):
         ).join(
             TradingAccount,
             Position.account_id == TradingAccount.id,
+        ).outerjoin(
+            Strategy,
+            Position.strategy_id == Strategy.id,
         ).filter(
             TradeBatch.id == int(identifier),
             Position.user_id == user_id,
             TradingAccount.user_id == user_id,
+            or_(Position.strategy_id.is_(None), Strategy.user_id == user_id),
         ).first()
     return None
 
