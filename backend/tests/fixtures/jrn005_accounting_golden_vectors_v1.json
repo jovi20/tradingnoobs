@@ -69,6 +69,38 @@
       }
     },
     {
+      "id": "multiple_add_partial_reduce_with_unconsumed_fee",
+      "side": "LONG",
+      "opening_balance": "0.00000000",
+      "events": [
+        {"id": "m1", "type": "OPEN", "quantity": "1", "price": "10", "fee": "0.1"},
+        {"id": "m2", "type": "ADD", "quantity": "2", "price": "11", "fee": "0.2"},
+        {"id": "m3", "type": "ADD", "quantity": "1", "price": "12", "fee": "0"},
+        {"id": "m4", "type": "REDUCE", "quantity": "2", "price": "13", "fee": "0.1"}
+      ],
+      "expected_events": [
+        {"id": "m1", "realized_gross": "0.00000000", "consumed_open_fee": "0.00000000", "realized_net": "0.00000000"},
+        {"id": "m2", "realized_gross": "0.00000000", "consumed_open_fee": "0.00000000", "realized_net": "0.00000000"},
+        {"id": "m3", "realized_gross": "0.00000000", "consumed_open_fee": "0.00000000", "realized_net": "0.00000000"},
+        {"id": "m4", "realized_gross": "5.00000000", "consumed_open_fee": "0.20000000", "realized_net": "4.70000000"}
+      ],
+      "expected_postings": [
+        {"source": "m1", "kind": "TRADE_FEE", "amount": "-0.10000000"},
+        {"source": "m2", "kind": "TRADE_FEE", "amount": "-0.20000000"},
+        {"source": "m4", "kind": "REALIZED_GROSS", "amount": "5.00000000"},
+        {"source": "m4", "kind": "TRADE_FEE", "amount": "-0.10000000"}
+      ],
+      "expected_summary": {
+        "quantity_opened": "4.00000000",
+        "quantity_closed": "2.00000000",
+        "open_quantity": "2.00000000",
+        "realized_gross": "5.00000000",
+        "realized_net": "4.70000000",
+        "total_fees": "0.40000000",
+        "journal_balance": "4.60000000"
+      }
+    },
+    {
       "id": "half_even_posting_boundary",
       "side": "LONG",
       "opening_balance": "0.00000000",
