@@ -30,6 +30,10 @@ from services.ibkr_flex_import_service import (
     IbkrFlexImportError,
     stage_and_upload_ibkr_flex_preview,
 )
+from services.generic_import_service import (
+    cleanup_terminal_import_rows,
+    expire_due_import_sessions,
+)
 
 
 EXTERNAL_ACCOUNT = "U1234567"
@@ -222,6 +226,11 @@ def test_bootstrap_upload_persists_masked_replayable_preview_only(
     assert account.hard_delete_eligible is False
     assert list(tmp_path.iterdir()) == []
 
+    assert expire_due_import_sessions(
+        db,
+        now=now + timedelta(days=2),
+    ) == 1
+    db.commit()
     replay = run_upload(
         db,
         owner=owner,
@@ -235,6 +244,7 @@ def test_bootstrap_upload_persists_masked_replayable_preview_only(
     assert replay.replayed is True
     assert replay.body == first.body
     assert db.query(ImportSession).count() == 1
+    assert db.query(ImportSession).one().status == "EXPIRED"
     assert list(tmp_path.iterdir()) == []
 
 
@@ -323,6 +333,37 @@ def test_existing_binding_upload_uses_bound_preview_and_persists_provenance(
     assert db.query(ExternalSourceObservation).count() == 1
     assert db.query(ImportSourceBinding).count() == 1
     assert list(tmp_path.iterdir()) == []
+
+    assert cleanup_terminal_import_rows(
+        db,
+        now=datetime(2026, 8, 25, tzinfo=timezone.utc),
+    ) == 1
+    db.commit()
+    assert db.query(ImportRow).count() == 0
+    assert db.query(ImportSession).count() == 1
+    assert db.query(SourceStatement).count() == 1
+    assert db.query(ExternalSourceObservation).count() == 1
+    assert db.query(IdempotencyKey).count() == 1
+
+    restarted_db = sessionmaker(bind=db.get_bind(), autoflush=False)()
+    try:
+        restarted_owner = restarted_db.get(User, owner.id)
+        restarted_account = restarted_db.get(TradingAccount, account.id)
+        replay = run_upload(
+            restarted_db,
+            owner=restarted_owner,
+            account=restarted_account,
+            provider_contract=provider_contract,
+            payload=statement_xml(),
+            key="bound-upload-key",
+            temp_root=tmp_path,
+            now=datetime(2026, 9, 1, tzinfo=timezone.utc),
+        )
+        assert replay.replayed is True
+        assert replay.body == result.body
+        assert restarted_db.query(ImportRow).count() == 0
+    finally:
+        restarted_db.close()
 
 
 def test_parse_failure_is_terminal_and_permanently_replayable(

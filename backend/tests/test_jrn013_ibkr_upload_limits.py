@@ -16,11 +16,13 @@ from sqlalchemy.orm import sessionmaker
 from database import Base
 from models import IdempotencyKey, ImportSession, TradingAccount, User
 from services.ibkr_flex_import_service import (
+    IBKR_FILE_PREFIX,
     IbkrFlexImportError,
     enforce_ibkr_owner_upload_limits,
     remove_staged_ibkr_flex_file,
     stage_ibkr_flex_upload,
 )
+from services.generic_import_service import scavenge_orphan_import_files
 
 
 @pytest.fixture()
@@ -134,6 +136,32 @@ def test_invalid_extension_and_oversize_remove_partial_file(
         )
     assert size_failure.value.code == "IMPORT_FILE_TOO_LARGE"
     assert list(Path(tmp_path).iterdir()) == []
+
+
+def test_generic_startup_scavenger_removes_expired_ibkr_orphan(tmp_path):
+    boundary = datetime(2026, 7, 26, 12, tzinfo=timezone.utc)
+    orphan = tmp_path / f"{IBKR_FILE_PREFIX}crashed.xml"
+    fresh = tmp_path / f"{IBKR_FILE_PREFIX}active.xml"
+    unrelated = tmp_path / "keep.xml"
+    for path in (orphan, fresh, unrelated):
+        path.touch()
+    os.utime(
+        orphan,
+        (boundary.timestamp() - 3600, boundary.timestamp() - 3600),
+    )
+    os.utime(
+        fresh,
+        (boundary.timestamp() - 3599, boundary.timestamp() - 3599),
+    )
+
+    assert scavenge_orphan_import_files(
+        now=boundary,
+        older_than_seconds=3600,
+        temp_root=tmp_path,
+    ) == 1
+    assert not orphan.exists()
+    assert fresh.exists()
+    assert unrelated.exists()
 
 
 def test_two_nonterminal_sessions_are_allowed_but_third_is_blocked(db):
