@@ -120,15 +120,15 @@ class ObservabilityTests(unittest.TestCase):
 
     def test_validation_error_never_echoes_invalid_input(self):
         client = build_test_client()
-        secret = "short-secret-must-not-echo"
+        sentinel_value = "short-secret-must-not-echo"
 
         response = client.post(
             "/api/validation",
-            json={"secret": {"nested": secret}},
+            json={"secret": {"nested": sentinel_value}},
         )
 
         self.assertEqual(response.status_code, 422)
-        self.assertNotIn(secret, response.text)
+        self.assertNotIn(sentinel_value, response.text)
         error = response.json()["detail"][0]
         self.assertNotIn("input", error)
         self.assertNotIn("ctx", error)

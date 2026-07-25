@@ -357,18 +357,18 @@ class JournalBaselineDatabaseBoundaryTests(unittest.TestCase):
             db.close()
 
     def test_authenticated_optional_secret_writes_are_retired_without_db_side_effects(self):
-        secret = "must-not-be-persisted"
+        sentinel_value = "must-not-be-persisted"
         retired_user_payloads = (
-            {"ibkr_flex_query_id": secret},
-            {"ibkr_flex_token": secret},
+            {"ibkr_flex_query_id": sentinel_value},
+            {"ibkr_flex_token": sentinel_value},
             {"ibkr_flex_start_date": "2026-07-17"},
-            {"binance_api_key": secret},
-            {"binance_api_secret": secret},
+            {"binance_api_key": sentinel_value},
+            {"binance_api_secret": sentinel_value},
             {"binance_market_type": "SPOT"},
             {"binance_symbols": ["BTCUSDT"]},
-            {"finnhub_api_key": secret},
+            {"finnhub_api_key": sentinel_value},
             {"llm_api_url": "https://llm.invalid/v1"},
-            {"llm_api_key": secret},
+            {"llm_api_key": sentinel_value},
             {"llm_model": "test-model"},
         )
         baseline_counts = self._optional_persistence_counts()
@@ -377,14 +377,14 @@ class JournalBaselineDatabaseBoundaryTests(unittest.TestCase):
             with self.subTest(body=body):
                 response = self.client.patch("/api/settings", json=body)
                 self.assertEqual(response.status_code, 422)
-                self.assertNotIn(secret, response.text)
+                self.assertNotIn(sentinel_value, response.text)
                 self.assertEqual(self._optional_persistence_counts(), baseline_counts)
 
         for path in (
             "/api/admin/settings/binance_api_secret",
             "/api/admin/platform/settings/finnhub_api_key",
         ):
-            response = self.client.put(path, json={"value": secret})
+            response = self.client.put(path, json={"value": sentinel_value})
             self.assertEqual(response.status_code, 404)
             self.assertEqual(
                 response.json()["detail"]["code"],
@@ -396,7 +396,7 @@ class JournalBaselineDatabaseBoundaryTests(unittest.TestCase):
             ("/api/admin/platform/integrations/ibkr/flex_token", "BROKER_SYNC"),
             ("/api/admin/platform/integrations/finnhub/api_key", "MARKET"),
         ):
-            response = self.client.put(path, json={"secret_value": secret})
+            response = self.client.put(path, json={"secret_value": sentinel_value})
             self.assertEqual(response.status_code, 404)
             self.assertEqual(response.json()["detail"]["capability"], capability)
             self.assertEqual(self._optional_persistence_counts(), baseline_counts)
