@@ -31,7 +31,7 @@ from services.trade_lifecycle_simulation_service import (
 )
 
 
-SOURCE_PREVIEW_SCHEMA_VERSION = 1
+SOURCE_PREVIEW_SCHEMA_VERSION = 2
 
 
 class SourcePreviewProjectionError(ValueError):
@@ -360,6 +360,98 @@ def _active_group_state(
     return quantities, histories
 
 
+def _accepted_authority_state(
+    db: Session,
+    *,
+    binding: ImportSourceBinding,
+) -> list[dict[str, Any]]:
+    executions = (
+        db.query(ExternalExecution)
+        .filter(ExternalExecution.binding_id == binding.id)
+        .order_by(ExternalExecution.external_execution_id.asc())
+        .all()
+    )
+    if not executions:
+        return []
+    active_applications = {
+        application.external_execution_id: application
+        for application in db.query(ExternalTradeApplication)
+        .filter(
+            ExternalTradeApplication.external_execution_id.in_(
+                [execution.id for execution in executions]
+            ),
+            ExternalTradeApplication.is_active.is_(True),
+        )
+        .all()
+    }
+    observation_ids = {
+        observation_id
+        for execution in executions
+        for observation_id in (
+            execution.current_trade_observation_id,
+            execution.canceled_by_observation_id,
+        )
+        if observation_id is not None
+    }
+    observation_ids.update(
+        application.source_observation_id
+        for application in active_applications.values()
+    )
+    observations = {
+        observation.id: observation
+        for observation in db.query(ExternalSourceObservation)
+        .filter(ExternalSourceObservation.id.in_(observation_ids))
+        .all()
+    }
+
+    def observation_identity(
+        observation_id: int | None,
+    ) -> dict[str, Any] | None:
+        if observation_id is None:
+            return None
+        observation = observations[observation_id]
+        return {
+            "public_id": observation.public_id,
+            "external_source_event_id": observation.external_source_event_id,
+            "fingerprint_version": observation.fingerprint_version,
+            "source_payload_fingerprint": (
+                observation.source_payload_fingerprint
+            ),
+        }
+
+    return [
+        {
+            "external_execution_id": execution.external_execution_id,
+            "disposition": execution.disposition,
+            "current_trade_observation": observation_identity(
+                execution.current_trade_observation_id
+            ),
+            "canceled_by_observation": observation_identity(
+                execution.canceled_by_observation_id
+            ),
+            "active_application": (
+                {
+                    "public_id": application.public_id,
+                    "application_version": application.application_version,
+                    "source_observation_id": (
+                        observations[application.source_observation_id]
+                    ).public_id,
+                    "derived_direction": application.derived_direction,
+                    "derived_action": application.derived_action,
+                    "pre_quantity": application.pre_quantity,
+                    "post_quantity": application.post_quantity,
+                }
+                if (
+                    application := active_applications.get(execution.id)
+                )
+                is not None
+                else None
+            ),
+        }
+        for execution in executions
+    ]
+
+
 def _pending_trade_observations(
     db: Session,
     *,
@@ -554,6 +646,10 @@ def build_source_preview_projection(
             ],
             "projected_coverage_through_exclusive": projected_frontier,
             "coverage_gap": coverage_gap,
+            "accepted_authority_state": _accepted_authority_state(
+                db,
+                binding=binding,
+            ),
             "accepted_group_history": accepted_histories,
             "pending_units": [
                 {

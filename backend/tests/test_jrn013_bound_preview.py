@@ -1315,7 +1315,7 @@ def test_binding_wide_projection_digest_is_stable_and_tracks_pending_truth(
     source_graph,
     provider_contract,
 ):
-    accepted, _, _ = seed_accepted_execution(
+    accepted, accepted_observation, execution = seed_accepted_execution(
         db,
         graph=source_graph,
         provider_contract=provider_contract,
@@ -1344,7 +1344,7 @@ def test_binding_wide_projection_digest_is_stable_and_tracks_pending_truth(
     )
     rebuilt = build_source_preview_projection(db, binding=binding)
 
-    assert first.source_preview_schema_version == 1
+    assert first.source_preview_schema_version == 2
     assert first.source_preview_digest == rebuilt.digest
     assert first_session.source_preview_digest == rebuilt.digest
     assert rebuilt.payload["pending_units"][0]["derived_action"] == "ADD"
@@ -1381,6 +1381,50 @@ def test_binding_wide_projection_digest_is_stable_and_tracks_pending_truth(
     assert build_source_preview_projection(db, binding=binding).digest == (
         second.source_preview_digest
     )
+
+    authority_baseline = build_source_preview_projection(
+        db,
+        binding=binding,
+    ).digest
+    binding.source_state_revision += 1
+    revision_changed = build_source_preview_projection(
+        db,
+        binding=binding,
+    ).digest
+    assert revision_changed != authority_baseline
+    binding.source_state_revision -= 1
+
+    pending_observation = db.query(ExternalSourceObservation).filter_by(
+        public_id=first.items[0].observation_public_id,
+    ).one()
+    execution.current_trade_observation_id = pending_observation.id
+    authority_changed = build_source_preview_projection(
+        db,
+        binding=binding,
+    ).digest
+    assert authority_changed != authority_baseline
+    execution.current_trade_observation_id = accepted_observation.id
+
+    execution.disposition = "ACCEPTED_TOMBSTONE"
+    execution.canceled_by_observation_id = pending_observation.id
+    tombstone_changed = build_source_preview_projection(
+        db,
+        binding=binding,
+    ).digest
+    assert tombstone_changed != authority_baseline
+    execution.disposition = "ACTIVE"
+    execution.canceled_by_observation_id = None
+
+    application = db.query(ExternalTradeApplication).filter_by(
+        external_execution_id=execution.id,
+        is_active=True,
+    ).one()
+    application.post_quantity = Decimal("3")
+    group_boundary_changed = build_source_preview_projection(
+        db,
+        binding=binding,
+    ).digest
+    assert group_boundary_changed != authority_baseline
 
 
 def test_pending_coverage_fixed_point_handles_adjacent_overlap_gap_and_bridge(
