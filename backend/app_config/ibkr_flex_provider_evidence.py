@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 import hashlib
 import json
 from pathlib import Path
@@ -66,6 +67,10 @@ class IbkrFlexFieldContract(_EvidenceModel):
     execution_status_field: str
     commission_field: str
     commission_currency_field: str
+    commission_charge_sign: Literal["NEGATIVE", "POSITIVE"]
+    commission_currency_semantics: Literal[
+        "MUST_EQUAL_TRADE_CURRENCY"
+    ]
     side_buy_value: str
     side_sell_value: str
     open_value: str
@@ -281,6 +286,100 @@ def _required_attributes(
     return all((element.attrib.get(name) or "").strip() for name in names)
 
 
+def _proves_commission_semantics(
+    trade: etree._Element,
+    contract: IbkrFlexFieldContract,
+) -> bool:
+    raw_commission = (
+        trade.attrib.get(contract.commission_field) or ""
+    ).strip()
+    commission_currency = (
+        trade.attrib.get(contract.commission_currency_field) or ""
+    ).strip()
+    trade_currency = (
+        trade.attrib.get(contract.currency_field) or ""
+    ).strip()
+    if not raw_commission or not commission_currency or not trade_currency:
+        return False
+    try:
+        commission = Decimal(raw_commission)
+    except InvalidOperation:
+        return False
+    if not commission.is_finite() or commission == 0:
+        return False
+    sign_matches = (
+        commission < 0
+        if contract.commission_charge_sign == "NEGATIVE"
+        else commission > 0
+    )
+    return sign_matches and commission_currency == trade_currency
+
+
+def _proves_flat_boundary(
+    statement: etree._Element,
+    root: etree._Element,
+    coverage_start: date | None,
+    contract: IbkrFlexFieldContract,
+) -> bool:
+    if coverage_start is None:
+        return False
+    raw_inception = (
+        statement.attrib.get(contract.account_inception_date_field) or ""
+    ).strip()
+    if raw_inception:
+        try:
+            inception = datetime.strptime(
+                raw_inception,
+                contract.statement_date_format,
+            ).date()
+        except ValueError:
+            pass
+        else:
+            if coverage_start <= inception:
+                return True
+
+    snapshots = _elements(root, contract.open_positions_element)
+    if len(snapshots) != 1:
+        return False
+    snapshot = snapshots[0]
+    try:
+        snapshot_date = datetime.strptime(
+            snapshot.attrib[
+                contract.open_positions_snapshot_date_field
+            ],
+            contract.statement_date_format,
+        ).date()
+    except (KeyError, ValueError):
+        return False
+    if snapshot_date != coverage_start:
+        return False
+
+    statement_account = (
+        statement.attrib.get(contract.account_field) or ""
+    ).strip()
+    for position in snapshot:
+        if (
+            not isinstance(position.tag, str)
+            or _local_name(position) != contract.open_position_element
+        ):
+            return False
+        position_account = (
+            position.attrib.get(contract.account_field) or ""
+        ).strip()
+        if position_account and position_account != statement_account:
+            return False
+        raw_quantity = (
+            position.attrib.get(contract.open_position_quantity_field) or ""
+        ).strip()
+        try:
+            quantity = Decimal(raw_quantity)
+        except InvalidOperation:
+            return False
+        if not quantity.is_finite() or quantity != 0:
+            return False
+    return True
+
+
 @dataclass(frozen=True)
 class _FixtureShape:
     path: str
@@ -401,13 +500,7 @@ def _validate_fixture_semantics(
             )
     if "COMMISSION_SIGN_CURRENCY" in claimed:
         if not trades or not any(
-            _required_attributes(
-                trade,
-                (
-                    contract.commission_field,
-                    contract.commission_currency_field,
-                ),
-            )
+            _proves_commission_semantics(trade, contract)
             for trade in trades
         ):
             reasons.append(
@@ -429,16 +522,12 @@ def _validate_fixture_semantics(
                 f"Fixture does not prove CORRECTION_CANCEL_TARGETS: {relative_path}"
             )
     if "FLAT_BOUNDARY" in claimed:
-        inception = (
-            statement.attrib.get(contract.account_inception_date_field) or ""
-        ).strip()
-        snapshots = _elements(root, contract.open_positions_element)
-        has_snapshot = any(
-            (snapshot.attrib.get(contract.open_positions_snapshot_date_field) or "")
-            .strip()
-            for snapshot in snapshots
-        )
-        if not inception and not has_snapshot:
+        if not _proves_flat_boundary(
+            statement,
+            root,
+            coverage_start,
+            contract,
+        ):
             reasons.append(
                 f"Fixture does not prove FLAT_BOUNDARY: {relative_path}"
             )

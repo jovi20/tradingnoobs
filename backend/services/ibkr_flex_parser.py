@@ -168,7 +168,12 @@ def _parse_positive_decimal(value: str, *, field_name: str) -> Decimal:
     return parsed
 
 
-def _parse_fee(value: str | None, *, field_name: str) -> Decimal:
+def _parse_fee(
+    value: str | None,
+    *,
+    field_name: str,
+    charge_sign: Literal["NEGATIVE", "POSITIVE"],
+) -> Decimal:
     if value is None:
         return Decimal("0")
     try:
@@ -182,6 +187,18 @@ def _parse_fee(value: str | None, *, field_name: str) -> Decimal:
         raise IbkrFlexParseError(
             "IBKR_INVALID_COMMISSION",
             f"IBKR commission must be finite: {field_name}",
+        )
+    if (
+        parsed != 0
+        and (
+            (charge_sign == "NEGATIVE" and parsed > 0)
+            or (charge_sign == "POSITIVE" and parsed < 0)
+        )
+    ):
+        raise IbkrFlexParseError(
+            "IBKR_COMMISSION_SIGN_UNSUPPORTED",
+            "IBKR commission sign does not match the frozen provider "
+            "contract",
         )
     return abs(parsed)
 
@@ -674,6 +691,7 @@ def parse_ibkr_flex_xml(
         fee = _parse_fee(
             _optional_attribute(element, fields.commission_field),
             field_name=fields.commission_field,
+            charge_sign=fields.commission_charge_sign,
         )
         fee_currency = (
             _optional_attribute(element, fields.commission_currency_field)

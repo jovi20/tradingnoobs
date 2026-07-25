@@ -93,6 +93,8 @@ def provider_contract():
             "execution_status_field": "tradeStatus",
             "commission_field": "ibCommission",
             "commission_currency_field": "ibCommissionCurrency",
+            "commission_charge_sign": "NEGATIVE",
+            "commission_currency_semantics": "MUST_EQUAL_TRADE_CURRENCY",
             "side_buy_value": "BUY",
             "side_sell_value": "SELL",
             "open_value": "OPEN",

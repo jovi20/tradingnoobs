@@ -52,6 +52,8 @@ def provider_contract() -> VerifiedIbkrFlexProviderContract:
             "execution_status_field": "tradeStatus",
             "commission_field": "ibCommission",
             "commission_currency_field": "ibCommissionCurrency",
+            "commission_charge_sign": "NEGATIVE",
+            "commission_currency_semantics": "MUST_EQUAL_TRADE_CURRENCY",
             "side_buy_value": "BUY",
             "side_sell_value": "SELL",
             "open_value": "OPEN",
@@ -704,6 +706,47 @@ def test_unknown_side_and_open_close_fail_closed(
             provider_contract=provider_contract,
         )
     assert failure.value.code == code
+
+
+def test_commission_sign_is_driven_by_the_frozen_contract(
+    tmp_path,
+    provider_contract,
+):
+    positive_commission = trade().replace(
+        'ibCommission="-1.25"',
+        'ibCommission="1.25"',
+    )
+    with pytest.raises(IbkrFlexParseError) as failure:
+        parse_ibkr_flex_xml(
+            write_xml(
+                tmp_path,
+                document(positive_commission),
+                "wrong-commission-sign.xml",
+            ),
+            source_timezone="UTC",
+            provider_contract=provider_contract,
+        )
+    assert failure.value.code == "IBKR_COMMISSION_SIGN_UNSUPPORTED"
+
+    payload = provider_contract.field_contract.model_dump()
+    payload["commission_charge_sign"] = "POSITIVE"
+    positive_contract = VerifiedIbkrFlexProviderContract(
+        query_template_id="SYNTHETIC_POSITIVE_COMMISSION_TEST_ONLY",
+        query_template_sha256=f"sha256:{'c' * 64}",
+        field_contract=IbkrFlexFieldContract.model_validate(payload),
+        official_sources=(),
+        fixtures=(),
+    )
+    parsed = parse_ibkr_flex_xml(
+        write_xml(
+            tmp_path,
+            document(positive_commission),
+            "positive-commission.xml",
+        ),
+        source_timezone="UTC",
+        provider_contract=positive_contract,
+    )
+    assert str(parsed.events[0].normalized_fee) == "1.25"
 
 
 @pytest.mark.parametrize(

@@ -41,6 +41,8 @@ def field_contract() -> dict:
         "execution_status_field": "tradeStatus",
         "commission_field": "ibCommission",
         "commission_currency_field": "ibCommissionCurrency",
+        "commission_charge_sign": "NEGATIVE",
+        "commission_currency_semantics": "MUST_EQUAL_TRADE_CURRENCY",
         "side_buy_value": "BUY",
         "side_sell_value": "SELL",
         "open_value": "OPEN",
@@ -74,7 +76,7 @@ def statement_xml(*, generation: str, to_date: str) -> bytes:
       fromDate="20260701"
       toDate="{to_date}"
       whenGenerated="{generation}"
-      accountInceptionDate="20200101"
+      accountInceptionDate="20260701"
     >
       <Trades>
         <Trade
@@ -340,6 +342,70 @@ def test_fixture_wire_enum_values_must_match_the_frozen_contract(tmp_path):
         verify_provider_evidence(manifest, fixture_root=tmp_path)
 
     assert "does not prove BASIC_EXECUTION_FIELDS" in str(failure.value)
+
+
+@pytest.mark.parametrize(
+    ("replacements", "missing_semantic"),
+    (
+        (
+            ((b'ibCommission="-1"', b'ibCommission="1"'),),
+            "COMMISSION_SIGN_CURRENCY",
+        ),
+        (
+            (
+                (
+                    b'accountInceptionDate="20260701"',
+                    b'accountInceptionDate="20200101"',
+                ),
+            ),
+            "FLAT_BOUNDARY",
+        ),
+        (
+            (
+                (b' accountInceptionDate="20260701"', b""),
+                (
+                    b"</Trades>",
+                    b"</Trades><OpenPositions snapshotDate=\"20260701\">"
+                    b"<OpenPosition position=\"1\" />"
+                    b"</OpenPositions>",
+                ),
+            ),
+            "FLAT_BOUNDARY",
+        ),
+    ),
+)
+def test_fixture_financial_and_boundary_values_must_prove_the_contract(
+    tmp_path,
+    replacements,
+    missing_semantic,
+):
+    template = tmp_path / "query-template.json"
+    template.write_bytes(b'{"query":"JOURNAL_FLEX_V1"}')
+    first = tmp_path / "statement-1.xml"
+    first_content = statement_xml(
+        generation="20260702;120000",
+        to_date="20260701",
+    )
+    for old, new in replacements:
+        first_content = first_content.replace(old, new)
+    first.write_bytes(first_content)
+    second = tmp_path / "statement-2.xml"
+    second.write_bytes(
+        statement_xml(generation="20260703;120000", to_date="20260702")
+    )
+    hashes = [
+        "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in (first, second, template)
+    ]
+    hashes.append(write_official_artifact(tmp_path))
+    manifest = IbkrFlexProviderEvidenceManifest.model_validate(
+        verified_payload(*hashes)
+    )
+
+    with pytest.raises(IbkrProviderEvidenceError) as failure:
+        verify_provider_evidence(manifest, fixture_root=tmp_path)
+
+    assert f"does not prove {missing_semantic}" in str(failure.value)
 
 
 def test_declared_wire_token_must_exist_in_bound_official_quote(tmp_path):
