@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "record_kind": "JRN_TASK_CHECKPOINT",
+  "task_id": "JRN-010",
+  "branch": "dev",
+  "status": "COMPLETE",
+  "release_status": "NOT_READY_FOR_PRODUCTION",
+  "recorded_at": "2026-07-25T21:35:33+08:00",
+  "implementation_base_commit": "116d61aa88549bbd3dd6e33f54b61b295f3c4074",
+  "implementation_checkpoint_commit": "5cdf55e1d6bba6073cff9fe476668eeed4776691",
+  "implementation_commits": [
+    "5cdf55e1d6bba6073cff9fe476668eeed4776691"
+  ],
+  "record_commit_resolution": "git log -1 --format=%H -- docs/superpowers/plans/2026-07-25-jrn-010-checkpoint-record.json",
+  "review_subject": {
+    "commit": "5cdf55e1d6bba6073cff9fe476668eeed4776691",
+    "migration_head": "f6a7b8c9d0e1",
+    "migration_blob": "9e1a3c4b05f6ce63c7c4352d29e1743907e82b41",
+    "models_blob": "a96c9a4f66c588b9e8c8e40499daaffdb92277cb",
+    "trading_positions_router_blob": "24e17586559b87ea6dd8ca04c8c913c52aeb28e7",
+    "trading_position_write_service_blob": "1fbb936526d6a0baf7865b00353c865a4be2fe40",
+    "trading_position_read_service_blob": "ffd39cb2d8d670dc4c49d14d3d38ae9e0d31d9ec",
+    "truth_legacy_projection_service_blob": "a7eed7ebf6f57015e09110427a8f4e5818963199",
+    "postgresql_test_blob": "25220b94cb4a34567d528ec9cce66b1161be7b4e",
+    "lifecycle_test_blob": "bfe1cd41cbbc493dc8da72d293e483730f6a6a0a",
+    "openapi_blob": "106d8fce945bab6842ceccbb3a55c00df19be0da",
+    "frontend_api_blob": "24e860519f128d91e10613f436397ea2a743449a",
+    "frontend_action_panel_blob": "5b807dd84abe8c3dd7ea2fdcedb1ccd2ed69b78e"
+  },
+  "scope_summary": [
+    "Add canonical VOID lifecycle state and an Alembic revision that upgrades legacy position-status constraints without deleting historical facts.",
+    "Enable permanent-idempotency latest-event reversal for active ADD, REDUCE, and CLOSE events while reserving OPEN reversal for audited whole-position void.",
+    "Implement whole-position void by appending compensating facts and postings in reverse event order, preserving the original event and ledger audit trail.",
+    "Enforce lifecycle chronology so reopening an older lifecycle cannot cross a later same-side non-void lifecycle, with stable lifecycle-order and side-conflict errors.",
+    "Release same-side financially-open uniqueness only after full close or completed void, while permitting historical re-recording after affected lifecycles are void.",
+    "Remove VOID lifecycles from dashboard, timeline, PDF, analytics, and active lifecycle read projections without treating archive as a financial correction.",
+    "Keep legacy PATCH, delete, batch, and migration-fallback mutation surfaces fail-closed in the public API.",
+    "Expose distinct latest-event reversal and whole-position void controls in the frontend, each requiring a reason and carrying stable idempotency and request identity."
+  ],
+  "verification_environment": {
+    "python": "3.13.5",
+    "node": "24.18.0",
+    "npm": "11.16.0",
+    "postgresql_server": "16.14 (Homebrew)"
+  },
+  "verification": [
+    {
+      "command": "backend/venv/bin/python scripts/run_journal_baseline_gate.py",
+      "result": "PASS on the final pre-commit worktree matching 5cdf55e: 514 backend tests including PostgreSQL migration, immutability, lifecycle-order, idempotency, reversal, void, and reverse-vs-OPEN race coverage; current OpenAPI and release contracts; 162 frontend tests; typecheck; lint; and production build."
+    },
+    {
+      "command": "backend/venv/bin/python scripts/check_added_secrets.py --base 116d61aa88549bbd3dd6e33f54b61b295f3c4074 --head 5cdf55e1d6bba6073cff9fe476668eeed4776691",
+      "result": "PASS: ruleset added-secrets-v1, 1,376 added lines, 0 findings."
+    },
+    {
+      "command": "JRN-010 PostgreSQL migration and concurrency cases through scripts/run_journal_baseline_gate.py",
+      "result": "PASS against PostgreSQL 16.14, including empty-schema head validation and a reverse-vs-new-OPEN race proving at most one operation succeeds."
+    },
+    {
+      "command": "git diff --cached --check",
+      "result": "PASS before implementation commit; scoped staged paths excluded all recorded user WIP."
+    }
+  ],
+  "review": {
+    "disposition": "APPROVE_REMOTE_CI_CLOSED",
+    "blocking_findings_after_fix": [],
+    "fixed_findings": [
+      {
+        "severity": "P1",
+        "finding": "Migration-head contract tests initially pinned the prior JRN-009 head and failed after the new revision was added.",
+        "resolution": "Both head assertions now require f6a7b8c9d0e1, after which the complete unified gate passed."
+      }
+    ],
+    "residual_risks": [
+      "JRN-011 through JRN-015 still own persistent import sessions, bootstrap replay, IBKR source binding, incremental application, and source correction replay.",
+      "Non-latest event correction remains intentionally unavailable through ordinary routes and requires the audited void-and-re-record workflow.",
+      "VOID lifecycle audit/export linkage is preserved in canonical data, while the broader user-facing trusted review and portable export experience remains assigned to JRN-017 and JRN-018.",
+      "The local npm install reports 15 high-severity transitive dependency audit findings; the locked install, tests, lint, typecheck, and production build pass, but dependency remediation remains separate release-hardening work.",
+      "The product remains NOT_READY_FOR_PRODUCTION until the remaining active-plan exit gates are closed."
+    ]
+  },
+  "remote_ci": {
+    "status": "PASS",
+    "required_workflow": ".github/workflows/journal-baseline.yml",
+    "required_job": "journal-baseline",
+    "verified_commit": "5cdf55e1d6bba6073cff9fe476668eeed4776691",
+    "workflow_run_id": 30159669100,
+    "workflow_run_url": "https://github.com/jovi20/tradingnoobs/actions/runs/30159669100",
+    "workflow_run_conclusion": "success",
+    "job_id": 89682822970,
+    "job_url": "https://github.com/jovi20/tradingnoobs/actions/runs/30159669100/job/89682822970",
+    "job_conclusion": "success",
+    "artifact": {
+      "id": 8619959551,
+      "name": "jrn002-gate-summary",
+      "digest": "sha256:71aeee6e72a1c0b58bdf721d981e7fa84ddd5e780350171f81220c5d10b4e1d3",
+      "expired": false
+    }
+  },
+  "required_check_enforcement": {
+    "ruleset_id": 19728078,
+    "ruleset_name": "main-journal-baseline",
+    "ruleset_url": "https://github.com/jovi20/tradingnoobs/settings/rules/19728078",
+    "enforcement": "active",
+    "target_ref": "refs/heads/main",
+    "required_check": "journal-baseline",
+    "integration": "GitHub Actions",
+    "dev_is_targeted": false
+  },
+  "next_task_gate": "SATISFIED: JRN-010 is closed; JRN-011 may start from migration head f6a7b8c9d0e1 and the audited immutable reversal, whole-position void, lifecycle-order, and legacy-mutation isolation contracts."
+}
