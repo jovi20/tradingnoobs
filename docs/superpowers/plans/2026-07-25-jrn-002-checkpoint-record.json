@@ -1,0 +1,144 @@
+{
+  "schema_version": 1,
+  "record_kind": "JRN_TASK_CHECKPOINT",
+  "task_id": "JRN-002",
+  "branch": "dev",
+  "status": "CHECKPOINT_LOCAL_REVIEW_PASS_REMOTE_CI_PENDING",
+  "release_status": "NOT_READY_FOR_PRODUCTION",
+  "recorded_at": "2026-07-25T13:09:33+08:00",
+  "implementation_base_commit": "6a0e1ed85b4b65a69f87e497eaff0a22dd784340",
+  "implementation_checkpoint_commit": "876cda7a004434f12779f19a5b329df4a311dc88",
+  "implementation_commits": [
+    "8e7074b85f7ba82274b68d7362947fff9299a227",
+    "fa03d1ac26a256f981b997fba65b1fc7ee9fac4c",
+    "876cda7a004434f12779f19a5b329df4a311dc88"
+  ],
+  "record_commit_resolution": "git log -1 --format=%H -- docs/superpowers/plans/2026-07-25-jrn-002-checkpoint-record.json",
+  "review_subject": {
+    "commit": "876cda7a004434f12779f19a5b329df4a311dc88",
+    "plan_path": "docs/superpowers/plans/2026-07-16-dev-trading-journal-development-plan.md",
+    "workflow_blob": "4370c94fb81fb635c154b1102eed111c79a65741",
+    "gate_runner_blob": "e26ff1c217f02965d81729ef60f222c61283494b",
+    "backend_product_lock_blob": "1684ad9585c3a46dddb724889da176142d173d71",
+    "backend_ci_lock_blob": "cd74a9a9a088a3b2beb8637acf9a9aca1ff0577b",
+    "frontend_manifest_blob": "fca0fe6cf8e4c77f38d16408a6f22540e7c2dc90",
+    "frontend_lock_blob": "05767c9ff230fe82c08bada801e54843e0adf17e",
+    "openapi_snapshot_blob": "b78df12849ec17e82cc3c436fdf0f49b47a4c53b",
+    "postgresql_gate_test_blob": "fbb27f5b3a8dcedc902b8e6c8b7442dafc13e0ba"
+  },
+  "scope_summary": [
+    "Pin Python 3.13.5, Node 24.18.0, npm 11.16.0, PostgreSQL 16.14, hash-locked Python dependencies, and an exact npm lock.",
+    "Use one local/CI gate for exact-SHA added-secret scanning, dependency-lock consistency, all backend tests, OpenAPI drift, frontend release-contract drift, tests, typecheck, lint, and production build.",
+    "Run PostgreSQL 16 empty-database upgrade, populated revision 5e6f7a8b9cad upgrade, and auth/account/timezone/minimal canonical-write integration.",
+    "Upload the machine-readable gate summary from the dedicated GitHub Actions workflow.",
+    "Patch production frontend advisories found during review and normalize registry-resolvable React and type versions."
+  ],
+  "changed_files": [
+    {"status": "A", "path": ".github/workflows/journal-baseline.yml"},
+    {"status": "M", "path": ".gitignore"},
+    {"status": "A", "path": ".node-version"},
+    {"status": "A", "path": ".python-version"},
+    {"status": "M", "path": "README.md"},
+    {"status": "M", "path": "backend/Dockerfile"},
+    {"status": "M", "path": "backend/README.md"},
+    {"status": "A", "path": "backend/openapi/journal-baseline.openapi.json"},
+    {"status": "A", "path": "backend/requirements-ci.in"},
+    {"status": "A", "path": "backend/requirements-ci.lock.txt"},
+    {"status": "A", "path": "backend/requirements.lock.txt"},
+    {"status": "M", "path": "backend/requirements.txt"},
+    {"status": "A", "path": "backend/scripts/check_dependency_locks.py"},
+    {"status": "A", "path": "backend/scripts/generate_openapi_snapshot.py"},
+    {"status": "M", "path": "backend/tests/test_alembic_chain.py"},
+    {"status": "A", "path": "backend/tests/test_jrn002_postgresql_gate.py"},
+    {"status": "M", "path": "backend/tests/test_market_data_alembic_adoption.py"},
+    {"status": "M", "path": "docker-compose.yml"},
+    {"status": "M", "path": "docs/DEVELOPER_GUIDE.md"},
+    {"status": "M", "path": "docs/TODO.md"},
+    {"status": "M", "path": "docs/project-summary-and-roadmap.md"},
+    {"status": "M", "path": "frontend/Dockerfile"},
+    {"status": "M", "path": "frontend/package-lock.json"},
+    {"status": "M", "path": "frontend/package.json"},
+    {"status": "A", "path": "scripts/run_journal_baseline_gate.py"}
+  ],
+  "verification_source": {
+    "commit": "876cda7a004434f12779f19a5b329df4a311dc88",
+    "immutable_archive": "/private/tmp/tradingnoobs-jrn002-876cda7.tar",
+    "archive_sha256": "2aeaa9c720a6b68add62a29c78a27d565d8cb7c63c3454aa050c7e266076c8cd",
+    "embedded_commit_from_git_get_tar_commit_id": "876cda7a004434f12779f19a5b329df4a311dc88",
+    "detached_worktree": "/private/tmp/tradingnoobs-jrn002-876cda7",
+    "python_environment": "/private/tmp/tradingnoobs-jrn002-clean-venv",
+    "python_install": "pip==26.1.2; pip install --require-hashes -r backend/requirements-ci.lock.txt",
+    "frontend_install": "npm ci --cache /private/tmp/jrn002-876cda7-empty-npm-cache",
+    "dependency_reuse": "No project venv, node_modules, or pre-existing npm cache was reused for the final exact-SHA reconstruction."
+  },
+  "verification_environment": {
+    "python": "3.13.5",
+    "node": "24.18.0",
+    "npm": "11.16.0",
+    "postgresql_server": "16.14 (Homebrew)",
+    "alembic": "1.18.5",
+    "pytest": "8.4.2",
+    "psycopg2": "2.9.12",
+    "sqlalchemy": "2.0.51",
+    "next": "16.2.11",
+    "react": "19.2.4",
+    "postcss": "8.5.20",
+    "sharp": "0.35.3"
+  },
+  "verification": [
+    {
+      "command": "JRN002_SECRET_SCAN_BASE=6a0e1ed85b4b65a69f87e497eaff0a22dd784340 JRN002_SECRET_SCAN_HEAD=876cda7 /private/tmp/tradingnoobs-jrn002-clean-venv/bin/python scripts/run_journal_baseline_gate.py",
+      "result": "PASS on clean exact-SHA detached worktree; summary commit matches 876cda7a004434f12779f19a5b329df4a311dc88 and worktree_status is empty."
+    },
+    {
+      "command": "python scripts/check_added_secrets.py --base 6a0e1ed85b4b65a69f87e497eaff0a22dd784340 --head 876cda7a004434f12779f19a5b329df4a311dc88",
+      "result": "PASS: ruleset added-secrets-v1, 15984 added lines, 0 findings."
+    },
+    {
+      "command": "python -m pytest backend/tests",
+      "result": "PASS: 460 tests; PostgreSQL-required suites ran against disposable PostgreSQL 16.14."
+    },
+    {
+      "command": "python backend/scripts/generate_openapi_snapshot.py --check",
+      "result": "PASS: JOURNAL_BASELINE OpenAPI snapshot is current."
+    },
+    {
+      "command": "npm test && npm run typecheck && npm run lint && npm run build",
+      "result": "PASS: 159 tests, typecheck, lint, and Next 16.2.11 production build with 14/14 generated pages."
+    },
+    {
+      "command": "npm audit --omit=dev --package-lock-only --json",
+      "result": "PASS: 0 production dependency vulnerabilities."
+    }
+  ],
+  "review": {
+    "reviewed_at": "2026-07-25T13:09:33+08:00",
+    "disposition": "LOCAL_APPROVE_WITH_REMOTE_CI_BLOCKER",
+    "blocking_findings_after_fix": [],
+    "fixed_findings": [
+      {
+        "severity": "P1",
+        "finding": "The initial unified gate omitted the plan-required static added-secret boundary.",
+        "resolution": "fa03d1a adds exact base/head secret scanning to the same local/CI gate and passes the PR or push SHA range from GitHub Actions."
+      },
+      {
+        "severity": "P1",
+        "finding": "The initial frontend lock contained high-severity production advisories in Next, PostCSS, and Sharp; manifest React ranges were no longer registry-resolvable.",
+        "resolution": "876cda7 upgrades Next to 16.2.11, PostCSS to 8.5.20, Sharp to 0.35.3, normalizes React/type versions, rebuilds from an empty cache, and reduces production npm audit findings to zero."
+      }
+    ],
+    "residual_risks": [
+      "GitHub Actions has not run for this checkpoint, so the mandatory remote CI condition is unproven.",
+      "Full npm audit still reports high-severity development-only brace-expansion/minimatch paths under eslint-config-next plugins. Production audit is zero; forcing brace-expansion 5 breaks Minimatch 3, and current compatible plugin releases have not removed that upstream chain.",
+      "Existing Python and Node module-type deprecation warnings remain non-blocking technical debt.",
+      "Repository branch protection and required-check configuration are external GitHub settings and are not proven by the committed workflow alone."
+    ]
+  },
+  "remote_ci": {
+    "status": "NOT_RUN",
+    "required_workflow": ".github/workflows/journal-baseline.yml",
+    "required_job": "journal-baseline",
+    "closure_condition": "Run the workflow for commit 876cda7a004434f12779f19a5b329df4a311dc88, retain the uploaded gate summary, verify the required-check setting, and record a successful conclusion before marking JRN-002 COMPLETE."
+  },
+  "next_task_gate": "NOT_SATISFIED: JRN-002 remains open until remote CI and required-check evidence are recorded."
+}

@@ -49,13 +49,13 @@ P0-P19 阶段计划已经归档，详见 [superpowers/plans/archive/README.md](.
 
 | 风险 | 说明 | 当前策略 |
 |------|------|----------|
-| JRN-002 至 004 尚未关闭 | `JRN-000/001` 已完成；JRN-002 实现候选已在 hash-locked 干净环境通过本地统一 gate，但尚无稳定 checkpoint、远端 CI 结果和评审。Invite-only auth 与完整 tenant matrix 仍待实现。 | 先关闭 JRN-002 checkpoint；JRN-003 完成后收口 JRN-004，三项完成前不进入 M1 会计实现。 |
+| JRN-002 至 004 尚未关闭 | `JRN-000/001` 已完成；JRN-002 checkpoint `876cda7` 已在无缓存依赖的精确 SHA 环境通过本地统一 gate 与评审，但尚无远端 CI/required-check 证据。Invite-only auth 与完整 tenant matrix 仍待实现。 | 先取得并归档 JRN-002 远端 CI 证据；JRN-003 完成后收口 JRN-004，三项完成前不进入 M1 会计实现。 |
 | 交易日志仍有发布阻断 | 导入、账务、现金硬删除、凭据、双写和恢复证据尚未闭环。 | 只执行当前 trading-journal active plan，完成后再进入 invite-only Beta 决策。 |
 | legacy 路径仍存在 | `Position / TradeBatch / Transaction / AssetMetadata / DailySnapshot` 仍被部分迁移兼容读取、Dashboard 和账户流水路径引用；未注册 historical Import parser 也引用其中若干模型，但不存在可达 Import 路径。 | 先隔离和标记边界，再逐步删除。 |
 | `backend/models.py` 仍集中 | 模型还没有物理拆分。 | `DEFERRED_BY_SCOPE`；等会计和 truth/legacy 语义稳定后再评估。 |
 | 前端 raw legacy DTO 仍有 allowlist | 部分页面还使用 legacy DTO 作为 migration/support 或 bridge。 | 新页面不继续扩张 raw DTO；逐步迁到 read-model adapter/generated contracts。 |
 | Staging 还未实际部署验证 | 历史 P19 本地证据不能证明真实 PostgreSQL/backup。 | 先完成 M0-M2；真实 staging 是 `JRN-021`。 |
-| 主应用 mandatory CI 待 checkpoint | JRN-002 候选已新增 hash lock、OpenAPI snapshot、PostgreSQL 16 migration/integration gate 和独立 workflow；本地干净环境已通过，但远端 workflow 尚未运行。 | 绑定 scoped checkpoint、运行远端 CI 并完成评审后关闭 JRN-002。 |
+| 主应用 mandatory CI 待远端证据 | JRN-002 checkpoint `876cda7` 已新增 hash lock、OpenAPI snapshot、PostgreSQL 16 migration/integration gate、secret boundary 和独立 workflow；本地精确 SHA 已通过，远端 workflow 尚未运行。 | 对 `876cda7` 运行远端 CI、确认 required-check 配置并归档 artifact 后关闭 JRN-002。 |
 
 ## 后续路线图
 
