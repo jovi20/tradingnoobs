@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "record_kind": "JRN_TASK_CHECKPOINT",
+  "task_id": "JRN-005",
+  "branch": "dev",
+  "status": "CHECKPOINT_LOCAL_REVIEW_PASS_REMOTE_CI_PENDING",
+  "release_status": "NOT_READY_FOR_PRODUCTION",
+  "recorded_at": "2026-07-25T15:23:09+08:00",
+  "implementation_base_commit": "435d1677b7d76a331a3cc94fb260ae5a55dde120",
+  "implementation_checkpoint_commit": "2c0e8d0ebbd6af290ef6281c053ac3d554beaaba",
+  "implementation_commits": [
+    "95521f6b1fb95ef7e8f886df26f109345622c09d",
+    "2c0e8d0ebbd6af290ef6281c053ac3d554beaaba"
+  ],
+  "record_commit_resolution": "git log -1 --format=%H -- docs/superpowers/plans/2026-07-25-jrn-005-checkpoint-record.json",
+  "review_subject": {
+    "commit": "2c0e8d0ebbd6af290ef6281c053ac3d554beaaba",
+    "migration_head": "b2c3d4e5f6a7",
+    "accounting_contract_blob": "33600009cf40b36ddd985c060a63abd5502bd943",
+    "golden_vectors_blob": "a9099291d437b9861159ad959ba47a0891f99c43",
+    "contract_test_blob": "bfeb10eec4f219be817967928b38b3270435bfee",
+    "adr_blob": "e75a85417acbc219aaae9b60cc18f8571a64f354",
+    "scanner_blob": "8585f8e825fbb3f948d904a4b8400c5b3ef2dbe7",
+    "scan_report_blob": "03c3764d8186edd8259af4434e9112fe5bb75609"
+  },
+  "scope_summary": [
+    "Freeze Decimal-only, NUMERIC(20,8), ROUND_HALF_EVEN posting semantics without changing the transitional ledger implementation.",
+    "Separate REALIZED_GROSS and TRADE_FEE ledger postings from position-only realized net attribution.",
+    "Freeze FIFO opening-fee allocation, last-consumption remainder, long/short direction, HEDGE_BY_DIRECTION isolation, and stable event ordering.",
+    "Freeze cash, dividend, reversal, posting uniqueness, replay conflict, and unsupported-input error contracts.",
+    "Normalize evidence-gated IBKR signed commission to one non-negative aggregated fee and reject foreign fee currency.",
+    "Provide executable golden vectors for zero/one fee, repeated ADD, repeated partial REDUCE, full CLOSE, indivisible fee remainder, half-even rounding, long, short, hedge, cash, dividend, reversal, ordering, and rejection cases.",
+    "Scan three discovered SQLite samples with aggregate counts only and perform no data mutation."
+  ],
+  "verification_environment": {
+    "python": "3.13.5",
+    "node": "24.18.0",
+    "npm": "11.16.0",
+    "postgresql_server": "16.14 (Homebrew)"
+  },
+  "verification": [
+    {
+      "command": "JRN002_SECRET_SCAN_BASE=435d167 JRN002_SECRET_SCAN_HEAD=HEAD backend/venv/bin/python scripts/run_journal_baseline_gate.py",
+      "result": "PASS on exact commit 2c0e8d0ebbd6af290ef6281c053ac3d554beaaba: 481 backend tests, current OpenAPI and release contracts, 160 frontend tests, typecheck, lint, and production build."
+    },
+    {
+      "command": "python scripts/check_added_secrets.py --base 435d167 --head 2c0e8d0",
+      "result": "PASS: ruleset added-secrets-v1, 740 added lines, 0 findings."
+    },
+    {
+      "command": "cd backend && venv/bin/python -m pytest tests/test_jrn005_accounting_contract.py -q",
+      "result": "PASS: four contract/vector suites validate posting reconciliation, FIFO fee conservation, rounding, cash, reversal, hedge, commission, ordering, errors, and posting-key uniqueness."
+    },
+    {
+      "command": "backend/venv/bin/python scripts/scan_jrn005_accounting_data.py backend/tradingnoobs.db tradingnoobs.db backend/backend/backups/sqlite-20260715T121930964204Z.db",
+      "result": "PASS: aggregate-only report generated; no non-USD rows or sampled gross-posting mismatch found; no nonzero trade fee exists in the samples, so fee behavior remains vector-proven rather than sample-proven."
+    }
+  ],
+  "review": {
+    "disposition": "LOCAL_APPROVE_WITH_REMOTE_CI_BLOCKER",
+    "blocking_findings_after_fix": [],
+    "fixed_findings": [
+      {
+        "severity": "P2",
+        "finding": "The first vector set covered one ADD but did not satisfy the plan's explicit repeated-ADD acceptance case.",
+        "resolution": "2c0e8d0 adds a second ADD followed by a partial REDUCE, preserves unconsumed opening fee, and proves why position realized net can differ from current journal-balance effect before full close."
+      }
+    ],
+    "residual_risks": [
+      "The current accounting and ledger services do not implement this contract: they write realized net instead of gross plus fee, can update/delete ledger rows, and lack explicit posting kind, append-only guards, sequence_no, and posting uniqueness. JRN-006 must replace these behaviors.",
+      "IBKR commission normalization remains disabled until JRN-013 retains official field documentation and redacted real fixture evidence for sign and currency semantics.",
+      "The discovered local samples are tiny and contain no nonzero trade fee, so they cannot validate fee migration or allocation behavior.",
+      "GitHub Actions has not run for this checkpoint; JRN-002 through JRN-005 still lack remote required-check evidence."
+    ]
+  },
+  "remote_ci": {
+    "status": "NOT_RUN",
+    "required_workflow": ".github/workflows/journal-baseline.yml",
+    "required_job": "journal-baseline",
+    "closure_condition": "Run the workflow for commit 2c0e8d0ebbd6af290ef6281c053ac3d554beaaba and retain a successful required-check conclusion before marking JRN-005 COMPLETE or starting JRN-006."
+  },
+  "next_task_gate": "BLOCKED: JRN-006 accounting implementation requires JRN-004 and JRN-005 closure, including remote required-check evidence. Do not implement the ledger while those checks remain pending."
+}
