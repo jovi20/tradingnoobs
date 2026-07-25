@@ -126,6 +126,16 @@ def test_invalid_extension_and_oversize_remove_partial_file(
         "services.ibkr_flex_import_service.MAX_FILE_BYTES",
         4,
     )
+    exact = UploadFile(
+        filename="statement.xml",
+        file=BytesIO(b"1234"),
+    )
+    staged = asyncio.run(
+        stage_ibkr_flex_upload(exact, temp_root=tmp_path)
+    )
+    assert staged.size_bytes == 4
+    remove_staged_ibkr_flex_file(staged)
+
     oversized = UploadFile(
         filename="statement.xml",
         file=BytesIO(b"12345"),
