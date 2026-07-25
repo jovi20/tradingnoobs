@@ -120,8 +120,12 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
   `human_review_required=true`，不保存源文件名、源 hash 或 alias mapping，也没有
   能将 provider manifest 升为 `VERIFIED` 的路径。开发者指南已增加命令和提交前
   人工隐私复核清单。
-- 实现 checkpoint `ba490a4` 的全部 `test_jrn013_*.py` 共 152 项通过；完整统一
-  gate 在 PostgreSQL 16.14 上通过 693 个后端测试、165 个前端测试、OpenAPI、
+- 实现 checkpoint `7743919` 新增只读 provider evidence readiness CLI；它对
+  manifest、模板 artifact、官方 artifact/hash/quote/exact wire token 和逐语义
+  fixture 运行与 route 相同的机器 gate，输出稳定 JSON 和精确 blocker，不输出
+  Query Template ID、不修改 manifest，也不能自行升级 `UNVERIFIED`。
+- `7743919` 的全部 `test_jrn013_*.py` 共 155 项通过；精确 SHA 完整统一 gate 在
+  PostgreSQL 16.14 上通过 696 个后端测试、165 个前端测试、OpenAPI、
   release contract、typecheck、lint 和 production build。
 
 ## 尚未实现或未满足
@@ -153,7 +157,7 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
 - JRN-014 的 source-bound canonical confirm、coverage acceptance/frontier
   推进与“只应用新增 execution”尚未实现。
 - JRN-015 的人工 correction/cancel-bust resolution 与 versioned replay 尚未实现。
-- `ba490a4` 已通过完整统一 gate 与真实 PostgreSQL migration gate；尚未取得
+- `7743919` 已通过完整统一 gate 与真实 PostgreSQL migration gate；尚未取得
   远端 CI、真实 provider evidence 和绑定该 SHA 的独立 review，因此仍只能视为
   进度 checkpoint。
 
@@ -199,7 +203,9 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
    status 字段。公开材料无法证明的语义必须通过正式支持渠道确认，不能只用 fixture
    或第三方 parser 猜合同。
 4. 填充 evidence manifest，运行 artifact/hash/semantic gate、全部 JRN-013 测试、
-   真实 PostgreSQL migration gate和统一 gate；再取得同一 SHA 独立评审。
+   真实 PostgreSQL migration gate和统一 gate；readiness gate 的标准命令为
+   `backend/venv/bin/python backend/scripts/verify_ibkr_flex_evidence.py
+   --pretty`。再取得同一 SHA 独立评审。
 5. 只有第 4 步通过才允许 evidence-first route 进入 owner-bound upload/preview，
    并在前端开放入口、关闭 JRN-013。
 6. 按 JRN-014 实现同 binding 的重复、重叠、增量 canonical confirm；验证同一

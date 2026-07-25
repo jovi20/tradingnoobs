@@ -261,6 +261,19 @@ Broker、Market 和 LLM provider 的历史环境变量仍可能被代码识别�
 
 ### 8.5 IBKR 真实 fixture 脱敏
 
+先运行只读 provider evidence gate，取得当前缺失模板、官方语义、exact wire token
+和真实 fixture 的机器可读清单。默认仓库 manifest 尚未验证，因此当前预期退出码
+为 1 且 `gate_status` 为 `BLOCKED`：
+
+```bash
+backend/venv/bin/python backend/scripts/verify_ibkr_flex_evidence.py \
+  --pretty
+```
+
+补充 evidence 时可用 `--manifest` 和 `--fixture-root` 指向待审目录。只有 manifest
+显式为 `VERIFIED`，且模板、artifact/hash/quote/wire token、逐语义真实 fixture
+全部通过时，命令才返回 0 和 `gate_status=PASS`。该命令只读，不修改 manifest。
+
 只在受控本地环境中处理真实 Flex XML。先用拟冻结的 field contract 或包含
 `field_contract` 的 draft manifest 生成候选 fixture；输出目录必须尚不存在，
 source 和输出父目录不能是符号链接：
