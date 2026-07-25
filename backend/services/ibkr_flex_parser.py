@@ -31,6 +31,13 @@ MAX_XML_NODES = 20_000
 MAX_ATTRIBUTES_PER_NODE = 80
 MAX_XML_DEPTH = 16
 MAX_FIELD_LENGTH = 2_048
+MAX_EXTERNAL_ACCOUNT_ID_LENGTH = 255
+MAX_SOURCE_EVENT_ID_LENGTH = 255
+MAX_TRANSACTION_ID_LENGTH = 255
+MAX_SOURCE_ORDER_KEY_LENGTH = 512
+MAX_CONID_LENGTH = 100
+MAX_CURRENCY_LENGTH = 10
+MAX_EXECUTION_STATUS_LENGTH = 100
 SOURCE_FINGERPRINT_VERSION = 1
 ASCII_INTEGER_PATTERN = re.compile(r"^[0-9]+$")
 
@@ -126,6 +133,20 @@ def _optional_attribute(element: etree._Element, field_name: str) -> str | None:
             f"IBKR field exceeds {MAX_FIELD_LENGTH} characters: {field_name}",
         )
     return value or None
+
+
+def _require_max_length(
+    value: str,
+    *,
+    field_name: str,
+    max_length: int,
+) -> str:
+    if len(value) > max_length:
+        raise IbkrFlexParseError(
+            "IBKR_FIELD_TOO_LONG",
+            f"IBKR field exceeds {max_length} characters: {field_name}",
+        )
+    return value
 
 
 def _parse_positive_decimal(value: str, *, field_name: str) -> Decimal:
@@ -357,7 +378,11 @@ def parse_ibkr_flex_xml(
             "IBKR XML must contain exactly one FlexStatement",
         )
     statement = statements[0]
-    raw_account_ref = _required_attribute(statement, fields.account_field)
+    raw_account_ref = _require_max_length(
+        _required_attribute(statement, fields.account_field),
+        field_name=fields.account_field,
+        max_length=MAX_EXTERNAL_ACCOUNT_ID_LENGTH,
+    )
     if not raw_account_ref.isascii():
         raise IbkrFlexParseError(
             "IBKR_ACCOUNT_ID_INVALID",
@@ -534,28 +559,46 @@ def parse_ibkr_flex_xml(
                 "IBKR XML must contain exactly one external account",
             )
         if kind == "TRADE":
-            source_event_id = _required_attribute(
-                element,
-                fields.execution_id_field,
-                code="IBKR_EXECUTION_ID_MISSING",
+            source_event_id = _require_max_length(
+                _required_attribute(
+                    element,
+                    fields.execution_id_field,
+                    code="IBKR_EXECUTION_ID_MISSING",
+                ),
+                field_name=fields.execution_id_field,
+                max_length=MAX_SOURCE_EVENT_ID_LENGTH,
             )
             external_execution_id = source_event_id
             affected_execution_id = None
         else:
-            source_event_id = _required_attribute(
-                element,
-                fields.change_event_id_field,
-                code="IBKR_CHANGE_EVENT_ID_MISSING",
+            source_event_id = _require_max_length(
+                _required_attribute(
+                    element,
+                    fields.change_event_id_field,
+                    code="IBKR_CHANGE_EVENT_ID_MISSING",
+                ),
+                field_name=fields.change_event_id_field,
+                max_length=MAX_SOURCE_EVENT_ID_LENGTH,
             )
             external_execution_id = None
             affected_execution_id = _optional_attribute(
                 element,
                 fields.affected_execution_id_field,
             )
+            if affected_execution_id is not None:
+                affected_execution_id = _require_max_length(
+                    affected_execution_id,
+                    field_name=fields.affected_execution_id_field,
+                    max_length=MAX_SOURCE_EVENT_ID_LENGTH,
+                )
 
-        transaction_id = _required_attribute(
-            element,
-            fields.transaction_id_field,
+        transaction_id = _require_max_length(
+            _required_attribute(
+                element,
+                fields.transaction_id_field,
+            ),
+            field_name=fields.transaction_id_field,
+            max_length=MAX_TRANSACTION_ID_LENGTH,
         )
         if not ASCII_INTEGER_PATTERN.fullmatch(transaction_id):
             raise IbkrFlexParseError(
@@ -567,13 +610,21 @@ def parse_ibkr_flex_xml(
             element,
             fields.asset_category_field,
         ).upper()
-        conid = _required_attribute(element, fields.conid_field)
+        conid = _require_max_length(
+            _required_attribute(element, fields.conid_field),
+            field_name=fields.conid_field,
+            max_length=MAX_CONID_LENGTH,
+        )
         symbol = _required_attribute(element, fields.symbol_field).upper()
         exchange = _required_attribute(element, fields.exchange_field).upper()
-        currency = _required_attribute(
-            element,
-            fields.currency_field,
-        ).upper()
+        currency = _require_max_length(
+            _required_attribute(
+                element,
+                fields.currency_field,
+            ).upper(),
+            field_name=fields.currency_field,
+            max_length=MAX_CURRENCY_LENGTH,
+        )
         side = _required_attribute(element, fields.side_field).upper()
         if side not in {"BUY", "SELL"}:
             raise IbkrFlexParseError(
@@ -603,10 +654,14 @@ def parse_ibkr_flex_xml(
             timezone_name=source_timezone,
             field_name=fields.trade_time_field,
         )
-        status = _required_attribute(
-            element,
-            fields.execution_status_field,
-        ).upper()
+        status = _require_max_length(
+            _required_attribute(
+                element,
+                fields.execution_status_field,
+            ).upper(),
+            field_name=fields.execution_status_field,
+            max_length=MAX_EXECUTION_STATUS_LENGTH,
+        )
         fee = _parse_fee(
             _optional_attribute(element, fields.commission_field),
             field_name=fields.commission_field,
@@ -615,6 +670,11 @@ def parse_ibkr_flex_xml(
             _optional_attribute(element, fields.commission_currency_field)
             or currency
         ).upper()
+        fee_currency = _require_max_length(
+            fee_currency,
+            field_name=fields.commission_currency_field,
+            max_length=MAX_CURRENCY_LENGTH,
+        )
         if fee and fee_currency != currency:
             raise IbkrFlexParseError(
                 "IBKR_COMMISSION_CURRENCY_MISMATCH",
@@ -647,6 +707,14 @@ def parse_ibkr_flex_xml(
             "provider_declared_target_id": affected_execution_id,
         }
         fingerprint = _canonical_fingerprint(fingerprint_payload)
+        source_order_key = (
+            f"{numeric_transaction_id:020d}|{source_event_id}"
+        )
+        _require_max_length(
+            source_order_key,
+            field_name="source_order_key",
+            max_length=MAX_SOURCE_ORDER_KEY_LENGTH,
+        )
         normalized_events.append(
             NormalizedIbkrFlexEvent(
                 row_number=row_number,
@@ -655,9 +723,7 @@ def parse_ibkr_flex_xml(
                 external_execution_id=external_execution_id,
                 affected_external_execution_id=affected_execution_id,
                 transaction_id=str(numeric_transaction_id),
-                source_order_key=(
-                    f"{numeric_transaction_id:020d}|{source_event_id}"
-                ),
+                source_order_key=source_order_key,
                 conid=conid,
                 asset_category=asset_category,
                 symbol=symbol,

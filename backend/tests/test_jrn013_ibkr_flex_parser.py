@@ -11,7 +11,13 @@ from app_config.ibkr_flex_provider_evidence import (
 from services.ibkr_flex_parser import (
     IbkrFlexParseError,
     MAX_ATTRIBUTES_PER_NODE,
+    MAX_CONID_LENGTH,
+    MAX_CURRENCY_LENGTH,
     MAX_EXECUTIONS,
+    MAX_EXECUTION_STATUS_LENGTH,
+    MAX_EXTERNAL_ACCOUNT_ID_LENGTH,
+    MAX_SOURCE_EVENT_ID_LENGTH,
+    MAX_TRANSACTION_ID_LENGTH,
     MAX_XML_NODES,
     parse_ibkr_flex_xml,
 )
@@ -503,6 +509,142 @@ def test_missing_execution_id_and_non_numeric_transaction_fail_closed(
             provider_contract=provider_contract,
         )
     assert signed_order_failure.value.code == "IBKR_TRANSACTION_ID_INVALID"
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "code"),
+    (
+        ('buySell="BUY"', 'buySell="HOLD"', "IBKR_SIDE_UNSUPPORTED"),
+        (
+            'openCloseIndicator="OPEN"',
+            'openCloseIndicator="UNKNOWN"',
+            "IBKR_OPEN_CLOSE_UNSUPPORTED",
+        ),
+    ),
+)
+def test_unknown_side_and_open_close_fail_closed(
+    tmp_path,
+    provider_contract,
+    old,
+    new,
+    code,
+):
+    with pytest.raises(IbkrFlexParseError) as failure:
+        parse_ibkr_flex_xml(
+            write_xml(
+                tmp_path,
+                document(trade()).replace(old, new),
+                f"{code.lower()}.xml",
+            ),
+            source_timezone="UTC",
+            provider_contract=provider_contract,
+        )
+    assert failure.value.code == code
+
+
+@pytest.mark.parametrize(
+    ("raw_transaction_id", "normalized_id", "order_prefix"),
+    (
+        ("000101", "101", "00000000000000000101"),
+        (
+            "1234567890123456789012345",
+            "1234567890123456789012345",
+            "1234567890123456789012345",
+        ),
+    ),
+)
+def test_source_order_key_normalizes_without_truncating_numeric_transaction_id(
+    tmp_path,
+    provider_contract,
+    raw_transaction_id,
+    normalized_id,
+    order_prefix,
+):
+    parsed = parse_ibkr_flex_xml(
+        write_xml(
+            tmp_path,
+            document(trade(transaction_id=raw_transaction_id)),
+            f"order-{normalized_id}.xml",
+        ),
+        source_timezone="UTC",
+        provider_contract=provider_contract,
+    )
+    event = parsed.events[0]
+    assert event.transaction_id == normalized_id
+    assert event.source_order_key == f"{order_prefix}|EXEC-1"
+
+
+def test_persisted_source_field_widths_fail_before_database_writes(
+    tmp_path,
+    provider_contract,
+):
+    exact_event_id = "E" * MAX_SOURCE_EVENT_ID_LENGTH
+    exact_transaction_id = "1" * MAX_TRANSACTION_ID_LENGTH
+    exact = parse_ibkr_flex_xml(
+        write_xml(
+            tmp_path,
+            document(
+                trade(
+                    execution_id=exact_event_id,
+                    transaction_id=exact_transaction_id,
+                )
+            ),
+            "persisted-width-exact.xml",
+        ),
+        source_timezone="UTC",
+        provider_contract=provider_contract,
+    )
+    assert exact.events[0].external_source_event_id == exact_event_id
+    assert len(exact.events[0].source_order_key) == 511
+
+    long_account = "U" * (MAX_EXTERNAL_ACCOUNT_ID_LENGTH + 1)
+    long_target = "T" * (MAX_SOURCE_EVENT_ID_LENGTH + 1)
+    correction = (
+        '<TradeCorrection accountId="U1234567" sourceEventID="CORR-LONG" '
+        f'affectedIBExecID="{long_target}" transactionID="102" '
+        'assetCategory="STK" conid="265598" symbol="AAPL" '
+        'listingExchange="NASDAQ" currency="USD" buySell="BUY" '
+        'quantity="2" tradePrice="201" dateTime="20260725;110000" '
+        'openCloseIndicator="OPEN" tradeStatus="CORRECTED" '
+        'ibCommission="-1.25" ibCommissionCurrency="USD" />'
+    )
+    overlong_documents = (
+        document(
+            trade(execution_id="E" * (MAX_SOURCE_EVENT_ID_LENGTH + 1))
+        ),
+        document(
+            trade(transaction_id="1" * (MAX_TRANSACTION_ID_LENGTH + 1))
+        ),
+        document(trade()).replace(
+            'conid="265598"',
+            f'conid="{"1" * (MAX_CONID_LENGTH + 1)}"',
+        ),
+        document(trade()).replace(
+            'currency="USD"',
+            f'currency="{"X" * (MAX_CURRENCY_LENGTH + 1)}"',
+        ),
+        document(trade()).replace(
+            'tradeStatus="EXECUTED"',
+            f'tradeStatus="{"X" * (MAX_EXECUTION_STATUS_LENGTH + 1)}"',
+        ),
+        document(
+            trade(account_id=long_account),
+            account_id=long_account,
+        ),
+        document(correction),
+    )
+    for index, content in enumerate(overlong_documents):
+        with pytest.raises(IbkrFlexParseError) as failure:
+            parse_ibkr_flex_xml(
+                write_xml(
+                    tmp_path,
+                    content,
+                    f"persisted-width-{index}.xml",
+                ),
+                source_timezone="UTC",
+                provider_contract=provider_contract,
+            )
+        assert failure.value.code == "IBKR_FIELD_TOO_LONG"
 
 
 def test_change_requires_stable_identity_but_preserves_missing_target(

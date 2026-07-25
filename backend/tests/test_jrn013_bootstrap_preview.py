@@ -701,6 +701,103 @@ def test_owner_swap_and_prior_completed_trade_import_are_rejected(
     assert ineligible.value.code == "SOURCE_BOOTSTRAP_NOT_ELIGIBLE"
 
 
+def test_two_clean_accounts_can_preview_same_external_identity_without_binding(
+    db,
+    owner_graph,
+    provider_contract,
+):
+    owner, _, first_account, _ = owner_graph
+    second_account = TradingAccount(
+        public_id="bootstrap-second-owner-account",
+        user=owner,
+        name="IBKR candidate",
+        broker="IBKR",
+        currency="USD",
+        is_active=True,
+        accounting_health="ACCOUNTING_HEALTHY",
+        trade_source_state="CLEAN",
+        hard_delete_eligible=True,
+    )
+    db.add(second_account)
+    db.commit()
+    event = source_event(
+        row_number=1,
+        event_id="EXEC-PARALLEL-PREVIEW",
+        transaction_id=100,
+    )
+    first_session = make_session(
+        db,
+        owner=owner,
+        account=first_account,
+        suffix="parallel-first",
+    )
+    second_session = make_session(
+        db,
+        owner=owner,
+        account=second_account,
+        suffix="parallel-second",
+    )
+
+    first = preview_ibkr_source_bootstrap(
+        db,
+        account=first_account,
+        session=first_session,
+        parsed=parsed(event),
+        provider_contract=provider_contract,
+    )
+    second = preview_ibkr_source_bootstrap(
+        db,
+        account=second_account,
+        session=second_session,
+        parsed=parsed(event),
+        provider_contract=provider_contract,
+    )
+    db.commit()
+
+    assert first.status == second.status == "PREVIEW_READY"
+    assert first.source_preview_digest != second.source_preview_digest
+    assert db.query(ImportRow).count() == 2
+    assert_no_permanent_source_truth(db)
+
+
+def test_unknown_asset_category_becomes_session_only_terminal_conflict(
+    db,
+    owner_graph,
+    provider_contract,
+):
+    owner, _, account, _ = owner_graph
+    session = make_session(
+        db,
+        owner=owner,
+        account=account,
+        suffix="unknown-asset",
+    )
+    event = replace(
+        source_event(
+            row_number=1,
+            event_id="EXEC-UNKNOWN-ASSET",
+            transaction_id=100,
+        ),
+        asset_category="FUT",
+    )
+
+    result = preview_ibkr_source_bootstrap(
+        db,
+        account=account,
+        session=session,
+        parsed=parsed(event),
+        provider_contract=provider_contract,
+    )
+    db.commit()
+
+    assert result.status == "CONFLICTED"
+    assert result.conflict_reason == "UNSUPPORTED_ASSET_TYPE"
+    assert session.error_code == "SOURCE_BOOTSTRAP_CONFLICT"
+    assert db.query(ImportRow).count() == 1
+    assert not db.query(ImportRow).one().is_valid
+    assert_no_permanent_source_truth(db)
+
+
 def test_bootstrap_digest_is_stable_and_covers_fee_and_fingerprint(
     db,
     owner_graph,
