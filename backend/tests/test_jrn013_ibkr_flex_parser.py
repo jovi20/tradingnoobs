@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from app_config.ibkr_flex_provider_evidence import (
     IbkrFlexFieldContract,
@@ -51,6 +52,10 @@ def provider_contract() -> VerifiedIbkrFlexProviderContract:
             "execution_status_field": "tradeStatus",
             "commission_field": "ibCommission",
             "commission_currency_field": "ibCommissionCurrency",
+            "side_buy_value": "BUY",
+            "side_sell_value": "SELL",
+            "open_value": "OPEN",
+            "close_value": "CLOSE",
             "statement_to_date_inclusive": True,
             "statement_date_format": "%Y%m%d",
             "generation_time_format": "%Y%m%d;%H%M%S",
@@ -60,7 +65,7 @@ def provider_contract() -> VerifiedIbkrFlexProviderContract:
             ),
             "execution_time_format": "%Y%m%d;%H%M%S",
             "execution_time_semantics": "SOURCE_TIMEZONE_NAIVE",
-            "ordinary_trade_kind_from_element": True,
+            "event_kind_source": "ELEMENT_NAME",
             "correction_element": "TradeCorrection",
             "cancel_bust_element": "TradeCancel",
             "change_event_id_field": "sourceEventID",
@@ -160,6 +165,159 @@ def test_parses_one_statement_and_stable_execution_identity(
     assert event.transaction_id == "101"
     assert str(event.normalized_fee) == "1.25"
     assert event.occurred_at_utc.isoformat() == "2026-07-25T14:00:00+00:00"
+
+
+def test_attribute_event_discriminator_and_wire_enums_are_contract_driven(
+    tmp_path,
+    provider_contract,
+):
+    payload = provider_contract.field_contract.model_dump()
+    payload.update(
+        {
+            "event_kind_source": "ATTRIBUTE_VALUE",
+            "event_kind_field": "transactionType",
+            "ordinary_trade_kind_value": "ExchTrade",
+            "correction_kind_value": "TradeCorrect",
+            "cancel_bust_kind_value": "TradeCancel",
+            "correction_element": None,
+            "cancel_bust_element": None,
+            "side_buy_value": "B",
+            "side_sell_value": "S",
+            "open_value": "O",
+            "close_value": "C",
+        }
+    )
+    attribute_contract = VerifiedIbkrFlexProviderContract(
+        query_template_id="SYNTHETIC_ATTRIBUTE_TEST_ONLY",
+        query_template_sha256=f"sha256:{'b' * 64}",
+        field_contract=IbkrFlexFieldContract.model_validate(payload),
+        official_sources=(),
+        fixtures=(),
+    )
+    ordinary = trade().replace(
+        "<Trade ",
+        '<Trade transactionType="ExchTrade" ',
+    ).replace(
+        'buySell="BUY"',
+        'buySell="B"',
+    ).replace(
+        'openCloseIndicator="OPEN"',
+        'openCloseIndicator="O"',
+    )
+    correction = (
+        '<Trade transactionType="TradeCorrect" accountId="U1234567" '
+        'sourceEventID="CORR-1" affectedIBExecID="EXEC-1" '
+        'transactionID="102" assetCategory="STK" conid="265598" '
+        'symbol="AAPL" listingExchange="NASDAQ" currency="USD" '
+        'buySell="S" quantity="2" tradePrice="201" '
+        'dateTime="20260725;110000" openCloseIndicator="C" '
+        'tradeStatus="CORRECTED" ibCommission="-1.25" '
+        'ibCommissionCurrency="USD" />'
+    )
+    cancel = correction.replace(
+        'transactionType="TradeCorrect"',
+        'transactionType="TradeCancel"',
+    ).replace(
+        'sourceEventID="CORR-1"',
+        'sourceEventID="CANCEL-1"',
+    ).replace(
+        'transactionID="102"',
+        'transactionID="103"',
+    )
+
+    parsed = parse_ibkr_flex_xml(
+        write_xml(
+            tmp_path,
+            document(ordinary + correction + cancel),
+            "attribute-events.xml",
+        ),
+        source_timezone="UTC",
+        provider_contract=attribute_contract,
+    )
+
+    assert [event.event_kind for event in parsed.events] == [
+        "TRADE",
+        "CORRECTION",
+        "CANCEL_BUST",
+    ]
+    assert parsed.events[0].raw_open_close == "OPEN"
+    assert parsed.events[1].raw_side == "SELL"
+    assert parsed.events[1].raw_open_close == "CLOSE"
+    assert parsed.events[1].affected_external_execution_id == "EXEC-1"
+
+    with pytest.raises(IbkrFlexParseError) as failure:
+        parse_ibkr_flex_xml(
+            write_xml(
+                tmp_path,
+                document(
+                    ordinary.replace(
+                        'transactionType="ExchTrade"',
+                        'transactionType="Unknown"',
+                    )
+                ),
+                "unknown-attribute-event.xml",
+            ),
+            source_timezone="UTC",
+            provider_contract=attribute_contract,
+        )
+    assert failure.value.code == "IBKR_EVENT_KIND_UNSUPPORTED"
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    (
+        {
+            "event_kind_source": "ATTRIBUTE_VALUE",
+            "correction_element": None,
+            "cancel_bust_element": None,
+        },
+        {
+            "event_kind_source": "ATTRIBUTE_VALUE",
+            "event_kind_field": "transactionType",
+            "ordinary_trade_kind_value": "Trade",
+            "correction_kind_value": "Trade",
+            "cancel_bust_kind_value": "TradeCancel",
+            "correction_element": None,
+            "cancel_bust_element": None,
+        },
+        {
+            "event_kind_source": "ELEMENT_NAME",
+            "event_kind_field": "transactionType",
+            "ordinary_trade_kind_value": "Trade",
+        },
+        {"open_value": "O", "close_value": "O"},
+    ),
+)
+def test_invalid_event_and_enum_contracts_fail_at_manifest_boundary(
+    provider_contract,
+    overrides,
+):
+    payload = provider_contract.field_contract.model_dump()
+    payload.update(overrides)
+
+    with pytest.raises(ValidationError):
+        IbkrFlexFieldContract.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    (
+        "event_kind_source",
+        "side_buy_value",
+        "side_sell_value",
+        "open_value",
+        "close_value",
+    ),
+)
+def test_wire_contract_strategy_and_enums_are_required(
+    provider_contract,
+    field_name,
+):
+    payload = provider_contract.field_contract.model_dump()
+    payload.pop(field_name)
+
+    with pytest.raises(ValidationError):
+        IbkrFlexFieldContract.model_validate(payload)
 
 
 def test_fingerprint_excludes_statement_generation_and_file_provenance(

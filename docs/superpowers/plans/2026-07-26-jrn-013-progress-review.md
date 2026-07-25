@@ -37,6 +37,18 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
   XML element/attribute 名和 parser 枚举值，必须作为 `wire_tokens` 逐字出现于
   hash-bound 官方摘录。只有语义标签、展示层字段表或真实 fixture 不能激活 adapter；
   未声明 token 与声明但 quote/artifact 中不存在的 token 都会 fail-closed。
+- field contract 不再硬编码 event element shape 或 `BUY/SELL`、`OPEN/CLOSE`：
+  manifest 必须显式选择 `ELEMENT_NAME` 或 `ATTRIBUTE_VALUE` discriminator，并冻结
+  ordinary/correction/cancel、side 与 open-close 的 provider wire 值。parser 只按
+  该合同分类并规范为 canonical `TRADE/CORRECTION/CANCEL_BUST`、`BUY/SELL` 和
+  `OPEN/CLOSE`；未知 discriminator/value 稳定拒绝。混用两种策略、缺少值或重复值
+  在 manifest 校验阶段拒绝。
+- IBKR 官方 Flex Codes 页面已作为第二份 hash-bound artifact 入库，准确保留
+  `Ca=Cancelled`、`Co=Corrected Trade`、`O=Opening Trade`、`C=Closing Trade`。
+  它只计为 `EVENT_CODE_VALUES` supporting evidence，不会满足
+  `CORRECTION_CANCEL_TARGETS`，也不会把孤立 `O/C` 误当成
+  `openCloseIndicator="O|C"` 的证明。枚举 wire evidence 必须绑定字段和值片段，
+  例如 `transactionType="TradeCorrect"`。
 - 禁止 DTD/entity/XInclude 的受限 XML parser，以及文件、execution、节点、
   属性、深度和字段长度限制；5,000 execution 边界接受，5,001 拒绝。
 - provider contract 固定 generation 按 UTC instant 升序；同一 binding 下同一
@@ -81,8 +93,8 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
 - upload 编排在读取或暂存文件前先锁定 owner-scoped account；不存在或跨 owner
   account 均返回 `404 IMPORT_ACCOUNT_NOT_FOUND`，不调用上传读取、不创建临时文件、
   `IdempotencyKey` 或 `ImportSession`，并始终关闭上传句柄。
-- 本次复验的全部 `test_jrn013_*.py` 共 119 项测试通过；完整统一
-  gate 在 PostgreSQL 16.14 上通过 660 个后端测试、165 个前端测试、OpenAPI、
+- 本次复验的全部 `test_jrn013_*.py` 共 131 项测试通过；完整统一
+  gate 在 PostgreSQL 16.14 上通过 672 个后端测试、165 个前端测试、OpenAPI、
   release contract、typecheck、lint 和 production build。
 
 ## 尚未实现或未满足
@@ -96,14 +108,16 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
   证明 `ibExecID` 唯一稳定性、generation 严格顺序/tie、数值 transaction order、
   correction/cancel target、commission sign/currency、flat boundary 和 coverage
   inclusivity/timezone 的完整官方合同。不能用字段存在替代这些语义证明。
-- **P0 provider-contract blocker：**当前 parser 和 synthetic tests 假设 correction
-  与 cancel 是独立 `TradeCorrection/TradeCancel` 元素，以
-  `sourceEventID/affectedIBExecID` 关联目标，并要求 `tradeStatus` 和
-  `OPEN/CLOSE`。IBKR 官方 Trades Reference 没有证明这些 raw XML 名或枚举值，
+- **P0 provider-contract blocker：**现有 synthetic fixtures 假设 correction 与
+  cancel 是独立 `TradeCorrection/TradeCancel` 元素，以
+  `sourceEventID/affectedIBExecID` 关联目标，并使用 `tradeStatus` 和
+  `OPEN/CLOSE`；可配置 parser 也有 attribute-discriminator synthetic coverage，
+  但默认 manifest 尚未选择任何真实 field contract。IBKR 官方 Trades Reference
+  没有证明上述 raw XML 名或枚举值，
   且其 “Original Trade ID”等取消字段与公开第三方 parser 暴露的
   `Trade transactionType=TradeCorrect|TradeCancel`、original/related ID、`O/C`
   形状均提示当前假设可能错误。第三方实现不是 release evidence，因此现在既不能
-  按它改成“真实合同”，也不能把现有 synthetic contract 视为 provider-ready。
+  按它选择“真实合同”，也不能把任何 synthetic contract 视为 provider-ready。
   必须先取得同一冻结 Query 的真实 correction/cancel 样本和 IBKR 官方 raw-wire
   合同，再决定 field contract/parser 重构。
 - `backend/app_config/ibkr_flex_v1_provider_evidence.json` 因而保持

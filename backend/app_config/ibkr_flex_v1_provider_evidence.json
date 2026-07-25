@@ -20,13 +20,27 @@
           "quote": "Account ID | The account number.\nCurrency | The currency denomination.\nAsset Class | The asset class of the instrument traded.\nSymbol | The symbol of the instrument traded.\nConid | The conid of the instrument traded.\nListingExchange | The exchange the instrument traded.\nTrade Date | The date of the execution.\nTrade Time | The time of the execution.\nQuantity | The number of units for the transaction.\nTrade Price | The transaction price.\nIB Commission | The total amount of commission for the transaction.\nIB Commission Currency | The currency denomination of the trade.\nOpen/Close Indicator | The indicator denotes if the trade is an opening or closing trade.\nBuy/Sell | Buy or sell.\nIB Execution ID | The IB execution ID."
         }
       ]
+    },
+    {
+      "url": "https://www.ibkrguides.com/reportingreference/reportguide/codes_flex.htm",
+      "title": "Codes - Flex Statement",
+      "retrieved_at": "2026-07-26",
+      "artifact_relative_path": "official/ibkr-codes-flex-statement-2026-07-26.txt",
+      "artifact_sha256": "sha256:0ab2e855f9337bbb63acf88fbacf8811e7a150fabcd2a5412a6c222ee47735ba",
+      "excerpts": [
+        {
+          "semantic": "EVENT_CODE_VALUES",
+          "locator": "Main content, Codes table",
+          "quote": "C | Closing Trade\nCa | Cancelled\nCo | Corrected Trade\nO | Opening Trade"
+        }
+      ]
     }
   ],
   "fixtures": [],
   "unverified_reasons": [
     "No frozen IBKR Flex Query template has been supplied.",
     "Official evidence remains incomplete for generation ordering, transaction/open-close identity, correction/cancel targets, commission sign/currency, flat-boundary, and coverage inclusivity/timezone semantics.",
-    "The current synthetic parser contract uses unverified wire assumptions (including TradeCorrection/TradeCancel elements, sourceEventID/affectedIBExecID fields, tradeStatus, and OPEN/CLOSE values); it must not be treated as an IBKR-ready contract.",
+    "The synthetic fixtures still use unverified wire assumptions (including TradeCorrection/TradeCancel elements, sourceEventID/affectedIBExecID fields, tradeStatus, and OPEN/CLOSE values); the configurable parser has no IBKR-ready field contract until official raw-wire evidence selects and proves one.",
     "No redacted real statement pairs from the frozen query template have been supplied."
   ]
 }

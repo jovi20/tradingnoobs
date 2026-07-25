@@ -14,6 +14,7 @@ from lxml import etree
 
 from app_config.ibkr_flex_provider_evidence import (
     VerifiedIbkrFlexProviderContract,
+    provider_event_kind,
 )
 from app_config.release_contract import JOURNAL_BETA_CONTRACT
 from services.timezone_service import (
@@ -310,20 +311,6 @@ def _validate_xml_shape(root: etree._Element) -> None:
         stack.extend((child, depth + 1) for child in children)
 
 
-def _event_kind(
-    element_name: str,
-    contract: VerifiedIbkrFlexProviderContract,
-) -> str | None:
-    fields = contract.field_contract
-    if element_name == fields.trade_element:
-        return "TRADE"
-    if element_name == fields.correction_element:
-        return "CORRECTION"
-    if element_name == fields.cancel_bust_element:
-        return "CANCEL_BUST"
-    return None
-
-
 def parse_ibkr_flex_xml(
     path: Path,
     *,
@@ -539,7 +526,7 @@ def parse_ibkr_flex_xml(
         for element in containers[0]:
             if not isinstance(element.tag, str):
                 continue
-            kind = _event_kind(_local_name(element), provider_contract)
+            kind = provider_event_kind(element, fields)
             if kind is None:
                 raise IbkrFlexParseError(
                     "IBKR_EVENT_KIND_UNSUPPORTED",
@@ -635,20 +622,32 @@ def parse_ibkr_flex_xml(
             field_name=fields.currency_field,
             max_length=MAX_CURRENCY_LENGTH,
         )
-        side = _required_attribute(element, fields.side_field).upper()
-        if side not in {"BUY", "SELL"}:
+        provider_side = _required_attribute(
+            element,
+            fields.side_field,
+        )
+        if provider_side == fields.side_buy_value:
+            side = "BUY"
+        elif provider_side == fields.side_sell_value:
+            side = "SELL"
+        else:
             raise IbkrFlexParseError(
                 "IBKR_SIDE_UNSUPPORTED",
-                f"Unsupported IBKR side: {side}",
+                f"Unsupported IBKR side: {provider_side}",
             )
-        open_close = _required_attribute(
+        provider_open_close = _required_attribute(
             element,
             fields.open_close_field,
-        ).upper()
-        if open_close not in {"OPEN", "CLOSE"}:
+        )
+        if provider_open_close == fields.open_value:
+            open_close = "OPEN"
+        elif provider_open_close == fields.close_value:
+            open_close = "CLOSE"
+        else:
             raise IbkrFlexParseError(
                 "IBKR_OPEN_CLOSE_UNSUPPORTED",
-                f"Unsupported IBKR open/close indicator: {open_close}",
+                "Unsupported IBKR open/close indicator: "
+                f"{provider_open_close}",
             )
         quantity = _parse_positive_decimal(
             _required_attribute(element, fields.quantity_field),

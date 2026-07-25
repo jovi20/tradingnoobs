@@ -1,0 +1,17 @@
+Source title: Codes - Flex Statement
+Source URL: https://www.ibkrguides.com/reportingreference/reportguide/codes_flex.htm
+Retrieved at: 2026-07-26
+Page last updated: May 5, 2026
+
+Locator: Main content, "Codes" table
+
+C | Closing Trade
+Ca | Cancelled
+Co | Corrected Trade
+O | Opening Trade
+
+Scope note:
+
+This official table proves the meanings of these values in the Flex statement
+Code column. It does not identify the raw XML attribute that carries them and
+does not prove correction/cancel source or target identity.

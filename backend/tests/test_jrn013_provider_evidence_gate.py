@@ -41,6 +41,10 @@ def field_contract() -> dict:
         "execution_status_field": "tradeStatus",
         "commission_field": "ibCommission",
         "commission_currency_field": "ibCommissionCurrency",
+        "side_buy_value": "BUY",
+        "side_sell_value": "SELL",
+        "open_value": "OPEN",
+        "close_value": "CLOSE",
         "statement_to_date_inclusive": True,
         "statement_date_format": "%Y%m%d",
         "generation_time_format": "%Y%m%d;%H%M%S",
@@ -48,7 +52,7 @@ def field_contract() -> dict:
         "generation_tie_policy": "SAME_MARKER_DIFFERENT_FILE_CONFLICT",
         "execution_time_format": "%Y%m%d;%H%M%S",
         "execution_time_semantics": "SOURCE_TIMEZONE_NAIVE",
-        "ordinary_trade_kind_from_element": True,
+        "event_kind_source": "ELEMENT_NAME",
         "correction_element": "TradeCorrection",
         "cancel_bust_element": "TradeCancel",
         "change_event_id_field": "sourceEventID",
@@ -85,7 +89,7 @@ def statement_xml(*, generation: str, to_date: str) -> bytes:
           quantity="1"
           tradePrice="100"
           dateTime="20260701;093000"
-          openCloseIndicator="O"
+          openCloseIndicator="OPEN"
           tradeStatus="EXECUTED"
           ibCommission="-1"
           ibCommissionCurrency="USD"
@@ -192,6 +196,11 @@ def test_repository_manifest_fails_closed():
 
 def test_repository_manifest_retains_hash_bound_partial_official_evidence():
     manifest = read_provider_evidence_manifest()
+    codes_source = next(
+        source
+        for source in manifest.official_sources
+        if source.title == "Codes - Flex Statement"
+    )
 
     with pytest.raises(IbkrProviderEvidenceError) as failure:
         verify_provider_evidence(manifest)
@@ -208,6 +217,45 @@ def test_repository_manifest_retains_hash_bound_partial_official_evidence():
     assert "BASIC_EXECUTION_FIELDS" not in missing_official
     assert "GENERATION_ORDERING" in missing_official
     assert "COVERAGE_INCLUSIVITY_TIMEZONE" in missing_official
+    assert codes_source.excerpts[0].semantic == "EVENT_CODE_VALUES"
+    assert codes_source.excerpts[0].wire_tokens == ()
+
+
+def test_required_wire_tokens_follow_the_selected_event_contract():
+    payload = field_contract()
+    payload.update(
+        {
+            "event_kind_source": "ATTRIBUTE_VALUE",
+            "event_kind_field": "transactionType",
+            "ordinary_trade_kind_value": "ExchTrade",
+            "correction_kind_value": "TradeCorrect",
+            "cancel_bust_kind_value": "TradeCancel",
+            "correction_element": None,
+            "cancel_bust_element": None,
+            "side_buy_value": "B",
+            "side_sell_value": "S",
+            "open_value": "O",
+            "close_value": "C",
+        }
+    )
+    contract = IbkrFlexFieldContract.model_validate(payload)
+
+    tokens = required_provider_wire_tokens(contract)
+
+    assert {
+        "Trade",
+        "transactionType",
+        'transactionType="ExchTrade"',
+        'transactionType="TradeCorrect"',
+        'transactionType="TradeCancel"',
+        'buySell="B"',
+        'buySell="S"',
+        'openCloseIndicator="O"',
+        'openCloseIndicator="C"',
+    } <= tokens
+    assert "<TradeCorrection" not in tokens
+    assert 'openCloseIndicator="OPEN"' not in tokens
+    assert 'openCloseIndicator="CLOSE"' not in tokens
 
 
 def test_complete_official_and_real_fixture_evidence_can_verify(tmp_path):
@@ -260,9 +308,38 @@ def test_semantic_labels_without_exact_wire_contract_fail_closed(tmp_path):
         verify_provider_evidence(manifest, fixture_root=tmp_path)
 
     assert "missing exact provider wire tokens" in str(failure.value)
-    assert "TradeCorrection" in str(failure.value)
+    assert "<TradeCorrection" in str(failure.value)
     assert "sourceEventID" in str(failure.value)
     assert "OPEN" in str(failure.value)
+
+
+def test_fixture_wire_enum_values_must_match_the_frozen_contract(tmp_path):
+    template = tmp_path / "query-template.json"
+    template.write_bytes(b'{"query":"JOURNAL_FLEX_V1"}')
+    first = tmp_path / "statement-1.xml"
+    first.write_bytes(
+        statement_xml(
+            generation="20260702;120000",
+            to_date="20260701",
+        ).replace(b'buySell="BUY"', b'buySell="HOLD"')
+    )
+    second = tmp_path / "statement-2.xml"
+    second.write_bytes(
+        statement_xml(generation="20260703;120000", to_date="20260702")
+    )
+    hashes = [
+        "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in (first, second, template)
+    ]
+    hashes.append(write_official_artifact(tmp_path))
+    manifest = IbkrFlexProviderEvidenceManifest.model_validate(
+        verified_payload(*hashes)
+    )
+
+    with pytest.raises(IbkrProviderEvidenceError) as failure:
+        verify_provider_evidence(manifest, fixture_root=tmp_path)
+
+    assert "does not prove BASIC_EXECUTION_FIELDS" in str(failure.value)
 
 
 def test_declared_wire_token_must_exist_in_bound_official_quote(tmp_path):

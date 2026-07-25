@@ -11,7 +11,7 @@ from typing import Literal
 from urllib.parse import urlparse
 
 from lxml import etree
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
 
 EVIDENCE_PATH = Path(__file__).with_name(
@@ -35,6 +35,8 @@ REQUIRED_SEMANTICS = frozenset(
         "COVERAGE_INCLUSIVITY_TIMEZONE",
     }
 )
+SUPPORTING_SEMANTICS = frozenset({"EVENT_CODE_VALUES"})
+ALLOWED_EVIDENCE_SEMANTICS = REQUIRED_SEMANTICS | SUPPORTING_SEMANTICS
 
 
 class _EvidenceModel(BaseModel):
@@ -64,6 +66,10 @@ class IbkrFlexFieldContract(_EvidenceModel):
     execution_status_field: str
     commission_field: str
     commission_currency_field: str
+    side_buy_value: str
+    side_sell_value: str
+    open_value: str
+    close_value: str
     statement_to_date_inclusive: bool
     statement_date_format: str
     generation_time_format: str
@@ -73,9 +79,13 @@ class IbkrFlexFieldContract(_EvidenceModel):
     ]
     execution_time_format: str
     execution_time_semantics: Literal["SOURCE_TIMEZONE_NAIVE"]
-    ordinary_trade_kind_from_element: Literal[True]
-    correction_element: str
-    cancel_bust_element: str
+    event_kind_source: Literal["ELEMENT_NAME", "ATTRIBUTE_VALUE"]
+    event_kind_field: str | None = None
+    ordinary_trade_kind_value: str | None = None
+    correction_kind_value: str | None = None
+    cancel_bust_kind_value: str | None = None
+    correction_element: str | None
+    cancel_bust_element: str | None
     change_event_id_field: str
     affected_execution_id_field: str
     account_inception_date_field: str
@@ -83,6 +93,74 @@ class IbkrFlexFieldContract(_EvidenceModel):
     open_position_element: str
     open_positions_snapshot_date_field: str
     open_position_quantity_field: str
+
+    @model_validator(mode="after")
+    def validate_event_kind_contract(self) -> "IbkrFlexFieldContract":
+        if self.event_kind_source == "ELEMENT_NAME":
+            if not self.correction_element or not self.cancel_bust_element:
+                raise ValueError(
+                    "Element-name event contracts require correction and "
+                    "cancel element names"
+                )
+            element_names = {
+                self.trade_element,
+                self.correction_element,
+                self.cancel_bust_element,
+            }
+            if len(element_names) != 3:
+                raise ValueError(
+                    "Element-name event kind values must be distinct"
+                )
+            discriminator_values = (
+                self.event_kind_field,
+                self.ordinary_trade_kind_value,
+                self.correction_kind_value,
+                self.cancel_bust_kind_value,
+            )
+            if any(value is not None for value in discriminator_values):
+                raise ValueError(
+                    "Element-name event contracts cannot declare an "
+                    "attribute discriminator"
+                )
+        else:
+            if self.correction_element is not None:
+                raise ValueError(
+                    "Attribute event contracts cannot declare a correction "
+                    "element"
+                )
+            if self.cancel_bust_element is not None:
+                raise ValueError(
+                    "Attribute event contracts cannot declare a cancel "
+                    "element"
+                )
+            discriminator_values = (
+                self.event_kind_field,
+                self.ordinary_trade_kind_value,
+                self.correction_kind_value,
+                self.cancel_bust_kind_value,
+            )
+            if any(not value for value in discriminator_values):
+                raise ValueError(
+                    "Attribute event contracts require a field and all "
+                    "three event kind values"
+                )
+            if len(set(discriminator_values)) != 4:
+                raise ValueError(
+                    "Attribute event kind field and values must be distinct"
+                )
+        enum_values = (
+            self.side_buy_value,
+            self.side_sell_value,
+            self.open_value,
+            self.close_value,
+        )
+        if any(not value for value in enum_values):
+            raise ValueError("Provider side/open-close values cannot be empty")
+        if self.side_buy_value == self.side_sell_value:
+            raise ValueError("Provider buy/sell values must be distinct")
+        if self.open_value == self.close_value:
+            raise ValueError("Provider open/close values must be distinct")
+        return self
 
 
 class OfficialEvidenceExcerpt(_EvidenceModel):
@@ -170,6 +248,32 @@ def _elements(root: etree._Element, name: str) -> list[etree._Element]:
     return [element for element in root.iter() if _local_name(element) == name]
 
 
+def provider_event_kind(
+    element: etree._Element,
+    contract: IbkrFlexFieldContract,
+) -> Literal["TRADE", "CORRECTION", "CANCEL_BUST"] | None:
+    element_name = _local_name(element)
+    if contract.event_kind_source == "ELEMENT_NAME":
+        if element_name == contract.trade_element:
+            return "TRADE"
+        if element_name == contract.correction_element:
+            return "CORRECTION"
+        if element_name == contract.cancel_bust_element:
+            return "CANCEL_BUST"
+        return None
+    if element_name != contract.trade_element:
+        return None
+    assert contract.event_kind_field is not None
+    raw_kind = (element.attrib.get(contract.event_kind_field) or "").strip()
+    if raw_kind == contract.ordinary_trade_kind_value:
+        return "TRADE"
+    if raw_kind == contract.correction_kind_value:
+        return "CORRECTION"
+    if raw_kind == contract.cancel_bust_kind_value:
+        return "CANCEL_BUST"
+    return None
+
+
 def _required_attributes(
     element: etree._Element,
     names: tuple[str, ...],
@@ -212,9 +316,19 @@ def _validate_fixture_semantics(
             f"{relative_path}"
         ], empty_shape
     statement = statements[0]
-    trades = _elements(root, contract.trade_element)
-    corrections = _elements(root, contract.correction_element)
-    cancels = _elements(root, contract.cancel_bust_element)
+    events = [
+        (element, provider_event_kind(element, contract))
+        for element in root.iter()
+    ]
+    trades = [
+        element for element, kind in events if kind == "TRADE"
+    ]
+    corrections = [
+        element for element, kind in events if kind == "CORRECTION"
+    ]
+    cancels = [
+        element for element, kind in events if kind == "CANCEL_BUST"
+    ]
 
     generation: datetime | None = None
     coverage_start: date | None = None
@@ -259,6 +373,10 @@ def _validate_fixture_semantics(
         )
         if not trades or not any(
             _required_attributes(trade, required_trade_fields)
+            and trade.attrib[contract.side_field]
+            in {contract.side_buy_value, contract.side_sell_value}
+            and trade.attrib[contract.open_close_field]
+            in {contract.open_value, contract.close_value}
             for trade in trades
         ):
             reasons.append(
@@ -273,6 +391,8 @@ def _validate_fixture_semantics(
                     contract.open_close_field,
                 ),
             )
+            and trade.attrib[contract.open_close_field]
+            in {contract.open_value, contract.close_value}
             for trade in trades
         ):
             reasons.append(
@@ -423,7 +543,7 @@ def _validate_official_source(
             f"Official evidence has no reviewed excerpts: {source.url}"
         )
     for excerpt in source.excerpts:
-        if excerpt.semantic not in REQUIRED_SEMANTICS:
+        if excerpt.semantic not in ALLOWED_EVIDENCE_SEMANTICS:
             reasons.append(
                 f"Unknown official evidence semantic "
                 f"{excerpt.semantic}: {source.url}"
@@ -466,7 +586,7 @@ def required_provider_wire_tokens(
     contract: IbkrFlexFieldContract,
 ) -> set[str]:
     """Return provider-controlled XML names and values consumed by V1."""
-    return {
+    tokens = {
         contract.statement_element,
         contract.events_container_element,
         contract.trade_element,
@@ -489,8 +609,6 @@ def required_provider_wire_tokens(
         contract.execution_status_field,
         contract.commission_field,
         contract.commission_currency_field,
-        contract.correction_element,
-        contract.cancel_bust_element,
         contract.change_event_id_field,
         contract.affected_execution_id_field,
         contract.account_inception_date_field,
@@ -498,11 +616,36 @@ def required_provider_wire_tokens(
         contract.open_position_element,
         contract.open_positions_snapshot_date_field,
         contract.open_position_quantity_field,
-        "BUY",
-        "SELL",
-        "OPEN",
-        "CLOSE",
+        f'{contract.side_field}="{contract.side_buy_value}"',
+        f'{contract.side_field}="{contract.side_sell_value}"',
+        f'{contract.open_close_field}="{contract.open_value}"',
+        f'{contract.open_close_field}="{contract.close_value}"',
     }
+    event_tokens = (
+        (
+            f"<{contract.trade_element}",
+            f"<{contract.correction_element}",
+            f"<{contract.cancel_bust_element}",
+        )
+        if contract.event_kind_source == "ELEMENT_NAME"
+        else (
+            contract.event_kind_field,
+            (
+                f'{contract.event_kind_field}="'
+                f'{contract.ordinary_trade_kind_value}"'
+            ),
+            (
+                f'{contract.event_kind_field}="'
+                f'{contract.correction_kind_value}"'
+            ),
+            (
+                f'{contract.event_kind_field}="'
+                f'{contract.cancel_bust_kind_value}"'
+            ),
+        )
+    )
+    tokens.update(token for token in event_tokens if token is not None)
+    return tokens
 
 
 def verify_provider_evidence(
