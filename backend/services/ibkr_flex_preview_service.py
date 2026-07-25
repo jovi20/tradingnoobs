@@ -631,6 +631,16 @@ def _classify(
         observation=observation,
     ):
         return "ALREADY_IMPORTED"
+    if (
+        len(
+            statement_event_fingerprints.get(
+                event.external_source_event_id,
+                set(),
+            )
+        )
+        > 1
+    ):
+        return "SOURCE_PAYLOAD_CONFLICT"
 
     latest_generation = (
         _latest_authority_generation(db, execution=target)
@@ -665,13 +675,6 @@ def _classify(
             return "SOURCE_PAYLOAD_CONFLICT"
         return event.event_kind
 
-    fingerprints = statement_event_fingerprints.setdefault(
-        event.external_source_event_id,
-        set(),
-    )
-    fingerprints.add(event.source_payload_fingerprint)
-    if len(fingerprints) > 1:
-        return "SOURCE_PAYLOAD_CONFLICT"
     if target is not None:
         if strictly_earlier:
             return (
@@ -886,6 +889,11 @@ def preview_bound_ibkr_statement(
         binding=binding,
     )
     statement_fingerprints: dict[str, set[str]] = {}
+    for persisted in persisted_events:
+        statement_fingerprints.setdefault(
+            persisted.event.external_source_event_id,
+            set(),
+        ).add(persisted.event.source_payload_fingerprint)
     items_by_row: dict[int, BoundPreviewItem] = {}
     economic_items: dict[tuple[str, str], BoundPreviewItem] = {}
     for persisted in sorted(

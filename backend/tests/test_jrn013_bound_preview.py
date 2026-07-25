@@ -573,6 +573,60 @@ def test_exact_repeat_is_already_imported_with_new_generation_sighting(
     assert db.query(SourceReconciliationCase).count() == 0
 
 
+def test_same_file_reupload_reuses_statement_observation_and_sighting(
+    db,
+    source_graph,
+    provider_contract,
+):
+    user, _, account, _, binding = source_graph
+    file_hash = f"sha256:{'a' * 64}"
+    event = source_event(event_id="EXEC-SAME-FILE", transaction_id="205")
+    parsed = parsed_statement(
+        event,
+        generation="2026-07-26T22:00:05+00:00",
+    )
+    first_session = make_session(
+        db,
+        user=user,
+        account=account,
+        suffix="same-file-first",
+        file_hash=file_hash,
+    )
+    first = preview_bound_ibkr_statement(
+        db,
+        account=account,
+        binding=binding,
+        session=first_session,
+        parsed=parsed,
+        provider_contract=provider_contract,
+    )
+    db.commit()
+
+    second_session = make_session(
+        db,
+        user=user,
+        account=account,
+        suffix="same-file-second",
+        file_hash=file_hash,
+    )
+    second = preview_bound_ibkr_statement(
+        db,
+        account=account,
+        binding=binding,
+        session=second_session,
+        parsed=parsed,
+        provider_contract=provider_contract,
+    )
+    db.commit()
+
+    assert first.items[0].classification == "NEW"
+    assert second.items[0].classification == "NEW"
+    assert second_session.error_code != "SOURCE_GENERATION_CONFLICT"
+    assert db.query(SourceStatement).count() == 1
+    assert db.query(ExternalSourceObservation).count() == 1
+    assert db.query(StatementExecutionSighting).count() == 1
+
+
 def test_same_or_later_payload_change_creates_case_and_freezes_health(
     db,
     source_graph,
@@ -797,6 +851,61 @@ def test_duplicate_same_payload_combines_evidence_and_warns(
         assert row.normalized_values_json["masked_external_account_ref"] == (
             "****4567"
         )
+
+
+@pytest.mark.parametrize(
+    ("kind", "affected"),
+    (("TRADE", None), ("CORRECTION", "EXEC-UNKNOWN")),
+)
+def test_same_statement_same_event_id_different_payload_persists_both_sightings(
+    db,
+    source_graph,
+    provider_contract,
+    kind,
+    affected,
+):
+    user, _, account, _, binding = source_graph
+    session = make_session(
+        db,
+        user=user,
+        account=account,
+        suffix="payload-collision",
+    )
+    first = source_event(
+        event_id="EXEC-COLLISION",
+        row_number=1,
+        kind=kind,
+        affected=affected,
+        fingerprint=f"sha256:{'1' * 64}",
+    )
+    second = source_event(
+        event_id="EXEC-COLLISION",
+        row_number=2,
+        kind=kind,
+        affected=affected,
+        price="201",
+        fingerprint=f"sha256:{'2' * 64}",
+    )
+
+    result = preview_bound_ibkr_statement(
+        db,
+        account=account,
+        binding=binding,
+        session=session,
+        parsed=parsed_statement(first, second),
+        provider_contract=provider_contract,
+    )
+    db.commit()
+
+    assert result.status == "CONFLICTED"
+    assert {
+        item.classification for item in result.items
+    } == {"SOURCE_PAYLOAD_CONFLICT"}
+    assert db.query(ExternalSourceObservation).count() == 2
+    assert db.query(StatementExecutionSighting).count() == 2
+    assert db.query(SourceReconciliationCase).filter_by(
+        case_kind="SOURCE_PAYLOAD_CONFLICT",
+    ).count() == 2
 
 
 def test_duplicate_provider_order_creates_reconciliation_cases(
