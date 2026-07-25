@@ -43,6 +43,10 @@ from services.idempotency_service import (
 )
 from services.instrument_identity_service import InstrumentIdentity
 from services.outbox_service import enqueue_position_event_created_outbox
+from services.trade_lifecycle_simulation_service import (
+    LifecycleSimulationError,
+    simulate_canonical_lifecycle_step,
+)
 from services.trading_position_write_service import append_truth_trade_event
 from services.truth_native_open_service import create_truth_native_open
 
@@ -256,49 +260,21 @@ def _validate_lifecycle_prefixes(
         for row, values in group:
             action = str(values["action"])
             quantity = Decimal(str(values["quantity"]))
-            if action == "OPEN":
-                if open_quantity != 0:
-                    _confirm_error(
-                        "IMPORT_LIFECYCLE_OPEN_CONFLICT",
-                        f"Row {row.row_number} opens an already-open lifecycle",
-                    )
-                open_quantity = quantity
-            elif action == "ADD":
-                if open_quantity <= 0:
-                    _confirm_error(
-                        "IMPORT_LIFECYCLE_ORPHAN_EVENT",
-                        f"Row {row.row_number} has ADD without an open lifecycle",
-                    )
-                open_quantity += quantity
-            elif action == "REDUCE":
-                if open_quantity <= 0:
-                    _confirm_error(
-                        "IMPORT_LIFECYCLE_ORPHAN_EVENT",
-                        f"Row {row.row_number} has REDUCE without an open lifecycle",
-                    )
-                if quantity >= open_quantity:
-                    _confirm_error(
-                        "IMPORT_LIFECYCLE_OVER_REDUCE",
-                        f"Row {row.row_number} REDUCE must leave positive quantity",
-                    )
-                open_quantity -= quantity
-            elif action == "CLOSE":
-                if open_quantity <= 0:
-                    _confirm_error(
-                        "IMPORT_LIFECYCLE_ORPHAN_EVENT",
-                        f"Row {row.row_number} has CLOSE without an open lifecycle",
-                    )
-                if quantity != open_quantity:
-                    _confirm_error(
-                        "IMPORT_LIFECYCLE_CLOSE_QUANTITY_MISMATCH",
-                        f"Row {row.row_number} CLOSE must consume the full quantity",
-                    )
-                open_quantity = Decimal("0")
-            else:
-                _confirm_error(
-                    "UNSUPPORTED_IMPORT_ACTION",
-                    f"Row {row.row_number} has an unsupported lifecycle action",
+            try:
+                step = simulate_canonical_lifecycle_step(
+                    current_quantity=open_quantity,
+                    action=action,
+                    quantity=quantity,
+                    direction=values["direction"],
                 )
+            except LifecycleSimulationError as exc:
+                code = (
+                    "UNSUPPORTED_IMPORT_ACTION"
+                    if exc.code == "UNSUPPORTED_ACTION"
+                    else f"IMPORT_LIFECYCLE_{exc.code}"
+                )
+                _confirm_error(code, f"Row {row.row_number}: {exc}")
+            open_quantity = step.post_quantity
         ordered.extend(group)
     return ordered
 

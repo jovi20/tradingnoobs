@@ -25,6 +25,10 @@ from services.account_ledger_service import (
     sync_realized_pnl_event_to_account_ledger,
 )
 from services.trading_accounting_service import AccountingEvent, calculate_fifo_position_accounting
+from services.trade_lifecycle_simulation_service import (
+    LifecycleSimulationError,
+    simulate_canonical_lifecycle_step,
+)
 from services.truth_legacy_projection_service import project_truth_accounting_to_legacy
 
 
@@ -435,20 +439,31 @@ def append_truth_trade_event(
             "Trade events cannot predate the latest active lifecycle event"
         )
 
-    if event_type != PositionEventType.OPEN:
+    if event_type in TRADE_EVENT_TYPES:
         remaining_open_quantity = _remaining_open_quantity(position)
-        if remaining_open_quantity <= 0:
-            raise TradeEventQuantityError(
-                "Trading position has no remaining open quantity"
+        try:
+            simulate_canonical_lifecycle_step(
+                current_quantity=remaining_open_quantity,
+                action=event_type,
+                quantity=quantity,
+                direction=position.side,
             )
-        if event_type == PositionEventType.REDUCE and quantity >= remaining_open_quantity:
-            raise TradeEventQuantityError(
-                f"REDUCE event quantity must be less than remaining open quantity ({remaining_open_quantity})"
-            )
-        if event_type == PositionEventType.CLOSE and quantity != remaining_open_quantity:
-            raise TradeEventQuantityError(
-                f"CLOSE event quantity must equal remaining open quantity ({remaining_open_quantity})"
-            )
+        except LifecycleSimulationError as exc:
+            if exc.code == "ORPHAN_EVENT":
+                message = "Trading position has no remaining open quantity"
+            elif exc.code == "OVER_REDUCE":
+                message = (
+                    "REDUCE event quantity must be less than remaining open "
+                    f"quantity ({remaining_open_quantity})"
+                )
+            elif exc.code == "CLOSE_QUANTITY_MISMATCH":
+                message = (
+                    "CLOSE event quantity must equal remaining open "
+                    f"quantity ({remaining_open_quantity})"
+                )
+            else:
+                message = str(exc)
+            raise TradeEventQuantityError(message) from exc
 
     event = PositionEvent(
         user_id=position.user_id,
