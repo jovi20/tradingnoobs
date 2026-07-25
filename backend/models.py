@@ -3,8 +3,8 @@ Trading Noobs Backend - Database Models
 """
 from sqlalchemy import (
     Column, Integer, String, Text, Boolean, DateTime, Date,
-    ForeignKey, Numeric, JSON, Enum as SQLEnum, Index, UniqueConstraint,
-    CheckConstraint, text
+    ForeignKey, ForeignKeyConstraint, Numeric, JSON, Enum as SQLEnum, Index,
+    UniqueConstraint, CheckConstraint, text
 )
 from sqlalchemy import event, inspect
 from sqlalchemy.orm import Session, relationship
@@ -158,6 +158,38 @@ class ImportSessionStatus(str, enum.Enum):
     CONFLICTED = "CONFLICTED"
     FAILED = "FAILED"
     EXPIRED = "EXPIRED"
+
+
+class SourceHealth(str, enum.Enum):
+    HEALTHY = "HEALTHY"
+    RECONCILIATION_REQUIRED = "RECONCILIATION_REQUIRED"
+    SOURCE_DIVERGED = "SOURCE_DIVERGED"
+
+
+class SourceCompleteness(str, enum.Enum):
+    CURRENT = "CURRENT"
+    PENDING_IMPORT = "PENDING_IMPORT"
+
+
+class SourceObservationKind(str, enum.Enum):
+    TRADE = "TRADE"
+    CORRECTION = "CORRECTION"
+    CANCEL_BUST = "CANCEL_BUST"
+
+
+class ExternalExecutionDisposition(str, enum.Enum):
+    ACTIVE = "ACTIVE"
+    ACCEPTED_TOMBSTONE = "ACCEPTED_TOMBSTONE"
+
+
+class SourceReconciliationState(str, enum.Enum):
+    OPEN = "OPEN"
+    RESOLVING = "RESOLVING"
+    DIVERGED_REJECTED = "DIVERGED_REJECTED"
+    RESOLVED_APPLIED = "RESOLVED_APPLIED"
+    RESOLVED_SUPERSEDED_BY_LATER_AUTHORITY = (
+        "RESOLVED_SUPERSEDED_BY_LATER_AUTHORITY"
+    )
 
 
 class JobRunStatus(str, enum.Enum):
@@ -926,6 +958,736 @@ class ImportRow(Base):
     session = relationship("ImportSession", back_populates="rows")
     user = relationship("User")
     account = relationship("TradingAccount")
+
+
+class ImportSourceBinding(Base):
+    __tablename__ = "import_source_bindings"
+    __table_args__ = (
+        UniqueConstraint(
+            "account_id",
+            name="uq_import_source_bindings_account_lifetime",
+        ),
+        UniqueConstraint(
+            "user_id",
+            "adapter_kind",
+            "normalized_external_account_ref",
+            name="uq_import_source_bindings_owner_external_account",
+        ),
+        UniqueConstraint(
+            "id",
+            "user_id",
+            "account_id",
+            name="uq_import_source_bindings_owner_graph",
+        ),
+        CheckConstraint(
+            "adapter_kind = 'IBKR_FLEX_XML_V1'",
+            name="ck_import_source_bindings_adapter",
+        ),
+        CheckConstraint(
+            "source_health IN ('HEALTHY', 'RECONCILIATION_REQUIRED', "
+            "'SOURCE_DIVERGED')",
+            name="ck_import_source_bindings_health",
+        ),
+        CheckConstraint(
+            "source_completeness IN ('CURRENT', 'PENDING_IMPORT')",
+            name="ck_import_source_bindings_completeness",
+        ),
+        CheckConstraint(
+            "source_state_revision >= 0",
+            name="ck_import_source_bindings_revision",
+        ),
+        Index(
+            "ix_import_source_bindings_owner_health",
+            "user_id",
+            "source_health",
+            "source_completeness",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    public_id = Column(
+        String(36),
+        unique=True,
+        index=True,
+        nullable=False,
+        default=lambda: str(uuid.uuid4()),
+    )
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    account_id = Column(Integer, ForeignKey("trading_accounts.id"), nullable=False)
+    adapter_kind = Column(String(40), nullable=False)
+    normalized_external_account_ref = Column(String(255), nullable=False)
+    masked_external_account_ref = Column(String(255), nullable=False)
+    source_timezone = Column(String(100), nullable=False)
+    source_health = Column(String(40), nullable=False, default=SourceHealth.HEALTHY.value)
+    source_completeness = Column(
+        String(30),
+        nullable=False,
+        default=SourceCompleteness.CURRENT.value,
+    )
+    accepted_coverage_start = Column(Date, nullable=True)
+    accepted_coverage_through_exclusive = Column(Date, nullable=True)
+    source_state_revision = Column(Integer, nullable=False, default=0)
+    archived_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User")
+    account = relationship("TradingAccount")
+
+
+class SourceStatement(Base):
+    __tablename__ = "source_statements"
+    __table_args__ = (
+        UniqueConstraint(
+            "binding_id",
+            "file_hash",
+            name="uq_source_statements_binding_file",
+        ),
+        UniqueConstraint(
+            "id",
+            "binding_id",
+            name="uq_source_statements_binding_graph",
+        ),
+        ForeignKeyConstraint(
+            ["binding_id", "user_id", "account_id"],
+            [
+                "import_source_bindings.id",
+                "import_source_bindings.user_id",
+                "import_source_bindings.account_id",
+            ],
+            name="fk_source_statements_binding_owner_graph",
+        ),
+        CheckConstraint(
+            "coverage_start < coverage_end_exclusive",
+            name="ck_source_statements_coverage",
+        ),
+        Index(
+            "ix_source_statements_binding_generation",
+            "binding_id",
+            "generation_order_key",
+        ),
+        Index(
+            "ix_source_statements_owner_coverage",
+            "user_id",
+            "account_id",
+            "coverage_start",
+            "coverage_end_exclusive",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    public_id = Column(
+        String(36),
+        unique=True,
+        index=True,
+        nullable=False,
+        default=lambda: str(uuid.uuid4()),
+    )
+    binding_id = Column(Integer, nullable=False)
+    user_id = Column(Integer, nullable=False)
+    account_id = Column(Integer, nullable=False)
+    import_session_id = Column(
+        Integer,
+        ForeignKey("import_sessions.id"),
+        nullable=False,
+    )
+    file_hash = Column(String(71), nullable=False)
+    statement_generation = Column(String(255), nullable=False)
+    generation_order_key = Column(String(512), nullable=False)
+    raw_from_date = Column(String(100), nullable=False)
+    raw_to_date = Column(String(100), nullable=False)
+    coverage_start = Column(Date, nullable=False)
+    coverage_end_exclusive = Column(Date, nullable=False)
+    source_timezone = Column(String(100), nullable=False)
+    normalized_external_account_ref = Column(String(255), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+
+class ExternalSourceObservation(Base):
+    __tablename__ = "external_source_observations"
+    __table_args__ = (
+        UniqueConstraint(
+            "binding_id",
+            "external_source_event_id",
+            "fingerprint_version",
+            "source_payload_fingerprint",
+            name="uq_external_source_observations_identity",
+        ),
+        UniqueConstraint(
+            "id",
+            "binding_id",
+            name="uq_external_source_observations_binding_graph",
+        ),
+        ForeignKeyConstraint(
+            ["binding_id", "user_id", "account_id"],
+            [
+                "import_source_bindings.id",
+                "import_source_bindings.user_id",
+                "import_source_bindings.account_id",
+            ],
+            name="fk_external_source_observations_binding_owner_graph",
+        ),
+        CheckConstraint(
+            "event_kind IN ('TRADE', 'CORRECTION', 'CANCEL_BUST')",
+            name="ck_external_source_observations_event_kind",
+        ),
+        CheckConstraint(
+            "fingerprint_version > 0",
+            name="ck_external_source_observations_fingerprint_version",
+        ),
+        CheckConstraint(
+            "quantity IS NULL OR quantity > 0",
+            name="ck_external_source_observations_quantity",
+        ),
+        CheckConstraint(
+            "price IS NULL OR price > 0",
+            name="ck_external_source_observations_price",
+        ),
+        CheckConstraint(
+            "normalized_fee IS NULL OR normalized_fee >= 0",
+            name="ck_external_source_observations_fee",
+        ),
+        Index(
+            "ix_external_source_observations_binding_execution",
+            "binding_id",
+            "external_execution_id",
+        ),
+        Index(
+            "ix_external_source_observations_binding_affected",
+            "binding_id",
+            "affected_external_execution_id",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    public_id = Column(
+        String(36),
+        unique=True,
+        index=True,
+        nullable=False,
+        default=lambda: str(uuid.uuid4()),
+    )
+    binding_id = Column(Integer, nullable=False)
+    user_id = Column(Integer, nullable=False)
+    account_id = Column(Integer, nullable=False)
+    event_kind = Column(String(30), nullable=False)
+    external_source_event_id = Column(String(255), nullable=False)
+    external_execution_id = Column(String(255), nullable=True)
+    affected_external_execution_id = Column(String(255), nullable=True)
+    provider_declared_target_id = Column(String(255), nullable=True)
+    fingerprint_version = Column(Integer, nullable=False)
+    source_payload_fingerprint = Column(String(71), nullable=False)
+    transaction_id = Column(String(255), nullable=False)
+    source_order_key = Column(String(512), nullable=False)
+    conid = Column(String(100), nullable=False)
+    instrument_identity_json = Column(JSON, nullable=False)
+    raw_side = Column(String(30), nullable=False)
+    raw_open_close = Column(String(30), nullable=False)
+    quantity = Column(Numeric(20, 8), nullable=True)
+    price = Column(Numeric(20, 8), nullable=True)
+    occurred_at = Column(DateTime(timezone=True), nullable=False)
+    source_timezone = Column(String(100), nullable=False)
+    currency = Column(String(10), nullable=False)
+    normalized_fee = Column(Numeric(20, 8), nullable=True)
+    fee_currency = Column(String(10), nullable=True)
+    execution_status = Column(String(100), nullable=False)
+    normalized_payload_json = Column(JSON, nullable=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+
+class StatementExecutionSighting(Base):
+    __tablename__ = "statement_execution_sightings"
+    __table_args__ = (
+        UniqueConstraint(
+            "statement_id",
+            "external_source_event_id",
+            "observation_id",
+            name="uq_statement_execution_sightings_identity",
+        ),
+        UniqueConstraint(
+            "id",
+            "binding_id",
+            name="uq_statement_execution_sightings_binding_graph",
+        ),
+        ForeignKeyConstraint(
+            ["statement_id", "binding_id"],
+            ["source_statements.id", "source_statements.binding_id"],
+            name="fk_statement_sightings_statement_binding",
+        ),
+        ForeignKeyConstraint(
+            ["observation_id", "binding_id"],
+            [
+                "external_source_observations.id",
+                "external_source_observations.binding_id",
+            ],
+            name="fk_statement_sightings_observation_binding",
+        ),
+        ForeignKeyConstraint(
+            ["binding_id", "user_id", "account_id"],
+            [
+                "import_source_bindings.id",
+                "import_source_bindings.user_id",
+                "import_source_bindings.account_id",
+            ],
+            name="fk_statement_sightings_binding_owner_graph",
+        ),
+        Index(
+            "ix_statement_sightings_binding_generation",
+            "binding_id",
+            "generation_order_key",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    public_id = Column(
+        String(36),
+        unique=True,
+        index=True,
+        nullable=False,
+        default=lambda: str(uuid.uuid4()),
+    )
+    binding_id = Column(Integer, nullable=False)
+    user_id = Column(Integer, nullable=False)
+    account_id = Column(Integer, nullable=False)
+    statement_id = Column(Integer, nullable=False)
+    observation_id = Column(Integer, nullable=False)
+    external_source_event_id = Column(String(255), nullable=False)
+    generation_order_key = Column(String(512), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+
+class ExternalExecution(Base):
+    __tablename__ = "external_executions"
+    __table_args__ = (
+        UniqueConstraint(
+            "binding_id",
+            "external_execution_id",
+            name="uq_external_executions_binding_execution",
+        ),
+        UniqueConstraint(
+            "id",
+            "binding_id",
+            name="uq_external_executions_binding_graph",
+        ),
+        UniqueConstraint(
+            "binding_id",
+            "canceled_by_observation_id",
+            name="uq_external_executions_canceled_by",
+        ),
+        ForeignKeyConstraint(
+            ["binding_id", "user_id", "account_id"],
+            [
+                "import_source_bindings.id",
+                "import_source_bindings.user_id",
+                "import_source_bindings.account_id",
+            ],
+            name="fk_external_executions_binding_owner_graph",
+        ),
+        ForeignKeyConstraint(
+            ["current_trade_observation_id", "binding_id"],
+            [
+                "external_source_observations.id",
+                "external_source_observations.binding_id",
+            ],
+            name="fk_external_executions_current_observation_binding",
+        ),
+        ForeignKeyConstraint(
+            ["canceled_by_observation_id", "binding_id"],
+            [
+                "external_source_observations.id",
+                "external_source_observations.binding_id",
+            ],
+            name="fk_external_executions_canceled_observation_binding",
+        ),
+        CheckConstraint(
+            "disposition IN ('ACTIVE', 'ACCEPTED_TOMBSTONE')",
+            name="ck_external_executions_disposition",
+        ),
+        CheckConstraint(
+            "(disposition = 'ACTIVE' AND canceled_by_observation_id IS NULL) "
+            "OR (disposition = 'ACCEPTED_TOMBSTONE' "
+            "AND canceled_by_observation_id IS NOT NULL)",
+            name="ck_external_executions_tombstone",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    public_id = Column(
+        String(36),
+        unique=True,
+        index=True,
+        nullable=False,
+        default=lambda: str(uuid.uuid4()),
+    )
+    binding_id = Column(Integer, nullable=False)
+    user_id = Column(Integer, nullable=False)
+    account_id = Column(Integer, nullable=False)
+    external_execution_id = Column(String(255), nullable=False)
+    current_trade_observation_id = Column(Integer, nullable=False)
+    disposition = Column(String(30), nullable=False)
+    canceled_by_observation_id = Column(Integer, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class ExternalTradeApplication(Base):
+    __tablename__ = "external_trade_applications"
+    __table_args__ = (
+        UniqueConstraint(
+            "external_execution_id",
+            "application_version",
+            name="uq_external_trade_applications_version",
+        ),
+        UniqueConstraint(
+            "id",
+            "binding_id",
+            name="uq_external_trade_applications_binding_graph",
+        ),
+        ForeignKeyConstraint(
+            ["external_execution_id", "binding_id"],
+            ["external_executions.id", "external_executions.binding_id"],
+            name="fk_external_trade_applications_execution_binding",
+        ),
+        ForeignKeyConstraint(
+            ["source_observation_id", "binding_id"],
+            [
+                "external_source_observations.id",
+                "external_source_observations.binding_id",
+            ],
+            name="fk_external_trade_applications_observation_binding",
+        ),
+        ForeignKeyConstraint(
+            ["binding_id", "user_id", "account_id"],
+            [
+                "import_source_bindings.id",
+                "import_source_bindings.user_id",
+                "import_source_bindings.account_id",
+            ],
+            name="fk_external_trade_applications_binding_owner_graph",
+        ),
+        CheckConstraint(
+            "application_version > 0",
+            name="ck_external_trade_applications_version",
+        ),
+        CheckConstraint(
+            "derived_direction IN ('LONG', 'SHORT')",
+            name="ck_external_trade_applications_direction",
+        ),
+        CheckConstraint(
+            "derived_action IN ('OPEN', 'ADD', 'REDUCE', 'CLOSE')",
+            name="ck_external_trade_applications_action",
+        ),
+        CheckConstraint(
+            "pre_quantity >= 0 AND post_quantity >= 0",
+            name="ck_external_trade_applications_quantities",
+        ),
+        CheckConstraint(
+            "(canonical_position_public_id IS NULL "
+            "AND canonical_event_public_id IS NULL) "
+            "OR (canonical_position_public_id IS NOT NULL "
+            "AND canonical_event_public_id IS NOT NULL)",
+            name="ck_external_trade_applications_canonical_pair",
+        ),
+        Index(
+            "uq_external_trade_applications_active",
+            "external_execution_id",
+            unique=True,
+            sqlite_where=text("is_active = 1"),
+            postgresql_where=text("is_active"),
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    public_id = Column(
+        String(36),
+        unique=True,
+        index=True,
+        nullable=False,
+        default=lambda: str(uuid.uuid4()),
+    )
+    binding_id = Column(Integer, nullable=False)
+    user_id = Column(Integer, nullable=False)
+    account_id = Column(Integer, nullable=False)
+    external_execution_id = Column(Integer, nullable=False)
+    source_observation_id = Column(Integer, nullable=False)
+    application_version = Column(Integer, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+    derived_direction = Column(String(10), nullable=False)
+    derived_action = Column(String(20), nullable=False)
+    pre_quantity = Column(Numeric(20, 8), nullable=False)
+    post_quantity = Column(Numeric(20, 8), nullable=False)
+    canonical_position_public_id = Column(String(36), nullable=True)
+    canonical_event_public_id = Column(String(36), nullable=True)
+    applied_import_session_id = Column(
+        Integer,
+        ForeignKey("import_sessions.id"),
+        nullable=False,
+    )
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    superseded_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class StatementCoverageAcceptance(Base):
+    __tablename__ = "statement_coverage_acceptances"
+    __table_args__ = (
+        UniqueConstraint(
+            "binding_id",
+            "statement_id",
+            name="uq_statement_coverage_acceptances_binding_statement",
+        ),
+        ForeignKeyConstraint(
+            ["statement_id", "binding_id"],
+            ["source_statements.id", "source_statements.binding_id"],
+            name="fk_statement_coverage_acceptances_statement_binding",
+        ),
+        ForeignKeyConstraint(
+            ["binding_id", "user_id", "account_id"],
+            [
+                "import_source_bindings.id",
+                "import_source_bindings.user_id",
+                "import_source_bindings.account_id",
+            ],
+            name="fk_statement_coverage_acceptances_binding_owner_graph",
+        ),
+        CheckConstraint(
+            "accepted_source_state_revision > 0",
+            name="ck_statement_coverage_acceptances_revision",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    public_id = Column(
+        String(36),
+        unique=True,
+        index=True,
+        nullable=False,
+        default=lambda: str(uuid.uuid4()),
+    )
+    binding_id = Column(Integer, nullable=False)
+    user_id = Column(Integer, nullable=False)
+    account_id = Column(Integer, nullable=False)
+    statement_id = Column(Integer, nullable=False)
+    import_session_id = Column(
+        Integer,
+        ForeignKey("import_sessions.id"),
+        nullable=False,
+    )
+    operation_idempotency_id = Column(
+        Integer,
+        ForeignKey("idempotency_keys.id"),
+        nullable=False,
+    )
+    accepted_source_state_revision = Column(Integer, nullable=False)
+    accepted_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+
+class SourceReconciliationCase(Base):
+    __tablename__ = "source_reconciliation_cases"
+    __table_args__ = (
+        UniqueConstraint(
+            "binding_id",
+            "trigger_sighting_id",
+            "case_kind",
+            "against_source_state_hash",
+            name="uq_source_reconciliation_cases_trigger_episode",
+        ),
+        UniqueConstraint(
+            "id",
+            "binding_id",
+            name="uq_source_reconciliation_cases_binding_graph",
+        ),
+        ForeignKeyConstraint(
+            ["binding_id", "user_id", "account_id"],
+            [
+                "import_source_bindings.id",
+                "import_source_bindings.user_id",
+                "import_source_bindings.account_id",
+            ],
+            name="fk_source_reconciliation_cases_binding_owner_graph",
+        ),
+        ForeignKeyConstraint(
+            ["conflict_observation_id", "binding_id"],
+            [
+                "external_source_observations.id",
+                "external_source_observations.binding_id",
+            ],
+            name="fk_source_reconciliation_cases_observation_binding",
+        ),
+        ForeignKeyConstraint(
+            ["trigger_sighting_id", "binding_id"],
+            [
+                "statement_execution_sightings.id",
+                "statement_execution_sightings.binding_id",
+            ],
+            name="fk_source_reconciliation_cases_trigger_binding",
+        ),
+        ForeignKeyConstraint(
+            ["winning_sighting_id", "binding_id"],
+            [
+                "statement_execution_sightings.id",
+                "statement_execution_sightings.binding_id",
+            ],
+            name="fk_source_reconciliation_cases_winner_binding",
+        ),
+        CheckConstraint(
+            "state IN ('OPEN', 'RESOLVING', 'DIVERGED_REJECTED', "
+            "'RESOLVED_APPLIED', "
+            "'RESOLVED_SUPERSEDED_BY_LATER_AUTHORITY')",
+            name="ck_source_reconciliation_cases_state",
+        ),
+        CheckConstraint(
+            "against_source_state_schema_version > 0",
+            name="ck_source_reconciliation_cases_schema_version",
+        ),
+        Index(
+            "uq_source_reconciliation_cases_nonterminal",
+            "binding_id",
+            "conflict_observation_id",
+            "case_kind",
+            "against_source_state_hash",
+            unique=True,
+            sqlite_where=text(
+                "state IN ('OPEN', 'RESOLVING', 'DIVERGED_REJECTED')"
+            ),
+            postgresql_where=text(
+                "state IN ('OPEN', 'RESOLVING', 'DIVERGED_REJECTED')"
+            ),
+        ),
+        Index(
+            "ix_source_reconciliation_cases_binding_state",
+            "binding_id",
+            "state",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    public_id = Column(
+        String(36),
+        unique=True,
+        index=True,
+        nullable=False,
+        default=lambda: str(uuid.uuid4()),
+    )
+    binding_id = Column(Integer, nullable=False)
+    user_id = Column(Integer, nullable=False)
+    account_id = Column(Integer, nullable=False)
+    conflict_observation_id = Column(Integer, nullable=False)
+    trigger_sighting_id = Column(Integer, nullable=False)
+    case_kind = Column(String(80), nullable=False)
+    state = Column(String(60), nullable=False, default=SourceReconciliationState.OPEN.value)
+    against_source_state_schema_version = Column(Integer, nullable=False)
+    against_source_state_hash = Column(String(71), nullable=False)
+    against_source_state_snapshot_json = Column(JSON, nullable=False)
+    selected_target_external_execution_id = Column(String(255), nullable=True)
+    resolution_actor_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    resolution_reason = Column(Text, nullable=True)
+    resolution_request_id = Column(String(100), nullable=True)
+    winning_sighting_id = Column(Integer, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class SourceCaseEvidenceSighting(Base):
+    __tablename__ = "source_case_evidence_sightings"
+    __table_args__ = (
+        UniqueConstraint(
+            "case_id",
+            "sighting_id",
+            name="uq_source_case_evidence_sightings_case_sighting",
+        ),
+        ForeignKeyConstraint(
+            ["case_id", "binding_id"],
+            [
+                "source_reconciliation_cases.id",
+                "source_reconciliation_cases.binding_id",
+            ],
+            name="fk_source_case_evidence_sightings_case_binding",
+        ),
+        ForeignKeyConstraint(
+            ["sighting_id", "binding_id"],
+            [
+                "statement_execution_sightings.id",
+                "statement_execution_sightings.binding_id",
+            ],
+            name="fk_source_case_evidence_sightings_sighting_binding",
+        ),
+        ForeignKeyConstraint(
+            ["binding_id", "user_id", "account_id"],
+            [
+                "import_source_bindings.id",
+                "import_source_bindings.user_id",
+                "import_source_bindings.account_id",
+            ],
+            name="fk_source_case_evidence_sightings_binding_owner_graph",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    binding_id = Column(Integer, nullable=False)
+    user_id = Column(Integer, nullable=False)
+    account_id = Column(Integer, nullable=False)
+    case_id = Column(Integer, nullable=False)
+    sighting_id = Column(Integer, nullable=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+
+_IMMUTABLE_SOURCE_EVIDENCE_MODELS = (
+    SourceStatement,
+    ExternalSourceObservation,
+    StatementExecutionSighting,
+    StatementCoverageAcceptance,
+    SourceCaseEvidenceSighting,
+)
+
+
+@event.listens_for(Session, "before_flush")
+def _prevent_source_evidence_mutation(session, flush_context, instances) -> None:
+    for item in session.deleted:
+        if isinstance(item, _IMMUTABLE_SOURCE_EVIDENCE_MODELS):
+            raise ValueError("Source evidence is append-only and cannot be deleted")
+    for item in session.dirty:
+        if isinstance(item, _IMMUTABLE_SOURCE_EVIDENCE_MODELS) and session.is_modified(
+            item,
+            include_collections=False,
+        ):
+            raise ValueError("Source evidence is immutable")
 
 
 class SystemSetting(Base):

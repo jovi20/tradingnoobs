@@ -390,11 +390,37 @@ def test_empty_postgresql_database_upgrades_to_current_head(
         "latest_market_quotes",
         "price_bars_daily",
         "market_data_watermarks",
+        "import_source_bindings",
+        "source_statements",
+        "external_source_observations",
+        "statement_execution_sightings",
+        "external_executions",
+        "external_trade_applications",
+        "statement_coverage_acceptances",
+        "source_reconciliation_cases",
+        "source_case_evidence_sightings",
     } <= set(inspector.get_table_names())
     with engine.connect() as connection:
         assert connection.execute(
             text("SELECT version_num FROM alembic_version")
         ).scalar_one() == _alembic_head()
+        assert connection.execute(
+            text(
+                """
+                SELECT count(*)
+                FROM pg_trigger
+                WHERE NOT tgisinternal
+                  AND tgname LIKE 'trg_%_append_only'
+                  AND tgrelid IN (
+                      'source_statements'::regclass,
+                      'external_source_observations'::regclass,
+                      'statement_execution_sightings'::regclass,
+                      'statement_coverage_acceptances'::regclass,
+                      'source_case_evidence_sightings'::regclass
+                  )
+                """
+            )
+        ).scalar_one() == 5
     assert {
         "reverses_transaction_id",
         "actor_user_id",
