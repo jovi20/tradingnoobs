@@ -763,6 +763,13 @@ class WeeklyReport(Base):
 class TradingAccount(Base):
     """用户的实盘账户标签"""
     __tablename__ = "trading_accounts"
+    __table_args__ = (
+        UniqueConstraint(
+            "id",
+            "user_id",
+            name="uq_trading_accounts_owner_graph",
+        ),
+    )
     
     id = Column(Integer, primary_key=True, index=True)
     public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
@@ -988,6 +995,11 @@ class ImportSourceBinding(Base):
             "account_id",
             name="uq_import_source_bindings_owner_graph",
         ),
+        ForeignKeyConstraint(
+            ["account_id", "user_id"],
+            ["trading_accounts.id", "trading_accounts.user_id"],
+            name="fk_import_source_bindings_account_owner",
+        ),
         CheckConstraint(
             "adapter_kind = 'IBKR_FLEX_XML_V1'",
             name="ck_import_source_bindings_adapter",
@@ -1045,7 +1057,7 @@ class ImportSourceBinding(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     user = relationship("User")
-    account = relationship("TradingAccount")
+    account = relationship("TradingAccount", foreign_keys=[account_id])
 
 
 class SourceStatement(Base):

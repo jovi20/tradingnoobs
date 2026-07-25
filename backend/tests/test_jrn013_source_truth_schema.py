@@ -267,7 +267,8 @@ def test_binding_slots_are_lifetime_unique_per_account_and_external_identity(
     owner_graph,
 ):
     first, second, accounts = owner_graph
-    binding(db, first, accounts[0], "U1234567")
+    first_binding = binding(db, first, accounts[0], "U1234567")
+    first_binding.archived_at = datetime.now(timezone.utc)
     db.commit()
 
     with pytest.raises(IntegrityError):
@@ -277,6 +278,11 @@ def test_binding_slots_are_lifetime_unique_per_account_and_external_identity(
 
     with pytest.raises(IntegrityError):
         binding(db, first, accounts[0], "U7654321")
+        db.commit()
+    db.rollback()
+
+    with pytest.raises(IntegrityError):
+        binding(db, second, accounts[1], "U7654321")
         db.commit()
     db.rollback()
 
