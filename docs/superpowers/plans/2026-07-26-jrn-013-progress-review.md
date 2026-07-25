@@ -49,6 +49,15 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
   `CORRECTION_CANCEL_TARGETS`，也不会把孤立 `O/C` 误当成
   `openCloseIndicator="O|C"` 的证明。枚举 wire evidence 必须绑定字段和值片段，
   例如 `transactionType="TradeCorrect"`。
+- commission charge sign 与 commission/trade currency 关系已成为 field contract
+  的显式必填项；parser 对非零反向 sign 稳定返回
+  `IBKR_COMMISSION_SIGN_UNSUPPORTED`，只有符合合同的费用才规范为正 magnitude。
+  evidence fixture 必须提供 finite non-zero commission、正确 sign 和相同 currency，
+  不能再用两个字段存在冒充 `COMMISSION_SIGN_CURRENCY`。
+- `FLAT_BOUNDARY` fixture gate 已对齐 parser：inception 仅在
+  `fromDate <= accountInceptionDate` 时有效；否则必须恰好有一个 snapshotDate 等于
+  fromDate 的 OpenPositions，子元素类型/账户必须一致且每个 quantity 都是 finite
+  zero。旧日期 inception、非零仓位、非法数量或不完整 snapshot 均不能证明空仓。
 - 禁止 DTD/entity/XInclude 的受限 XML parser，以及文件、execution、节点、
   属性、深度和字段长度限制；5,000 execution 边界接受，5,001 拒绝。
 - provider contract 固定 generation 按 UTC instant 升序；同一 binding 下同一
@@ -93,8 +102,8 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
 - upload 编排在读取或暂存文件前先锁定 owner-scoped account；不存在或跨 owner
   account 均返回 `404 IMPORT_ACCOUNT_NOT_FOUND`，不调用上传读取、不创建临时文件、
   `IdempotencyKey` 或 `ImportSession`，并始终关闭上传句柄。
-- 本次复验的全部 `test_jrn013_*.py` 共 131 项测试通过；完整统一
-  gate 在 PostgreSQL 16.14 上通过 672 个后端测试、165 个前端测试、OpenAPI、
+- 本次复验的全部 `test_jrn013_*.py` 共 135 项测试通过；完整统一
+  gate 在 PostgreSQL 16.14 上通过 676 个后端测试、165 个前端测试、OpenAPI、
   release contract、typecheck、lint 和 production build。
 
 ## 尚未实现或未满足
@@ -125,7 +134,7 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
 - JRN-014 的 source-bound canonical confirm、coverage acceptance/frontier
   推进与“只应用新增 execution”尚未实现。
 - JRN-015 的人工 correction/cancel-bust resolution 与 versioned replay 尚未实现。
-- `515f857` 已通过完整统一 gate 与真实 PostgreSQL migration gate；尚未取得
+- `a46887b` 已通过完整统一 gate 与真实 PostgreSQL migration gate；尚未取得
   远端 CI 和绑定该 SHA 的独立 review，因此仍只能视为进度 checkpoint。
 
 ## 设计必要性评估
