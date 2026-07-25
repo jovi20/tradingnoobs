@@ -3,9 +3,9 @@
   "record_kind": "JRN_TASK_CHECKPOINT",
   "task_id": "JRN-005",
   "branch": "dev",
-  "status": "CHECKPOINT_LOCAL_REVIEW_PASS_REMOTE_CI_PENDING",
+  "status": "COMPLETE",
   "release_status": "NOT_READY_FOR_PRODUCTION",
-  "recorded_at": "2026-07-25T15:23:09+08:00",
+  "recorded_at": "2026-07-25T17:27:25+08:00",
   "implementation_base_commit": "435d1677b7d76a331a3cc94fb260ae5a55dde120",
   "implementation_checkpoint_commit": "2c0e8d0ebbd6af290ef6281c053ac3d554beaaba",
   "implementation_commits": [
@@ -57,7 +57,7 @@
     }
   ],
   "review": {
-    "disposition": "LOCAL_APPROVE_WITH_REMOTE_CI_BLOCKER",
+    "disposition": "APPROVE_REMOTE_CI_AND_REQUIRED_CHECK_CLOSED",
     "blocking_findings_after_fix": [],
     "fixed_findings": [
       {
@@ -69,15 +69,39 @@
     "residual_risks": [
       "The current accounting and ledger services do not implement this contract: they write realized net instead of gross plus fee, can update/delete ledger rows, and lack explicit posting kind, append-only guards, sequence_no, and posting uniqueness. JRN-006 must replace these behaviors.",
       "IBKR commission normalization remains disabled until JRN-013 retains official field documentation and redacted real fixture evidence for sign and currency semantics.",
-      "The discovered local samples are tiny and contain no nonzero trade fee, so they cannot validate fee migration or allocation behavior.",
-      "GitHub Actions has not run for this checkpoint; JRN-002 through JRN-005 still lack remote required-check evidence."
+      "The discovered local samples are tiny and contain no nonzero trade fee, so they cannot validate fee migration or allocation behavior."
     ]
   },
   "remote_ci": {
-    "status": "NOT_RUN",
+    "status": "PASS",
     "required_workflow": ".github/workflows/journal-baseline.yml",
     "required_job": "journal-baseline",
-    "closure_condition": "Run the workflow for commit 2c0e8d0ebbd6af290ef6281c053ac3d554beaaba and retain a successful required-check conclusion before marking JRN-005 COMPLETE or starting JRN-006."
+    "verified_commit": "68532b8d9ac9ef67e7241d4d47fbd0c4327fcdea",
+    "workflow_run_id": 30151924998,
+    "workflow_run_url": "https://github.com/jovi20/tradingnoobs/actions/runs/30151924998",
+    "workflow_run_conclusion": "success",
+    "job_id": 89663633330,
+    "job_url": "https://github.com/jovi20/tradingnoobs/actions/runs/30151924998/job/89663633330",
+    "job_conclusion": "success",
+    "artifact": {
+      "id": 8617918462,
+      "name": "jrn002-gate-summary",
+      "digest": "sha256:d8346bef3fbdc684459e0527f7f76d1c43e6f202da1534a0ca04914a20b39ba5",
+      "expired": false
+    },
+    "implementation_checkpoint_is_verified_commit_ancestor": true
   },
-  "next_task_gate": "BLOCKED: JRN-006 accounting implementation requires JRN-004 and JRN-005 closure, including remote required-check evidence. Do not implement the ledger while those checks remain pending."
+  "required_check_enforcement": {
+    "ruleset_id": 19728078,
+    "ruleset_name": "main-journal-baseline",
+    "ruleset_url": "https://github.com/jovi20/tradingnoobs/settings/rules/19728078",
+    "enforcement": "active",
+    "target_ref": "refs/heads/main",
+    "required_check": "journal-baseline",
+    "integration": "GitHub Actions",
+    "bypass_list": [],
+    "require_branches_to_be_up_to_date": false,
+    "dev_is_targeted": false
+  },
+  "next_task_gate": "SATISFIED: JRN-004 and JRN-005 are closed; JRN-006 may start with the JRN-005 vectors as its acceptance oracle."
 }

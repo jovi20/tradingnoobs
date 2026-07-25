@@ -3,9 +3,9 @@
   "record_kind": "JRN_TASK_CHECKPOINT",
   "task_id": "JRN-004",
   "branch": "dev",
-  "status": "CHECKPOINT_LOCAL_REVIEW_PASS_REMOTE_CI_PENDING",
+  "status": "COMPLETE",
   "release_status": "NOT_READY_FOR_PRODUCTION",
-  "recorded_at": "2026-07-25T15:09:13+08:00",
+  "recorded_at": "2026-07-25T17:27:25+08:00",
   "implementation_base_commit": "b8aa0fce2833c854c6f7f0753b0079e2d7cde575",
   "implementation_checkpoint_commit": "575c67d7418ca9b9346b0402d890c316c7f962dd",
   "implementation_commits": [
@@ -80,7 +80,7 @@
   ],
   "review": {
     "reviewed_at": "2026-07-25T15:09:13+08:00",
-    "disposition": "LOCAL_APPROVE_WITH_REMOTE_CI_BLOCKER",
+    "disposition": "APPROVE_REMOTE_CI_AND_REQUIRED_CHECK_CLOSED",
     "blocking_findings_after_fix": [],
     "fixed_findings": [
       {
@@ -90,7 +90,6 @@
       }
     ],
     "residual_risks": [
-      "GitHub Actions has not run for this checkpoint, so remote CI and required-check evidence remain unproven for JRN-002, JRN-003, and JRN-004.",
       "After different owners create the same scope/key pair, downgrade to the former global uniqueness constraint can fail. JRN-019 must define a preflight and forward-fix or data-disposition policy instead of assuming a lossless rollback.",
       "Owner consistency is enforced by application queries and tests rather than composite database foreign keys, so direct out-of-band database writes can still create corrupt graphs that application reads must reject.",
       "Journal-balance validation currently performs nested owner checks per ledger row. This is correct for the Beta boundary but may become an N+1 performance bottleneck; JRN-006 should replace it with constrained relational queries or database invariants before ledger volume grows.",
@@ -98,10 +97,35 @@
     ]
   },
   "remote_ci": {
-    "status": "NOT_RUN",
+    "status": "PASS",
     "required_workflow": ".github/workflows/journal-baseline.yml",
     "required_job": "journal-baseline",
-    "closure_condition": "Run the workflow for commit 575c67d7418ca9b9346b0402d890c316c7f962dd, retain its gate summary, and record a successful required-check conclusion before marking JRN-004 COMPLETE."
+    "verified_commit": "68532b8d9ac9ef67e7241d4d47fbd0c4327fcdea",
+    "workflow_run_id": 30151924998,
+    "workflow_run_url": "https://github.com/jovi20/tradingnoobs/actions/runs/30151924998",
+    "workflow_run_conclusion": "success",
+    "job_id": 89663633330,
+    "job_url": "https://github.com/jovi20/tradingnoobs/actions/runs/30151924998/job/89663633330",
+    "job_conclusion": "success",
+    "artifact": {
+      "id": 8617918462,
+      "name": "jrn002-gate-summary",
+      "digest": "sha256:d8346bef3fbdc684459e0527f7f76d1c43e6f202da1534a0ca04914a20b39ba5",
+      "expired": false
+    },
+    "implementation_checkpoint_is_verified_commit_ancestor": true
+  },
+  "required_check_enforcement": {
+    "ruleset_id": 19728078,
+    "ruleset_name": "main-journal-baseline",
+    "ruleset_url": "https://github.com/jovi20/tradingnoobs/settings/rules/19728078",
+    "enforcement": "active",
+    "target_ref": "refs/heads/main",
+    "required_check": "journal-baseline",
+    "integration": "GitHub Actions",
+    "bypass_list": [],
+    "require_branches_to_be_up_to_date": false,
+    "dev_is_targeted": false
   },
   "excluded_existing_worktree_changes": [
     ".github/workflows/deploy.yml",
@@ -115,5 +139,5 @@
     "backend/requirements-dev.txt",
     "backend/routers/open_registration 2.py"
   ],
-  "next_task_gate": "PARTIALLY_SATISFIED: JRN-004 implementation is locally approved; JRN-005 contract and golden-vector work may begin, but JRN-006 accounting implementation and M0 release closure remain blocked on required remote CI evidence."
+  "next_task_gate": "SATISFIED: JRN-004 is closed; its remote-CI prerequisite for JRN-006 is satisfied."
 }

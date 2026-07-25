@@ -13,10 +13,9 @@
 - 当前仍是 `NOT_READY_FOR_PRODUCTION`，不得直接部署真实用户环境。
 - `JRN-000` 与 `JRN-001` 已完成。JRN-001 的最终 implementation checkpoint `1c382ce` 已通过精确归档全量、双视口浏览器、真实 PostgreSQL 16 验证，并取得同一 SHA 两路全新独立 `APPROVE`；六个更早 checkpoint 均已 supersede，完整历史见 checkpoint record。
 - `JRN-001` 不新增 Alembic revision，migration head 继续是 `9cad10111213`；其最终证据必须绑定稳定 scoped checkpoint。
-- `JRN-002` 最终 scoped checkpoint `876cda7` 已在无复用 venv/node_modules/npm cache 的精确 SHA 环境通过统一 gate 和本地评审；远端 workflow 与 required-check 证据尚未产生，因此仍不标记 `COMPLETE`。
-- `JRN-003` 最终 scoped checkpoint `cacf8c0` 已通过真实 PostgreSQL 16（含 migration downgrade/re-upgrade 与首次限流 bucket 并发竞争）、统一 gate 和本地评审；远端 workflow 与 required-check 证据尚未产生，因此仍不标记 `COMPLETE`。
-- `JRN-004` 最终 scoped checkpoint `575c67d` 已通过真实 PostgreSQL 16（含 owner-scoped idempotency migration、并发首次写入与 downgrade/re-upgrade）、477 项后端测试、160 项前端测试和本地评审；评审发现的 nested batch owner resolver 遗漏已修复。远端 workflow 与 required-check 证据尚未产生，因此仍不标记 `COMPLETE`。
-- `JRN-005` 最终 scoped checkpoint `2c0e8d0` 已冻结 `JOURNAL_ACCOUNTING_V1`、ADR、posting matrix、错误码和可执行 golden vectors，并通过 481 项后端测试、160 项前端测试与本地评审；当前 ledger 实现仍不符合该合同，属于 JRN-006，且远端 required-check 未关闭。
+- `JRN-002` 至 `JRN-005` 已完成：最终 scoped checkpoint `876cda7`、`cacf8c0`、`575c67d`、`2c0e8d0` 均为远端验证提交 `68532b8` 的祖先；GitHub Actions run `30151924998` 的 `journal-baseline` job `89663633330` 与 artifact `8617918462` 成功。
+- GitHub ruleset `main-journal-baseline`（ID `19728078`）为 `Active`，仅目标 `refs/heads/main`，要求 GitHub Actions `journal-baseline`；`dev` 不受该 ruleset 限制。
+- `JRN-005` 已冻结 `JOURNAL_ACCOUNTING_V1`、ADR、posting matrix、错误码和可执行 golden vectors；当前 ledger 实现仍不符合该合同，属于下一任务 `JRN-006`。
 - IBKR 文件的重复、重叠、增量导入与 correction replay 只在 `JRN-013` 至 `JRN-015` 实现，当前合同冻结不代表功能已落地。
 - 本轮不自动 merge 到 `main`、不创建 PR、不打 tag；这些属于后续显式操作。
 - 旧 P0-P19 阶段计划已归档到 [superpowers/plans/archive/](./superpowers/plans/archive/)。
@@ -27,13 +26,13 @@
 |--------|------|------|------|------|
 | P0 | `COMPLETE` | `JRN-000` WIP、migration chain 与 checkpoint | 已有逐路径 disposition 和 checkpoint；四个 migration 已进入 `9cad10111213` baseline；optional runtime 默认不可达。 | Active plan Step 0 |
 | P0 | `COMPLETE` | `JRN-001` release contract 与 capability ceiling | `1c382ce` 已通过完整验证、真实浏览器门禁与同 SHA 双路独立评审；合同及禁用边界已冻结。 | Active plan M0 |
-| P0 | `CHECKPOINT_LOCAL_REVIEW_PASS / REMOTE_CI_PENDING` | `JRN-002` 可复现基线与 PostgreSQL CI | `876cda7` 精确 SHA 干净重建、统一 gate 与本地评审已通过；待远端 workflow 和 required-check 证据关闭。 | Active plan M0 |
-| P0 | `CHECKPOINT_LOCAL_REVIEW_PASS / REMOTE_CI_PENDING` | `JRN-003` invite-only auth 与 release secret | `cacf8c0` 已通过精确 SHA 全量 gate 与本地评审；待远端 workflow 和 required-check 证据关闭。 | Active plan M0 |
-| P0 | `CHECKPOINT_LOCAL_REVIEW_PASS / REMOTE_CI_PENDING` | `JRN-004` tenant/owner 边界封闭 | `575c67d` 已通过精确 SHA 全量 gate 与本地评审；当前资源两用户矩阵、混合 owner graph、public/internal ID 和 legacy import deny-only 边界通过；待远端 workflow 和 required-check 证据关闭。 | Active plan M0 |
-| P0 | `CHECKPOINT_LOCAL_REVIEW_PASS / REMOTE_CI_PENDING` | `JRN-005` 会计 posting matrix 与 golden vectors | `2c0e8d0` 已冻结合同、逐事件矩阵、错误码、golden vectors 和脱敏存量扫描；待远端 workflow 和 required-check 证据关闭。 | Active plan M1 |
-| P0 | `BLOCKED_BY_JRN_004_005_REMOTE_CI` | `JRN-006` append-only ledger 与 journal balance 收敛 | 不得开始实现；必须先取得 JRN-004/005 closure，再以全部 JRN-005 vectors 作为验收 oracle。 | Active plan M1 |
+| P0 | `COMPLETE` | `JRN-002` 可复现基线与 PostgreSQL CI | `876cda7` 精确 SHA 干净重建、统一 gate、本地评审、远端 workflow、artifact 与 main required-check 证据均已关闭。 | Active plan M0 |
+| P0 | `COMPLETE` | `JRN-003` invite-only auth 与 release secret | `cacf8c0` 已通过精确 SHA 全量 gate、本地评审及共同远端验证提交 `68532b8` 的 required check。 | Active plan M0 |
+| P0 | `COMPLETE` | `JRN-004` tenant/owner 边界封闭 | `575c67d` 的两用户矩阵、混合 owner graph、public/internal ID 和 legacy import deny-only 边界已通过，并取得远端 CI 与 required-check 证据。 | Active plan M0 |
+| P0 | `COMPLETE` | `JRN-005` 会计 posting matrix 与 golden vectors | `2c0e8d0` 已冻结合同、逐事件矩阵、错误码、golden vectors 和脱敏存量扫描，并取得远端 CI 与 required-check 证据。 | Active plan M1 |
+| P0 | `READY_TO_START` | `JRN-006` append-only ledger 与 journal balance 收敛 | Remote-CI blocker 已解除；以全部 JRN-005 vectors 作为验收 oracle，实现 append-only、posting uniqueness、replay 和 balance 收敛。 | Active plan M1 |
 
-JRN-000/001 已完成；JRN-002/003/004/005 的本地 checkpoint 均已通过，但远端 CI/required-check 证据仍未产生。JRN-006 明确等待 JRN-004/005 closure，当前不继续会计实现。source-bound IBKR 实现仍严格等待 JRN-013 至 JRN-015。不得提前做新页面、模型拆分、在线 Broker Sync、Market、AI 或量化功能。
+JRN-000 至 JRN-005 已完成。JRN-006 的 remote-CI blocker 已解除，成为下一开发任务；产品整体仍为 `NOT_READY_FOR_PRODUCTION`。source-bound IBKR 实现仍严格等待 JRN-013 至 JRN-015。不得提前做新页面、模型拆分、在线 Broker Sync、Market、AI 或量化功能。
 
 ## 暂不做
 

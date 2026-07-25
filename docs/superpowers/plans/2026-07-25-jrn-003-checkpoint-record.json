@@ -3,9 +3,9 @@
   "record_kind": "JRN_TASK_CHECKPOINT",
   "task_id": "JRN-003",
   "branch": "dev",
-  "status": "CHECKPOINT_LOCAL_REVIEW_PASS_REMOTE_CI_PENDING",
+  "status": "COMPLETE",
   "release_status": "NOT_READY_FOR_PRODUCTION",
-  "recorded_at": "2026-07-25T14:43:54+08:00",
+  "recorded_at": "2026-07-25T17:27:25+08:00",
   "implementation_base_commit": "0b588b9ae23393d0956d543dd5c29166a0e6dbf0",
   "implementation_checkpoint_commit": "cacf8c049cf5966c724e725183aafae97ceba531",
   "implementation_commits": [
@@ -107,7 +107,7 @@
   ],
   "review": {
     "reviewed_at": "2026-07-25T14:43:54+08:00",
-    "disposition": "LOCAL_APPROVE_WITH_REMOTE_CI_BLOCKER",
+    "disposition": "APPROVE_REMOTE_CI_AND_REQUIRED_CHECK_CLOSED",
     "blocking_findings_after_fix": [],
     "fixed_findings": [
       {
@@ -122,17 +122,41 @@
       }
     ],
     "residual_risks": [
-      "GitHub Actions has not run for this checkpoint, so remote CI and required-check evidence remain unproven.",
       "Security audit immutability is enforced by the absence of mutation APIs and normal application ownership, not by a database trigger or append-only database role.",
       "Rate-limit bucket retention and cleanup are operational lifecycle work still to be specified before production release.",
       "Existing Python, Alembic, Starlette, Browserslist, and Node module-type warnings remain non-blocking technical debt."
     ]
   },
   "remote_ci": {
-    "status": "NOT_RUN",
+    "status": "PASS",
     "required_workflow": ".github/workflows/journal-baseline.yml",
     "required_job": "journal-baseline",
-    "closure_condition": "Run the workflow for commit cacf8c049cf5966c724e725183aafae97ceba531, retain its gate summary, and record a successful required-check conclusion before marking JRN-003 COMPLETE."
+    "verified_commit": "68532b8d9ac9ef67e7241d4d47fbd0c4327fcdea",
+    "workflow_run_id": 30151924998,
+    "workflow_run_url": "https://github.com/jovi20/tradingnoobs/actions/runs/30151924998",
+    "workflow_run_conclusion": "success",
+    "job_id": 89663633330,
+    "job_url": "https://github.com/jovi20/tradingnoobs/actions/runs/30151924998/job/89663633330",
+    "job_conclusion": "success",
+    "artifact": {
+      "id": 8617918462,
+      "name": "jrn002-gate-summary",
+      "digest": "sha256:d8346bef3fbdc684459e0527f7f76d1c43e6f202da1534a0ca04914a20b39ba5",
+      "expired": false
+    },
+    "implementation_checkpoint_is_verified_commit_ancestor": true
+  },
+  "required_check_enforcement": {
+    "ruleset_id": 19728078,
+    "ruleset_name": "main-journal-baseline",
+    "ruleset_url": "https://github.com/jovi20/tradingnoobs/settings/rules/19728078",
+    "enforcement": "active",
+    "target_ref": "refs/heads/main",
+    "required_check": "journal-baseline",
+    "integration": "GitHub Actions",
+    "bypass_list": [],
+    "require_branches_to_be_up_to_date": false,
+    "dev_is_targeted": false
   },
   "excluded_existing_worktree_changes": [
     ".github/workflows/deploy.yml",
@@ -146,5 +170,5 @@
     "backend/requirements-dev.txt",
     "backend/routers/open_registration 2.py"
   ],
-  "next_task_gate": "PARTIALLY_SATISFIED: JRN-003 implementation is locally approved; JRN-004 may be prepared locally but release closure remains gated on remote CI evidence for JRN-002 and JRN-003."
+  "next_task_gate": "SATISFIED: JRN-003 remote CI and main required-check evidence are recorded."
 }

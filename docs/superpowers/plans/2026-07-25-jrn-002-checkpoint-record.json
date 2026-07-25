@@ -3,9 +3,9 @@
   "record_kind": "JRN_TASK_CHECKPOINT",
   "task_id": "JRN-002",
   "branch": "dev",
-  "status": "CHECKPOINT_LOCAL_REVIEW_PASS_REMOTE_CI_PENDING",
+  "status": "COMPLETE",
   "release_status": "NOT_READY_FOR_PRODUCTION",
-  "recorded_at": "2026-07-25T13:09:33+08:00",
+  "recorded_at": "2026-07-25T17:27:25+08:00",
   "implementation_base_commit": "6a0e1ed85b4b65a69f87e497eaff0a22dd784340",
   "implementation_checkpoint_commit": "876cda7a004434f12779f19a5b329df4a311dc88",
   "implementation_commits": [
@@ -113,7 +113,7 @@
   ],
   "review": {
     "reviewed_at": "2026-07-25T13:09:33+08:00",
-    "disposition": "LOCAL_APPROVE_WITH_REMOTE_CI_BLOCKER",
+    "disposition": "APPROVE_REMOTE_CI_AND_REQUIRED_CHECK_CLOSED",
     "blocking_findings_after_fix": [],
     "fixed_findings": [
       {
@@ -128,17 +128,40 @@
       }
     ],
     "residual_risks": [
-      "GitHub Actions has not run for this checkpoint, so the mandatory remote CI condition is unproven.",
       "Full npm audit still reports high-severity development-only brace-expansion/minimatch paths under eslint-config-next plugins. Production audit is zero; forcing brace-expansion 5 breaks Minimatch 3, and current compatible plugin releases have not removed that upstream chain.",
-      "Existing Python and Node module-type deprecation warnings remain non-blocking technical debt.",
-      "Repository branch protection and required-check configuration are external GitHub settings and are not proven by the committed workflow alone."
+      "Existing Python and Node module-type deprecation warnings remain non-blocking technical debt."
     ]
   },
   "remote_ci": {
-    "status": "NOT_RUN",
+    "status": "PASS",
     "required_workflow": ".github/workflows/journal-baseline.yml",
     "required_job": "journal-baseline",
-    "closure_condition": "Run the workflow for commit 876cda7a004434f12779f19a5b329df4a311dc88, retain the uploaded gate summary, verify the required-check setting, and record a successful conclusion before marking JRN-002 COMPLETE."
+    "verified_commit": "68532b8d9ac9ef67e7241d4d47fbd0c4327fcdea",
+    "workflow_run_id": 30151924998,
+    "workflow_run_url": "https://github.com/jovi20/tradingnoobs/actions/runs/30151924998",
+    "workflow_run_conclusion": "success",
+    "job_id": 89663633330,
+    "job_url": "https://github.com/jovi20/tradingnoobs/actions/runs/30151924998/job/89663633330",
+    "job_conclusion": "success",
+    "artifact": {
+      "id": 8617918462,
+      "name": "jrn002-gate-summary",
+      "digest": "sha256:d8346bef3fbdc684459e0527f7f76d1c43e6f202da1534a0ca04914a20b39ba5",
+      "expired": false
+    },
+    "implementation_checkpoint_is_verified_commit_ancestor": true
   },
-  "next_task_gate": "NOT_SATISFIED: JRN-002 remains open until remote CI and required-check evidence are recorded."
+  "required_check_enforcement": {
+    "ruleset_id": 19728078,
+    "ruleset_name": "main-journal-baseline",
+    "ruleset_url": "https://github.com/jovi20/tradingnoobs/settings/rules/19728078",
+    "enforcement": "active",
+    "target_ref": "refs/heads/main",
+    "required_check": "journal-baseline",
+    "integration": "GitHub Actions",
+    "bypass_list": [],
+    "require_branches_to_be_up_to_date": false,
+    "dev_is_targeted": false
+  },
+  "next_task_gate": "SATISFIED: JRN-002 remote CI and main required-check evidence are recorded."
 }
