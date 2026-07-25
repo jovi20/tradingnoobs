@@ -11,14 +11,6 @@ from sqlalchemy.orm import Session
 from app_config.ibkr_flex_provider_evidence import (
     VerifiedIbkrFlexProviderContract,
 )
-from app_config.release_contract import (
-    ReleaseContractViolation,
-    require_allowed_asset_type,
-    require_allowed_instrument_type,
-    require_allowed_market,
-    require_exchange_code,
-    require_normalized_symbol,
-)
 from models import (
     ExternalExecution,
     ExternalSourceObservation,
@@ -39,6 +31,11 @@ from services.ibkr_flex_parser import (
     NormalizedIbkrFlexEvent,
     ParsedIbkrFlexStatement,
     SOURCE_FINGERPRINT_VERSION,
+)
+from services.ibkr_flex_identity_service import (
+    IbkrFlexIdentityError,
+    derive_ibkr_instrument_identity,
+    ibkr_group_key,
 )
 from services.source_reconciliation_service import (
     NONTERMINAL_CASE_STATES,
@@ -68,13 +65,6 @@ CONFLICT_CLASSIFICATIONS = frozenset(
         "UNSUPPORTED_CROSS_ZERO",
     }
 )
-ASSET_CATEGORY_IDENTITY = {
-    "STK": ("STOCK", "US", "SPOT"),
-    "ETF": ("FUND", "US", "SPOT"),
-    "CRYPTO": ("CRYPTO", "CRYPTO", "SPOT"),
-}
-
-
 class IbkrFlexPreviewError(ValueError):
     def __init__(self, code: str, message: str, *, http_status: int = 422):
         self.code = code
@@ -130,26 +120,9 @@ def _as_utc(value: datetime) -> datetime:
 
 
 def _instrument_identity(event: NormalizedIbkrFlexEvent) -> dict[str, str]:
-    mapped = ASSET_CATEGORY_IDENTITY.get(event.asset_category)
-    if mapped is None:
-        raise IbkrFlexPreviewError(
-            "UNSUPPORTED_ASSET_TYPE",
-            f"Unsupported IBKR asset category: {event.asset_category}",
-        )
-    asset_type, market, instrument_type = mapped
     try:
-        return {
-            "asset_type": require_allowed_asset_type(asset_type),
-            "market": require_allowed_market(market),
-            "exchange_code": require_exchange_code(event.exchange),
-            "normalized_symbol": require_normalized_symbol(event.symbol),
-            "instrument_type": require_allowed_instrument_type(
-                instrument_type
-            ),
-            "quote_currency": event.currency,
-            "provider_conid": event.conid,
-        }
-    except ReleaseContractViolation as exc:
+        return derive_ibkr_instrument_identity(event)
+    except IbkrFlexIdentityError as exc:
         raise IbkrFlexPreviewError(exc.code, str(exc)) from exc
 
 
@@ -157,15 +130,7 @@ def _group_key(
     identity: dict[str, str],
     direction: str,
 ) -> tuple[str, ...]:
-    return (
-        identity["asset_type"],
-        identity["market"],
-        identity["exchange_code"],
-        identity["normalized_symbol"],
-        identity["instrument_type"],
-        identity["quote_currency"],
-        direction,
-    )
+    return ibkr_group_key(identity, direction)
 
 
 def _event_order_key(
