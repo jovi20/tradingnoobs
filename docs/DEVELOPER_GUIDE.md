@@ -15,7 +15,7 @@
 - `BROKER_SYNC`、`MARKET`、`AI_INSIGHTS`、`PDF_EXPORT`、`RISK_CARDS` 和 `OPEN_REGISTRATION` 当前均为 `DISABLED / DEFERRED`。对应 API、导航、设置、凭据写入和 job/outbox producer 不属于 JOURNAL Beta 可用面。
 - 可选能力必须同时满足外部 deployment allowlist 和数据库 runtime rollout；缺失部署 allowlist 时 ceiling 为空。数据库配置不能扩大 ceiling。
 - JOURNAL Beta 不执行 Broker 网络同步，不读取或要求 Broker、行情或 LLM 凭据。
-- `IBKR_FLEX_XML_V1` 是 `JRN-013` 至 `JRN-015` 计划实现的本地文件 adapter，不是在线 Broker Sync；重复、重叠、增量确认和 correction replay 截至本次更新均未实现或开放。
+- `IBKR_FLEX_XML_V1` 是 `JRN-013` 至 `JRN-015` 的本地文件 adapter，不是在线 Broker Sync。JRN-013 的 source schema、安全 parser、provider-evidence gate、preview 与上传编排已有内部实现，但 evidence manifest 仍为 `UNVERIFIED`、公开入口未开放；canonical 增量确认和 correction replay 仍等待 JRN-014/015。
 - `GENERIC_BOOTSTRAP` 已完成 JRN-011/012 upload、preview 和一次性 canonical confirm：模板、owner-bound 持久 session、CSV/XLSX 校验、24 小时 TTL、30 天 row cleanup、逐行选择、完整 lifecycle-prefix validation、永久 confirm 幂等与单事务 replay 已开放。Preview 不写 position/event/ledger；非空 confirm 只接受 eligible `CLEAN` 账户并原子转为 `MANUAL`。
 - `OPEN_REGISTRATION` 继续关闭；`/register` 与 `/api/auth/register` 只承担 invite-only onboarding。管理员创建一次性、限时、哈希存储且受审计的邀请码，注册必须提交有效 IANA 时区。两者不能被解释为开放注册。
 
@@ -148,7 +148,7 @@ Owner/tenant 边界遵循同一合同：普通 API 对非当前用户的 public 
 | 异步任务 | `基础已落地` | Job model、outbox relay、worker CLI、business lock、owner-scoped idempotency、admin jobs UI/API 已落地。 |
 | 管理员运维 | `P17 已落地` | `/api/admin/ops/backups`、管理员晋升、密码重置、stale/failed job recovery metadata、force-cancel typed confirmation 和 `/admin/ops` 控制台已完成；PostgreSQL backup provider 未配置时返回 `409 BACKUP_PROVIDER_NOT_CONFIGURED`。 |
 | 市场数据 | `代码已 checkpoint / Beta hard-off` | JRN-000 已记录 optional-code disposition；类型化 provider registry、报价/日线、mapping、水位、job handlers 与前端 freshness 代码存在不表示已发布。交易日志 Beta 由 capability boundary 关闭 route/secret/job/UI。 |
-| Broker 同步 | `Beta hard-off` | 在线同步、网络访问、Token/credential 保存和后台 sync job 均关闭。`IBKR_FLEX_XML_V1` 仅是 `JRN-013` 至 `JRN-015` 计划中的本地文件 adapter，目前未实现。 |
+| Broker 同步 | `Beta hard-off` | 在线同步、网络访问、Token/credential 保存和后台 sync job 均关闭。`IBKR_FLEX_XML_V1` 仅有 JRN-013 内部 preview 基础，因 provider evidence 未验证且 JRN-014/015 未完成而不可用。 |
 | 风控预警 | `代码存在 / Beta hard-off` | 历史 P13 risk card 代码不属于 JOURNAL Beta 可用面；相关 API、Dashboard/Timeline 卡片和后台 producer 必须关闭。 |
 | PDF 导出 | `代码存在 / Beta hard-off` | 历史 P14 renderer、接口、按钮和 runbook 仅作为 deferred evidence；JOURNAL Beta 不开放 PDF 下载。 |
 

@@ -22,7 +22,7 @@
 - `JRN-010` 已完成。implementation checkpoint `5cdf55e` 已通过 514 个后端测试、162 个前端测试、完整本地统一 gate 与 GitHub Actions run `30159669100`、job `89682822970`、artifact `8619959551`；migration head 为 `f6a7b8c9d0e1`。
 - `JRN-011` 已完成。implementation checkpoint `c235e03` 已通过 531 个后端测试、164 个前端测试、真实 CSV 双视口浏览器验收、完整本地统一 gate 与 GitHub Actions run `30162055891`、job `89688870542`、artifact `8620551325`；migration head 为 `a7b8c9d0e1f2`，generic confirm 仍严格关闭。
 - `JRN-012` 已完成。implementation checkpoint `b7907b4` 已通过 539 个后端测试、165 个前端测试、真实三行 CSV 双视口 confirm 验收、完整本地统一 gate 与 GitHub Actions run `30164943748`、job `89696243794`、artifact `8621327988`；migration head 为 `b8c9d0e1f2a3`，generic bootstrap confirm 已按一次性账户资格合同开放。
-- IBKR 文件的重复、重叠、增量导入与 correction replay 只在 `JRN-013` 至 `JRN-015` 实现，当前合同冻结不代表功能已落地。
+- `JRN-013` 已在进度 checkpoint `0188077` 完成大部分 source schema、安全 parser、evidence gate、preview 与上传编排内部实现；默认 evidence manifest 仍为 `UNVERIFIED`，公开 route 保持关闭，任务不能关闭。重复、重叠文件的 canonical 增量确认与 correction replay 仍分别属于 `JRN-014/015`。
 - 本轮不自动 merge 到 `main`、不创建 PR、不打 tag；这些属于后续显式操作。
 - 旧 P0-P19 阶段计划已归档到 [superpowers/plans/archive/](./superpowers/plans/archive/)。
 
@@ -44,7 +44,7 @@
 | P0 | `COMPLETE` | `JRN-011` 持久化通用 Import upload/preview session | `c235e03` 已交付 owner-bound 持久 session/row、永久上传幂等、CSV/XLSX 预览、TTL/清理、账户归档语义和响应式 UI，并由远端 run `30162055891` 闭环。 | Active plan M1 |
 | P0 | `COMPLETE` | `JRN-012` 通用 bootstrap Import confirm 与 canonical replay | `b7907b4` 已交付账户锁内 eligibility 复验、永久 confirm 幂等、稳定分组 lifecycle replay、单事务 canonical/ledger 写入、原子回滚和响应式选择确认 UI，并由远端 run `30164943748` 闭环。 | Active plan M1 |
 
-JRN-000 至 JRN-012 已完成，下一开发任务为 JRN-013；产品整体仍为 `NOT_READY_FOR_PRODUCTION`。source-bound IBKR 实现仍严格等待 JRN-013 至 JRN-015。不得提前做新页面、模型拆分、在线 Broker Sync、Market、AI 或量化功能。
+JRN-000 至 JRN-012 已完成。当前开发任务仍为 JRN-013：先取得冻结 Flex Query 模板、官方逐语义合同和同模板脱敏真实 fixtures，补全 provider-evidence gate，再跑完整 checkpoint/CI/独立评审；详见 [JRN-013 进度与设计评审](./superpowers/plans/2026-07-26-jrn-013-progress-review.md)。证据不足时不得开放 adapter 或进入 JRN-014。产品整体仍为 `NOT_READY_FOR_PRODUCTION`；不得提前做新页面、模型拆分、在线 Broker Sync、Market、AI 或量化功能。
 
 ## 暂不做
 

@@ -8,7 +8,7 @@ Next.js 前端，负责交易工作台、Timeline、Dashboard、仓位生命周�
 
 当前 Beta 默认关闭 Broker network sync、Market、AI/Insights、PDF export、risk cards 和 open registration。对应 optional 页面或组件即使仍存在于源码中，也必须从导航和普通设置中移除，并在直接访问时 fail-closed；不要把代码存在描述为用户可用能力。`/register` 仅提供一次性、限时邀请码 onboarding，不是开放注册；注册必须明确选择有效 IANA 时区。
 
-`IBKR_FLEX_XML_V1` 是 `JRN-013` 至 `JRN-015` 计划中的本地文件导入 adapter，目前尚未实现。前端当前不得展示 Broker Token/Query ID 配置、网络同步按钮或“已连接”状态。
+`IBKR_FLEX_XML_V1` 是 `JRN-013` 至 `JRN-015` 的本地文件导入 adapter。后端已有 JRN-013 内部 preview 基础，但 provider evidence 尚未验证且公开入口保持关闭。前端当前不得展示该导入入口、Broker Token/Query ID 配置、网络同步按钮或“已连接”状态。
 
 `/positions/import` 已接入 JRN-011/012 owner-bound 持久 upload/preview 与一次性 canonical confirm，显示 normalization、逐行错误/warning、session expiry、有效行选择和写入计数。Preview 不描述为已入账；只有成功 confirm 产生 canonical facts。
 
