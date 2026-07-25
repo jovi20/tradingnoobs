@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "contract_id": "JOURNAL_ACCOUNTING_V1",
+  "generated_at": "2026-07-25T15:20:00+08:00",
+  "scanner": "scripts/scan_jrn005_accounting_data.py",
+  "privacy": "AGGREGATE_COUNTS_ONLY_NO_IDS_NO_AMOUNTS",
+  "disposition": "INVENTORY_ONLY_NO_DATA_MUTATION",
+  "samples": [
+    {
+      "path": "backend/tradingnoobs.db",
+      "status": "SCANNED",
+      "accounts": 1,
+      "non_usd_accounts": 0,
+      "trade_events": 3,
+      "non_usd_trade_events": 0,
+      "trade_events_with_fee": 0,
+      "negative_trade_fees": 0,
+      "missing_dedicated_trade_fee_postings": 0,
+      "close_events": 1,
+      "missing_realized_pnl_postings": 0,
+      "realized_postings_not_gross": 0,
+      "non_usd_ledger_rows": 0,
+      "non_usd_transactions": 0
+    },
+    {
+      "path": "tradingnoobs.db",
+      "status": "SCANNED",
+      "accounts": 0,
+      "non_usd_accounts": 0,
+      "trade_events": 0,
+      "non_usd_trade_events": 0,
+      "trade_events_with_fee": 0,
+      "negative_trade_fees": 0,
+      "missing_dedicated_trade_fee_postings": 0,
+      "close_events": 0,
+      "missing_realized_pnl_postings": 0,
+      "realized_postings_not_gross": 0,
+      "non_usd_ledger_rows": 0,
+      "non_usd_transactions": 0
+    },
+    {
+      "path": "backend/backend/backups/sqlite-20260715T121930964204Z.db",
+      "status": "SCANNED",
+      "accounts": 1,
+      "non_usd_accounts": 0,
+      "trade_events": 3,
+      "non_usd_trade_events": 0,
+      "trade_events_with_fee": 0,
+      "negative_trade_fees": 0,
+      "missing_dedicated_trade_fee_postings": 0,
+      "close_events": 1,
+      "missing_realized_pnl_postings": 0,
+      "realized_postings_not_gross": 0,
+      "non_usd_ledger_rows": 0,
+      "non_usd_transactions": 0
+    }
+  ],
+  "conclusions": [
+    "The discovered samples contain no non-USD release-scope rows.",
+    "The nonempty current sample and backup contain no nonzero trade fee, so existing data cannot validate fee sign, allocation, or dedicated fee posting behavior.",
+    "The sampled realized posting matches the stored realized gross value, but one row is not sufficient evidence for FIFO, partial-close, rounding, reversal, or hedge semantics.",
+    "No row was changed or silently repaired. JRN-006 migration/backfill must rerun this scanner against the deployment database and quarantine any divergence."
+  ]
+}

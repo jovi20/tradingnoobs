@@ -1,0 +1,157 @@
+{
+  "schema_version": 1,
+  "contract_id": "JOURNAL_ACCOUNTING_V1",
+  "currency": "USD",
+  "trade_vectors": [
+    {
+      "id": "long_fifo_multi_add_partial_close_remainder",
+      "side": "LONG",
+      "opening_balance": "100.00000000",
+      "events": [
+        {"id": "e1", "type": "OPEN", "quantity": "3", "price": "10", "fee": "1"},
+        {"id": "e2", "type": "ADD", "quantity": "2", "price": "12", "fee": "0.5"},
+        {"id": "e3", "type": "REDUCE", "quantity": "1", "price": "15", "fee": "0.2"},
+        {"id": "e4", "type": "REDUCE", "quantity": "3", "price": "11", "fee": "0.3"},
+        {"id": "e5", "type": "CLOSE", "quantity": "1", "price": "13", "fee": "0.1"}
+      ],
+      "expected_events": [
+        {"id": "e1", "realized_gross": "0.00000000", "consumed_open_fee": "0.00000000", "realized_net": "0.00000000"},
+        {"id": "e2", "realized_gross": "0.00000000", "consumed_open_fee": "0.00000000", "realized_net": "0.00000000"},
+        {"id": "e3", "realized_gross": "5.00000000", "consumed_open_fee": "0.33333333", "realized_net": "4.46666667"},
+        {"id": "e4", "realized_gross": "1.00000000", "consumed_open_fee": "0.91666667", "realized_net": "-0.21666667"},
+        {"id": "e5", "realized_gross": "1.00000000", "consumed_open_fee": "0.25000000", "realized_net": "0.65000000"}
+      ],
+      "expected_postings": [
+        {"source": "e1", "kind": "TRADE_FEE", "amount": "-1.00000000"},
+        {"source": "e2", "kind": "TRADE_FEE", "amount": "-0.50000000"},
+        {"source": "e3", "kind": "REALIZED_GROSS", "amount": "5.00000000"},
+        {"source": "e3", "kind": "TRADE_FEE", "amount": "-0.20000000"},
+        {"source": "e4", "kind": "REALIZED_GROSS", "amount": "1.00000000"},
+        {"source": "e4", "kind": "TRADE_FEE", "amount": "-0.30000000"},
+        {"source": "e5", "kind": "REALIZED_GROSS", "amount": "1.00000000"},
+        {"source": "e5", "kind": "TRADE_FEE", "amount": "-0.10000000"}
+      ],
+      "expected_summary": {
+        "quantity_opened": "5.00000000",
+        "quantity_closed": "5.00000000",
+        "open_quantity": "0.00000000",
+        "realized_gross": "7.00000000",
+        "realized_net": "4.90000000",
+        "total_fees": "2.10000000",
+        "journal_balance": "104.90000000"
+      }
+    },
+    {
+      "id": "short_fifo_direction",
+      "side": "SHORT",
+      "opening_balance": "0.00000000",
+      "events": [
+        {"id": "s1", "type": "OPEN", "quantity": "2", "price": "100", "fee": "0.4"},
+        {"id": "s2", "type": "CLOSE", "quantity": "2", "price": "80", "fee": "0.2"}
+      ],
+      "expected_events": [
+        {"id": "s1", "realized_gross": "0.00000000", "consumed_open_fee": "0.00000000", "realized_net": "0.00000000"},
+        {"id": "s2", "realized_gross": "40.00000000", "consumed_open_fee": "0.40000000", "realized_net": "39.40000000"}
+      ],
+      "expected_postings": [
+        {"source": "s1", "kind": "TRADE_FEE", "amount": "-0.40000000"},
+        {"source": "s2", "kind": "REALIZED_GROSS", "amount": "40.00000000"},
+        {"source": "s2", "kind": "TRADE_FEE", "amount": "-0.20000000"}
+      ],
+      "expected_summary": {
+        "quantity_opened": "2.00000000",
+        "quantity_closed": "2.00000000",
+        "open_quantity": "0.00000000",
+        "realized_gross": "40.00000000",
+        "realized_net": "39.40000000",
+        "total_fees": "0.60000000",
+        "journal_balance": "39.40000000"
+      }
+    },
+    {
+      "id": "half_even_posting_boundary",
+      "side": "LONG",
+      "opening_balance": "0.00000000",
+      "events": [
+        {"id": "r1", "type": "OPEN", "quantity": "0.5", "price": "1.00000000", "fee": "0.000000015"},
+        {"id": "r2", "type": "CLOSE", "quantity": "0.5", "price": "1.00000001", "fee": "0"}
+      ],
+      "expected_events": [
+        {"id": "r1", "realized_gross": "0.00000000", "consumed_open_fee": "0.00000000", "realized_net": "0.00000000"},
+        {"id": "r2", "realized_gross": "0.00000000", "consumed_open_fee": "0.00000002", "realized_net": "-0.00000002"}
+      ],
+      "expected_postings": [
+        {"source": "r1", "kind": "TRADE_FEE", "amount": "-0.00000002"},
+        {"source": "r2", "kind": "REALIZED_GROSS", "amount": "0.00000000"}
+      ],
+      "expected_summary": {
+        "quantity_opened": "0.50000000",
+        "quantity_closed": "0.50000000",
+        "open_quantity": "0.00000000",
+        "realized_gross": "0.00000000",
+        "realized_net": "-0.00000002",
+        "total_fees": "0.00000002",
+        "journal_balance": "-0.00000002"
+      }
+    }
+  ],
+  "cash_vector": {
+    "opening_balance": "1000.00000000",
+    "facts": [
+      {"id": "c1", "kind": "DEPOSIT", "magnitude": "100", "posting": "100.00000000"},
+      {"id": "c2", "kind": "WITHDRAWAL", "magnitude": "30", "posting": "-30.00000000"},
+      {"id": "c3", "kind": "INTEREST", "magnitude": "2", "posting": "2.00000000"},
+      {"id": "c4", "kind": "ACCOUNT_FEE", "magnitude": "3", "posting": "-3.00000000"},
+      {"id": "c5", "kind": "CASH_DIVIDEND_RECEIVED", "magnitude": "5", "posting": "5.00000000"}
+    ],
+    "expected_journal_balance": "1074.00000000"
+  },
+  "reversal_vector": {
+    "original_postings": [
+      {"source": "deposit-1", "kind": "DEPOSIT", "amount": "100.00000000"},
+      {"source": "open-1", "kind": "TRADE_FEE", "amount": "-1.00000000"},
+      {"source": "close-1", "kind": "REALIZED_GROSS", "amount": "10.00000000"},
+      {"source": "close-1", "kind": "TRADE_FEE", "amount": "-0.50000000"}
+    ],
+    "reversal_postings": [
+      {"source": "reverse-deposit-1", "kind": "DEPOSIT", "amount": "-100.00000000", "reverses": "deposit-1"},
+      {"source": "reverse-open-1", "kind": "TRADE_FEE", "amount": "1.00000000", "reverses": "open-1"},
+      {"source": "reverse-close-1", "kind": "REALIZED_GROSS", "amount": "-10.00000000", "reverses": "close-1"},
+      {"source": "reverse-close-1", "kind": "TRADE_FEE", "amount": "0.50000000", "reverses": "close-1"}
+    ],
+    "expected_net_effect": "0.00000000"
+  },
+  "hedge_vector": {
+    "account": "account-1",
+    "instrument": "instrument-1",
+    "positions": [
+      {"id": "long-1", "side": "LONG", "gross": "10.00000000", "fees": "1.00000000", "net": "9.00000000"},
+      {"id": "short-1", "side": "SHORT", "gross": "6.00000000", "fees": "0.50000000", "net": "5.50000000"}
+    ],
+    "expected_position_count": 2,
+    "cross_side_netting": false,
+    "expected_journal_balance_effect": "14.50000000"
+  },
+  "ibkr_commission_vectors": [
+    {"raw": "-1.25", "currency": "USD", "expected_fee": "1.25000000"},
+    {"raw": "1.25", "currency": "USD", "expected_fee": "1.25000000"},
+    {"raw": "0", "currency": "USD", "expected_fee": "0.00000000"}
+  ],
+  "ordering_vector": {
+    "same_event_time_utc": "2026-07-25T09:30:00Z",
+    "input": [
+      {"id": "o3", "sequence_no": 3},
+      {"id": "o1", "sequence_no": 1},
+      {"id": "o2", "sequence_no": 2}
+    ],
+    "expected": ["o1", "o2", "o3"]
+  },
+  "rejections": [
+    {"id": "negative_manual_fee", "code": "INVALID_FEE_AMOUNT", "status": 422},
+    {"id": "multiple_fee_components", "code": "MULTIPLE_FEE_COMPONENTS_UNSUPPORTED", "status": 422},
+    {"id": "foreign_fee_currency", "code": "FEE_CURRENCY_MISMATCH", "status": 422},
+    {"id": "close_more_than_open", "code": "POSITION_QUANTITY_EXCEEDED", "status": 422},
+    {"id": "manual_backdate", "code": "EVENT_CHRONOLOGY_VIOLATION", "status": 422},
+    {"id": "ambiguous_source_order", "code": "UNSUPPORTED_ORDER_CONFLICT", "status": 422}
+  ]
+}

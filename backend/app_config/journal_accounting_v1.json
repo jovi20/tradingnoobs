@@ -1,0 +1,84 @@
+{
+  "contract_id": "JOURNAL_ACCOUNTING_V1",
+  "status": "FROZEN_CONTRACT_ONLY",
+  "implementation_task": "JRN-006",
+  "golden_vectors": "backend/tests/fixtures/jrn005_accounting_golden_vectors_v1.json",
+  "precision": {
+    "numeric": "DECIMAL_ONLY",
+    "posting_storage": "NUMERIC(20,8)",
+    "posting_quantum": "0.00000001",
+    "rounding": "ROUND_HALF_EVEN",
+    "intermediate_quantization": false
+  },
+  "ordering": {
+    "position_event_key": ["event_time_utc", "sequence_no"],
+    "sequence_scope": "POSITION",
+    "sequence_allocation": "MONOTONIC_UNDER_POSITION_ROW_LOCK",
+    "manual_backdate": false,
+    "import_tie_break": "ORIGINAL_ROW_NUMBER"
+  },
+  "fees": {
+    "max_components_per_trade_event": 1,
+    "manual_input": "NON_NEGATIVE_AGGREGATED_MAGNITUDE",
+    "posting_kind": "TRADE_FEE",
+    "posting_sign": "NEGATIVE",
+    "zero_posting": "OMIT",
+    "opening_allocation": "FIFO_QUANTITY_PRO_RATA",
+    "allocation_quantum": "0.00000001",
+    "allocation_rounding": "ROUND_HALF_EVEN",
+    "last_lot_consumption": "TAKES_REMAINDER",
+    "ibkr_commission_normalization": "ABS_NONZERO_COMMISSION_AS_COST",
+    "ibkr_enablement_requires_provider_evidence": true,
+    "currency_must_equal_account_currency": true
+  },
+  "postings": {
+    "unique_key": ["source_fact_public_id", "posting_kind"],
+    "trade": {
+      "OPEN": ["TRADE_FEE_IF_NONZERO"],
+      "ADD": ["TRADE_FEE_IF_NONZERO"],
+      "REDUCE": ["REALIZED_GROSS", "TRADE_FEE_IF_NONZERO"],
+      "CLOSE": ["REALIZED_GROSS", "TRADE_FEE_IF_NONZERO"]
+    },
+    "cash": {
+      "OPENING_BALANCE": "POSITIVE_MAGNITUDE",
+      "DEPOSIT": "POSITIVE_MAGNITUDE",
+      "WITHDRAWAL": "NEGATIVE_MAGNITUDE",
+      "INTEREST": "POSITIVE_MAGNITUDE",
+      "ACCOUNT_FEE": "NEGATIVE_MAGNITUDE",
+      "CASH_DIVIDEND_RECEIVED": "POSITIVE_MAGNITUDE",
+      "CASH_DIVIDEND_PAID_IN_LIEU": "NEGATIVE_MAGNITUDE"
+    },
+    "realized_gross_zero_posting": "EMIT",
+    "reversal": "EXACT_NEGATION_PER_ORIGINAL_POSTING",
+    "replay": "RETURN_EXISTING_IDENTICAL_POSTING_OR_FAIL_CONFLICT",
+    "realized_net_is_ledger_posting": false
+  },
+  "position_attribution": {
+    "realized_net": "REALIZED_GROSS_MINUS_CLOSE_FEE_MINUS_CONSUMED_OPEN_FEE",
+    "unconsumed_open_fee": "REMAINS_WITH_FIFO_LOT",
+    "hedge_mode": "HEDGE_BY_DIRECTION",
+    "cross_side_netting": false
+  },
+  "journal_balance": [
+    "OPENING_BALANCE",
+    "DEPOSIT",
+    "WITHDRAWAL",
+    "INTEREST",
+    "CASH_DIVIDEND",
+    "REALIZED_GROSS",
+    "TRADE_FEE",
+    "ACCOUNT_FEE",
+    "COMPENSATING_REVERSAL"
+  ],
+  "errors": {
+    "INVALID_FEE_AMOUNT": 422,
+    "MULTIPLE_FEE_COMPONENTS_UNSUPPORTED": 422,
+    "FEE_CURRENCY_MISMATCH": 422,
+    "NON_POSITIVE_QUANTITY": 422,
+    "NON_POSITIVE_PRICE": 422,
+    "POSITION_QUANTITY_EXCEEDED": 422,
+    "EVENT_CHRONOLOGY_VIOLATION": 422,
+    "UNSUPPORTED_ORDER_CONFLICT": 422,
+    "POSTING_FACT_CONFLICT": 409
+  }
+}
