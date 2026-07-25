@@ -1,0 +1,43 @@
+Source title: Trades - Flex Statement - Documentation
+Source URL: https://www.ibkrguides.com/reportingreference/reportguide/tradesfq.htm
+Retrieved at: 2026-07-26
+Page last updated: December 8, 2025
+
+Locator: Main content, "Trades" introduction
+
+The trades section shows all trades, sorted by asset class, then by currency, then by symbol. Realized and MTM profit and loss is shown for all realized (closed) trades. For the purpose of cost basis and realized profit or loss, commissions are netted. For MTM profit or loss, commissions are not netted and are included as a separate line in the MTM Performance Summary in Base section.
+
+Locator: Main content, "Trades" field table
+
+Account ID | The account number.
+Currency | The currency denomination.
+Asset Class | The asset class of the instrument traded.
+Symbol | The symbol of the instrument traded.
+Conid | The conid of the instrument traded.
+ListingExchange | The exchange the instrument traded.
+Trade Date | The date of the execution.
+Trade Time | The time of the execution.
+Quantity | The number of units for the transaction.
+Trade Price | The transaction price.
+IB Commission | The total amount of commission for the transaction.
+IB Commission Currency | The currency denomination of the trade.
+Open/Close Indicator | The indicator denotes if the trade is an opening or closing trade.
+Buy/Sell | Buy or sell.
+IB Execution ID | The IB execution ID.
+Original Trade Price | The original trade price that was cancelled.
+Original Trade Date | The original trade date that was cancelled.
+Original Trade ID | The original trade ID that was cancelled.
+Original Order ID | The original order ID that was cancelled.
+Change in Price | The change in price from the current and cancelled trade.
+Change in Quantity | The change in quantity from the current and cancelled trade.
+
+Locator: Main content, "Level of Detail"
+
+As part of setting up the Trades section for your Activity Flex Query, you select one or more Levels of Detail for trade data in this section from among the following choices:
+
+Symbol Summary
+Executions
+Orders
+Asset Class
+Closed Lots
+Wash Sales

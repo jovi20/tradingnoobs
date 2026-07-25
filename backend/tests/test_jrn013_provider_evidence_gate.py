@@ -171,6 +171,26 @@ def test_repository_manifest_fails_closed():
     assert "No frozen IBKR Flex Query template" in str(failure.value)
 
 
+def test_repository_manifest_retains_hash_bound_partial_official_evidence():
+    manifest = read_provider_evidence_manifest()
+
+    with pytest.raises(IbkrProviderEvidenceError) as failure:
+        verify_provider_evidence(manifest)
+
+    reasons = failure.value.reasons
+    assert not any(
+        "Official evidence artifact" in reason for reason in reasons
+    )
+    missing_official = next(
+        reason
+        for reason in reasons
+        if reason.startswith("Official evidence missing semantics:")
+    )
+    assert "BASIC_EXECUTION_FIELDS" not in missing_official
+    assert "GENERATION_ORDERING" in missing_official
+    assert "COVERAGE_INCLUSIVITY_TIMEZONE" in missing_official
+
+
 def test_complete_official_and_real_fixture_evidence_can_verify(tmp_path):
     template = tmp_path / "query-template.json"
     template.write_bytes(b'{"query":"JOURNAL_FLEX_V1"}')

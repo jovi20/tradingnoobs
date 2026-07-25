@@ -6,11 +6,26 @@
   "query_template_relative_path": null,
   "query_template_sha256": null,
   "field_contract": null,
-  "official_sources": [],
+  "official_sources": [
+    {
+      "url": "https://www.ibkrguides.com/reportingreference/reportguide/tradesfq.htm",
+      "title": "Trades - Flex Statement - Documentation",
+      "retrieved_at": "2026-07-26",
+      "artifact_relative_path": "official/ibkr-trades-flex-statement-2026-07-26.txt",
+      "artifact_sha256": "sha256:bf7ef2151431244be7cc4db3fdbe4116dfe5cb4d8d90038e63de347afc68f4e4",
+      "excerpts": [
+        {
+          "semantic": "BASIC_EXECUTION_FIELDS",
+          "locator": "Main content, Trades field table",
+          "quote": "Account ID | The account number.\nCurrency | The currency denomination.\nAsset Class | The asset class of the instrument traded.\nSymbol | The symbol of the instrument traded.\nConid | The conid of the instrument traded.\nListingExchange | The exchange the instrument traded.\nTrade Date | The date of the execution.\nTrade Time | The time of the execution.\nQuantity | The number of units for the transaction.\nTrade Price | The transaction price.\nIB Commission | The total amount of commission for the transaction.\nIB Commission Currency | The currency denomination of the trade.\nOpen/Close Indicator | The indicator denotes if the trade is an opening or closing trade.\nBuy/Sell | Buy or sell.\nIB Execution ID | The IB execution ID."
+        }
+      ]
+    }
+  ],
   "fixtures": [],
   "unverified_reasons": [
     "No frozen IBKR Flex Query template has been supplied.",
-    "No official field-semantics evidence has been retained.",
+    "Official evidence remains incomplete for generation ordering, transaction/open-close identity, correction/cancel targets, commission sign/currency, flat-boundary, and coverage inclusivity/timezone semantics.",
     "No redacted real statement pairs from the frozen query template have been supplied."
   ]
 }
