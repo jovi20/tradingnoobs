@@ -180,6 +180,55 @@ def test_fingerprint_excludes_statement_generation_and_file_provenance(
     assert first.generation_order_key != second.generation_order_key
 
 
+def test_fingerprint_payload_covers_source_contract_and_excludes_derived_state(
+    tmp_path,
+    provider_contract,
+):
+    parsed = parse_ibkr_flex_xml(
+        write_xml(tmp_path, document(trade()), "fingerprint-contract.xml"),
+        source_timezone="America/New_York",
+        provider_contract=provider_contract,
+    )
+    payload = parsed.events[0].normalized_payload
+
+    assert set(payload) == {
+        "adapter_kind",
+        "adapter_version",
+        "normalized_external_account_ref",
+        "event_kind",
+        "external_source_event_id",
+        "external_execution_id",
+        "affected_external_execution_id",
+        "transaction_id",
+        "asset_category",
+        "conid",
+        "symbol",
+        "exchange",
+        "raw_side",
+        "raw_open_close",
+        "quantity",
+        "price",
+        "occurred_at_utc",
+        "source_timezone",
+        "currency",
+        "normalized_fee",
+        "fee_currency",
+        "execution_status",
+        "provider_declared_target_id",
+    }
+    assert {
+        "statement_generation",
+        "generation_order_key",
+        "file_hash",
+        "row_number",
+        "derived_direction",
+        "derived_action",
+        "pre_quantity",
+        "post_quantity",
+        "user_selected_target",
+    }.isdisjoint(payload)
+
+
 @pytest.mark.parametrize(
     ("content", "source_timezone", "code"),
     (

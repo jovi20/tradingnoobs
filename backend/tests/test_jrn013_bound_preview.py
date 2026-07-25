@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
+import services.ibkr_flex_preview_service as preview_service
 from app_config.ibkr_flex_provider_evidence import (
     IbkrFlexFieldContract,
     VerifiedIbkrFlexProviderContract,
@@ -627,6 +628,55 @@ def test_same_file_reupload_reuses_statement_observation_and_sighting(
     assert db.query(StatementExecutionSighting).count() == 1
 
 
+def test_fingerprint_version_change_never_silently_matches_accepted_observation(
+    db,
+    source_graph,
+    provider_contract,
+    monkeypatch,
+):
+    accepted, _, _ = seed_accepted_execution(
+        db,
+        graph=source_graph,
+        provider_contract=provider_contract,
+    )
+    user, _, account, _, binding = source_graph
+    monkeypatch.setattr(preview_service, "SOURCE_FINGERPRINT_VERSION", 2)
+    session = make_session(
+        db,
+        user=user,
+        account=account,
+        suffix="fingerprint-v2",
+    )
+    repeated = source_event(
+        event_id=accepted.external_source_event_id,
+        transaction_id=accepted.transaction_id,
+        occurred_at=accepted.occurred_at_utc,
+        fingerprint=accepted.source_payload_fingerprint,
+    )
+
+    result = preview_bound_ibkr_statement(
+        db,
+        account=account,
+        binding=binding,
+        session=session,
+        parsed=parsed_statement(
+            repeated,
+            generation="2026-07-26T23:00:00+00:00",
+        ),
+        provider_contract=provider_contract,
+    )
+    db.commit()
+
+    assert result.items[0].classification == "SOURCE_PAYLOAD_CONFLICT"
+    assert {
+        observation.fingerprint_version
+        for observation in db.query(ExternalSourceObservation).all()
+    } == {1, 2}
+    assert db.query(SourceReconciliationCase).filter_by(
+        case_kind="SOURCE_PAYLOAD_CONFLICT",
+    ).count() == 1
+
+
 def test_same_or_later_payload_change_creates_case_and_freezes_health(
     db,
     source_graph,
@@ -764,6 +814,256 @@ def test_correction_never_becomes_new_and_missing_target_is_case(
     db.commit()
     assert missing_result.items[0].classification == "TARGET_UNRESOLVED"
     assert db.query(SourceReconciliationCase).count() == 2
+
+
+@pytest.mark.parametrize("kind", ("CORRECTION", "CANCEL_BUST"))
+def test_accepted_change_replay_stale_and_payload_conflict_follow_authority(
+    db,
+    source_graph,
+    provider_contract,
+    kind,
+):
+    accepted, _, execution = seed_accepted_execution(
+        db,
+        graph=source_graph,
+        provider_contract=provider_contract,
+    )
+    user, _, account, _, binding = source_graph
+    accepted_change = source_event(
+        event_id=f"{kind}-ACCEPTED",
+        transaction_id="110",
+        kind=kind,
+        affected=accepted.external_execution_id,
+        occurred_at=accepted.occurred_at_utc + timedelta(hours=1),
+        fingerprint=f"sha256:{'a' * 64}",
+    )
+    accepted_session = make_session(
+        db,
+        user=user,
+        account=account,
+        suffix=f"{kind.lower()}-accepted",
+    )
+    accepted_preview = preview_bound_ibkr_statement(
+        db,
+        account=account,
+        binding=binding,
+        session=accepted_session,
+        parsed=parsed_statement(
+            accepted_change,
+            generation="2026-07-25T23:00:00+00:00",
+        ),
+        provider_contract=provider_contract,
+    )
+    accepted_observation = db.query(ExternalSourceObservation).filter_by(
+        public_id=accepted_preview.items[0].observation_public_id
+    ).one()
+    accepted_case = db.query(SourceReconciliationCase).one()
+    accepted_case.state = "RESOLVED_APPLIED"
+    accepted_case.resolved_at = datetime.now(timezone.utc)
+    if kind == "CORRECTION":
+        execution.current_trade_observation_id = accepted_observation.id
+    else:
+        execution.disposition = "ACCEPTED_TOMBSTONE"
+        execution.canceled_by_observation_id = accepted_observation.id
+    db.commit()
+
+    exact_session = make_session(
+        db,
+        user=user,
+        account=account,
+        suffix=f"{kind.lower()}-exact",
+    )
+    exact = preview_bound_ibkr_statement(
+        db,
+        account=account,
+        binding=binding,
+        session=exact_session,
+        parsed=parsed_statement(
+            accepted_change,
+            generation="2026-07-26T00:00:00+00:00",
+        ),
+        provider_contract=provider_contract,
+    )
+    db.commit()
+    assert exact.items[0].classification == "ALREADY_IMPORTED"
+    assert db.query(ExternalSourceObservation).count() == 2
+    assert db.query(StatementExecutionSighting).filter_by(
+        observation_id=accepted_observation.id,
+    ).count() == 2
+
+    stale_session = make_session(
+        db,
+        user=user,
+        account=account,
+        suffix=f"{kind.lower()}-stale",
+    )
+    stale_change = source_event(
+        event_id=f"{kind}-STALE",
+        transaction_id="109",
+        kind=kind,
+        affected=accepted.external_execution_id,
+        occurred_at=accepted.occurred_at_utc + timedelta(minutes=30),
+        fingerprint=f"sha256:{'b' * 64}",
+    )
+    stale = preview_bound_ibkr_statement(
+        db,
+        account=account,
+        binding=binding,
+        session=stale_session,
+        parsed=parsed_statement(
+            stale_change,
+            generation="2026-07-25T22:30:00+00:00",
+        ),
+        provider_contract=provider_contract,
+    )
+    db.commit()
+    assert stale.items[0].classification == "STALE_SOURCE_OBSERVATION"
+    assert db.query(SourceReconciliationCase).count() == 1
+
+    changed_session = make_session(
+        db,
+        user=user,
+        account=account,
+        suffix=f"{kind.lower()}-changed",
+    )
+    changed_change = source_event(
+        event_id=accepted_change.external_source_event_id,
+        transaction_id=accepted_change.transaction_id,
+        kind=kind,
+        affected=accepted.external_execution_id,
+        occurred_at=accepted_change.occurred_at_utc,
+        price="201",
+        fingerprint=f"sha256:{'c' * 64}",
+    )
+    changed = preview_bound_ibkr_statement(
+        db,
+        account=account,
+        binding=binding,
+        session=changed_session,
+        parsed=parsed_statement(
+            changed_change,
+            generation="2026-07-26T01:00:00+00:00",
+        ),
+        provider_contract=provider_contract,
+    )
+    db.commit()
+    assert changed.items[0].classification == "SOURCE_PAYLOAD_CONFLICT"
+    assert db.query(SourceReconciliationCase).filter_by(
+        case_kind="SOURCE_PAYLOAD_CONFLICT",
+    ).count() == 1
+
+
+@pytest.mark.parametrize("prior_state", ("OPEN", "DIVERGED_REJECTED"))
+def test_strict_later_conflict_closes_old_episode_and_opens_new_one(
+    db,
+    source_graph,
+    provider_contract,
+    prior_state,
+):
+    accepted, _, _ = seed_accepted_execution(
+        db,
+        graph=source_graph,
+        provider_contract=provider_contract,
+    )
+    user, _, account, _, binding = source_graph
+    first_change = source_event(
+        event_id="CORR-F2",
+        transaction_id="120",
+        kind="CORRECTION",
+        affected=accepted.external_execution_id,
+        occurred_at=accepted.occurred_at_utc + timedelta(hours=2),
+        fingerprint=f"sha256:{'2' * 64}",
+    )
+    first_session = make_session(
+        db,
+        user=user,
+        account=account,
+        suffix=f"authority-first-{prior_state.lower()}",
+    )
+    first = preview_bound_ibkr_statement(
+        db,
+        account=account,
+        binding=binding,
+        session=first_session,
+        parsed=parsed_statement(
+            first_change,
+            generation="2026-07-26T00:00:00+00:00",
+        ),
+        provider_contract=provider_contract,
+    )
+    first_case = db.query(SourceReconciliationCase).one()
+    first_case.state = prior_state
+    db.commit()
+
+    later_change = source_event(
+        event_id="CORR-F3",
+        transaction_id="121",
+        kind="CORRECTION",
+        affected=accepted.external_execution_id,
+        occurred_at=accepted.occurred_at_utc + timedelta(hours=3),
+        fingerprint=f"sha256:{'3' * 64}",
+    )
+    later_session = make_session(
+        db,
+        user=user,
+        account=account,
+        suffix=f"authority-later-{prior_state.lower()}",
+    )
+    later = preview_bound_ibkr_statement(
+        db,
+        account=account,
+        binding=binding,
+        session=later_session,
+        parsed=parsed_statement(
+            later_change,
+            generation="2026-07-26T01:00:00+00:00",
+        ),
+        provider_contract=provider_contract,
+    )
+    db.commit()
+
+    db.refresh(first_case)
+    assert first.items[0].classification == "CORRECTION"
+    assert later.items[0].classification == "CORRECTION"
+    assert first_case.state == "RESOLVED_SUPERSEDED_BY_LATER_AUTHORITY"
+    assert first_case.winning_sighting_id == db.query(
+        StatementExecutionSighting.id
+    ).filter_by(public_id=later.items[0].sighting_public_id).scalar()
+    open_cases = db.query(SourceReconciliationCase).filter_by(state="OPEN").all()
+    assert len(open_cases) == 1
+    assert open_cases[0].conflict_observation_id == db.query(
+        ExternalSourceObservation.id
+    ).filter_by(public_id=later.items[0].observation_public_id).scalar()
+    assert binding.source_health == "RECONCILIATION_REQUIRED"
+
+    reassert_session = make_session(
+        db,
+        user=user,
+        account=account,
+        suffix=f"authority-reassert-{prior_state.lower()}",
+    )
+    reasserted = preview_bound_ibkr_statement(
+        db,
+        account=account,
+        binding=binding,
+        session=reassert_session,
+        parsed=parsed_statement(
+            first_change,
+            generation="2026-07-26T02:00:00+00:00",
+        ),
+        provider_contract=provider_contract,
+    )
+    db.commit()
+
+    assert reasserted.items[0].classification == "CORRECTION"
+    assert db.query(SourceReconciliationCase).count() == 3
+    latest_open = db.query(SourceReconciliationCase).filter_by(
+        state="OPEN",
+    ).one()
+    assert latest_open.conflict_observation_id == db.query(
+        ExternalSourceObservation.id
+    ).filter_by(public_id=first.items[0].observation_public_id).scalar()
+    assert binding.source_health == "RECONCILIATION_REQUIRED"
 
 
 def test_late_new_and_coverage_gap_are_fail_closed(
