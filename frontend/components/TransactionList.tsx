@@ -1,31 +1,45 @@
 import { useState } from 'react'
 import { accountsAPI } from '@/lib/api'
 import { TransactionViewModel } from '@/lib/adapters/trading'
-import { Trash2, ArrowUpRight, ArrowDownLeft, ArrowRight } from 'lucide-react'
+import { RotateCcw, ArrowUpRight, ArrowDownLeft, ArrowRight } from 'lucide-react'
 import { format } from 'date-fns'
 import { getCurrencySymbol } from '@/lib/symbolUtils'
 
 interface TransactionListProps {
     token: string
     transactions: TransactionViewModel[]
-    onDelete: (id: string) => void
+    onChanged: () => void
 }
 
-export function TransactionList({ token, transactions, onDelete }: TransactionListProps) {
-    const [deletingId, setDeletingId] = useState<string | null>(null)
+export function TransactionList({ token, transactions, onChanged }: TransactionListProps) {
+    const [reversingId, setReversingId] = useState<string | null>(null)
+    const [retryKeys, setRetryKeys] = useState<Record<string, string>>({})
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('确定要删除这条流水吗？账户余额将被冲回。')) return
+    const handleReverse = async (id: string) => {
+        const reason = prompt('请输入冲正原因')
+        if (!reason?.trim()) return
+        const key = retryKeys[id] || crypto.randomUUID()
+        setRetryKeys((current) => ({ ...current, [id]: key }))
 
-        setDeletingId(id)
+        setReversingId(id)
         try {
-            await accountsAPI.deleteTransaction(token, id)
-            onDelete(id)
+            await accountsAPI.reverseTransaction(
+                token,
+                id,
+                { occurred_at: new Date().toISOString(), reason: reason.trim() },
+                key,
+            )
+            setRetryKeys((current) => {
+                const next = { ...current }
+                delete next[id]
+                return next
+            })
+            onChanged()
         } catch (error) {
-            console.error('Failed to delete transaction:', error)
-            alert('删除流水失败，请稍后重试')
+            console.error('Failed to reverse transaction:', error)
+            alert('冲正流水失败，请稍后重试')
         } finally {
-            setDeletingId(null)
+            setReversingId(null)
         }
     }
 
@@ -35,8 +49,6 @@ export function TransactionList({ token, transactions, onDelete }: TransactionLi
             WITHDRAWAL: '出金',
             INTEREST: '利息',
             FEE: '手续费或税费',
-            TRANSFER_IN: '转入',
-            TRANSFER_OUT: '转出'
         }
         return labels[type] || type
     }
@@ -45,11 +57,9 @@ export function TransactionList({ token, transactions, onDelete }: TransactionLi
         switch (type) {
             case 'DEPOSIT':
             case 'INTEREST':
-            case 'TRANSFER_IN':
                 return <ArrowDownLeft className="h-4 w-4 text-profit" />
             case 'WITHDRAWAL':
             case 'FEE':
-            case 'TRANSFER_OUT':
                 return <ArrowUpRight className="h-4 w-4 text-loss" />
             default:
                 return <ArrowRight className="h-4 w-4 text-ink-muted" />
@@ -97,13 +107,17 @@ export function TransactionList({ token, transactions, onDelete }: TransactionLi
                         </div>
                         <button
                             type="button"
-                            onClick={() => handleDelete(tx.routeId)}
-                            disabled={deletingId === tx.routeId}
-                            aria-label={`删除${getTypeLabel(tx.type)}流水`}
-                            title="删除流水"
+                            onClick={() => handleReverse(tx.routeId)}
+                            disabled={
+                                reversingId === tx.routeId
+                                || Boolean(tx.reverses_transaction_public_id)
+                                || Boolean(tx.reversed_by_transaction_public_id)
+                            }
+                            aria-label={`冲正${getTypeLabel(tx.type)}流水`}
+                            title="冲正流水"
                             className="text-muted-foreground hover:text-loss transition-colors p-1"
                         >
-                            <Trash2 className="h-4 w-4" />
+                            <RotateCcw className="h-4 w-4" />
                         </button>
                     </div>
                 </div>

@@ -2,6 +2,7 @@ import os
 import tempfile
 import unittest
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -13,6 +14,8 @@ from models import (
     AccountLedgerEntry,
     AccountLedgerEntryType,
     BatchType,
+    IdempotencyKey,
+    LedgerPostingKind,
     Position,
     PositionDirection,
     PositionStatus,
@@ -153,6 +156,7 @@ class PublicIdNestedRouteTests(unittest.TestCase):
 
         create_response = self.client.post(
             f"/api/accounts/{self.account.public_id}/transactions",
+            headers={"Idempotency-Key": "public-account-deposit"},
             json={
                 "type": "DEPOSIT",
                 "amount": 50,
@@ -161,12 +165,13 @@ class PublicIdNestedRouteTests(unittest.TestCase):
                 "description": "Top up",
             },
         )
-        self.assertEqual(create_response.status_code, 200)
+        self.assertEqual(create_response.status_code, 201)
         self.assertEqual(create_response.json()["account_id"], self.account.id)
 
     def test_transaction_create_writes_account_ledger_entry(self):
         create_response = self.client.post(
             f"/api/accounts/{self.account.public_id}/transactions",
+            headers={"Idempotency-Key": "public-account-withdrawal"},
             json={
                 "type": "WITHDRAWAL",
                 "amount": 25,
@@ -176,7 +181,7 @@ class PublicIdNestedRouteTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(create_response.status_code, 200)
+        self.assertEqual(create_response.status_code, 201)
         payload = create_response.json()
         ledger_entry = self.db.query(AccountLedgerEntry).filter(
             AccountLedgerEntry.transaction_id == payload["id"]
@@ -187,10 +192,10 @@ class PublicIdNestedRouteTests(unittest.TestCase):
 
         delete_response = self.client.delete(f"/api/transactions/{payload['public_id']}")
 
-        self.assertEqual(delete_response.status_code, 409)
+        self.assertEqual(delete_response.status_code, 405)
         self.assertEqual(
             delete_response.json()["detail"]["code"],
-            "POSTING_FACT_CONFLICT",
+            "FINANCIAL_FACT_IMMUTABLE",
         )
         self.assertEqual(
             self.db.query(AccountLedgerEntry).filter(
@@ -205,12 +210,196 @@ class PublicIdNestedRouteTests(unittest.TestCase):
             1,
         )
 
+    def test_each_cash_transaction_type_creates_and_reverses_with_derived_sign(self):
+        cases = (
+            ("DEPOSIT", LedgerPostingKind.DEPOSIT, Decimal("12.00000000")),
+            ("WITHDRAWAL", LedgerPostingKind.WITHDRAWAL, Decimal("-12.00000000")),
+            ("INTEREST", LedgerPostingKind.INTEREST, Decimal("12.00000000")),
+            ("FEE", LedgerPostingKind.ACCOUNT_FEE, Decimal("-12.00000000")),
+        )
+
+        for index, (transaction_type, posting_kind, expected_amount) in enumerate(cases):
+            with self.subTest(transaction_type=transaction_type):
+                created = self.client.post(
+                    f"/api/accounts/{self.account.public_id}/transactions",
+                    headers={"Idempotency-Key": f"{transaction_type.lower()}-create"},
+                    json={
+                        "type": transaction_type,
+                        "amount": "12",
+                        "currency": "USD",
+                        "date": f"2026-07-25T12:{index:02d}:00+00:00",
+                    },
+                )
+                self.assertEqual(created.status_code, 201, created.text)
+                original = self.db.query(Transaction).filter(
+                    Transaction.public_id == created.json()["public_id"]
+                ).one()
+                original_entry = self.db.query(AccountLedgerEntry).filter(
+                    AccountLedgerEntry.transaction_id == original.id
+                ).one()
+                self.assertEqual(original.amount, expected_amount)
+                self.assertEqual(original_entry.posting_kind, posting_kind.value)
+                self.assertEqual(original_entry.amount, expected_amount)
+
+                reversed_response = self.client.post(
+                    f"/api/transactions/{original.public_id}/reverse",
+                    headers={
+                        "Idempotency-Key": f"{transaction_type.lower()}-reverse",
+                        "X-Request-ID": f"{transaction_type.lower()}-reverse-request",
+                    },
+                    json={
+                        "occurred_at": f"2026-07-25T13:{index:02d}:00+00:00",
+                        "reason": f"Correct {transaction_type.lower()}",
+                    },
+                )
+                self.assertEqual(
+                    reversed_response.status_code,
+                    201,
+                    reversed_response.text,
+                )
+                reversal = self.db.query(Transaction).filter(
+                    Transaction.public_id == reversed_response.json()["public_id"]
+                ).one()
+                reversal_entry = self.db.query(AccountLedgerEntry).filter(
+                    AccountLedgerEntry.transaction_id == reversal.id
+                ).one()
+                self.assertEqual(reversal.amount, -expected_amount)
+                self.assertEqual(reversal.reverses_transaction_id, original.id)
+                self.assertEqual(
+                    reversal_entry.posting_kind,
+                    LedgerPostingKind.COMPENSATING_REVERSAL.value,
+                )
+                self.assertEqual(reversal_entry.amount, -expected_amount)
+                self.assertEqual(
+                    reversal_entry.reverses_ledger_entry_id,
+                    original_entry.id,
+                )
+
+    def test_financial_transaction_idempotency_and_reversal_are_permanent(self):
+        body = {
+            "type": "WITHDRAWAL",
+            "amount": 25,
+            "currency": "USD",
+            "date": "2026-07-25T12:00:00+00:00",
+            "description": "Cash out",
+        }
+        missing = self.client.post(
+            f"/api/accounts/{self.account.public_id}/transactions",
+            json=body,
+        )
+        self.assertEqual(missing.status_code, 422)
+        self.assertEqual(missing.json()["detail"]["code"], "IDEMPOTENCY_KEY_REQUIRED")
+
+        headers = {"Idempotency-Key": "cash-withdrawal-retry"}
+        first = self.client.post(
+            f"/api/accounts/{self.account.public_id}/transactions",
+            headers=headers,
+            json=body,
+        )
+        replay = self.client.post(
+            f"/api/accounts/{self.account.public_id}/transactions",
+            headers=headers,
+            json=body,
+        )
+        conflict = self.client.post(
+            f"/api/accounts/{self.account.public_id}/transactions",
+            headers=headers,
+            json={**body, "amount": 26},
+        )
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(replay.json(), first.json())
+        self.assertEqual(conflict.status_code, 409)
+        self.assertEqual(conflict.json()["detail"]["code"], "IDEMPOTENCY_KEY_REUSED")
+
+        original_public_id = first.json()["public_id"]
+        reversal_body = {
+            "occurred_at": "2026-07-25T13:00:00+00:00",
+            "reason": "Duplicate broker cash record",
+        }
+        reversal_headers = {
+            "Idempotency-Key": "cash-withdrawal-reversal",
+            "X-Request-ID": "request-cash-reversal",
+        }
+        reversal = self.client.post(
+            f"/api/transactions/{original_public_id}/reverse",
+            headers=reversal_headers,
+            json=reversal_body,
+        )
+        reversal_replay = self.client.post(
+            f"/api/transactions/{original_public_id}/reverse",
+            headers=reversal_headers,
+            json=reversal_body,
+        )
+        duplicate_reversal = self.client.post(
+            f"/api/transactions/{original_public_id}/reverse",
+            headers={"Idempotency-Key": "different-reversal-key"},
+            json=reversal_body,
+        )
+        self.assertEqual(reversal.status_code, 201)
+        self.assertEqual(reversal_replay.json(), reversal.json())
+        self.assertEqual(duplicate_reversal.status_code, 409)
+        self.assertEqual(
+            duplicate_reversal.json()["detail"]["code"],
+            "FINANCIAL_FACT_ALREADY_REVERSED",
+        )
+        self.assertEqual(
+            reversal.json()["reverses_transaction_public_id"],
+            original_public_id,
+        )
+        self.assertEqual(reversal.json()["request_id"], "request-cash-reversal")
+
+        self.db.expire_all()
+        idempotency_rows = self.db.query(IdempotencyKey).filter(
+            IdempotencyKey.key.in_(
+                ["cash-withdrawal-retry", "cash-withdrawal-reversal"]
+            )
+        ).all()
+        self.assertEqual(len(idempotency_rows), 2)
+        self.assertTrue(all(row.expires_at is None for row in idempotency_rows))
+        self.assertTrue(all(row.source_fact_public_id for row in idempotency_rows))
+        reversal_entry = self.db.query(AccountLedgerEntry).filter(
+            AccountLedgerEntry.posting_kind
+            == LedgerPostingKind.COMPENSATING_REVERSAL.value,
+        ).one()
+        self.assertEqual(float(reversal_entry.amount), 25.0)
+        self.assertIsNotNone(reversal_entry.reverses_ledger_entry_id)
+
+        self.assertEqual(
+            self.client.delete(
+                f"/api/accounts/{self.account.public_id}"
+            ).status_code,
+            204,
+        )
+        replay_after_archive = self.client.post(
+            f"/api/accounts/{self.account.public_id}/transactions",
+            headers=headers,
+            json=body,
+        )
+        reversal_after_archive = self.client.post(
+            f"/api/transactions/{original_public_id}/reverse",
+            headers=reversal_headers,
+            json=reversal_body,
+        )
+        new_after_archive = self.client.post(
+            f"/api/accounts/{self.account.public_id}/transactions",
+            headers={"Idempotency-Key": "new-after-archive"},
+            json={**body, "description": "Must fail"},
+        )
+        self.assertEqual(replay_after_archive.json(), first.json())
+        self.assertEqual(reversal_after_archive.json(), reversal.json())
+        self.assertEqual(new_after_archive.status_code, 409)
+        self.assertEqual(
+            new_after_archive.json()["detail"]["code"],
+            "ACCOUNT_ARCHIVED",
+        )
+
     def test_transaction_create_rejects_transfer_and_non_usd_without_side_effects(self):
         before_transactions = self.db.query(Transaction).count()
         before_ledger = self.db.query(AccountLedgerEntry).count()
 
         transfer_response = self.client.post(
             f"/api/accounts/{self.account.public_id}/transactions",
+            headers={"Idempotency-Key": "disabled-transfer"},
             json={
                 "type": "TRANSFER_IN",
                 "amount": 50,
@@ -220,6 +409,7 @@ class PublicIdNestedRouteTests(unittest.TestCase):
         )
         currency_response = self.client.post(
             f"/api/accounts/{self.account.public_id}/transactions",
+            headers={"Idempotency-Key": "unsupported-currency"},
             json={
                 "type": "DEPOSIT",
                 "amount": 50,

@@ -1,7 +1,11 @@
 """Trading account routes for the journal release."""
+from datetime import timezone
 from typing import List
+import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app_config.release_contract import (
@@ -10,14 +14,38 @@ from app_config.release_contract import (
     require_release_currency,
 )
 from database import get_db
-from models import AccountingHealth, TradingAccount, User
-from schemas import TradingAccountCreate, TradingAccountUpdate, TradingAccountResponse
+from models import (
+    AccountingHealth,
+    AccountLedgerEntry,
+    LedgerPostingKind,
+    TradingAccount,
+    User,
+)
+from schemas import (
+    FinancialFactReverseCreate,
+    TradingAccountCreate,
+    TradingAccountUpdate,
+    TradingAccountResponse,
+)
 from services.account_ledger_service import (
+    AccountingReconciliationRequiredError,
+    LedgerPostingConflictError,
     calculate_account_cash_balance_read_model,
+    create_or_replay_posting,
+    require_accounting_healthy,
     sync_opening_balance_to_account_ledger,
 )
 from services.auth_service import get_current_user
-from services.public_id_service import resolve_trading_account
+from services.financial_command_service import (
+    FinancialCommandError,
+    account_has_financial_history,
+    begin_financial_command,
+    complete_financial_command,
+    financial_request_id,
+    lock_owned_account,
+    permanently_forbid_account_hard_delete,
+)
+from services.timezone_service import LocalDateTimeError, normalize_user_datetime_to_utc
 
 router = APIRouter(prefix="/api/accounts", tags=["Trading Accounts"])
 
@@ -78,11 +106,31 @@ async def list_accounts(
 @router.post("", response_model=TradingAccountResponse, status_code=status.HTTP_201_CREATED)
 async def create_account(
     account_data: TradingAccountCreate,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Create a new trading account"""
+    command = None
+    if account_data.initial_balance not in (None, 0):
+        try:
+            command = begin_financial_command(
+                db,
+                user_id=current_user.id,
+                scope="account.opening-balance.create.v1",
+                idempotency_key=idempotency_key,
+                request_payload=jsonable_encoder(account_data),
+            )
+        except FinancialCommandError as exc:
+            db.rollback()
+            raise HTTPException(
+                status_code=exc.http_status,
+                detail={"code": exc.code, "message": str(exc)},
+            ) from exc
+        if command.replay_response is not None:
+            return JSONResponse(status_code=201, content=command.replay_response)
     currency = _require_release_currency(account_data.currency)
+
     account = TradingAccount(
         user_id=current_user.id,
         name=account_data.name,
@@ -92,12 +140,31 @@ async def create_account(
         initial_balance=account_data.initial_balance,
         description=account_data.description
     )
-    db.add(account)
-    db.flush()
-    sync_opening_balance_to_account_ledger(db, account=account)
+    try:
+        db.add(account)
+        db.flush()
+        opening_entry = sync_opening_balance_to_account_ledger(db, account=account)
+        if opening_entry is not None:
+            permanently_forbid_account_hard_delete(account)
+    except (
+        AccountingReconciliationRequiredError,
+        LedgerPostingConflictError,
+    ) as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    response_content = jsonable_encoder(_journal_account_response(db, account))
+    if command is not None and opening_entry is not None:
+        complete_financial_command(
+            db,
+            record=command.record,
+            response_json=response_content,
+            source_fact_public_id=account.public_id,
+        )
     db.commit()
-    db.refresh(account)
-    return await get_account(account.public_id, current_user, db)
+    return JSONResponse(status_code=201, content=response_content)
 
 
 @router.get("/{account_id}", response_model=TradingAccountResponse)
@@ -107,7 +174,11 @@ async def get_account(
     db: Session = Depends(get_db)
 ):
     """Get a specific journal account."""
-    account = resolve_trading_account(db, current_user.id, account_id)
+    account = lock_owned_account(
+        db,
+        user_id=current_user.id,
+        account_public_id=account_id,
+    )
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
     return _journal_account_response(db, account)
@@ -121,7 +192,11 @@ async def update_account(
     db: Session = Depends(get_db)
 ):
     """Update a trading account"""
-    account = resolve_trading_account(db, current_user.id, account_id)
+    account = lock_owned_account(
+        db,
+        user_id=current_user.id,
+        account_public_id=account_id,
+    )
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 
@@ -131,6 +206,21 @@ async def update_account(
             update_data["currency"],
             field="currency",
         )
+        if (
+            update_data["currency"] != account.currency
+            and (
+                not account.hard_delete_eligible
+                or account_has_financial_history(db, account=account)
+            )
+        ):
+            db.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "ACCOUNT_BASE_CURRENCY_FROZEN",
+                    "message": "Account currency is immutable after the first financial fact",
+                },
+            )
 
     for key, value in update_data.items():
         setattr(account, key, value)
@@ -147,10 +237,145 @@ async def delete_account(
     db: Session = Depends(get_db)
 ):
     """Delete a trading account"""
-    account = resolve_trading_account(db, current_user.id, account_id)
+    account = lock_owned_account(
+        db,
+        user_id=current_user.id,
+        account_public_id=account_id,
+    )
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
     
-    db.delete(account)
+    if (
+        not account.hard_delete_eligible
+        or account_has_financial_history(db, account=account)
+    ):
+        account.is_active = False
+    else:
+        db.delete(account)
     db.commit()
     return None
+
+
+@router.post(
+    "/{account_id}/opening-balance/reverse",
+    response_model=TradingAccountResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def reverse_opening_balance(
+    account_id: str,
+    payload: FinancialFactReverseCreate,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    request_id: str | None = Header(default=None, alias="X-Request-ID"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    account = lock_owned_account(
+        db,
+        user_id=current_user.id,
+        account_public_id=account_id,
+    )
+    if account is None:
+        raise HTTPException(status_code=404, detail="Account not found")
+    original = (
+        db.query(AccountLedgerEntry)
+        .filter(
+            AccountLedgerEntry.account_id == account.id,
+            AccountLedgerEntry.user_id == current_user.id,
+            AccountLedgerEntry.posting_kind
+            == LedgerPostingKind.OPENING_BALANCE.value,
+        )
+        .with_for_update()
+        .first()
+    )
+    if original is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "OPENING_BALANCE_NOT_FOUND", "message": "Account has no posted opening balance"},
+        )
+    try:
+        command = begin_financial_command(
+            db,
+            user_id=current_user.id,
+            scope="account.opening-balance.reverse.v1",
+            idempotency_key=idempotency_key,
+            request_payload={
+                "account_public_id": account.public_id,
+                "payload": jsonable_encoder(payload),
+            },
+        )
+        if command.replay_response is not None:
+            return JSONResponse(status_code=201, content=command.replay_response)
+        if not account.is_active:
+            raise FinancialCommandError(
+                "ACCOUNT_ARCHIVED",
+                "Archived accounts are read-only",
+                http_status=409,
+            )
+        if db.query(AccountLedgerEntry.id).filter(
+            AccountLedgerEntry.reverses_ledger_entry_id == original.id
+        ).first() is not None:
+            raise FinancialCommandError(
+                "FINANCIAL_FACT_ALREADY_REVERSED",
+                "Opening balance has already been reversed",
+                http_status=409,
+            )
+        occurred_at = normalize_user_datetime_to_utc(
+            payload.occurred_at,
+            timezone_name=current_user.timezone,
+        )
+        original_time = original.occurred_at
+        if original_time.tzinfo is None:
+            original_time = original_time.replace(tzinfo=timezone.utc)
+        if occurred_at < original_time.astimezone(timezone.utc):
+            raise FinancialCommandError(
+                "REVERSAL_CHRONOLOGY_VIOLATION",
+                "Opening-balance reversal cannot predate the original fact",
+                http_status=422,
+            )
+        require_accounting_healthy(account)
+        source_fact_public_id = str(uuid.uuid4())
+        create_or_replay_posting(
+            db,
+            user_id=current_user.id,
+            account_id=account.id,
+            source_fact_public_id=source_fact_public_id,
+            posting_kind=LedgerPostingKind.COMPENSATING_REVERSAL,
+            occurred_at=occurred_at,
+            currency=original.currency,
+            amount=-original.amount,
+            fx_rate_to_account_ccy=original.fx_rate_to_account_ccy or 1,
+            reverses_ledger_entry_id=original.id,
+            source="OPENING_BALANCE_REVERSAL",
+            source_run_id=financial_request_id(
+                request_id,
+                fallback=idempotency_key or "",
+            ),
+            description=payload.reason.strip(),
+        )
+        response_content = jsonable_encoder(_journal_account_response(db, account))
+        complete_financial_command(
+            db,
+            record=command.record,
+            response_json=response_content,
+            source_fact_public_id=source_fact_public_id,
+        )
+        db.commit()
+        return JSONResponse(status_code=201, content=response_content)
+    except LocalDateTimeError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=422,
+            detail={"code": exc.code, "message": str(exc), "field": "occurred_at"},
+        ) from exc
+    except FinancialCommandError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except AccountingReconciliationRequiredError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc

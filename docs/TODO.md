@@ -35,9 +35,9 @@
 | P0 | `COMPLETE` | `JRN-006` append-only ledger 与 journal balance 收敛 | `4b350d9` 实现全部 JRN-005 vectors、append-only、posting uniqueness、replay、legacy quarantine 和 balance 收敛，并通过本地精确 SHA 与远端 run `30154375511`。 | Active plan M1 |
 | P0 | `COMPLETE` | `JRN-007` Truth-native OPEN 单事务写入 | `22e59f6` 已交付 deterministic instrument、account lock、side uniqueness、永久幂等和单事务 OPEN，并由两次远端 CI 成功闭环。 | Active plan M1 |
 | P0 | `COMPLETE` | `JRN-008` Lifecycle 并发、幂等与 legacy projection | `61979cf` 已交付 account→position lock、永久 lifecycle 幂等、backdate/sequence 规则、并发 REDUCE/CLOSE 防超量和单事务 legacy projection，并由远端 run `30156750813` 闭环。 | Active plan M1 |
-| P0 | `READY_TO_START` | `JRN-009` 不可变资金流水、cash dividend 与账户 lifecycle | 基于 canonical ledger 与 JRN-008 锁协议，交付不可变资金命令、dividend、reversal、archive/delete 与 base-currency 冻结合同。 | Active plan M1 |
+| P0 | `IN_PROGRESS` | `JRN-009` 不可变资金流水、cash dividend 与账户 lifecycle | 正在基于 canonical ledger 与 JRN-008 锁协议交付不可变资金命令、dividend、reversal、archive/delete、base-currency 冻结和 `e5f6a7b8c9d0` migration。 | Active plan M1 |
 
-JRN-000 至 JRN-008 已完成，下一开发任务为 JRN-009；产品整体仍为 `NOT_READY_FOR_PRODUCTION`。source-bound IBKR 实现仍严格等待 JRN-013 至 JRN-015。不得提前做新页面、模型拆分、在线 Broker Sync、Market、AI 或量化功能。
+JRN-000 至 JRN-008 已完成，当前开发任务为 JRN-009；产品整体仍为 `NOT_READY_FOR_PRODUCTION`。source-bound IBKR 实现仍严格等待 JRN-013 至 JRN-015。不得提前做新页面、模型拆分、在线 Broker Sync、Market、AI 或量化功能。
 
 ## 暂不做
 

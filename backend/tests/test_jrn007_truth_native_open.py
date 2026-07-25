@@ -146,6 +146,7 @@ class TruthNativeOpenRouterTests(unittest.TestCase):
             self.account.trade_source_state,
             TradeSourceState.MANUAL.value,
         )
+        self.assertFalse(self.account.hard_delete_eligible)
         self.assertEqual(self.db.query(Position).count(), 1)
         self.assertEqual(self.db.query(TradingPosition).count(), 1)
         fee_posting = self.db.query(AccountLedgerEntry).one()

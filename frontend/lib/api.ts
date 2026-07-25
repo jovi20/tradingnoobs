@@ -276,12 +276,16 @@ export interface Transaction {
     id: number
     public_id: string
     account_id: number
-    type: 'DEPOSIT' | 'WITHDRAWAL' | 'INTEREST' | 'FEE' | 'TRANSFER_IN' | 'TRANSFER_OUT'
+    type: 'DEPOSIT' | 'WITHDRAWAL' | 'INTEREST' | 'FEE'
     amount: number
     currency: string
     date: string
     description?: string
     created_at: string
+    reverses_transaction_public_id?: string | null
+    reversed_by_transaction_public_id?: string | null
+    reversal_reason?: string | null
+    request_id?: string | null
 }
 
 export type JournalTransactionCreateType = 'DEPOSIT' | 'WITHDRAWAL' | 'INTEREST' | 'FEE'
@@ -292,6 +296,11 @@ export interface TransactionCreate {
     currency?: string
     date: string
     description?: string
+}
+
+export interface FinancialFactReverseCreate {
+    occurred_at: string
+    reason: string
 }
 
 export interface User {
@@ -806,16 +815,29 @@ export const accountsAPI = {
         return fetchAPI(`/api/accounts/${accountId}/transactions`, {}, token)
     },
 
-    createTransaction: async (token: string, accountId: number | string, data: TransactionCreate): Promise<Transaction> => {
+    createTransaction: async (
+        token: string,
+        accountId: number | string,
+        data: TransactionCreate,
+        idempotencyKey: string,
+    ): Promise<Transaction> => {
         return fetchAPI(`/api/accounts/${accountId}/transactions`, {
             method: 'POST',
+            headers: { 'Idempotency-Key': idempotencyKey },
             body: JSON.stringify(data),
         }, token)
     },
 
-    deleteTransaction: async (token: string, id: number | string): Promise<void> => {
-        return fetchAPI(`/api/transactions/${id}`, {
-            method: 'DELETE',
+    reverseTransaction: async (
+        token: string,
+        id: number | string,
+        data: FinancialFactReverseCreate,
+        idempotencyKey: string,
+    ): Promise<Transaction> => {
+        return fetchAPI(`/api/transactions/${id}/reverse`, {
+            method: 'POST',
+            headers: { 'Idempotency-Key': idempotencyKey },
+            body: JSON.stringify(data),
         }, token)
     }
 }

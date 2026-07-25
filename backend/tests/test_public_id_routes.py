@@ -187,6 +187,7 @@ class PublicIdRouteTests(unittest.TestCase):
     def test_account_create_and_update_reject_non_usd_currency(self):
         create_response = self.client.post(
             "/api/accounts",
+            headers={"Idempotency-Key": "opening-ledger-account"},
             json={
                 "name": "Unsupported Currency",
                 "broker": "IBKR",
@@ -217,6 +218,7 @@ class PublicIdRouteTests(unittest.TestCase):
     def test_account_create_writes_opening_balance_ledger_entry(self):
         create_response = self.client.post(
             "/api/accounts",
+            headers={"Idempotency-Key": "cash-adjustment-account"},
             json={
                 "name": "Opening Ledger",
                 "broker": "IBKR",
@@ -234,10 +236,13 @@ class PublicIdRouteTests(unittest.TestCase):
         self.assertEqual(ledger_entry.entry_type, AccountLedgerEntryType.CASH_ADJUSTMENT)
         self.assertEqual(ledger_entry.amount, Decimal("1000"))
         self.assertEqual(Decimal(str(payload["journal_balance"])), Decimal("1000"))
+        created_account = self.db.get(TradingAccount, payload["id"])
+        self.assertFalse(created_account.hard_delete_eligible)
 
     def test_account_metadata_update_rejects_cash_balance_mutation(self):
         create_response = self.client.post(
             "/api/accounts",
+            headers={"Idempotency-Key": "cash-adjustment-account"},
             json={
                 "name": "Cash Adjustment",
                 "broker": "IBKR",
@@ -269,6 +274,89 @@ class PublicIdRouteTests(unittest.TestCase):
             Decimal("1000"),
         )
         self.assertNotIn("cash_balance", get_response.json())
+
+    def test_account_delete_hard_deletes_only_empty_and_archives_history(self):
+        empty = self.client.post(
+            "/api/accounts",
+            json={"name": "Empty", "broker": "IBKR", "currency": "USD"},
+        )
+        self.assertEqual(empty.status_code, 201)
+        empty_public_id = empty.json()["public_id"]
+        self.assertEqual(
+            self.client.delete(f"/api/accounts/{empty_public_id}").status_code,
+            204,
+        )
+        self.assertEqual(
+            self.client.get(f"/api/accounts/{empty_public_id}").status_code,
+            404,
+        )
+
+        historical_body = {
+            "name": "Historical",
+            "broker": "IBKR",
+            "currency": "USD",
+            "initial_balance": "1000",
+        }
+        headers = {"Idempotency-Key": "historical-opening"}
+        historical = self.client.post(
+            "/api/accounts",
+            headers=headers,
+            json=historical_body,
+        )
+        replay = self.client.post(
+            "/api/accounts",
+            headers=headers,
+            json=historical_body,
+        )
+        self.assertEqual(replay.json(), historical.json())
+        historical_public_id = historical.json()["public_id"]
+        historical_id = historical.json()["id"]
+        reversal_body = {
+            "occurred_at": "2026-07-25T14:00:00+00:00",
+            "reason": "Opening balance entered twice",
+        }
+        reversal_headers = {
+            "Idempotency-Key": "historical-opening-reversal",
+            "X-Request-ID": "request-opening-reversal",
+        }
+        reversal = self.client.post(
+            f"/api/accounts/{historical_public_id}/opening-balance/reverse",
+            headers=reversal_headers,
+            json=reversal_body,
+        )
+        reversal_replay = self.client.post(
+            f"/api/accounts/{historical_public_id}/opening-balance/reverse",
+            headers=reversal_headers,
+            json=reversal_body,
+        )
+        self.assertEqual(reversal.status_code, 201)
+        self.assertEqual(reversal_replay.json(), reversal.json())
+        self.assertEqual(
+            Decimal(str(reversal.json()["journal_balance"])),
+            Decimal("0"),
+        )
+        self.db.expire_all()
+        historical_account = self.db.get(TradingAccount, historical_id)
+        self.assertFalse(historical_account.hard_delete_eligible)
+        self.assertEqual(
+            self.client.delete(f"/api/accounts/{historical_public_id}").status_code,
+            204,
+        )
+        archived = self.client.get(f"/api/accounts/{historical_public_id}")
+        self.assertEqual(archived.status_code, 200)
+        self.assertFalse(archived.json()["is_active"])
+        replay_after_archive = self.client.post(
+            f"/api/accounts/{historical_public_id}/opening-balance/reverse",
+            headers=reversal_headers,
+            json=reversal_body,
+        )
+        self.assertEqual(replay_after_archive.json(), reversal.json())
+        self.assertEqual(
+            self.db.query(AccountLedgerEntry).filter(
+                AccountLedgerEntry.account_id == historical_id
+            ).count(),
+            2,
+        )
 
     def test_positions_list_and_get_include_and_accept_public_id(self):
         list_response = self.client.get("/api/positions")

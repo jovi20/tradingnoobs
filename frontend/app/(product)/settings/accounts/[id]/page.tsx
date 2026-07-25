@@ -6,7 +6,7 @@ import {
     ArrowLeft,
     Briefcase,
     Save,
-    Trash2,
+    Archive,
     Loader2,
     AlertCircle,
     CheckCircle2,
@@ -97,13 +97,13 @@ export default function AccountDetailPage() {
         }
     }
 
-    const handleDelete = async () => {
-        if (!token || !account || !confirm('确定要删除这个账户吗？此操作不可撤销，且会影响相关仓位统计。')) return
+    const handleArchive = async () => {
+        if (!token || !account || !confirm('确定要归档这个账户吗？历史交易和账务记录会继续保留。')) return
         try {
             await accountsAPI.delete(token, account.routeId)
             router.push('/settings')
         } catch (err: any) {
-            setError(err.message || '删除失败')
+            setError(err.message || '归档失败')
         }
     }
 
@@ -169,12 +169,12 @@ export default function AccountDetailPage() {
                 <div className="flex gap-2">
                     <button
                         type="button"
-                        onClick={handleDelete}
-                        aria-label="删除账户"
+                        onClick={handleArchive}
+                        aria-label="归档账户"
                         className="btn flex items-center gap-2 border-loss/30 bg-panel text-loss hover:bg-loss/8"
                     >
-                        <Trash2 className="w-4 h-4" />
-                        <span className="hidden sm:inline">删除账户</span>
+                        <Archive className="w-4 h-4" />
+                        <span className="hidden sm:inline">归档账户</span>
                     </button>
                 </div>
             </div>
@@ -222,7 +222,7 @@ export default function AccountDetailPage() {
                             <div>
                                 <h3 className="mb-4 text-sm font-semibold text-ink">记录新流水</h3>
                                 <div className="rounded-md border border-line bg-panel-subtle p-4">
-                                    {account.journal_balance_trusted ? (
+                                    {account.journal_balance_trusted && account.is_active ? (
                                         <TransactionForm
                                             token={token!}
                                             accountId={account.routeId}
@@ -242,7 +242,7 @@ export default function AccountDetailPage() {
                                 <TransactionList
                                     token={token!}
                                     transactions={transactions}
-                                    onDelete={refreshData}
+                                    onChanged={refreshData}
                                 />
                             </div>
                         </div>

@@ -6,7 +6,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from database import Base, get_db
@@ -620,7 +620,17 @@ class JRN004OwnerBoundaryTests(unittest.TestCase):
         )
 
     def test_truth_lifecycle_fails_closed_for_cross_position_reversal_reference(self):
-        self.owner_event.reverses_event_id = self.foreign_event.id
+        self.db.execute(
+            text(
+                "UPDATE position_events "
+                "SET reverses_event_id = :foreign_event_id "
+                "WHERE id = :owner_event_id"
+            ),
+            {
+                "foreign_event_id": self.foreign_event.id,
+                "owner_event_id": self.owner_event.id,
+            },
+        )
         self.db.commit()
 
         response = self.client.get(

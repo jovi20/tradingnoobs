@@ -929,7 +929,7 @@ class TradingAccountCreate(BaseModel):
     broker: str = Field(..., max_length=50)
     account_type: Optional[str] = Field(None, max_length=50)
     currency: str = Field(default="USD", max_length=10)
-    initial_balance: Optional[Decimal] = None
+    initial_balance: Optional[Decimal] = Field(default=None, ge=0)
     description: Optional[str] = None
 
 
@@ -969,6 +969,8 @@ class TradingAccountResponse(BaseModel):
 # ============== Transaction Schemas ==============
 
 class TransactionBase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     type: str # TransactionType enum value
     amount: Decimal
     currency: str = "USD"
@@ -976,7 +978,7 @@ class TransactionBase(BaseModel):
     description: Optional[str] = None
 
 class TransactionCreate(TransactionBase):
-    pass
+    amount: Decimal = Field(..., gt=0)
 
 class TransactionResponse(TransactionBase):
     id: int
@@ -984,9 +986,25 @@ class TransactionResponse(TransactionBase):
     account_id: int
     created_at: datetime
     updated_at: Optional[datetime]
+    reverses_transaction_public_id: Optional[str] = None
+    reversed_by_transaction_public_id: Optional[str] = None
+    reversal_reason: Optional[str] = None
+    request_id: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+
+class FinancialFactReverseCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    occurred_at: datetime
+    reason: str = Field(..., min_length=1, max_length=1000)
+
+
+class CashDividendEffectEnum(str, Enum):
+    RECEIVED = "RECEIVED"
+    PAID_IN_LIEU = "PAID_IN_LIEU"
 
 
 # ============== System Settings Schemas ==============
@@ -1194,6 +1212,7 @@ class TradingPositionEventNarrativeUpdate(BaseModel):
 
 class TradingPositionDividendCreate(BaseModel):
     amount: Decimal = Field(..., gt=0)
+    effect: CashDividendEffectEnum = CashDividendEffectEnum.RECEIVED
     currency: str = Field(default="USD", max_length=10)
     occurred_at: datetime
     fx_rate_to_account_ccy: Decimal = Field(default=Decimal("1"), gt=0)

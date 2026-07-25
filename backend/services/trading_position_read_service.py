@@ -198,7 +198,14 @@ def _ledger_total(truth_position: TradingPosition, entry_type: AccountLedgerEntr
         (
             entry.amount_account_ccy if entry.amount_account_ccy is not None else entry.amount
             for entry in truth_position.ledger_entries
-            if entry.entry_type == entry_type
+            if (
+                entry.entry_type == entry_type
+                or (
+                    entry.reverses_ledger_entry_id is not None
+                    and entry.reversed_entry is not None
+                    and entry.reversed_entry.entry_type == entry_type
+                )
+            )
         ),
         Decimal("0"),
     )

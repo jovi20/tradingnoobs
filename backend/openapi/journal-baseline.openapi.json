@@ -533,6 +533,14 @@
         "title": "Body_login_api_auth_login_post",
         "type": "object"
       },
+      "CashDividendEffectEnum": {
+        "enum": [
+          "RECEIVED",
+          "PAID_IN_LIEU"
+        ],
+        "title": "CashDividendEffectEnum",
+        "type": "string"
+      },
       "ContextRailQuickFilter": {
         "properties": {
           "active": {
@@ -993,6 +1001,28 @@
           "enabled"
         ],
         "title": "FeatureFlagUpdate",
+        "type": "object"
+      },
+      "FinancialFactReverseCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "occurred_at",
+          "reason"
+        ],
+        "title": "FinancialFactReverseCreate",
         "type": "object"
       },
       "FreshnessStatusEnum": {
@@ -3948,6 +3978,7 @@
           "initial_balance": {
             "anyOf": [
               {
+                "minimum": 0.0,
                 "type": "number"
               },
               {
@@ -4179,6 +4210,10 @@
             "maxLength": 10,
             "title": "Currency",
             "type": "string"
+          },
+          "effect": {
+            "$ref": "#/components/schemas/CashDividendEffectEnum",
+            "default": "RECEIVED"
           },
           "fx_rate_to_account_ccy": {
             "anyOf": [
@@ -4550,10 +4585,12 @@
         "type": "string"
       },
       "TransactionCreate": {
+        "additionalProperties": false,
         "properties": {
           "amount": {
             "anyOf": [
               {
+                "exclusiveMinimum": 0.0,
                 "type": "number"
               },
               {
@@ -4598,6 +4635,7 @@
         "type": "object"
       },
       "TransactionResponse": {
+        "additionalProperties": false,
         "properties": {
           "account_id": {
             "title": "Account Id",
@@ -4641,6 +4679,50 @@
           "public_id": {
             "title": "Public Id",
             "type": "string"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "reversal_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reversal Reason"
+          },
+          "reversed_by_transaction_public_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reversed By Transaction Public Id"
+          },
+          "reverses_transaction_public_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reverses Transaction Public Id"
           },
           "type": {
             "title": "Type",
@@ -5072,6 +5154,24 @@
       "post": {
         "description": "Create a new trading account",
         "operationId": "create_account_api_accounts_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -5258,6 +5358,95 @@
         ]
       }
     },
+    "/api/accounts/{account_id}/opening-balance/reverse": {
+      "post": {
+        "operationId": "reverse_opening_balance_api_accounts__account_id__opening_balance_reverse_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinancialFactReverseCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingAccountResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Reverse Opening Balance",
+        "tags": [
+          "Trading Accounts"
+        ]
+      }
+    },
     "/api/accounts/{account_id}/transactions": {
       "get": {
         "operationId": "list_transactions_api_accounts__account_id__transactions_get",
@@ -5329,7 +5518,6 @@
         ]
       },
       "post": {
-        "description": "Create a new transaction and update account cash balance.",
         "operationId": "create_transaction_api_accounts__account_id__transactions_post",
         "parameters": [
           {
@@ -5339,6 +5527,38 @@
             "schema": {
               "title": "Account Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
             }
           }
         ],
@@ -5353,7 +5573,7 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
                 "schema": {
@@ -8686,6 +8906,22 @@
               ],
               "title": "Idempotency-Key"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
           }
         ],
         "requestBody": {
@@ -8724,6 +8960,102 @@
           }
         ],
         "summary": "Create Trading Position Dividend",
+        "tags": [
+          "Trading Positions"
+        ]
+      }
+    },
+    "/api/trading-positions/{position_public_id}/dividends/{event_public_id}/reverse": {
+      "post": {
+        "operationId": "reverse_trading_position_dividend_api_trading_positions__position_public_id__dividends__event_public_id__reverse_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "position_public_id",
+            "required": true,
+            "schema": {
+              "title": "Position Public Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "event_public_id",
+            "required": true,
+            "schema": {
+              "title": "Event Public Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinancialFactReverseCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Reverse Trading Position Dividend",
         "tags": [
           "Trading Positions"
         ]
@@ -8976,7 +9308,6 @@
     },
     "/api/transactions/{transaction_id}": {
       "delete": {
-        "description": "Delete a transaction and revert the balance change.",
         "operationId": "delete_transaction_api_transactions__transaction_id__delete",
         "parameters": [
           {
@@ -8990,7 +9321,7 @@
           }
         ],
         "responses": {
-          "200": {
+          "405": {
             "content": {
               "application/json": {
                 "schema": {}
@@ -9015,6 +9346,95 @@
           }
         ],
         "summary": "Delete Transaction",
+        "tags": [
+          "transactions"
+        ]
+      }
+    },
+    "/api/transactions/{transaction_id}/reverse": {
+      "post": {
+        "operationId": "reverse_transaction_api_transactions__transaction_id__reverse_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "transaction_id",
+            "required": true,
+            "schema": {
+              "title": "Transaction Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinancialFactReverseCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Reverse Transaction",
         "tags": [
           "transactions"
         ]

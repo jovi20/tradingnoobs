@@ -54,8 +54,9 @@ test('account transaction controls use consistent Chinese copy', () => {
     const listSource = readFileSync(resolve(frontendRoot, 'components/TransactionList.tsx'), 'utf8')
 
     assert.doesNotMatch(formSource, /\((?:Deposit|Withdrawal|Interest|Fee|Transfer In|Transfer Out)\)/)
-    assert.doesNotMatch(listSource, /No transactions found|Failed to delete transaction['"]\)/)
+    assert.doesNotMatch(listSource, /No transactions found|deleteTransaction|删除流水/)
     assert.match(formSource, /<option value="DEPOSIT">入金<\/option>/)
     assert.match(formSource, /setFormData\(\(current\) => \(\{[\s\S]*?amount: 0,[\s\S]*?description: ''/)
-    assert.match(listSource, /aria-label=\{`删除\$\{getTypeLabel\(tx\.type\)\}流水`\}/)
+    assert.match(listSource, /aria-label=\{`冲正\$\{getTypeLabel\(tx\.type\)\}流水`\}/)
+    assert.match(listSource, /accountsAPI\.reverseTransaction/)
 })

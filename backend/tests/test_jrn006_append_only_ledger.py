@@ -584,6 +584,7 @@ class JRN006AccountingHealthApiTests(unittest.TestCase):
 
         mutation = self.client.post(
             f"/api/accounts/{self.account.public_id}/transactions",
+            headers={"Idempotency-Key": "degraded-account-deposit"},
             json={
                 "type": "DEPOSIT",
                 "amount": "10",
@@ -608,6 +609,7 @@ class JRN006AccountingHealthApiTests(unittest.TestCase):
         ):
             response = self.client.post(
                 f"/api/accounts/{self.account.public_id}/transactions",
+                headers={"Idempotency-Key": "posting-failure-deposit"},
                 json={
                     "type": "DEPOSIT",
                     "amount": "10",

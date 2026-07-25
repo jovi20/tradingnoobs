@@ -1,19 +1,24 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import subprocess
 import sys
+import time
 import uuid
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
+from threading import Event
+from unittest.mock import patch
 
 import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
+from fastapi import HTTPException
 from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.engine import Engine, URL, make_url
@@ -29,6 +34,8 @@ from models import (
     PositionEventType,
     TradeInstrument,
     TradeInstrumentType,
+    Transaction,
+    TransactionType,
     TradingAccount,
     TradingPosition,
     TradingPositionSide,
@@ -38,11 +45,15 @@ from models import (
 from services.account_ledger_service import (
     create_or_replay_posting,
     sync_opening_balance_to_account_ledger,
+    sync_transaction_to_account_ledger,
 )
 from services.auth_rate_limit_service import consume_auth_attempt
 from services.auth_service import authenticate_user, create_user
 from services.idempotency_service import begin_idempotent_request
+from services.financial_command_service import lock_owned_account
 from services.instrument_identity_service import InstrumentIdentity
+from schemas import TradingAccountUpdate
+from routers.accounts import update_account
 from services.trading_position_write_service import (
     append_truth_trade_event,
     lock_owned_truth_position,
@@ -377,6 +388,261 @@ def test_empty_postgresql_database_upgrades_to_current_head(
         assert connection.execute(
             text("SELECT version_num FROM alembic_version")
         ).scalar_one() == _alembic_head()
+    assert {
+        "reverses_transaction_id",
+        "actor_user_id",
+        "request_id",
+        "reversal_reason",
+    } <= {
+        column["name"] for column in inspector.get_columns("transactions")
+    }
+    assert {"actor_user_id", "request_id"} <= {
+        column["name"] for column in inspector.get_columns("position_events")
+    }
+    assert "hard_delete_eligible" in {
+        column["name"] for column in inspector.get_columns("trading_accounts")
+    }
+
+
+def test_jrn009_populated_upgrade_downgrade_reupgrade_preserves_cash_facts(
+    postgres_database: tuple[Engine, str],
+) -> None:
+    engine, database_url = postgres_database
+    _run_alembic(database_url, "upgrade", "d4e5f6a7b8c9")
+    with engine.begin() as connection:
+        user_id = connection.execute(
+            text(
+                """
+                INSERT INTO users (
+                    public_id, email, email_normalized, hashed_password,
+                    status, is_active, role, timezone
+                ) VALUES (
+                    'jrn009-upgrade-user', 'jrn009-upgrade@example.com',
+                    'jrn009-upgrade@example.com', 'hash',
+                    'ACTIVE', true, 'user', 'UTC'
+                ) RETURNING id
+                """
+            )
+        ).scalar_one()
+        account_id = connection.execute(
+            text(
+                """
+                INSERT INTO trading_accounts (
+                    public_id, user_id, name, broker, currency, is_active,
+                    accounting_health, trade_source_state
+                ) VALUES (
+                    'jrn009-upgrade-account', :user_id, 'Upgrade', 'MANUAL',
+                    'USD', true, 'ACCOUNTING_HEALTHY', 'MANUAL'
+                ) RETURNING id
+                """
+            ),
+            {"user_id": user_id},
+        ).scalar_one()
+        connection.execute(
+            text(
+                """
+                INSERT INTO transactions (
+                    public_id, account_id, type, amount, currency, date,
+                    description
+                ) VALUES (
+                    'jrn009-existing-cash', :account_id, 'DEPOSIT', 25,
+                    'USD', '2026-07-25T12:00:00+00:00', 'Existing cash'
+                )
+                """
+            ),
+            {"account_id": account_id},
+        )
+
+    _run_alembic(database_url, "upgrade", "head")
+    with engine.connect() as connection:
+        assert connection.execute(
+            text(
+                "SELECT amount FROM transactions "
+                "WHERE public_id = 'jrn009-existing-cash'"
+            )
+        ).scalar_one() == Decimal("25.00")
+        assert connection.execute(
+            text(
+                "SELECT hard_delete_eligible FROM trading_accounts "
+                "WHERE public_id = 'jrn009-upgrade-account'"
+            )
+        ).scalar_one() is False
+
+    _run_alembic(database_url, "downgrade", "d4e5f6a7b8c9")
+    assert "reverses_transaction_id" not in {
+        column["name"] for column in inspect(engine).get_columns("transactions")
+    }
+    assert "hard_delete_eligible" not in {
+        column["name"] for column in inspect(engine).get_columns("trading_accounts")
+    }
+    _run_alembic(database_url, "upgrade", "head")
+    with engine.connect() as connection:
+        assert connection.execute(
+            text(
+                "SELECT amount FROM transactions "
+                "WHERE public_id = 'jrn009-existing-cash'"
+            )
+        ).scalar_one() == Decimal("25.00")
+
+
+def test_jrn009_postgresql_guards_and_account_lock_prevent_duplicate_reversal(
+    postgres_database: tuple[Engine, str],
+) -> None:
+    engine, database_url = postgres_database
+    _run_alembic(database_url, "upgrade", "head")
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    with SessionLocal() as db:
+        user = create_user(db, "jrn009-lock@example.com", "StrongPassword-123")
+        user.timezone = "UTC"
+        account = TradingAccount(
+            public_id="jrn009-lock-account",
+            user_id=user.id,
+            name="JRN009 Lock",
+            broker="MANUAL",
+            currency="USD",
+            is_active=True,
+        )
+        db.add(account)
+        db.flush()
+        original = Transaction(
+            public_id="jrn009-original-transaction",
+            account_id=account.id,
+            type=TransactionType.WITHDRAWAL,
+            amount=Decimal("-25"),
+            currency="USD",
+            date=datetime(2026, 7, 25, 12, 0, tzinfo=timezone.utc),
+            actor_user_id=user.id,
+            request_id="original-request",
+        )
+        db.add(original)
+        db.flush()
+        sync_transaction_to_account_ledger(db, transaction=original, account=account)
+        db.commit()
+        user_id = user.id
+        original_id = original.id
+
+    with engine.connect() as connection:
+        transaction_id = connection.execute(
+            text(
+                "SELECT id FROM transactions "
+                "WHERE public_id = 'jrn009-original-transaction'"
+            )
+        ).scalar_one()
+        with pytest.raises(DBAPIError):
+            connection.execute(
+                text("UPDATE transactions SET amount = -30 WHERE id = :id"),
+                {"id": transaction_id},
+            )
+        connection.rollback()
+        with pytest.raises(DBAPIError):
+            connection.execute(
+                text("DELETE FROM transactions WHERE id = :id"),
+                {"id": transaction_id},
+            )
+        connection.rollback()
+
+    def reverse_once(index: int) -> str:
+        with SessionLocal() as db:
+            account = lock_owned_account(
+                db,
+                user_id=user_id,
+                account_public_id="jrn009-lock-account",
+            )
+            assert account is not None
+            if db.query(Transaction.id).filter(
+                Transaction.reverses_transaction_id == original_id
+            ).first() is not None:
+                db.rollback()
+                return "CONFLICT"
+            reversal = Transaction(
+                public_id=f"jrn009-reversal-{index}",
+                account_id=account.id,
+                type=TransactionType.WITHDRAWAL,
+                amount=Decimal("25"),
+                currency="USD",
+                date=datetime(2026, 7, 25, 13, index, tzinfo=timezone.utc),
+                reverses_transaction_id=original_id,
+                actor_user_id=user_id,
+                request_id=f"reversal-request-{index}",
+                reversal_reason="Concurrent correction",
+            )
+            db.add(reversal)
+            db.commit()
+            return "CREATED"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(reverse_once, range(2)))
+    assert sorted(results) == ["CONFLICT", "CREATED"]
+    with SessionLocal() as db:
+        assert db.query(Transaction).filter(
+            Transaction.reverses_transaction_id == original_id
+        ).count() == 1
+
+        account = TradingAccount(
+            public_id="jrn009-currency-lock-account",
+            user_id=user_id,
+            name="JRN009 Currency Lock",
+            broker="MANUAL",
+            currency="USD",
+            is_active=True,
+        )
+        db.add(account)
+        db.commit()
+
+    writer_locked = Event()
+    updater_started = Event()
+
+    def create_first_history_marker() -> None:
+        with SessionLocal() as db:
+            account = lock_owned_account(
+                db,
+                user_id=user_id,
+                account_public_id="jrn009-currency-lock-account",
+            )
+            assert account is not None
+            account.hard_delete_eligible = False
+            writer_locked.set()
+            assert updater_started.wait(timeout=5)
+            time.sleep(0.2)
+            db.commit()
+
+    def race_currency_update() -> str:
+        assert writer_locked.wait(timeout=5)
+        updater_started.set()
+        with SessionLocal() as db:
+            user = db.get(User, user_id)
+            assert user is not None
+            try:
+                with patch(
+                    "routers.accounts._require_release_currency",
+                    return_value="EUR",
+                ):
+                    asyncio.run(
+                        update_account(
+                            "jrn009-currency-lock-account",
+                            TradingAccountUpdate(currency="EUR"),
+                            current_user=user,
+                            db=db,
+                        )
+                    )
+            except HTTPException as exc:
+                assert exc.status_code == 409
+                assert exc.detail["code"] == "ACCOUNT_BASE_CURRENCY_FROZEN"
+                return "FROZEN"
+            return "UPDATED"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        writer_future = executor.submit(create_first_history_marker)
+        updater_future = executor.submit(race_currency_update)
+        writer_future.result()
+        assert updater_future.result() == "FROZEN"
+
+    with SessionLocal() as db:
+        account = db.query(TradingAccount).filter(
+            TradingAccount.public_id == "jrn009-currency-lock-account"
+        ).one()
+        assert account.currency == "USD"
+        assert account.hard_delete_eligible is False
 
 
 def test_populated_pre_extension_fixture_upgrades_without_data_loss(

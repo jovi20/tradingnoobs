@@ -139,5 +139,5 @@ class JRN003SecretMigrationTests(unittest.TestCase):
             )
             self.assertEqual(
                 connection.execute("SELECT version_num FROM alembic_version").fetchone()[0],
-                "d4e5f6a7b8c9",
+                "e5f6a7b8c9d0",
             )

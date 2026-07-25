@@ -131,6 +131,7 @@ class PublicIdLeafRouteTests(unittest.TestCase):
     def test_transaction_create_and_delete_support_public_id(self):
         create_response = self.client.post(
             f"/api/accounts/{self.account.public_id}/transactions",
+            headers={"Idempotency-Key": "leaf-account-deposit"},
             json={
                 "type": "DEPOSIT",
                 "amount": 50,
@@ -139,15 +140,15 @@ class PublicIdLeafRouteTests(unittest.TestCase):
                 "description": "Top up",
             },
         )
-        self.assertEqual(create_response.status_code, 200)
+        self.assertEqual(create_response.status_code, 201)
         payload = create_response.json()
         self.assertIn("public_id", payload)
 
         delete_response = self.client.delete(f"/api/transactions/{self.transaction.public_id}")
-        self.assertEqual(delete_response.status_code, 409)
+        self.assertEqual(delete_response.status_code, 405)
         self.assertEqual(
             delete_response.json()["detail"]["code"],
-            "POSTING_FACT_CONFLICT",
+            "FINANCIAL_FACT_IMMUTABLE",
         )
 
     def test_public_trade_batch_mutations_fail_closed_for_public_id(self):

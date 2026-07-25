@@ -330,6 +330,44 @@ def sync_transaction_to_account_ledger(
     )
 
 
+def sync_transaction_reversal_to_account_ledger(
+    db: Session,
+    *,
+    transaction: Transaction,
+    original: Transaction,
+    account: TradingAccount,
+) -> AccountLedgerEntry:
+    if (
+        transaction.account_id != account.id
+        or original.account_id != account.id
+        or transaction.reverses_transaction_id != original.id
+    ):
+        raise ValueError("Transaction reversal owner graph is inconsistent")
+    require_accounting_healthy(account)
+    if transaction.id is None:
+        db.flush()
+    original_entry = (
+        db.query(AccountLedgerEntry)
+        .filter(AccountLedgerEntry.transaction_id == original.id)
+        .one()
+    )
+    return create_or_replay_posting(
+        db,
+        user_id=account.user_id,
+        account_id=account.id,
+        source_fact_public_id=transaction.public_id,
+        posting_kind=LedgerPostingKind.COMPENSATING_REVERSAL,
+        occurred_at=transaction.date,
+        currency=original_entry.currency,
+        amount=-quantize_posting(original_entry.amount),
+        transaction_id=transaction.id,
+        reverses_ledger_entry_id=original_entry.id,
+        source="TRANSACTION_REVERSAL",
+        source_run_id=transaction.request_id or transaction.public_id,
+        description=transaction.reversal_reason,
+    )
+
+
 def sync_opening_balance_to_account_ledger(
     db: Session,
     *,
@@ -420,6 +458,51 @@ def sync_dividend_event_to_account_ledger(
         source="POSITION_EVENT",
         source_run_id=event.public_id,
         description=event.note or "Dividend",
+    )
+
+
+def sync_dividend_reversal_to_account_ledger(
+    db: Session,
+    *,
+    event: PositionEvent,
+    original: PositionEvent,
+) -> AccountLedgerEntry:
+    _require_event_owner_graph(db, event)
+    if (
+        event.reverses_event_id != original.id
+        or event.position_id != original.position_id
+        or event.account_id != original.account_id
+        or event.user_id != original.user_id
+    ):
+        raise ValueError("Dividend reversal owner graph is inconsistent")
+    account = db.query(TradingAccount).filter(
+        TradingAccount.id == event.account_id,
+        TradingAccount.user_id == event.user_id,
+    ).one()
+    require_accounting_healthy(account)
+    if event.id is None:
+        db.flush()
+    original_entry = (
+        db.query(AccountLedgerEntry)
+        .filter(AccountLedgerEntry.position_event_id == original.id)
+        .one()
+    )
+    return create_or_replay_posting(
+        db,
+        user_id=event.user_id,
+        account_id=event.account_id,
+        position_id=event.position_id,
+        position_event_id=event.id,
+        source_fact_public_id=event.public_id,
+        posting_kind=LedgerPostingKind.COMPENSATING_REVERSAL,
+        occurred_at=event.event_time,
+        currency=original_entry.currency,
+        amount=-quantize_posting(original_entry.amount),
+        fx_rate_to_account_ccy=original_entry.fx_rate_to_account_ccy or 1,
+        reverses_ledger_entry_id=original_entry.id,
+        source="DIVIDEND_REVERSAL",
+        source_run_id=event.request_id or event.public_id,
+        description=event.reason,
     )
 
 

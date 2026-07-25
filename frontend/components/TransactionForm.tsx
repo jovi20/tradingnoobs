@@ -17,6 +17,7 @@ interface TransactionFormProps {
 
 export function TransactionForm({ token, accountId, currency, onSuccess, onCancel }: TransactionFormProps) {
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID())
     const [formData, setFormData] = useState<TransactionCreate>({
         type: 'DEPOSIT',
         amount: 0,
@@ -29,13 +30,19 @@ export function TransactionForm({ token, accountId, currency, onSuccess, onCance
         e.preventDefault()
         setIsSubmitting(true)
         try {
-            await accountsAPI.createTransaction(token, accountId, { ...formData, currency })
+            await accountsAPI.createTransaction(
+                token,
+                accountId,
+                { ...formData, currency },
+                idempotencyKey,
+            )
             setFormData((current) => ({
                 ...current,
                 amount: 0,
                 date: new Date().toISOString().slice(0, 16),
                 description: '',
             }))
+            setIdempotencyKey(crypto.randomUUID())
             onSuccess()
         } catch (error) {
             console.error('Failed to create transaction:', error)

@@ -24,6 +24,9 @@ from models import (
     TradingPositionStatus,
 )
 from services.account_ledger_service import require_accounting_healthy
+from services.financial_command_service import (
+    permanently_forbid_account_hard_delete,
+)
 from services.instrument_identity_service import (
     InstrumentIdentity,
     get_or_create_journal_instrument,
@@ -214,6 +217,7 @@ def create_truth_native_open(
         confidence=confidence,
         note=reason,
     )
+    permanently_forbid_account_hard_delete(account)
     enqueue_position_event_created_outbox(
         db,
         position=truth_position,

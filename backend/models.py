@@ -456,7 +456,11 @@ class User(Base):
     identities = relationship("UserIdentity", back_populates="user")
     auth_tokens = relationship("AuthToken", back_populates="user")
     truth_positions = relationship("TradingPosition", back_populates="user")
-    position_events_v2 = relationship("PositionEvent", back_populates="user")
+    position_events_v2 = relationship(
+        "PositionEvent",
+        back_populates="user",
+        foreign_keys="PositionEvent.user_id",
+    )
     account_ledger_entries = relationship("AccountLedgerEntry", back_populates="user")
 
 
@@ -718,7 +722,6 @@ class TradingAccount(Base):
     broker = Column(String(50), nullable=False)  # 券商/交易所，如 "IBKR", "Binance"
     account_type = Column(String(50), nullable=True)  # 账户类型，如 "现货", "合约", "保证金"
     currency = Column(String(10), default="USD")  # 账户币种
-    currency = Column(String(10), default="USD")  # 账户币种
     initial_balance = Column(Numeric(20, 2), nullable=True)  # 初始资金
     cash_balance = Column(Numeric(20, 2), nullable=True, default=0) # 当前现金余额
     current_balance = Column(Numeric(20, 2), nullable=True, default=0) # 当前净值 (NAV) - Manually Synced
@@ -734,6 +737,7 @@ class TradingAccount(Base):
         nullable=False,
         default=TradeSourceState.CLEAN.value,
     )
+    hard_delete_eligible = Column(Boolean, nullable=False, default=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -887,6 +891,8 @@ class PositionEvent(Base):
     external_order_id = Column(String(255), nullable=True)
     input_source = Column(String(50), nullable=True)
     source_run_id = Column(String(100), nullable=True)
+    actor_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    request_id = Column(String(100), nullable=True)
     reason = Column(Text, nullable=True)
     emotion = Column(String(50), nullable=True)
     confidence = Column(Integer, nullable=True)
@@ -904,11 +910,57 @@ class PositionEvent(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    user = relationship("User", back_populates="position_events_v2")
+    user = relationship(
+        "User",
+        back_populates="position_events_v2",
+        foreign_keys=[user_id],
+    )
     position = relationship("TradingPosition", back_populates="events")
     account = relationship("TradingAccount")
     instrument = relationship("TradeInstrument")
     ledger_entries = relationship("AccountLedgerEntry", back_populates="position_event")
+
+
+_IMMUTABLE_POSITION_EVENT_FINANCIAL_FIELDS = {
+    "position_id",
+    "account_id",
+    "instrument_id",
+    "event_type",
+    "event_time",
+    "sequence_no",
+    "side_effect",
+    "quantity",
+    "price",
+    "currency",
+    "gross_amount",
+    "fee_amount",
+    "fee_currency",
+    "fx_rate_to_account_ccy",
+    "reverses_event_id",
+}
+
+
+@event.listens_for(Session, "before_flush")
+def _prevent_posted_position_event_financial_mutation(
+    session,
+    flush_context,
+    instances,
+) -> None:
+    for position_event in session.deleted:
+        if (
+            isinstance(position_event, PositionEvent)
+            and inspect(position_event).persistent
+        ):
+            raise ValueError("Position events are immutable")
+    for position_event in session.dirty:
+        if not isinstance(position_event, PositionEvent) or not inspect(position_event).persistent:
+            continue
+        state = inspect(position_event)
+        if any(
+            state.attrs[field].history.has_changes()
+            for field in _IMMUTABLE_POSITION_EVENT_FINANCIAL_FIELDS
+        ):
+            raise ValueError("Posted position-event financial fields are immutable")
 
 
 class AccountLedgerEntry(Base):
@@ -1392,6 +1444,12 @@ class TransactionType(str, enum.Enum):
 class Transaction(Base):
     """资金流水 - 记录充提、利息、费用等"""
     __tablename__ = "transactions"
+    __table_args__ = (
+        UniqueConstraint(
+            "reverses_transaction_id",
+            name="uq_transaction_reverses_transaction",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
@@ -1403,6 +1461,14 @@ class Transaction(Base):
     date = Column(DateTime(timezone=True), nullable=False, default=func.now())
     description = Column(Text, nullable=True)
     related_tx_id = Column(Integer, nullable=True) # For transfers between accounts
+    reverses_transaction_id = Column(
+        Integer,
+        ForeignKey("transactions.id"),
+        nullable=True,
+    )
+    actor_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    request_id = Column(String(100), nullable=True)
+    reversal_reason = Column(Text, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -1410,6 +1476,25 @@ class Transaction(Base):
     # Relationships
     trading_account = relationship("TradingAccount", back_populates="transactions")
     ledger_entries = relationship("AccountLedgerEntry", back_populates="transaction")
+    reversed_transaction = relationship(
+        "Transaction",
+        remote_side=[id],
+        foreign_keys=[reverses_transaction_id],
+    )
+
+
+@event.listens_for(Session, "before_flush")
+def _prevent_posted_transaction_mutation(session, flush_context, instances) -> None:
+    for transaction in session.deleted:
+        if isinstance(transaction, Transaction) and inspect(transaction).persistent:
+            raise ValueError("Posted transactions are immutable")
+    for transaction in session.dirty:
+        if (
+            isinstance(transaction, Transaction)
+            and inspect(transaction).persistent
+            and session.is_modified(transaction, include_collections=False)
+        ):
+            raise ValueError("Posted transactions are immutable")
 
 
 class AIAnalysisResult(Base):

@@ -651,6 +651,7 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
 
         response = self.client.post(
             f"/api/trading-positions/{truth_position.public_id}/dividends",
+            headers={"Idempotency-Key": "quarterly-dividend"},
             json={
                 "amount": "12.50",
                 "currency": "USD",
@@ -683,6 +684,7 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
 
         response = self.client.post(
             f"/api/trading-positions/{truth_position.public_id}/dividends",
+            headers={"Idempotency-Key": "foreign-currency-dividend"},
             json={
                 "amount": "100",
                 "currency": "HKD",
@@ -720,6 +722,11 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
             json=request_body,
             headers=headers,
         )
+        account = self.db.query(TradingAccount).filter(
+            TradingAccount.id == truth_position.account_id
+        ).one()
+        account.is_active = False
+        self.db.commit()
         second_response = self.client.post(
             f"/api/trading-positions/{truth_position.public_id}/dividends",
             json=request_body,
@@ -744,7 +751,7 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
             1,
         )
         idempotency_record = self.db.query(IdempotencyKey).filter(
-            IdempotencyKey.scope == "trading_position.dividend.create",
+            IdempotencyKey.scope == "position.cash-dividend.create.v1",
         ).one()
         self.assertEqual(idempotency_record.status, "COMPLETED")
 
@@ -773,7 +780,71 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
 
         self.assertEqual(first_response.status_code, 201)
         self.assertEqual(conflict_response.status_code, 409)
-        self.assertEqual(conflict_response.json()["detail"], "Idempotency key reuse with a different request payload.")
+        self.assertEqual(
+            conflict_response.json()["detail"]["code"],
+            "IDEMPOTENCY_KEY_REUSED",
+        )
+
+    def test_paid_in_lieu_dividend_and_reversal_append_compensating_fact(self):
+        truth_position = self._seed_synced_position()
+        dividend = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/dividends",
+            headers={"Idempotency-Key": "paid-in-lieu-dividend"},
+            json={
+                "amount": "12.50",
+                "effect": "PAID_IN_LIEU",
+                "currency": "USD",
+                "occurred_at": "2026-04-04T12:00:00+00:00",
+            },
+        )
+        self.assertEqual(dividend.status_code, 201)
+        event = self.db.query(PositionEvent).filter(
+            PositionEvent.position_id == truth_position.id,
+            PositionEvent.event_type == PositionEventType.DIVIDEND,
+        ).one()
+        self.assertEqual(event.side_effect, "PAID_IN_LIEU")
+        self.assertEqual(event.gross_amount, Decimal("-12.50000000"))
+        original_entry = self.db.query(AccountLedgerEntry).filter(
+            AccountLedgerEntry.position_event_id == event.id
+        ).one()
+        self.assertEqual(
+            original_entry.posting_kind,
+            LedgerPostingKind.CASH_DIVIDEND_PAID_IN_LIEU.value,
+        )
+
+        body = {
+            "occurred_at": "2026-04-05T12:00:00+00:00",
+            "reason": "Broker corrected the dividend classification",
+        }
+        headers = {
+            "Idempotency-Key": "paid-in-lieu-reversal",
+            "X-Request-ID": "request-dividend-reversal",
+        }
+        reversal = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/dividends/{event.public_id}/reverse",
+            headers=headers,
+            json=body,
+        )
+        replay = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/dividends/{event.public_id}/reverse",
+            headers=headers,
+            json=body,
+        )
+        self.assertEqual(reversal.status_code, 201)
+        self.assertEqual(replay.json(), reversal.json())
+        self.assertEqual(
+            Decimal(str(reversal.json()["data"]["ledger_summary"]["total_dividends"])),
+            Decimal("0"),
+        )
+        reversal_entry = self.db.query(AccountLedgerEntry).filter(
+            AccountLedgerEntry.posting_kind
+            == LedgerPostingKind.COMPENSATING_REVERSAL.value,
+        ).one()
+        self.assertEqual(reversal_entry.amount, Decimal("12.50000000"))
+        self.assertEqual(
+            reversal_entry.reverses_ledger_entry_id,
+            original_entry.id,
+        )
         self.db.expire_all()
         self.assertEqual(
             self.db.query(PositionEvent).filter(
