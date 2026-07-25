@@ -5,9 +5,33 @@ import { ImportPreviewRow } from '@/lib/api'
 
 interface ImportPreviewTableProps {
     rows: ImportPreviewRow[]
+    selectedRowPublicIds: Set<string>
+    onSelectionChange: (selected: Set<string>) => void
+    disabled?: boolean
 }
 
-export function ImportPreviewTable({ rows }: ImportPreviewTableProps) {
+export function ImportPreviewTable({
+    rows,
+    selectedRowPublicIds,
+    onSelectionChange,
+    disabled = false,
+}: ImportPreviewTableProps) {
+    const validRows = rows.filter(row => row.is_valid)
+    const allValidSelected = validRows.length > 0
+        && validRows.every(row => selectedRowPublicIds.has(row.public_id))
+    const toggleAll = () => {
+        onSelectionChange(
+            allValidSelected
+                ? new Set()
+                : new Set(validRows.map(row => row.public_id)),
+        )
+    }
+    const toggleRow = (publicId: string) => {
+        const next = new Set(selectedRowPublicIds)
+        if (next.has(publicId)) next.delete(publicId)
+        else next.add(publicId)
+        onSelectionChange(next)
+    }
     const fieldLabels: Record<string, string> = {
         action: '操作',
         direction: '方向',
@@ -62,6 +86,16 @@ export function ImportPreviewTable({ rows }: ImportPreviewTableProps) {
             <table className="w-full text-sm text-left">
                 <thead className="text-xs text-ink-muted uppercase bg-panel-subtle">
                     <tr>
+                        <th className="p-4">
+                            <input
+                                type="checkbox"
+                                checked={allValidSelected}
+                                onChange={toggleAll}
+                                disabled={disabled || validRows.length === 0}
+                                aria-label="选择全部有效行"
+                                className="h-4 w-4 accent-current"
+                            />
+                        </th>
                         <th className="p-4">行</th>
                         <th className="p-4">状态</th>
                         <th className="p-4">时间</th>
@@ -83,6 +117,16 @@ export function ImportPreviewTable({ rows }: ImportPreviewTableProps) {
                                 ${!row.is_valid ? 'bg-loss/10' : ''}
                             `}
                         >
+                            <td className="p-4">
+                                <input
+                                    type="checkbox"
+                                    checked={selectedRowPublicIds.has(row.public_id)}
+                                    onChange={() => toggleRow(row.public_id)}
+                                    disabled={disabled || !row.is_valid}
+                                    aria-label={`选择第 ${row.row_number} 行`}
+                                    className="h-4 w-4 accent-current"
+                                />
+                            </td>
                             <td className="p-4 font-mono tn-nums">{row.row_number}</td>
                             <td className="p-4">
                                 {row.is_valid ? (

@@ -19,7 +19,7 @@ test('uploadImportPreview sends owner account, file, and stable idempotency key'
     error_rows: 1,
     warning_rows: 0,
     rows: [],
-    confirm_available: false,
+    confirm_available: true,
   }
   globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
     calls.push({ input, init })
@@ -81,7 +81,7 @@ test('import session read and template download remain authenticated', async () 
       error_rows: 0,
       warning_rows: 0,
       rows: [],
-      confirm_available: false,
+      confirm_available: true,
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -104,6 +104,56 @@ test('import session read and template download remain authenticated', async () 
       (calls[1].init?.headers as Record<string, string>).Authorization,
       'Bearer token-1',
     )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('confirmImport sends the selected rows and stable idempotency key', async () => {
+  const calls: Array<{ input: string | URL | Request; init?: RequestInit }> = []
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+    calls.push({ input, init })
+    return new Response(JSON.stringify({
+      schema_version: 1,
+      session_public_id: 'session-1',
+      account_public_id: 'account-1',
+      status: 'COMPLETED',
+      selected_row_count: 2,
+      position_count: 1,
+      event_count: 2,
+      posting_count: 2,
+      source_ids: {
+        position_public_ids: ['position-1'],
+        event_public_ids: ['event-1', 'event-2'],
+        posting_public_ids: ['posting-1', 'posting-2'],
+      },
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  try {
+    const result = await positionsAPI.confirmImport(
+      'token-1',
+      'session-1',
+      ['row-1', 'row-2'],
+      'confirm-key-1',
+    )
+    assert.equal(result.status, 'COMPLETED')
+    assert.equal(
+      String(calls[0].input),
+      'http://localhost:8000/api/positions/import/confirm',
+    )
+    assert.equal(calls[0].init?.method, 'POST')
+    const headers = calls[0].init?.headers as Record<string, string>
+    assert.equal(headers.Authorization, 'Bearer token-1')
+    assert.equal(headers['Idempotency-Key'], 'confirm-key-1')
+    assert.deepEqual(JSON.parse(String(calls[0].init?.body)), {
+      session_public_id: 'session-1',
+      selected_row_public_ids: ['row-1', 'row-2'],
+    })
   } finally {
     globalThis.fetch = originalFetch
   }

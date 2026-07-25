@@ -1,19 +1,25 @@
-# 通用交易导入模板与 Preview
+# 通用交易导入模板、Preview 与 Confirm
 
 更新时间：2026-07-25
 
-`JRN-011` 已实现 owner-bound、持久化的 `GENERIC_BOOTSTRAP` upload/preview。`JRN-012` 的 canonical confirm 尚未实现，因此当前导入页只校验和保存 preview，不写入 position、event 或 ledger。
+`JRN-011/012` 已实现 owner-bound、持久化的 `GENERIC_BOOTSTRAP` upload/preview 与一次性 canonical confirm。Preview 只校验并保存 normalized rows，不写入 position、event 或 ledger；只有 confirm 会在一笔事务中写入 canonical facts。
 
 ## 当前接口
 
 - `GET /api/positions/import/template`：下载 UTF-8 CSV canonical 模板。
 - `POST /api/positions/import/upload`：上传 CSV/XLSX，必须提供目标账户和 `Idempotency-Key`。
 - `GET /api/positions/import/sessions/{session_public_id}`：仅 owner 可重新读取持久 preview。
-- `POST /api/positions/import/confirm`：仍返回 `404 FEATURE_DISABLED`，等待 `JRN-012`。
+- `POST /api/positions/import/confirm`：提交最终选中的有效行和 `Idempotency-Key`，原子 replay canonical lifecycle。
 
 上传限制为 10 MiB、5,000 行，preview TTL 为 24 小时。到期判断不依赖后台 worker；`now == expires_at` 即返回 `410 IMPORT_SESSION_EXPIRED`。终态 normalized rows 保留 30 天后由限批 maintenance command 清理，ImportSession audit shell 永久保留。
 
 任一 ImportSession 一经创建，目标账户永久失去 hard-delete 资格；删除操作只会 archive 账户。普通文件声明的 `external_trade_id`、`source_id` 或类似字段不会获得可信来源身份，只会产生 warning。
+
+Generic confirm 只接受活跃、`CLEAN` 且除 opening balance 外没有交易或资金事实的账户。非空成功 confirm 会原子执行 `CLEAN -> MANUAL`，以后不能再次使用 generic bootstrap；void、archive 或 preview cleanup 都不会恢复资格。空选择会以 `COMPLETED_NOOP` 消费当前 session、写入 0 条事实并保持 `CLEAN`，之后可以创建新的 bootstrap session。
+
+选中行按完整 instrument identity 和 direction 分组，组内按 UTC 时间及原文件 row number 稳定 replay。每组必须从 `OPEN` 开始；`ADD/REDUCE/CLOSE` 必须形成合法 quantity prefix，full close 后可以开始新的 `OPEN`，多空方向互不 net。任一行失败会回滚 position、event、posting、账户状态、session 完成状态和 confirm 幂等记录。成功响应及 confirm 幂等记录永久保留；同 key/hash 可重放原响应，其他 key/hash 不能二次消费 session。
+
+该 adapter 不是月度增量导入。未来同一 IBKR 账户的重复、重叠和只应用新增 execution 由 `IBKR_FLEX_XML_V1` source-bound 路径承担。
 
 ## Canonical 模板列
 
@@ -30,12 +36,12 @@
 | `price` | 是 | 大于 0 的 decimal。 |
 | `quantity` | 是 | 大于 0 的 decimal。 |
 | `currency` | 是 | 当前 release 只允许 `USD`，且必须等于账户币种。 |
-| `commission` | 否 | 非负、单 event 聚合 fee preview；JRN-012 confirm 才会进入 canonical posting。 |
+| `commission` | 否 | 非负、单 event 聚合 fee；confirm 写入 canonical `TRADE_FEE` posting。 |
 | `fee_currency` | 否 | 省略时使用账户币种；提供时必须等于账户币种。 |
 | `reason` | 否 | 交易理由。 |
 | `note` | 否 | 附加备注。 |
 
-完全相同的 normalized row 不会被静默去重；后续重复行显示 `DUPLICATE_ROW` warning。同一时间的行保留原文件 row number，JRN-012 confirm 将按该顺序稳定 replay。合法但尚未建档的 instrument 显示 `CREATE_ON_CONFIRM`，preview 本身不会创建 instrument。
+完全相同的 normalized row 不会被静默去重；后续重复行显示 `DUPLICATE_ROW` warning，选中后仍逐行参与完整 lifecycle 校验。同一时间的行保留原文件 row number，confirm 按该顺序稳定 replay。合法但尚未建档的 instrument 显示 `CREATE_ON_CONFIRM`，preview 本身不会创建 instrument。
 
 ## 临时文件与维护
 

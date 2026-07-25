@@ -198,7 +198,7 @@ class JRN011ImportPreviewTests(unittest.TestCase):
         self.assertEqual(payload["status"], "PREVIEW_READY")
         self.assertEqual(payload["total_rows"], 2)
         self.assertEqual(payload["valid_rows"], 2)
-        self.assertFalse(payload["confirm_available"])
+        self.assertTrue(payload["confirm_available"])
         self.assertEqual(
             payload["rows"][0]["normalized_values"]["instrument_resolution"],
             "CREATE_ON_CONFIRM",
@@ -616,7 +616,7 @@ class JRN011ImportPreviewTests(unittest.TestCase):
         self.assertFalse(account.is_active)
         self.assertEqual(self.db.query(ImportSession).count(), 1)
 
-    def test_template_is_public_contract_and_confirm_remains_fail_closed(self):
+    def test_template_is_public_contract_and_confirm_is_owner_first(self):
         template = self.client.get("/api/positions/import/template")
         self.assertEqual(template.status_code, 200)
         self.assertIn("asset_type,market,exchange_code", template.text)
@@ -625,4 +625,7 @@ class JRN011ImportPreviewTests(unittest.TestCase):
             json={"session_public_id": "untrusted"},
         )
         self.assertEqual(confirm.status_code, 404)
-        self.assertEqual(confirm.json()["error"]["code"], "FEATURE_DISABLED")
+        self.assertEqual(
+            confirm.json()["detail"]["code"],
+            "IMPORT_SESSION_NOT_FOUND",
+        )

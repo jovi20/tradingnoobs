@@ -377,6 +377,23 @@ export function isAuthenticationApiError(error: unknown): boolean {
 
 const LOCALIZED_API_ERROR_MESSAGES: Readonly<Record<string, string>> = {
     [JOURNAL_BETA_RELEASE_CONTRACT.lifecycle.same_side_open_conflict.code]: '同一账户中已存在相同标的和方向的未平仓仓位，请加仓到已有仓位。',
+    ACCOUNT_ARCHIVED: '该账户已归档，不能继续导入。',
+    ACCOUNTING_RECONCILIATION_REQUIRED: '该账户需要先完成账务对账。',
+    DUPLICATE_IMPORT_ROW_SELECTION: '同一行不能重复选择。',
+    GENERIC_BOOTSTRAP_NOT_ELIGIBLE: '该账户已有交易或非期初资金记录，不能执行首次通用导入。',
+    IDEMPOTENCY_KEY_REUSED: '本次重试内容与原确认请求不一致。',
+    IDEMPOTENCY_REQUEST_IN_PROGRESS: '导入确认正在处理，请稍后重试。',
+    IMPORT_LIFECYCLE_CLOSE_QUANTITY_MISMATCH: '平仓数量必须等于该生命周期的剩余数量。',
+    IMPORT_LIFECYCLE_OPEN_CONFLICT: '选中行在尚未平仓时再次开仓。',
+    IMPORT_LIFECYCLE_ORPHAN_EVENT: '选中行缺少前置开仓记录。',
+    IMPORT_LIFECYCLE_OVER_REDUCE: '减仓数量必须小于剩余持仓数量。',
+    IMPORT_ROW_ALREADY_APPLIED: '选中行已经写入，不能重复导入。',
+    IMPORT_ROW_INVALID: '选中行包含校验错误。',
+    IMPORT_ROW_NOT_FOUND: '选中行不属于当前导入会话。',
+    IMPORT_SESSION_ALREADY_CONSUMED: '该导入会话已经确认，不能再次消费。',
+    IMPORT_SESSION_EXPIRED: '导入预览已过期，请重新上传文件。',
+    IMPORT_SESSION_STATE_CONFLICT: '导入会话状态已变化，请刷新后重试。',
+    STALE_IMPORT_PREVIEW: '预览内容已变化，请重新上传文件。',
 }
 
 function resolveApiError(payload: unknown, status: number): {
@@ -1338,7 +1355,23 @@ export interface ImportSession {
     warning_rows: number
     error?: ImportIssue | null
     rows: ImportPreviewRow[]
-    confirm_available: false
+    confirm_available: boolean
+}
+
+export interface ImportConfirmResponse {
+    schema_version: 1
+    session_public_id: string
+    account_public_id: string
+    status: 'COMPLETED' | 'COMPLETED_NOOP'
+    selected_row_count: number
+    position_count: number
+    event_count: number
+    posting_count: number
+    source_ids: {
+        position_public_ids: string[]
+        event_public_ids: string[]
+        posting_public_ids: string[]
+    }
 }
 
 export interface BatchCreate {
@@ -1438,6 +1471,35 @@ export const positionsAPI = {
             `/api/positions/import/sessions/${encodeURIComponent(sessionPublicId)}`,
             {},
             token,
+        )
+    },
+
+    confirmImport: async (
+        token: string,
+        sessionPublicId: string,
+        selectedRowPublicIds: string[],
+        idempotencyKey: string,
+    ): Promise<ImportConfirmResponse> => {
+        const response = await fetch(`${API_BASE}/api/positions/import/confirm`, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+                'Idempotency-Key': idempotencyKey,
+            },
+            body: JSON.stringify({
+                session_public_id: sessionPublicId,
+                selected_row_public_ids: selectedRowPublicIds,
+            }),
+        })
+        const payload = await response.json().catch(() => null)
+        if (response.ok) return payload as ImportConfirmResponse
+        const error = resolveApiError(payload, response.status)
+        throw new ApiRequestError(
+            response.status,
+            error.message,
+            error.code,
+            error.positionPublicId,
         )
     },
 

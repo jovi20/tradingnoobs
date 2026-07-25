@@ -135,13 +135,14 @@ def create_app(release_profile: ReleaseProfile | str | None = None) -> FastAPI:
         build_disabled_capability_router,
     )
 
-    application.include_router(
-        build_disabled_capability_router(
-            prefix="/api/positions",
-            capability="GENERIC_BOOTSTRAP",
-            routes=GENERIC_BOOTSTRAP_DISABLED_ROUTES,
+    if GENERIC_BOOTSTRAP_DISABLED_ROUTES:
+        application.include_router(
+            build_disabled_capability_router(
+                prefix="/api/positions",
+                capability="GENERIC_BOOTSTRAP",
+                routes=GENERIC_BOOTSTRAP_DISABLED_ROUTES,
+            )
         )
-    )
 
     def runtime_dependencies(capability: RuntimeCapability):
         from routers.capability_dependencies import require_runtime_capability

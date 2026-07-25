@@ -1527,9 +1527,27 @@ class ImportSessionResponse(BaseModel):
     warning_rows: int
     error: Optional[ImportIssue] = None
     rows: List[ImportPreviewRow] = Field(default_factory=list)
-    confirm_available: Literal[False] = False
+    confirm_available: bool = False
 
 
 class ImportConfirmRequest(BaseModel):
     session_public_id: str
     selected_row_public_ids: List[str] = Field(default_factory=list)
+
+
+class ImportConfirmSourceIds(BaseModel):
+    position_public_ids: List[str] = Field(default_factory=list)
+    event_public_ids: List[str] = Field(default_factory=list)
+    posting_public_ids: List[str] = Field(default_factory=list)
+
+
+class ImportConfirmResponse(BaseModel):
+    schema_version: Literal[1] = 1
+    session_public_id: str
+    account_public_id: str
+    status: Literal["COMPLETED", "COMPLETED_NOOP"]
+    selected_row_count: int
+    position_count: int
+    event_count: int
+    posting_count: int
+    source_ids: ImportConfirmSourceIds

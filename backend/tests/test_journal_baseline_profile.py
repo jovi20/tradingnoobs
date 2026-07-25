@@ -115,14 +115,14 @@ class JournalBaselineProfileTests(unittest.TestCase):
         self.assertFalse(any(path.startswith("/api/broker-sync") for path in paths))
         self.assertIn("/api/auth/register", paths)
         self.assertIn("/api/positions/import/upload", paths)
-        self.assertNotIn("/api/positions/import/confirm", paths)
+        self.assertIn("/api/positions/import/confirm", paths)
         self.assertIn("/api/positions/import/template", paths)
         self.assertIn(
             "/api/positions/import/sessions/{session_public_id}",
             paths,
         )
 
-    def test_import_preview_is_published_while_confirm_stays_fail_closed(self):
+    def test_import_preview_and_confirm_are_published(self):
         template = self.client.get("/api/positions/import/template")
         self.assertEqual(template.status_code, 401, template.text)
         self.assertNotEqual(
@@ -141,11 +141,10 @@ class JournalBaselineProfileTests(unittest.TestCase):
             "/api/positions/import/confirm",
             json={"session_public_id": "untrusted"},
         )
-        self.assertEqual(confirm.status_code, 404, confirm.text)
-        self.assertEqual(confirm.json()["error"]["code"], "FEATURE_DISABLED")
-        self.assertEqual(
-            confirm.json()["detail"]["capability"],
-            "GENERIC_BOOTSTRAP",
+        self.assertEqual(confirm.status_code, 401, confirm.text)
+        self.assertNotEqual(
+            confirm.json().get("error", {}).get("code"),
+            "FEATURE_DISABLED",
         )
 
     def test_short_user_secret_is_never_returned_verbatim(self):

@@ -106,7 +106,7 @@
 正常路径：
 - Insights 周报 PDF 通过后端 PDF renderer 生成。
 - 前端导出按钮只调用既有 export API，不直接拼装 PDF。
-- 通用模板下载与持久 upload/preview 已由 JRN-011 提供；confirm 仍关闭且 preview 不写任何财务事实。历史 legacy parser 只保留为不可达参考。
+- 通用模板、持久 upload/preview 与一次性 canonical confirm 已由 JRN-011/012 提供；preview 不写任何财务事实，confirm 通过 canonical writer 单事务 replay。历史 legacy parser 只保留为不可达参考。
 
 安全回滚顺序：
 - 如果 PDF 生成失败，优先返回用户可读错误并保留页面可用性。

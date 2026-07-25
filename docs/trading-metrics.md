@@ -227,13 +227,13 @@ Risk\% = \frac{|P_{entry} - P_{stop}|}{P_{entry}} \times 100
 
 ### 2.4 佣金与费用统计
 
-状态：`部分实现 / Import preview fee 已规范化、confirm 未实现`
+状态：`部分实现 / Import fee canonical posting 已实现`
 
 说明：
-- `GENERIC_BOOTSTRAP` 的 JRN-011 upload/preview 已实现；`commission` 会规范化为非负、单 event 聚合 fee preview，但不会写入 canonical ledger。
+- `GENERIC_BOOTSTRAP` 的 JRN-011/012 upload、preview 与 confirm 已实现；`commission` 规范化为非负、单 event 聚合 fee，confirm 通过 canonical writer 写入 `TRADE_FEE` posting。
 - 未注册 legacy parser 的 `commission` 分支仍只是一项 historical reference，不参与当前 Import 路径。
 - 交易流水支持费用类 `Transaction`
-- `JRN-012` 必须把 preview fee 通过 canonical writer 写为 `TRADE_FEE` posting；系统也尚未形成统一的年度费用指标面板。
+- 系统尚未形成统一的年度费用指标面板；IBKR commission sign/currency 与增量 source replay 仍等待 JRN-013/014。
 
 ### 2.5 AI 分析助手中的策略/情绪/检查清单分组指标
 

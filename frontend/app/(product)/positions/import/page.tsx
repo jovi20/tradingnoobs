@@ -4,14 +4,17 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
     ArrowLeft,
+    CheckCircle2,
     Download,
     FileCheck2,
     Loader2,
     RefreshCw,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { getLocalizedUiError } from '@/lib/authErrors'
 import {
     accountsAPI,
+    ImportConfirmResponse,
     ImportSession,
     positionsAPI,
     TradingAccount,
@@ -24,14 +27,23 @@ interface PendingUpload {
     idempotencyKey: string
 }
 
+interface PendingConfirm {
+    selectedRowPublicIds: string[]
+    idempotencyKey: string
+}
+
 export default function PositionImportPage() {
     const { token } = useAuth()
     const [accounts, setAccounts] = useState<TradingAccount[]>([])
     const [accountId, setAccountId] = useState('')
     const [session, setSession] = useState<ImportSession | null>(null)
+    const [selectedRowPublicIds, setSelectedRowPublicIds] = useState<Set<string>>(new Set())
     const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null)
+    const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null)
+    const [confirmResult, setConfirmResult] = useState<ImportConfirmResponse | null>(null)
     const [isLoadingAccounts, setIsLoadingAccounts] = useState(true)
     const [isUploading, setIsUploading] = useState(false)
+    const [isConfirming, setIsConfirming] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
@@ -40,12 +52,14 @@ export default function PositionImportPage() {
         accountsAPI.list(token)
             .then(items => {
                 if (!active) return
-                const writable = items.filter(account => account.is_active)
+                const writable = items.filter(
+                    account => account.is_active && account.trade_source_state === 'CLEAN',
+                )
                 setAccounts(writable)
                 setAccountId(current => current || writable[0]?.public_id || '')
             })
             .catch(caught => {
-                if (active) setError(caught instanceof Error ? caught.message : '账户加载失败')
+                if (active) setError(getLocalizedUiError(caught, '账户加载失败'))
             })
             .finally(() => {
                 if (active) setIsLoadingAccounts(false)
@@ -70,13 +84,18 @@ export default function PositionImportPage() {
                 upload.idempotencyKey,
             )
             setSession(result)
+            setConfirmResult(null)
+            setPendingConfirm(null)
+            setSelectedRowPublicIds(
+                new Set(result.rows.filter(row => row.is_valid).map(row => row.public_id)),
+            )
             if (result.status === 'FAILED') {
                 setError(result.error?.message || '文件解析失败')
             } else if (result.error_rows > 0) {
                 setError(`${result.error_rows} 行需要修正`)
             }
         } catch (caught) {
-            setError(caught instanceof Error ? caught.message : '上传失败')
+            setError(getLocalizedUiError(caught, '上传失败'))
         } finally {
             setIsUploading(false)
         }
@@ -103,8 +122,43 @@ export default function PositionImportPage() {
             anchor.click()
             URL.revokeObjectURL(url)
         } catch (caught) {
-            setError(caught instanceof Error ? caught.message : '模板下载失败')
+            setError(getLocalizedUiError(caught, '模板下载失败'))
         }
+    }
+
+    const runConfirm = async (command: PendingConfirm) => {
+        if (!token || !session) return
+        setIsConfirming(true)
+        setError(null)
+        try {
+            const result = await positionsAPI.confirmImport(
+                token,
+                session.session_public_id,
+                command.selectedRowPublicIds,
+                command.idempotencyKey,
+            )
+            setConfirmResult(result)
+        } catch (caught) {
+            setError(getLocalizedUiError(caught, '确认导入失败'))
+        } finally {
+            setIsConfirming(false)
+        }
+    }
+
+    const handleConfirm = () => {
+        if (!session) return
+        const command = pendingConfirm || {
+            selectedRowPublicIds: [...selectedRowPublicIds].sort(),
+            idempotencyKey: crypto.randomUUID(),
+        }
+        setPendingConfirm(command)
+        void runConfirm(command)
+    }
+
+    const handleSelectionChange = (selected: Set<string>) => {
+        setSelectedRowPublicIds(selected)
+        setPendingConfirm(null)
+        setError(null)
     }
 
     if (isLoadingAccounts) {
@@ -153,6 +207,9 @@ export default function PositionImportPage() {
                         setAccountId(event.target.value)
                         setSession(null)
                         setPendingUpload(null)
+                        setPendingConfirm(null)
+                        setConfirmResult(null)
+                        setSelectedRowPublicIds(new Set())
                     }}
                     className="input w-full"
                     disabled={isUploading}
@@ -167,7 +224,7 @@ export default function PositionImportPage() {
 
             {accounts.length === 0 ? (
                 <div className="border-y border-line py-12 text-center">
-                    <p className="text-ink-soft">没有可写账户</p>
+                    <p className="text-ink-soft">没有可用于首次导入的空账户</p>
                     <Link href="/settings" className="btn btn-secondary mt-4">
                         管理账户
                     </Link>
@@ -225,12 +282,66 @@ export default function PositionImportPage() {
                         </dl>
                     </div>
                     {session.rows.length > 0 ? (
-                        <ImportPreviewTable rows={session.rows} />
+                        <ImportPreviewTable
+                            rows={session.rows}
+                            selectedRowPublicIds={selectedRowPublicIds}
+                            onSelectionChange={handleSelectionChange}
+                            disabled={isConfirming || confirmResult !== null}
+                        />
                     ) : (
                         <div className="border-y border-line py-10 text-center text-ink-muted">
                             文件中没有交易行
                         </div>
                     )}
+                    {confirmResult ? (
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-y border-profit/40 bg-profit/5 px-4 py-4">
+                            <div className="flex items-center gap-2 text-profit">
+                                <CheckCircle2 className="h-5 w-5" />
+                                <span className="font-medium">
+                                    {confirmResult.status === 'COMPLETED'
+                                        ? '导入已完成'
+                                        : '空导入已结束'}
+                                </span>
+                            </div>
+                            <dl className="flex flex-wrap gap-5 text-sm">
+                                <div>
+                                    <dt className="text-xs text-ink-muted">选中行</dt>
+                                    <dd className="font-mono tn-nums">{confirmResult.selected_row_count}</dd>
+                                </div>
+                                <div>
+                                    <dt className="text-xs text-ink-muted">持仓</dt>
+                                    <dd className="font-mono tn-nums">{confirmResult.position_count}</dd>
+                                </div>
+                                <div>
+                                    <dt className="text-xs text-ink-muted">事件</dt>
+                                    <dd className="font-mono tn-nums">{confirmResult.event_count}</dd>
+                                </div>
+                                <div>
+                                    <dt className="text-xs text-ink-muted">入账</dt>
+                                    <dd className="font-mono tn-nums">{confirmResult.posting_count}</dd>
+                                </div>
+                            </dl>
+                        </div>
+                    ) : session.confirm_available ? (
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-y border-line py-4">
+                            <p className="text-sm text-ink-muted">
+                                已选择 {selectedRowPublicIds.size} 行
+                            </p>
+                            <button
+                                type="button"
+                                className="btn btn-primary flex items-center gap-2"
+                                onClick={handleConfirm}
+                                disabled={isConfirming}
+                            >
+                                {isConfirming ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    <CheckCircle2 className="h-4 w-4" />
+                                )}
+                                {selectedRowPublicIds.size > 0 ? '确认导入' : '结束空导入'}
+                            </button>
+                        </div>
+                    ) : null}
                 </section>
             )}
         </div>

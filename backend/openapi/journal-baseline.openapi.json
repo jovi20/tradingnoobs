@@ -1072,6 +1072,110 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "ImportConfirmRequest": {
+        "properties": {
+          "selected_row_public_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Selected Row Public Ids",
+            "type": "array"
+          },
+          "session_public_id": {
+            "title": "Session Public Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_public_id"
+        ],
+        "title": "ImportConfirmRequest",
+        "type": "object"
+      },
+      "ImportConfirmResponse": {
+        "properties": {
+          "account_public_id": {
+            "title": "Account Public Id",
+            "type": "string"
+          },
+          "event_count": {
+            "title": "Event Count",
+            "type": "integer"
+          },
+          "position_count": {
+            "title": "Position Count",
+            "type": "integer"
+          },
+          "posting_count": {
+            "title": "Posting Count",
+            "type": "integer"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "selected_row_count": {
+            "title": "Selected Row Count",
+            "type": "integer"
+          },
+          "session_public_id": {
+            "title": "Session Public Id",
+            "type": "string"
+          },
+          "source_ids": {
+            "$ref": "#/components/schemas/ImportConfirmSourceIds"
+          },
+          "status": {
+            "enum": [
+              "COMPLETED",
+              "COMPLETED_NOOP"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_public_id",
+          "account_public_id",
+          "status",
+          "selected_row_count",
+          "position_count",
+          "event_count",
+          "posting_count",
+          "source_ids"
+        ],
+        "title": "ImportConfirmResponse",
+        "type": "object"
+      },
+      "ImportConfirmSourceIds": {
+        "properties": {
+          "event_public_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Event Public Ids",
+            "type": "array"
+          },
+          "position_public_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Position Public Ids",
+            "type": "array"
+          },
+          "posting_public_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Posting Public Ids",
+            "type": "array"
+          }
+        },
+        "title": "ImportConfirmSourceIds",
+        "type": "object"
+      },
       "ImportIssue": {
         "properties": {
           "code": {
@@ -1162,7 +1266,6 @@
             "type": "string"
           },
           "confirm_available": {
-            "const": false,
             "default": false,
             "title": "Confirm Available",
             "type": "boolean"
@@ -8388,6 +8491,70 @@
         "summary": "Export Positions Csv",
         "tags": [
           "positions"
+        ]
+      }
+    },
+    "/api/positions/import/confirm": {
+      "post": {
+        "operationId": "confirm_generic_import_api_positions_import_confirm_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportConfirmRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportConfirmResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Confirm Generic Import",
+        "tags": [
+          "position-import"
         ]
       }
     },

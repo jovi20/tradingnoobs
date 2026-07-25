@@ -19,7 +19,11 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import ImportSessionStatus, User
 from routers.auth import get_current_user
-from schemas import ImportSessionResponse
+from schemas import (
+    ImportConfirmRequest,
+    ImportConfirmResponse,
+    ImportSessionResponse,
+)
 from services.financial_command_service import lock_owned_account
 from services.generic_import_service import (
     GenericImportError,
@@ -30,6 +34,7 @@ from services.generic_import_service import (
     stage_import_upload,
     upload_preview,
 )
+from services.generic_import_confirm_service import confirm_generic_bootstrap
 
 
 router = APIRouter(prefix="/api/positions/import", tags=["position-import"])
@@ -40,6 +45,34 @@ def _import_error(exc: GenericImportError) -> HTTPException:
         status_code=exc.http_status,
         detail={"code": exc.code, "message": str(exc)},
     )
+
+
+@router.post(
+    "/confirm",
+    response_model=ImportConfirmResponse,
+)
+async def confirm_generic_import(
+    payload: ImportConfirmRequest,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        result = confirm_generic_bootstrap(
+            db,
+            user_id=current_user.id,
+            timezone_name=current_user.timezone,
+            session_public_id=payload.session_public_id,
+            selected_row_public_ids=payload.selected_row_public_ids,
+            idempotency_key=idempotency_key,
+        )
+        return JSONResponse(status_code=result.http_status, content=result.body)
+    except GenericImportError as exc:
+        db.rollback()
+        raise _import_error(exc) from exc
+    except BaseException:
+        db.rollback()
+        raise
 
 
 @router.post(

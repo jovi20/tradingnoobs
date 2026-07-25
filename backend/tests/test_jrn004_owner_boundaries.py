@@ -662,7 +662,7 @@ class JRN004OwnerBoundaryTests(unittest.TestCase):
         self.db.rollback()
         self.assertEqual(self.db.query(AccountLedgerEntry).count(), ledger_count)
 
-    def test_import_preview_is_owner_bound_while_confirm_remains_deny_only(self):
+    def test_import_preview_and_confirm_are_owner_first(self):
         cross_owner = self.client.post(
             "/api/positions/import/upload",
             headers={"Idempotency-Key": "cross-owner-import"},
@@ -691,4 +691,7 @@ class JRN004OwnerBoundaryTests(unittest.TestCase):
             json={"session_public_id": "untrusted"},
         )
         self.assertEqual(confirm.status_code, 404, confirm.text)
-        self.assertEqual(confirm.json()["detail"]["code"], "FEATURE_DISABLED")
+        self.assertEqual(
+            confirm.json()["detail"]["code"],
+            "IMPORT_SESSION_NOT_FOUND",
+        )

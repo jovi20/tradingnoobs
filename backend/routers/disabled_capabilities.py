@@ -87,11 +87,8 @@ OPEN_REGISTRATION_DISABLED_ROUTES = _disabled_routes(
     OPEN_REGISTRATION_LAZY_ROUTES
 )
 
-# JRN-011 replaces upload, preview read, and template with persistent,
-# owner-bound routes. Canonical confirm stays deny-only until JRN-012.
-GENERIC_BOOTSTRAP_DISABLED_ROUTES: tuple[DisabledRoute, ...] = (
-    ("POST", "/import/confirm"),
-)
+# JRN-012 completes the owner-bound generic bootstrap flow.
+GENERIC_BOOTSTRAP_DISABLED_ROUTES: tuple[DisabledRoute, ...] = ()
 
 
 def feature_disabled_detail(capability: str) -> dict[str, str]:

@@ -86,6 +86,10 @@ test('auth errors are announced and primary product headings do not mix English 
   assert.doesNotMatch(importTable, />\s*Identity\s*</)
   assert.doesNotMatch(importTable, /\{err\.message\}|\{warning\.message\}/)
   assert.match(importTable, /LONG: '多头'/)
+  assert.match(importTable, /aria-label="选择全部有效行"/)
+  assert.match(importTable, /aria-label=\{`选择第 \$\{row\.row_number\} 行`\}/)
+  assert.match(importPage, /positionsAPI\.confirmImport/)
+  assert.match(importPage, /'确认导入'/)
 })
 
 test('settings presents Chinese labels while retaining technical identifiers as metadata', () => {

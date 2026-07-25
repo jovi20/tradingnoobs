@@ -37,7 +37,7 @@ Both adapters use a 10 MiB file limit, 5,000 rows/executions, a 24-hour preview 
 
 Account trade source state is `CLEAN / MANUAL / SOURCE_BOUND`. Source health is an orthogonal `NOT_APPLICABLE / HEALTHY / RECONCILIATION_REQUIRED / SOURCE_DIVERGED` projection whose persistent truth belongs to the source binding. Source completeness is `CURRENT / PENDING_IMPORT`. The complete ImportSession state graph and legal transitions are frozen in the machine contract; later tasks implement those models without renaming the states.
 
-This ADR freezes names, limits, retention, identity, and source states. JRN-011 now implements the generic template, persistent owner-bound upload/preview sessions, TTL, cleanup, and preview UI; the unsafe in-memory handler remains unregistered. Generic confirm stays deny-only until JRN-012 and preview cannot write financial facts. The source-bound IBKR parser and binding are implemented in JRN-013, incremental confirmation in JRN-014, and reconciliation in JRN-015.
+This ADR freezes names, limits, retention, identity, and source states. JRN-011/012 implement the generic template, persistent owner-bound upload/preview sessions, TTL, cleanup, preview selection UI, and one-time canonical confirm; the unsafe in-memory handler remains unregistered. Preview cannot write financial facts. Generic non-noop confirm accepts only an eligible CLEAN account, atomically transitions it to MANUAL, and is permanently idempotent. The source-bound IBKR parser and binding are implemented in JRN-013, incremental confirmation in JRN-014, and reconciliation in JRN-015.
 
 ## Capability Ceiling
 

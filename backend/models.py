@@ -818,6 +818,12 @@ class ImportSession(Base):
         unique=True,
         nullable=False,
     )
+    confirm_idempotency_id = Column(
+        Integer,
+        ForeignKey("idempotency_keys.id"),
+        unique=True,
+        nullable=True,
+    )
     adapter_kind = Column(String(40), nullable=False)
     file_format = Column(String(20), nullable=False)
     file_hash = Column(String(71), nullable=False)
@@ -849,7 +855,14 @@ class ImportSession(Base):
 
     user = relationship("User")
     account = relationship("TradingAccount", back_populates="import_sessions")
-    upload_idempotency = relationship("IdempotencyKey")
+    upload_idempotency = relationship(
+        "IdempotencyKey",
+        foreign_keys=[upload_idempotency_id],
+    )
+    confirm_idempotency = relationship(
+        "IdempotencyKey",
+        foreign_keys=[confirm_idempotency_id],
+    )
     rows = relationship(
         "ImportRow",
         back_populates="session",
@@ -870,6 +883,16 @@ class ImportRow(Base):
             "user_id",
             "session_id",
             "row_number",
+        ),
+        UniqueConstraint(
+            "applied_event_public_id",
+            name="uq_import_rows_applied_event",
+        ),
+        CheckConstraint(
+            "(applied_position_public_id IS NULL AND applied_event_public_id IS NULL) "
+            "OR (applied_position_public_id IS NOT NULL "
+            "AND applied_event_public_id IS NOT NULL)",
+            name="ck_import_rows_applied_link_pair",
         ),
     )
 
@@ -892,6 +915,8 @@ class ImportRow(Base):
     validation_errors_json = Column(JSON, nullable=False, default=list)
     warnings_json = Column(JSON, nullable=False, default=list)
     is_valid = Column(Boolean, nullable=False, default=False)
+    applied_position_public_id = Column(String(36), nullable=True)
+    applied_event_public_id = Column(String(36), nullable=True)
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,

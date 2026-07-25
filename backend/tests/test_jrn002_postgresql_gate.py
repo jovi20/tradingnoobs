@@ -29,6 +29,7 @@ from models import (
     AssetMaster,
     AuthRateLimitBucket,
     IdempotencyKey,
+    ImportRow,
     ImportSession,
     LedgerPostingKind,
     PositionEvent,
@@ -51,6 +52,7 @@ from services.account_ledger_service import (
 from services.auth_rate_limit_service import consume_auth_attempt
 from services.auth_service import authenticate_user, create_user
 from services.idempotency_service import begin_idempotent_request
+from services.generic_import_confirm_service import confirm_generic_bootstrap
 from services.financial_command_service import (
     lock_owned_account,
     permanently_forbid_account_hard_delete,
@@ -1537,3 +1539,148 @@ def test_jrn011_postgresql_session_create_serializes_account_delete(
         assert account.hard_delete_eligible is False
         session = db.execute(select(ImportSession)).scalar_one()
         assert session.account_id == account_id
+
+
+def test_jrn012_postgresql_concurrent_confirm_replays_one_canonical_write(
+    postgres_database: tuple[Engine, str],
+) -> None:
+    engine, database_url = postgres_database
+    _run_alembic(database_url, "upgrade", "head")
+    SessionLocal = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=engine,
+    )
+    raw_values = {
+        "asset_type": "STOCK",
+        "market": "US",
+        "exchange_code": "NASDAQ",
+        "symbol": "AAPL",
+        "instrument_type": "SPOT",
+        "direction": "LONG",
+        "action": "OPEN",
+        "timestamp": "2026-07-25T10:00:00+00:00",
+        "price": "200",
+        "quantity": "2",
+        "currency": "USD",
+        "commission": "1.25",
+        "fee_currency": "USD",
+        "reason": "bootstrap",
+        "note": "postgres concurrency",
+    }
+    normalized_values = {
+        "direction": "LONG",
+        "action": "OPEN",
+        "occurred_at": "2026-07-25T10:00:00Z",
+        "price": "200",
+        "quantity": "2",
+        "commission": "1.25",
+        "asset_type": "STOCK",
+        "market": "US",
+        "exchange_code": "NASDAQ",
+        "symbol": "AAPL",
+        "instrument_type": "SPOT",
+        "currency": "USD",
+        "instrument_resolution": "CREATE_ON_CONFIRM",
+        "fee_currency": "USD",
+        "reason": "bootstrap",
+        "note": "postgres concurrency",
+    }
+    with SessionLocal() as db:
+        user = User(
+            public_id="jrn012-pg-user",
+            email="jrn012-pg@example.com",
+            email_normalized="jrn012-pg@example.com",
+            hashed_password="hash",
+            status="ACTIVE",
+            is_active=True,
+            role="user",
+            timezone="UTC",
+        )
+        account = TradingAccount(
+            public_id="jrn012-pg-account",
+            user=user,
+            name="JRN012",
+            broker="IBKR",
+            currency="USD",
+            is_active=True,
+        )
+        db.add_all([user, account])
+        db.flush()
+        upload = begin_idempotent_request(
+            db,
+            scope="GENERIC_IMPORT_UPLOAD_V1",
+            key="sha256:jrn012-postgresql-upload",
+            request_payload={
+                "account_public_id": account.public_id,
+                "adapter_kind": "GENERIC_BOOTSTRAP",
+                "file_hash": "sha256:jrn012-fixture",
+            },
+            user_id=user.id,
+            ttl_seconds=None,
+        )
+        session = ImportSession(
+            public_id="jrn012-pg-session",
+            user_id=user.id,
+            account_id=account.id,
+            upload_idempotency_id=upload.record.id,
+            adapter_kind="GENERIC_BOOTSTRAP",
+            file_format="CSV_UTF8",
+            file_hash="sha256:jrn012-fixture",
+            file_size_bytes=1,
+            original_filename="fixture.csv",
+            status="PREVIEW_READY",
+            total_rows=1,
+            valid_rows=1,
+            error_rows=0,
+            warning_rows=0,
+            expires_at=datetime(2026, 7, 26, 10, 0, tzinfo=timezone.utc),
+        )
+        db.add(session)
+        db.flush()
+        import_row = ImportRow(
+            public_id="jrn012-pg-row",
+            session_id=session.id,
+            user_id=user.id,
+            account_id=account.id,
+            adapter_kind="GENERIC_BOOTSTRAP",
+            file_hash=session.file_hash,
+            row_number=2,
+            raw_values_json=raw_values,
+            normalized_values_json=normalized_values,
+            validation_errors_json=[],
+            warnings_json=[],
+            is_valid=True,
+        )
+        db.add(import_row)
+        permanently_forbid_account_hard_delete(account)
+        db.commit()
+        user_id = user.id
+
+    def confirm() -> tuple[dict, bool]:
+        with SessionLocal() as db:
+            result = confirm_generic_bootstrap(
+                db,
+                user_id=user_id,
+                timezone_name="UTC",
+                session_public_id="jrn012-pg-session",
+                selected_row_public_ids=["jrn012-pg-row"],
+                idempotency_key="jrn012-pg-confirm",
+                now=datetime(2026, 7, 25, 12, 0, tzinfo=timezone.utc),
+            )
+            return result.body, result.replayed
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _index: confirm(), range(2)))
+
+    assert results[0][0] == results[1][0]
+    assert sorted(replayed for _body, replayed in results) == [False, True]
+    with SessionLocal() as db:
+        session = db.execute(select(ImportSession)).scalar_one()
+        assert session.status == "COMPLETED"
+        assert session.confirm_idempotency_id is not None
+        assert len(db.execute(select(TradingPosition)).scalars().all()) == 1
+        assert len(db.execute(select(PositionEvent)).scalars().all()) == 1
+        row_record = db.execute(select(ImportRow)).scalar_one()
+        assert row_record.applied_position_public_id is not None
+        assert row_record.applied_event_public_id is not None

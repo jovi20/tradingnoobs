@@ -51,7 +51,7 @@ P0-P19 阶段计划已经归档，详见 [superpowers/plans/archive/README.md](.
 |------|------|----------|
 | JRN-002 至 004 尚未关闭 | `JRN-000/001` 已完成；JRN-002 checkpoint `876cda7` 已在无缓存依赖的精确 SHA 环境通过本地统一 gate 与评审，但尚无远端 CI/required-check 证据。Invite-only auth 与完整 tenant matrix 仍待实现。 | 先取得并归档 JRN-002 远端 CI 证据；JRN-003 完成后收口 JRN-004，三项完成前不进入 M1 会计实现。 |
 | 交易日志仍有发布阻断 | 导入、账务、现金硬删除、凭据、双写和恢复证据尚未闭环。 | 只执行当前 trading-journal active plan，完成后再进入 invite-only Beta 决策。 |
-| legacy 路径仍存在 | `Position / TradeBatch / Transaction / AssetMetadata / DailySnapshot` 仍被部分迁移兼容读取、Dashboard 和账户流水路径引用；JRN-011 preview 不调用未注册 historical Import parser，JRN-012 confirm 仍关闭。 | 先隔离和标记边界，再逐步删除。 |
+| legacy 路径仍存在 | `Position / TradeBatch / Transaction / AssetMetadata / DailySnapshot` 仍被部分迁移兼容读取、Dashboard 和账户流水路径引用；JRN-011/012 generic import 不调用未注册 historical Import parser，而是通过 canonical writer replay。 | 先隔离和标记边界，再逐步删除。 |
 | `backend/models.py` 仍集中 | 模型还没有物理拆分。 | `DEFERRED_BY_SCOPE`；等会计和 truth/legacy 语义稳定后再评估。 |
 | 前端 raw legacy DTO 仍有 allowlist | 部分页面还使用 legacy DTO 作为 migration/support 或 bridge。 | 新页面不继续扩张 raw DTO；逐步迁到 read-model adapter/generated contracts。 |
 | Staging 还未实际部署验证 | 历史 P19 本地证据不能证明真实 PostgreSQL/backup。 | 先完成 M0-M2；真实 staging 是 `JRN-021`。 |

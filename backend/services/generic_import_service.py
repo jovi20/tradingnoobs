@@ -839,7 +839,9 @@ def serialize_import_session(
         "warning_rows": session.warning_rows,
         "error": error,
         "rows": [_serialize_row(row) for row in rows],
-        "confirm_available": False,
+        "confirm_available": (
+            session.status == ImportSessionStatus.PREVIEW_READY.value
+        ),
     }
 
 

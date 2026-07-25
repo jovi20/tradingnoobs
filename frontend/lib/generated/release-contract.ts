@@ -222,16 +222,15 @@ export const JOURNAL_BETA_RELEASE_CONTRACT = {
             "mode": "ONE_TIME_BOOTSTRAP",
             "trusted_external_trade_ids": false,
             "implementation_gate": "JRN_011_AND_JRN_012",
-            "availability": "UPLOAD_PREVIEW_ONLY",
+            "availability": "UPLOAD_PREVIEW_CONFIRM",
             "implemented_paths": [
                 "/api/positions/import/upload",
                 "/api/positions/import/template",
-                "/api/positions/import/sessions/{session_public_id}"
-            ],
-            "disabled_paths": [
+                "/api/positions/import/sessions/{session_public_id}",
                 "/api/positions/import/confirm"
             ],
-            "confirm_policy": "DENY_ONLY_404_FEATURE_DISABLED_UNTIL_JRN_012"
+            "disabled_paths": [],
+            "confirm_policy": "ONE_TIME_CLEAN_ACCOUNT_CANONICAL_REPLAY"
         },
         "ibkr_flex_xml_v1": {
             "formats": [

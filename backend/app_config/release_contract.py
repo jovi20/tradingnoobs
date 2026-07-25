@@ -151,12 +151,10 @@ class GenericBootstrapContract(_FrozenModel):
     mode: Literal["ONE_TIME_BOOTSTRAP"]
     trusted_external_trade_ids: Literal[False]
     implementation_gate: Literal["JRN_011_AND_JRN_012"]
-    availability: Literal["UPLOAD_PREVIEW_ONLY"]
+    availability: Literal["UPLOAD_PREVIEW_CONFIRM"]
     implemented_paths: tuple[str, ...]
     disabled_paths: tuple[str, ...]
-    confirm_policy: Literal[
-        "DENY_ONLY_404_FEATURE_DISABLED_UNTIL_JRN_012"
-    ]
+    confirm_policy: Literal["ONE_TIME_CLEAN_ACCOUNT_CANONICAL_REPLAY"]
 
 
 class OwnerUploadLimitsContract(_FrozenModel):
@@ -377,12 +375,13 @@ class JournalBetaReleaseContract(_FrozenModel):
                 "/api/positions/import/upload",
                 "/api/positions/import/template",
                 "/api/positions/import/sessions/{session_public_id}",
+                "/api/positions/import/confirm",
             ),
             "implemented generic import paths",
         )
         require_exact(
             self.imports.generic_bootstrap.disabled_paths,
-            ("/api/positions/import/confirm",),
+            (),
             "disabled generic import paths",
         )
         require_exact(self.imports.ibkr_flex_xml_v1.formats, ("XML",), "IBKR formats")

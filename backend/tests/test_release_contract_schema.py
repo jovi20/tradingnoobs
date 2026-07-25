@@ -150,7 +150,7 @@ class JournalBetaReleaseContractTests(unittest.TestCase):
                     validator(value)
                 self.assertEqual(raised.exception.code, expected_code)
 
-    def test_import_preview_availability_and_source_names_are_frozen(self):
+    def test_import_confirm_availability_and_source_names_are_frozen(self):
         contract = JOURNAL_BETA_CONTRACT
         self.assertEqual(
             contract.imports.adapter_allowlist,
@@ -160,7 +160,7 @@ class JournalBetaReleaseContractTests(unittest.TestCase):
         self.assertFalse(contract.imports.ibkr_flex_xml_v1.credential_access)
         self.assertEqual(
             contract.imports.generic_bootstrap.availability,
-            "UPLOAD_PREVIEW_ONLY",
+            "UPLOAD_PREVIEW_CONFIRM",
         )
         self.assertEqual(
             contract.imports.generic_bootstrap.implemented_paths,
@@ -168,11 +168,12 @@ class JournalBetaReleaseContractTests(unittest.TestCase):
                 "/api/positions/import/upload",
                 "/api/positions/import/template",
                 "/api/positions/import/sessions/{session_public_id}",
+                "/api/positions/import/confirm",
             ),
         )
         self.assertEqual(
             contract.imports.generic_bootstrap.disabled_paths,
-            ("/api/positions/import/confirm",),
+            (),
         )
         self.assertEqual(
             tuple(path for _method, path in GENERIC_BOOTSTRAP_DISABLED_ROUTES),
