@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "record_kind": "JRN_TASK_CHECKPOINT",
+  "task_id": "JRN-007",
+  "branch": "dev",
+  "status": "COMPLETE",
+  "release_status": "NOT_READY_FOR_PRODUCTION",
+  "recorded_at": "2026-07-25T19:05:00+08:00",
+  "implementation_base_commit": "64bdb68a7f409fb0990a7fce9b5db1cb84cfa427",
+  "implementation_checkpoint_commit": "22e59f6e4a61ec13f3ac366b446910b33f8999a4",
+  "implementation_commits": [
+    "22e59f6e4a61ec13f3ac366b446910b33f8999a4"
+  ],
+  "record_commit_resolution": "git log -1 --format=%H -- docs/superpowers/plans/2026-07-25-jrn-007-checkpoint-record.json",
+  "review_subject": {
+    "commit": "22e59f6e4a61ec13f3ac366b446910b33f8999a4",
+    "migration_head": "d4e5f6a7b8c9",
+    "migration_blob": "7c065aa1d35b57a5a311acdb969a7bf7d61b90ff",
+    "router_blob": "dda057d9f1ac9da3f6fb6ab577be1fae72bac9dd",
+    "truth_open_service_blob": "4a33282ba7a1c6c21cd505bdccb47109767a9784",
+    "instrument_service_blob": "30ea7ce2dcc831ee9d4cc494d23eefc641d7e74b",
+    "implementation_test_blob": "6e78669c16378246a1189db109474b6d544eb9f1",
+    "openapi_blob": "187de2b96be934f17980623d57eb70fc92ee59af"
+  },
+  "scope_summary": [
+    "Replace legacy-first POST /api/positions with a truth-native OPEN command that writes canonical position, event, ledger, outbox, idempotency record, and legacy compatibility projection in one transaction.",
+    "Add deterministic full instrument identity resolution across asset type, market, exchange, normalized symbol, instrument type, and quote currency without invoking a market-data provider.",
+    "Add account trade_source_state, financially-open slot occupancy, position-event sequence uniqueness, instrument identity uniqueness, and source-fact linkage for permanent financial idempotency.",
+    "Require Idempotency-Key for OPEN, replay the original response for the same owner/scope/hash, reject conflicting reuse, and preserve the key without expiry.",
+    "Allow independent long and short lifecycles while rejecting duplicate same-side financially-open lifecycles, including archived-open truth, and reject OPEN before the latest same-side terminal time.",
+    "Normalize aware timestamps to UTC and interpret naive timestamps in the user's IANA timezone while rejecting DST gaps and folds.",
+    "Expose trade source state through account contracts and make the frontend retain a stable OPEN idempotency key across retries."
+  ],
+  "verification_environment": {
+    "python": "3.13.5",
+    "node": "24.18.0",
+    "npm": "11.16.0",
+    "postgresql_server": "16.14 (Homebrew)"
+  },
+  "verification": [
+    {
+      "command": "backend/venv/bin/python scripts/run_journal_baseline_gate.py",
+      "result": "PASS on exact commit 22e59f6e4a61ec13f3ac366b446910b33f8999a4: 498 backend tests including PostgreSQL concurrency, current OpenAPI and release contracts, 160 frontend tests, typecheck, lint, and 15-page production build."
+    },
+    {
+      "command": "python scripts/check_added_secrets.py --base 64bdb68 --head 22e59f6",
+      "result": "PASS: ruleset added-secrets-v1, 1532 added lines, 0 findings."
+    },
+    {
+      "command": "PYTHONPATH=backend backend/venv/bin/python -m pytest backend/tests/test_jrn007_truth_native_open.py backend/tests/test_position_truth_bridge_router.py -q",
+      "result": "PASS: 42 truth-native OPEN and compatibility regressions."
+    },
+    {
+      "command": "git diff --cached --check",
+      "result": "PASS before implementation commit; scoped staged paths excluded all recorded user WIP."
+    }
+  ],
+  "review": {
+    "disposition": "APPROVE_REMOTE_CI_CLOSED",
+    "blocking_findings_after_fix": [],
+    "fixed_findings": [
+      {
+        "severity": "P1",
+        "finding": "The first route draft checked same-side conflicts before completed-idempotency replay and SQLite could release a race-recovery savepoint before a physical outer write transaction existed.",
+        "resolution": "Completed replay now precedes business conflict scanning, and SQLite explicitly acquires the account write transaction before nested race-recovery savepoints; fault injection proves complete rollback."
+      },
+      {
+        "severity": "P1",
+        "finding": "The first migration draft assumed no duplicate instrument identities, event sequences, or financially-open slots in populated databases.",
+        "resolution": "Migration now deterministically quarantines duplicate instruments, renumbers duplicate event sequences, degrades affected accounts, and conservatively releases only duplicate open-slot rows before creating constraints."
+      },
+      {
+        "severity": "P2",
+        "finding": "The legacy read projection initially required symbol-only canonical codes and could not recognize the new deterministic full-identity assets.",
+        "resolution": "Projection accepts either proven legacy codes or the deterministic JRN1 identity code, while still rejecting canonical-code drift."
+      }
+    ],
+    "residual_risks": [
+      "JRN-008 still owns account-plus-position locking and permanent idempotency for ADD, REDUCE, and CLOSE; those existing routes retain their prior lifecycle contract until that task lands.",
+      "JRN-010 still owns latest-event reversal and whole-position void semantics, including the product path for correcting an incorrectly dated OPEN.",
+      "Accounts quarantined by migration because duplicate historical truth was detected require audited reconciliation; the migration deliberately does not guess which duplicate fact is financially authoritative.",
+      "The product remains NOT_READY_FOR_PRODUCTION until the remaining active-plan exit gates are closed."
+    ]
+  },
+  "remote_ci": {
+    "status": "PASS",
+    "required_workflow": ".github/workflows/journal-baseline.yml",
+    "required_job": "journal-baseline",
+    "verified_commit": "22e59f6e4a61ec13f3ac366b446910b33f8999a4",
+    "workflow_run_id": 30155459683,
+    "workflow_run_url": "https://github.com/jovi20/tradingnoobs/actions/runs/30155459683",
+    "workflow_run_conclusion": "success",
+    "job_id": 89672583770,
+    "job_url": "https://github.com/jovi20/tradingnoobs/actions/runs/30155459683/job/89672583770",
+    "job_conclusion": "success",
+    "artifact": {
+      "id": 8618890111,
+      "name": "jrn002-gate-summary",
+      "digest": "sha256:bb10d864349c9382f674d52aa8c7d52a66e0f2b119d535d176303cc4efe7ea88",
+      "expired": false
+    }
+  },
+  "required_check_enforcement": {
+    "ruleset_id": 19728078,
+    "ruleset_name": "main-journal-baseline",
+    "ruleset_url": "https://github.com/jovi20/tradingnoobs/settings/rules/19728078",
+    "enforcement": "active",
+    "target_ref": "refs/heads/main",
+    "required_check": "journal-baseline",
+    "integration": "GitHub Actions",
+    "dev_is_targeted": false
+  },
+  "next_task_gate": "SATISFIED: JRN-007 is closed; JRN-008 may start from migration head d4e5f6a7b8c9 and the truth-native OPEN transaction contract."
+}
