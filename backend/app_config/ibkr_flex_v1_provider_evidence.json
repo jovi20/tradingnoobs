@@ -26,6 +26,7 @@
   "unverified_reasons": [
     "No frozen IBKR Flex Query template has been supplied.",
     "Official evidence remains incomplete for generation ordering, transaction/open-close identity, correction/cancel targets, commission sign/currency, flat-boundary, and coverage inclusivity/timezone semantics.",
+    "The current synthetic parser contract uses unverified wire assumptions (including TradeCorrection/TradeCancel elements, sourceEventID/affectedIBExecID fields, tradeStatus, and OPEN/CLOSE values); it must not be treated as an IBKR-ready contract.",
     "No redacted real statement pairs from the frozen query template have been supplied."
   ]
 }

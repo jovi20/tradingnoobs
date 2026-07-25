@@ -89,6 +89,7 @@ class OfficialEvidenceExcerpt(_EvidenceModel):
     semantic: str
     locator: str
     quote: str
+    wire_tokens: tuple[str, ...] = ()
 
 
 class OfficialEvidenceSource(_EvidenceModel):
@@ -376,7 +377,7 @@ def _validate_official_source(
     source: OfficialEvidenceSource,
     *,
     resolved_root: Path,
-) -> tuple[list[str], set[str]]:
+) -> tuple[list[str], set[str], set[str]]:
     reasons: list[str] = []
     parsed = urlparse(source.url)
     if parsed.scheme != "https":
@@ -390,7 +391,7 @@ def _validate_official_source(
             f"Invalid official artifact SHA-256: "
             f"{source.artifact_relative_path}"
         )
-        return reasons, set()
+        return reasons, set(), set()
     artifact, path_reason = _evidence_path(
         relative_path=source.artifact_relative_path,
         resolved_root=resolved_root,
@@ -398,14 +399,14 @@ def _validate_official_source(
     )
     if path_reason:
         reasons.append(path_reason)
-        return reasons, set()
+        return reasons, set(), set()
     assert artifact is not None
     if _sha256(artifact) != source.artifact_sha256:
         reasons.append(
             f"Official evidence artifact hash mismatch: "
             f"{source.artifact_relative_path}"
         )
-        return reasons, set()
+        return reasons, set(), set()
     try:
         artifact_text = artifact.read_text(encoding="utf-8")
     except (OSError, UnicodeError):
@@ -413,9 +414,10 @@ def _validate_official_source(
             f"Official evidence artifact must be retained as UTF-8 text: "
             f"{source.artifact_relative_path}"
         )
-        return reasons, set()
+        return reasons, set(), set()
 
     verified_semantics: set[str] = set()
+    verified_wire_tokens: set[str] = set()
     if not source.excerpts:
         reasons.append(
             f"Official evidence has no reviewed excerpts: {source.url}"
@@ -439,10 +441,68 @@ def _validate_official_source(
                 f"for {excerpt.semantic}: {source.url}"
             )
             continue
+        invalid_tokens = sorted(
+            token
+            for token in excerpt.wire_tokens
+            if not token.strip()
+            or token not in excerpt.quote
+            or token not in artifact_text
+        )
+        if invalid_tokens:
+            reasons.append(
+                "Official evidence wire tokens are absent from the retained "
+                f"quote for {excerpt.semantic}: {source.url}: "
+                + ", ".join(invalid_tokens)
+            )
+            continue
         verified_semantics.add(excerpt.semantic)
+        verified_wire_tokens.update(excerpt.wire_tokens)
     if reasons:
-        return reasons, set()
-    return reasons, verified_semantics
+        return reasons, set(), set()
+    return reasons, verified_semantics, verified_wire_tokens
+
+
+def required_provider_wire_tokens(
+    contract: IbkrFlexFieldContract,
+) -> set[str]:
+    """Return provider-controlled XML names and values consumed by V1."""
+    return {
+        contract.statement_element,
+        contract.events_container_element,
+        contract.trade_element,
+        contract.account_field,
+        contract.from_date_field,
+        contract.to_date_field,
+        contract.generation_field,
+        contract.execution_id_field,
+        contract.transaction_id_field,
+        contract.asset_category_field,
+        contract.conid_field,
+        contract.symbol_field,
+        contract.exchange_field,
+        contract.currency_field,
+        contract.side_field,
+        contract.quantity_field,
+        contract.price_field,
+        contract.trade_time_field,
+        contract.open_close_field,
+        contract.execution_status_field,
+        contract.commission_field,
+        contract.commission_currency_field,
+        contract.correction_element,
+        contract.cancel_bust_element,
+        contract.change_event_id_field,
+        contract.affected_execution_id_field,
+        contract.account_inception_date_field,
+        contract.open_positions_element,
+        contract.open_position_element,
+        contract.open_positions_snapshot_date_field,
+        contract.open_position_quantity_field,
+        "BUY",
+        "SELL",
+        "OPEN",
+        "CLOSE",
+    }
 
 
 def verify_provider_evidence(
@@ -485,13 +545,19 @@ def verify_provider_evidence(
             reasons.append("Query template artifact hash mismatch")
 
     official_semantics: set[str] = set()
+    official_wire_tokens: set[str] = set()
     for source in manifest.official_sources:
-        source_reasons, source_semantics = _validate_official_source(
+        (
+            source_reasons,
+            source_semantics,
+            source_wire_tokens,
+        ) = _validate_official_source(
             source,
             resolved_root=resolved_root,
         )
         reasons.extend(source_reasons)
         official_semantics.update(source_semantics)
+        official_wire_tokens.update(source_wire_tokens)
 
     fixture_semantics: set[str] = set()
     fixture_shapes: list[tuple[RealFixtureEvidence, _FixtureShape]] = []
@@ -553,6 +619,16 @@ def verify_provider_evidence(
             "Official evidence missing semantics: "
             + ", ".join(missing_official)
         )
+    if manifest.field_contract is not None:
+        missing_wire_tokens = sorted(
+            required_provider_wire_tokens(manifest.field_contract)
+            - official_wire_tokens
+        )
+        if missing_wire_tokens:
+            reasons.append(
+                "Official evidence missing exact provider wire tokens: "
+                + ", ".join(missing_wire_tokens)
+            )
     missing_fixture = sorted(REQUIRED_SEMANTICS - fixture_semantics)
     if missing_fixture:
         reasons.append(

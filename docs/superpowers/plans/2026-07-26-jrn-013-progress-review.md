@@ -1,8 +1,8 @@
 # JRN-013 进度与设计评审
 
 日期：2026-07-26
-评审范围：`0b03f85..7bd90fd` 的 JRN-013 实现，以及 active plan 中
-`JRN-013` 至 `JRN-015` 的 IBKR Flex 文件导入设计。
+评审范围：截至 2026-07-26 当前 `dev` checkpoint 的 JRN-013 实现，以及
+active plan 中 `JRN-013` 至 `JRN-015` 的 IBKR Flex 文件导入设计。
 
 ## 结论
 
@@ -33,6 +33,10 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
   精确 field-table 引用覆盖 `BASIC_EXECUTION_FIELDS`；测试证明 artifact/hash/quote
   完整，且缺失语义列表不再误报该项。该部分证据不证明 execution identity 稳定性、
   generation、coverage、correction target 或 commission sign。
+- provider evidence gate 进一步要求 `VERIFIED` field contract 消费的全部 raw
+  XML element/attribute 名和 parser 枚举值，必须作为 `wire_tokens` 逐字出现于
+  hash-bound 官方摘录。只有语义标签、展示层字段表或真实 fixture 不能激活 adapter；
+  未声明 token 与声明但 quote/artifact 中不存在的 token 都会 fail-closed。
 - 禁止 DTD/entity/XInclude 的受限 XML parser，以及文件、execution、节点、
   属性、深度和字段长度限制；5,000 execution 边界接受，5,001 拒绝。
 - provider contract 固定 generation 按 UTC instant 升序；同一 binding 下同一
@@ -77,8 +81,8 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
 - upload 编排在读取或暂存文件前先锁定 owner-scoped account；不存在或跨 owner
   account 均返回 `404 IMPORT_ACCOUNT_NOT_FOUND`，不调用上传读取、不创建临时文件、
   `IdempotencyKey` 或 `ImportSession`，并始终关闭上传句柄。
-- 本次复验的全部 `test_jrn013_*.py` 共 117 项测试通过；完整统一
-  gate 在 PostgreSQL 16.14 上通过 658 个后端测试、165 个前端测试、OpenAPI、
+- 本次复验的全部 `test_jrn013_*.py` 共 119 项测试通过；完整统一
+  gate 在 PostgreSQL 16.14 上通过 660 个后端测试、165 个前端测试、OpenAPI、
   release contract、typecheck、lint 和 production build。
 
 ## 尚未实现或未满足
@@ -92,13 +96,23 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
   证明 `ibExecID` 唯一稳定性、generation 严格顺序/tie、数值 transaction order、
   correction/cancel target、commission sign/currency、flat boundary 和 coverage
   inclusivity/timezone 的完整官方合同。不能用字段存在替代这些语义证明。
+- **P0 provider-contract blocker：**当前 parser 和 synthetic tests 假设 correction
+  与 cancel 是独立 `TradeCorrection/TradeCancel` 元素，以
+  `sourceEventID/affectedIBExecID` 关联目标，并要求 `tradeStatus` 和
+  `OPEN/CLOSE`。IBKR 官方 Trades Reference 没有证明这些 raw XML 名或枚举值，
+  且其 “Original Trade ID”等取消字段与公开第三方 parser 暴露的
+  `Trade transactionType=TradeCorrect|TradeCancel`、original/related ID、`O/C`
+  形状均提示当前假设可能错误。第三方实现不是 release evidence，因此现在既不能
+  按它改成“真实合同”，也不能把现有 synthetic contract 视为 provider-ready。
+  必须先取得同一冻结 Query 的真实 correction/cancel 样本和 IBKR 官方 raw-wire
+  合同，再决定 field contract/parser 重构。
 - `backend/app_config/ibkr_flex_v1_provider_evidence.json` 因而保持
   `UNVERIFIED`；已发布 route 因 evidence-first gate 保持不可用。
 - JRN-014 的 source-bound canonical confirm、coverage acceptance/frontier
   推进与“只应用新增 execution”尚未实现。
 - JRN-015 的人工 correction/cancel-bust resolution 与 versioned replay 尚未实现。
-- `7bd90fd` 已通过当前工作树完整统一 gate 与真实 PostgreSQL migration gate；
-  尚未取得远端 CI 和绑定该 SHA 的独立 review，因此仍只能视为进度 checkpoint。
+- 当前工作树已通过完整统一 gate 与真实 PostgreSQL migration gate；尚未取得
+  远端 CI 和绑定最终 SHA 的独立 review，因此仍只能视为进度 checkpoint。
 
 ## 设计必要性评估
 
@@ -134,8 +148,11 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
    不同的 statement、账户 inception 或完整空 OpenPositions、correction/cancel
    样本、commission/currency 和无成交 coverage 样本。
 3. 为每项必需语义保留 IBKR 官方字段合同的 URL、取得日期、UTF-8 artifact、
-   SHA-256、locator 与逐字引用；公开材料无法证明的语义必须通过正式支持渠道
-   确认，不能只用 fixture 猜合同。
+   SHA-256、locator 与逐字引用，并把 parser 实际消费的 element/attribute 名和
+   枚举值绑定为 exact `wire_tokens`；重点先冻结 correction/cancel 的真实元素/
+   discriminator、source identity、target identity、`openCloseIndicator` 值和
+   status 字段。公开材料无法证明的语义必须通过正式支持渠道确认，不能只用 fixture
+   或第三方 parser 猜合同。
 4. 填充 evidence manifest，运行 artifact/hash/semantic gate、全部 JRN-013 测试、
    真实 PostgreSQL migration gate和统一 gate；再取得同一 SHA 独立评审。
 5. 只有第 4 步通过才允许 evidence-first route 进入 owner-bound upload/preview，
@@ -149,6 +166,9 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
 
 `APPROVE_IMPLEMENTATION_DIRECTION_WITH_EXTERNAL_EVIDENCE_BLOCKER`
 
-未发现要求回退现有 JRN-013 内部实现的 P0/P1 问题。阻断项是产品合同本身要求的
-真实 provider evidence、完整 release gate，以及尚属 JRN-014/JRN-015 的确认和
-纠错功能。产品状态继续为 `NOT_READY_FOR_PRODUCTION`。
+新增一个 P0 provider-contract blocker，但不要求回退 source-truth、preview 或
+fail-closed 基础设施：现有 parser 的 correction/cancel wire shape 尚未被证明，
+并可能与真实 Flex XML 不兼容。阻断项是取得 raw-wire 官方证据后修正 field
+contract/parser、补齐真实 provider evidence、完成 release gate，以及尚属
+JRN-014/JRN-015 的确认和纠错功能。产品状态继续为
+`NOT_READY_FOR_PRODUCTION`。

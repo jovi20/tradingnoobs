@@ -7,9 +7,11 @@ import pytest
 
 from app_config.ibkr_flex_provider_evidence import (
     REQUIRED_SEMANTICS,
+    IbkrFlexFieldContract,
     IbkrFlexProviderEvidenceManifest,
     IbkrProviderEvidenceError,
     read_provider_evidence_manifest,
+    required_provider_wire_tokens,
     require_verified_ibkr_flex_provider_contract,
     verify_provider_evidence,
 )
@@ -100,8 +102,15 @@ def statement_xml(*, generation: str, to_date: str) -> bytes:
 
 
 def official_artifact_text() -> str:
+    contract = IbkrFlexFieldContract.model_validate(field_contract())
     return "\n".join(
-        f"Evidence for {semantic}" for semantic in sorted(REQUIRED_SEMANTICS)
+        [
+            *(
+                f"Evidence for {semantic}"
+                for semantic in sorted(REQUIRED_SEMANTICS)
+            ),
+            *sorted(required_provider_wire_tokens(contract)),
+        ]
     )
 
 
@@ -118,6 +127,8 @@ def verified_payload(
     official_artifact_hash: str,
 ) -> dict:
     semantics = sorted(REQUIRED_SEMANTICS)
+    contract = IbkrFlexFieldContract.model_validate(field_contract())
+    wire_tokens = sorted(required_provider_wire_tokens(contract))
     return {
         "schema_version": 1,
         "adapter_kind": "IBKR_FLEX_XML_V1",
@@ -135,11 +146,19 @@ def verified_payload(
                 "artifact_sha256": official_artifact_hash,
                 "excerpts": [
                     {
+                        "semantic": semantics[0],
+                        "locator": "wire-contract",
+                        "quote": official_artifact_text(),
+                        "wire_tokens": wire_tokens,
+                    },
+                    *[
+                    {
                         "semantic": semantic,
                         "locator": f"section-{index}",
                         "quote": f"Evidence for {semantic}",
                     }
                     for index, semantic in enumerate(semantics, start=1)
+                    ],
                 ],
             }
         ],
@@ -215,6 +234,64 @@ def test_complete_official_and_real_fixture_evidence_can_verify(tmp_path):
 
     assert contract.query_template_id == "JOURNAL_FLEX_V1"
     assert contract.field_contract.execution_id_field == "ibExecID"
+
+
+def test_semantic_labels_without_exact_wire_contract_fail_closed(tmp_path):
+    template = tmp_path / "query-template.json"
+    template.write_bytes(b'{"query":"JOURNAL_FLEX_V1"}')
+    first = tmp_path / "statement-1.xml"
+    first.write_bytes(
+        statement_xml(generation="20260702;120000", to_date="20260701")
+    )
+    second = tmp_path / "statement-2.xml"
+    second.write_bytes(
+        statement_xml(generation="20260703;120000", to_date="20260702")
+    )
+    hashes = [
+        "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in (first, second, template)
+    ]
+    hashes.append(write_official_artifact(tmp_path))
+    payload = verified_payload(*hashes)
+    payload["official_sources"][0]["excerpts"][0]["wire_tokens"] = []
+    manifest = IbkrFlexProviderEvidenceManifest.model_validate(payload)
+
+    with pytest.raises(IbkrProviderEvidenceError) as failure:
+        verify_provider_evidence(manifest, fixture_root=tmp_path)
+
+    assert "missing exact provider wire tokens" in str(failure.value)
+    assert "TradeCorrection" in str(failure.value)
+    assert "sourceEventID" in str(failure.value)
+    assert "OPEN" in str(failure.value)
+
+
+def test_declared_wire_token_must_exist_in_bound_official_quote(tmp_path):
+    template = tmp_path / "query-template.json"
+    template.write_bytes(b'{"query":"JOURNAL_FLEX_V1"}')
+    first = tmp_path / "statement-1.xml"
+    first.write_bytes(
+        statement_xml(generation="20260702;120000", to_date="20260701")
+    )
+    second = tmp_path / "statement-2.xml"
+    second.write_bytes(
+        statement_xml(generation="20260703;120000", to_date="20260702")
+    )
+    hashes = [
+        "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in (first, second, template)
+    ]
+    hashes.append(write_official_artifact(tmp_path))
+    payload = verified_payload(*hashes)
+    payload["official_sources"][0]["excerpts"][0]["wire_tokens"].append(
+        "inventedProviderField"
+    )
+    manifest = IbkrFlexProviderEvidenceManifest.model_validate(payload)
+
+    with pytest.raises(IbkrProviderEvidenceError) as failure:
+        verify_provider_evidence(manifest, fixture_root=tmp_path)
+
+    assert "wire tokens are absent" in str(failure.value)
+    assert "inventedProviderField" in str(failure.value)
 
 
 def test_fixture_hash_and_semantic_gaps_fail_closed(tmp_path):
