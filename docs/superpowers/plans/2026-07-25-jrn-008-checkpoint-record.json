@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "record_kind": "JRN_TASK_CHECKPOINT",
+  "task_id": "JRN-008",
+  "branch": "dev",
+  "status": "COMPLETE",
+  "release_status": "NOT_READY_FOR_PRODUCTION",
+  "recorded_at": "2026-07-25T19:50:04+08:00",
+  "implementation_base_commit": "f8ade83abd25102292c5f4182bc37de1fb08b03f",
+  "implementation_checkpoint_commit": "61979cfef4c119b0363a31607597d9a13b60edb6",
+  "implementation_commits": [
+    "61979cfef4c119b0363a31607597d9a13b60edb6"
+  ],
+  "record_commit_resolution": "git log -1 --format=%H -- docs/superpowers/plans/2026-07-25-jrn-008-checkpoint-record.json",
+  "review_subject": {
+    "commit": "61979cfef4c119b0363a31607597d9a13b60edb6",
+    "migration_head": "d4e5f6a7b8c9",
+    "router_blob": "e986e7c43c5f36bf9b24c41b57b7672547b6bb29",
+    "write_service_blob": "43a6cf67602d2ecf6fca4084edd8c9a139b37263",
+    "idempotency_service_blob": "146df615e9ed52f0f623c14e34305a9d3498334d",
+    "legacy_projection_blob": "c543b91809a92db9cbc70ddf6e9c99cbc275f0e5",
+    "postgresql_test_blob": "37cdc07155ebc0a4d77d159ad38321d9d64e74bf",
+    "lifecycle_test_blob": "7c85cf19bd3bc2b6991ee1c844e2d9d8820e29df",
+    "openapi_blob": "b992a993c0e0f73bcab7d31472d1b0f0753eede8",
+    "frontend_api_blob": "7a7b7a621c00f72ac1f7cd735f3548d833ac4535"
+  },
+  "scope_summary": [
+    "Make canonical ADD, REDUCE, and CLOSE lock the owner-scoped account row and then the position row before validating remaining quantity, allocating sequence, and committing.",
+    "Require permanent financial Idempotency-Key records for lifecycle commands, replay completed responses, reject payload conflicts, link records to canonical source facts, and exclude them from expiry cleanup.",
+    "Reject backdated lifecycle events, resolve naive timestamps through the user's IANA timezone with DST gap/fold rejection, and replay equal timestamps deterministically by sequence.",
+    "Require REDUCE to remain partial and CLOSE to equal the remaining quantity, including PostgreSQL concurrency protection against over-close and duplicate close.",
+    "Commit canonical event, append-only ledger postings, outbox, idempotency response, position aggregates, and reconcilable TradeBatch compatibility projection in one transaction.",
+    "Reject ordinary manual lifecycle commands for source-bound accounts and preserve the legacy bridge until the separately gated JRN-014/JRN-016 retirement conditions are met.",
+    "Generate stable retry keys in the frontend for ADD, REDUCE, and CLOSE without changing the JRN-010 reversal/void product boundary."
+  ],
+  "verification_environment": {
+    "python": "3.13.5",
+    "node": "24.18.0",
+    "npm": "11.16.0",
+    "postgresql_server": "16.14 (Homebrew)"
+  },
+  "verification": [
+    {
+      "command": "backend/venv/bin/python scripts/run_journal_baseline_gate.py",
+      "result": "PASS on exact commit 61979cfef4c119b0363a31607597d9a13b60edb6: 503 backend tests including PostgreSQL lifecycle concurrency, current OpenAPI and release contracts, 160 frontend tests, typecheck, lint, and 15-page production build."
+    },
+    {
+      "command": "python scripts/check_added_secrets.py --base f8ade83 --head 61979cf",
+      "result": "PASS: ruleset added-secrets-v1, 800 added lines, 0 findings."
+    },
+    {
+      "command": "PYTHONPATH=backend backend/venv/bin/python -m pytest backend/tests/test_trading_position_lifecycle_router.py backend/tests/test_jrn002_postgresql_gate.py -q",
+      "result": "PASS within the exact-commit unified gate, including permanent replay, timestamp, rollback, projection reconciliation, and PostgreSQL race coverage."
+    },
+    {
+      "command": "git diff --cached --check",
+      "result": "PASS before implementation commit; scoped staged paths excluded all recorded user WIP."
+    }
+  ],
+  "review": {
+    "disposition": "APPROVE_REMOTE_CI_CLOSED",
+    "blocking_findings_after_fix": [],
+    "fixed_findings": [
+      {
+        "severity": "P1",
+        "finding": "A lifecycle-only locking change would still leave the existing reversal path able to allocate a competing event sequence outside the account-then-position protocol.",
+        "resolution": "The reversal endpoint now takes the same account-then-position locks before allocating sequence, while JRN-010 remains responsible for enabling the final reversal and whole-position void product contract."
+      },
+      {
+        "severity": "P1",
+        "finding": "Allowing REDUCE to consume the full remainder or CLOSE to accept an arbitrary smaller quantity would create two command shapes for the same state transition and ambiguous retry semantics.",
+        "resolution": "REDUCE is now strictly partial and CLOSE must exactly equal the remaining quantity, with deterministic 422 errors and concurrent PostgreSQL coverage."
+      }
+    ],
+    "residual_risks": [
+      "JRN-009 still owns immutable opening balance, cash transaction, cash dividend, reversal, account archive, and base-currency lifecycle behavior.",
+      "JRN-010 still owns the released product semantics and endpoints for latest-event reversal, whole-position void, and legacy mutation isolation.",
+      "JRN-013 through JRN-015 still own IBKR source binding, incremental execution identity, correction replay, and canonical source application; source-bound rejection in this task is only the write-side guard.",
+      "The legacy TradeBatch bridge remains intentionally present until JRN-014 and JRN-016 complete and the documented reconciliation, telemetry, and restore gates authorize a separate retirement task.",
+      "The product remains NOT_READY_FOR_PRODUCTION until the remaining active-plan exit gates are closed."
+    ]
+  },
+  "remote_ci": {
+    "status": "PASS",
+    "required_workflow": ".github/workflows/journal-baseline.yml",
+    "required_job": "journal-baseline",
+    "verified_commit": "61979cfef4c119b0363a31607597d9a13b60edb6",
+    "workflow_run_id": 30156750813,
+    "workflow_run_url": "https://github.com/jovi20/tradingnoobs/actions/runs/30156750813",
+    "workflow_run_conclusion": "success",
+    "job_id": 89675818444,
+    "job_url": "https://github.com/jovi20/tradingnoobs/actions/runs/30156750813/job/89675818444",
+    "job_conclusion": "success",
+    "artifact": {
+      "id": 8619240913,
+      "name": "jrn002-gate-summary",
+      "digest": "sha256:c0b7aad6e15a535c18251c9fc84ee900cfebdd6d23fe53f9e54673ccdf8365f0",
+      "expired": false
+    }
+  },
+  "required_check_enforcement": {
+    "ruleset_id": 19728078,
+    "ruleset_name": "main-journal-baseline",
+    "ruleset_url": "https://github.com/jovi20/tradingnoobs/settings/rules/19728078",
+    "enforcement": "active",
+    "target_ref": "refs/heads/main",
+    "required_check": "journal-baseline",
+    "integration": "GitHub Actions",
+    "dev_is_targeted": false
+  },
+  "next_task_gate": "SATISFIED: JRN-008 is closed; JRN-009 may start from migration head d4e5f6a7b8c9 and the canonical lifecycle lock, idempotency, sequence, and projection contract."
+}
