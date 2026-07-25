@@ -13,7 +13,12 @@ from app_config.release_contract import (
 from database import get_db
 from models import Transaction, TradingAccount, TransactionType, User
 from schemas import TransactionCreate, TransactionResponse
-from services.account_ledger_service import delete_transaction_ledger_entries, sync_transaction_to_account_ledger
+from services.account_ledger_service import (
+    AccountingReconciliationRequiredError,
+    LedgerPostingConflictError,
+    delete_transaction_ledger_entries,
+    sync_transaction_to_account_ledger,
+)
 from services.auth_service import get_current_user
 from services.public_id_service import resolve_trading_account, resolve_transaction
 
@@ -74,19 +79,6 @@ def create_transaction(
     )
     db.add(db_transaction)
     
-    # 3. Update Account Cash Balance
-    # DEPOSIT/INTEREST/TRANSFER_IN -> Add
-    # WITHDRAWAL/FEE/TRANSFER_OUT -> Subtract (assuming amount is clear, but let's stick to signed amount logic)
-    # Convention: Frontend sends positive for Deposit, negative for Withdrawal? 
-    # Or keep amount positive and use Type to determine sign?
-    # Let's use Type to determine sign for safety, or expect signed amount.
-    # Plan: "Signed Amount" in model. 
-    # DEPOSIT: +1000
-    # WITHDRAWAL: -500
-    # FEE: -10
-    # If user sends +500 for Withdrawal, we should flip it or trust input?
-    # Better to enforce sign based on type for consistency.
-    
     amount = transaction.amount
     if transaction.type in [TransactionType.WITHDRAWAL, TransactionType.FEE, TransactionType.TRANSFER_OUT]:
         if amount > 0:
@@ -96,14 +88,22 @@ def create_transaction(
             amount = -amount # Enforce positive
             
     db_transaction.amount = amount
-    
-    # Initialize cash_balance if None
-    if account.cash_balance is None:
-        account.cash_balance = 0
-        
-    account.cash_balance += amount
-    db.flush()
-    sync_transaction_to_account_ledger(db, transaction=db_transaction, account=account)
+    try:
+        db.flush()
+        sync_transaction_to_account_ledger(
+            db,
+            transaction=db_transaction,
+            account=account,
+        )
+    except (
+        AccountingReconciliationRequiredError,
+        LedgerPostingConflictError,
+    ) as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
     
     db.commit()
     db.refresh(db_transaction)
@@ -145,10 +145,14 @@ def delete_transaction(
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
         
-    # Revert Balance
-    account = transaction.trading_account
-    account.cash_balance -= transaction.amount
-    delete_transaction_ledger_entries(db, transaction=transaction)
+    try:
+        delete_transaction_ledger_entries(db, transaction=transaction)
+    except LedgerPostingConflictError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
     
     db.delete(transaction)
     db.commit()

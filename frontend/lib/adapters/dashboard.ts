@@ -126,6 +126,8 @@ export function formatDashboardAccountRows(
         name: account.name,
         broker: account.broker,
         balanceLabel: `${currencySymbol}${account.journal_balance.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
+        journalBalanceTrusted: account.journal_balance_trusted,
+        accountingHealth: account.accounting_health,
     }))
 }
 

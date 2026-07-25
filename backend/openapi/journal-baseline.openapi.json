@@ -710,6 +710,10 @@
       },
       "DashboardAccountBalance": {
         "properties": {
+          "accounting_health": {
+            "title": "Accounting Health",
+            "type": "string"
+          },
           "broker": {
             "title": "Broker",
             "type": "string"
@@ -717,6 +721,10 @@
           "journal_balance": {
             "title": "Journal Balance",
             "type": "number"
+          },
+          "journal_balance_trusted": {
+            "title": "Journal Balance Trusted",
+            "type": "boolean"
           },
           "name": {
             "title": "Name",
@@ -726,7 +734,9 @@
         "required": [
           "name",
           "broker",
-          "journal_balance"
+          "journal_balance",
+          "accounting_health",
+          "journal_balance_trusted"
         ],
         "title": "DashboardAccountBalance",
         "type": "object"
@@ -738,6 +748,18 @@
               "$ref": "#/components/schemas/DashboardAccountBalance"
             },
             "title": "Account Balances",
+            "type": "array"
+          },
+          "accounting_degraded": {
+            "default": false,
+            "title": "Accounting Degraded",
+            "type": "boolean"
+          },
+          "accounting_warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Accounting Warnings",
             "type": "array"
           },
           "avg_pnl_ratio": {
@@ -3939,6 +3961,10 @@
             ],
             "title": "Account Type"
           },
+          "accounting_health": {
+            "title": "Accounting Health",
+            "type": "string"
+          },
           "broker": {
             "title": "Broker",
             "type": "string"
@@ -3988,6 +4014,10 @@
             "title": "Journal Balance",
             "type": "string"
           },
+          "journal_balance_trusted": {
+            "title": "Journal Balance Trusted",
+            "type": "boolean"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -4023,6 +4053,8 @@
           "currency",
           "initial_balance",
           "journal_balance",
+          "accounting_health",
+          "journal_balance_trusted",
           "description",
           "is_active",
           "created_at",

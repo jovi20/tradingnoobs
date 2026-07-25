@@ -13,12 +13,14 @@ from main import app
 from models import (
     AccountLedgerEntry,
     AccountLedgerEntryType,
+    LedgerPostingKind,
     Position,
     PositionDirection,
     PositionStatus,
     TradingAccount,
     User,
 )
+from services.account_ledger_service import sync_opening_balance_to_account_ledger
 from services.auth_service import get_current_user
 
 
@@ -144,7 +146,7 @@ class PublicIdRouteTests(unittest.TestCase):
 
         self.assertEqual(get_response.status_code, 200)
         payload = get_response.json()
-        self.assertEqual(Decimal(str(payload["journal_balance"])), Decimal("1000"))
+        self.assertEqual(Decimal(str(payload["journal_balance"])), Decimal("0"))
         for legacy_or_market_field in (
             "cash_balance",
             "current_balance",
@@ -156,12 +158,15 @@ class PublicIdRouteTests(unittest.TestCase):
     def test_account_cash_balance_prefers_ledger_derived_read_model(self):
         self.account.initial_balance = Decimal("1000")
         self.account.cash_balance = Decimal("9999")
+        sync_opening_balance_to_account_ledger(self.db, account=self.account)
         self.db.add(
             AccountLedgerEntry(
                 public_id="ledger-cash-out",
                 user_id=self.user.id,
                 account_id=self.account.id,
                 entry_type=AccountLedgerEntryType.WITHDRAWAL,
+                source_fact_public_id="withdrawal-fact",
+                posting_kind=LedgerPostingKind.WITHDRAWAL.value,
                 occurred_at=datetime.now(timezone.utc),
                 currency="USD",
                 amount=Decimal("-25"),

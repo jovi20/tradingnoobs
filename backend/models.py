@@ -5,7 +5,8 @@ from sqlalchemy import (
     Column, Integer, String, Text, Boolean, DateTime, Date,
     ForeignKey, Numeric, JSON, Enum as SQLEnum, Index, UniqueConstraint, text
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy import event, inspect
+from sqlalchemy.orm import Session, relationship
 from sqlalchemy.sql import func
 from database import Base
 import enum
@@ -114,6 +115,25 @@ class AccountLedgerEntryType(str, enum.Enum):
     FEE = "FEE"
     CASH_ADJUSTMENT = "CASH_ADJUSTMENT"
     REALIZED_PNL = "REALIZED_PNL"
+
+
+class LedgerPostingKind(str, enum.Enum):
+    OPENING_BALANCE = "OPENING_BALANCE"
+    DEPOSIT = "DEPOSIT"
+    WITHDRAWAL = "WITHDRAWAL"
+    INTEREST = "INTEREST"
+    ACCOUNT_FEE = "ACCOUNT_FEE"
+    CASH_DIVIDEND_RECEIVED = "CASH_DIVIDEND_RECEIVED"
+    CASH_DIVIDEND_PAID_IN_LIEU = "CASH_DIVIDEND_PAID_IN_LIEU"
+    REALIZED_GROSS = "REALIZED_GROSS"
+    TRADE_FEE = "TRADE_FEE"
+    COMPENSATING_REVERSAL = "COMPENSATING_REVERSAL"
+    LEGACY_UNRESOLVED = "LEGACY_UNRESOLVED"
+
+
+class AccountingHealth(str, enum.Enum):
+    HEALTHY = "ACCOUNTING_HEALTHY"
+    RECONCILIATION_REQUIRED = "ACCOUNTING_RECONCILIATION_REQUIRED"
 
 
 class JobRunStatus(str, enum.Enum):
@@ -690,6 +710,11 @@ class TradingAccount(Base):
     current_balance = Column(Numeric(20, 2), nullable=True, default=0) # 当前净值 (NAV) - Manually Synced
     description = Column(Text, nullable=True)  # 备注
     is_active = Column(Boolean, default=True)  # 是否启用
+    accounting_health = Column(
+        String(50),
+        nullable=False,
+        default=AccountingHealth.HEALTHY.value,
+    )
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -699,6 +724,10 @@ class TradingAccount(Base):
     transactions = relationship("Transaction", back_populates="trading_account", cascade="all, delete-orphan")
     truth_positions = relationship("TradingPosition", back_populates="account")
     ledger_entries = relationship("AccountLedgerEntry", back_populates="account")
+    accounting_reconciliation_cases = relationship(
+        "AccountingReconciliationCase",
+        back_populates="account",
+    )
 
 
 class SystemSetting(Base):
@@ -786,7 +815,11 @@ class TradingPosition(Base):
     account = relationship("TradingAccount", back_populates="truth_positions")
     instrument = relationship("TradeInstrument", back_populates="positions")
     strategy = relationship("Strategy")
-    events = relationship("PositionEvent", back_populates="position", order_by="PositionEvent.event_time")
+    events = relationship(
+        "PositionEvent",
+        back_populates="position",
+        order_by="PositionEvent.event_time, PositionEvent.sequence_no",
+    )
     ledger_entries = relationship("AccountLedgerEntry", back_populates="position", order_by="AccountLedgerEntry.occurred_at")
 
 
@@ -801,6 +834,7 @@ class PositionEvent(Base):
     instrument_id = Column(Integer, ForeignKey("trade_instruments.id"), nullable=False)
     event_type = Column(SQLEnum(PositionEventType), nullable=False)
     event_time = Column(DateTime(timezone=True), nullable=False)
+    sequence_no = Column(Integer, nullable=False, default=0)
     side_effect = Column(String(20), nullable=True)
     quantity = Column(Numeric(20, 8), nullable=True)
     price = Column(Numeric(20, 8), nullable=True)
@@ -841,6 +875,13 @@ class PositionEvent(Base):
 
 class AccountLedgerEntry(Base):
     __tablename__ = "account_ledger_entries"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_fact_public_id",
+            "posting_kind",
+            name="uq_account_ledger_source_fact_posting_kind",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
@@ -849,7 +890,22 @@ class AccountLedgerEntry(Base):
     position_id = Column(Integer, ForeignKey("trading_positions.id"), nullable=True)
     position_event_id = Column(Integer, ForeignKey("position_events.id"), nullable=True)
     transaction_id = Column(Integer, ForeignKey("transactions.id"), nullable=True)
+    reverses_ledger_entry_id = Column(
+        Integer,
+        ForeignKey("account_ledger_entries.id"),
+        nullable=True,
+    )
     entry_type = Column(SQLEnum(AccountLedgerEntryType), nullable=False)
+    source_fact_public_id = Column(
+        String(36),
+        nullable=False,
+        default=lambda: str(uuid.uuid4()),
+    )
+    posting_kind = Column(
+        String(50),
+        nullable=False,
+        default=LedgerPostingKind.LEGACY_UNRESOLVED.value,
+    )
     occurred_at = Column(DateTime(timezone=True), nullable=False)
     currency = Column(String(10), nullable=False)
     amount = Column(Numeric(20, 8), nullable=False)
@@ -866,6 +922,76 @@ class AccountLedgerEntry(Base):
     position = relationship("TradingPosition", back_populates="ledger_entries")
     position_event = relationship("PositionEvent", back_populates="ledger_entries")
     transaction = relationship("Transaction", back_populates="ledger_entries")
+    reversed_entry = relationship(
+        "AccountLedgerEntry",
+        remote_side=[id],
+        foreign_keys=[reverses_ledger_entry_id],
+    )
+
+
+@event.listens_for(Session, "before_flush")
+def _prevent_account_ledger_mutation(session, flush_context, instances) -> None:
+    for entry in session.deleted:
+        if isinstance(entry, AccountLedgerEntry) and inspect(entry).persistent:
+            raise ValueError("Account ledger entries are append-only")
+    for entry in session.dirty:
+        if (
+            isinstance(entry, AccountLedgerEntry)
+            and inspect(entry).persistent
+            and session.is_modified(entry, include_collections=False)
+        ):
+            raise ValueError("Account ledger entries are append-only")
+
+
+class AccountingReconciliationCase(Base):
+    __tablename__ = "accounting_reconciliation_cases"
+    __table_args__ = (
+        Index(
+            "ix_accounting_reconciliation_account_status",
+            "account_id",
+            "status",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    public_id = Column(
+        String(36),
+        unique=True,
+        index=True,
+        nullable=False,
+        default=lambda: str(uuid.uuid4()),
+    )
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    account_id = Column(
+        Integer,
+        ForeignKey("trading_accounts.id"),
+        nullable=False,
+    )
+    original_ledger_entry_id = Column(
+        Integer,
+        ForeignKey("account_ledger_entries.id"),
+        nullable=True,
+    )
+    status = Column(String(20), nullable=False, default="OPEN")
+    issue_code = Column(String(100), nullable=False)
+    details_json = Column(JSON, nullable=False, default=dict)
+    resolution_note = Column(Text, nullable=True)
+    resolved_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+
+    account = relationship(
+        "TradingAccount",
+        back_populates="accounting_reconciliation_cases",
+    )
+    original_ledger_entry = relationship(
+        "AccountLedgerEntry",
+        foreign_keys=[original_ledger_entry_id],
+    )
 
 
 class BrokerSyncRun(Base):

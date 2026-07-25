@@ -28,6 +28,8 @@ from schemas import (
     TradingPositionTradeEventReverseCreate,
 )
 from services.account_ledger_service import (
+    AccountingReconciliationRequiredError,
+    LedgerPostingConflictError,
     sync_dividend_event_to_account_ledger,
 )
 from services.auth_service import get_current_user
@@ -210,6 +212,15 @@ def _begin_idempotent_lifecycle_write(
             user_id=current_user.id,
             ttl_seconds=24 * 60 * 60,
         )
+    except (
+        AccountingReconciliationRequiredError,
+        LedgerPostingConflictError,
+    ) as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -373,6 +384,15 @@ def create_trading_position_trade_event(
                 "position_public_id": exc.position_public_id,
             },
         ) from exc
+    except (
+        AccountingReconciliationRequiredError,
+        LedgerPostingConflictError,
+    ) as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -434,6 +454,15 @@ def reverse_trading_position_trade_event(
                 "message": str(exc),
                 "position_public_id": exc.position_public_id,
             },
+        ) from exc
+    except (
+        AccountingReconciliationRequiredError,
+        LedgerPostingConflictError,
+    ) as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail={"code": exc.code, "message": str(exc)},
         ) from exc
     except ValueError as exc:
         db.rollback()
@@ -498,7 +527,17 @@ def create_trading_position_dividend(
     )
     db.add(event)
     db.flush()
-    sync_dividend_event_to_account_ledger(db, event=event)
+    try:
+        sync_dividend_event_to_account_ledger(db, event=event)
+    except (
+        AccountingReconciliationRequiredError,
+        LedgerPostingConflictError,
+    ) as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
     enqueue_position_event_created_outbox(db, position=truth_position, event=event)
 
     db.flush()

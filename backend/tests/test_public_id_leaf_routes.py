@@ -144,7 +144,11 @@ class PublicIdLeafRouteTests(unittest.TestCase):
         self.assertIn("public_id", payload)
 
         delete_response = self.client.delete(f"/api/transactions/{self.transaction.public_id}")
-        self.assertEqual(delete_response.status_code, 200)
+        self.assertEqual(delete_response.status_code, 409)
+        self.assertEqual(
+            delete_response.json()["detail"]["code"],
+            "POSTING_FACT_CONFLICT",
+        )
 
     def test_public_trade_batch_mutations_fail_closed_for_public_id(self):
         update_response = self.client.patch(

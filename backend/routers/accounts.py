@@ -10,7 +10,7 @@ from app_config.release_contract import (
     require_release_currency,
 )
 from database import get_db
-from models import TradingAccount, User
+from models import AccountingHealth, TradingAccount, User
 from schemas import TradingAccountCreate, TradingAccountUpdate, TradingAccountResponse
 from services.account_ledger_service import (
     calculate_account_cash_balance_read_model,
@@ -37,6 +37,8 @@ def _journal_account_response(
     account: TradingAccount,
 ) -> TradingAccountResponse:
     """Serialize the journal read model without relabeling it as cash or NAV."""
+    health = account.accounting_health or AccountingHealth.HEALTHY.value
+    health_value = health.value if hasattr(health, "value") else str(health)
     return TradingAccountResponse(
         id=account.id,
         public_id=account.public_id,
@@ -47,6 +49,8 @@ def _journal_account_response(
         currency=account.currency,
         initial_balance=account.initial_balance,
         journal_balance=calculate_account_cash_balance_read_model(db, account=account),
+        accounting_health=health_value,
+        journal_balance_trusted=health_value == AccountingHealth.HEALTHY.value,
         description=account.description,
         is_active=account.is_active,
         created_at=account.created_at,

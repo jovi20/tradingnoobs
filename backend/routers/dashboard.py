@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import (
+    AccountingHealth,
     BatchType,
     Position,
     PositionEvent,
@@ -149,29 +150,37 @@ def _account_balances(
     db: Session,
     *,
     user_id: int,
-) -> tuple[float, list[DashboardAccountBalance]]:
+) -> tuple[float, list[DashboardAccountBalance], list[str]]:
     accounts = db.query(TradingAccount).filter(
         TradingAccount.user_id == user_id,
         TradingAccount.is_active == True,
     ).all()
-    values = [
-        (
-            account,
-            float(calculate_account_cash_balance_read_model(db, account=account)),
-        )
-        for account in accounts
-        if (account.currency or "").strip().upper() == "USD"
-    ]
-    total = sum(value for _, value in values)
+    values = []
+    warnings = []
+    for account in accounts:
+        if (account.currency or "").strip().upper() != "USD":
+            continue
+        health = account.accounting_health or AccountingHealth.HEALTHY.value
+        health_value = health.value if hasattr(health, "value") else str(health)
+        trusted = health_value == AccountingHealth.HEALTHY.value
+        value = float(calculate_account_cash_balance_read_model(db, account=account))
+        values.append((account, value, health_value, trusted))
+        if not trusted:
+            warnings.append(
+                f"ACCOUNTING_RECONCILIATION_REQUIRED:{account.public_id}"
+            )
+    total = sum(value for _, value, _, trusted in values if trusted)
     balances = [
         DashboardAccountBalance(
             name=account.name,
             broker=account.broker,
             journal_balance=value,
+            accounting_health=health,
+            journal_balance_trusted=trusted,
         )
-        for account, value in values
+        for account, value, health, trusted in values
     ]
-    return total, balances
+    return total, balances, warnings
 
 
 @router.get("/stats", response_model=DashboardStats)
@@ -231,7 +240,7 @@ def get_dashboard_stats(
 
     wins = [pnl for pnl in exit_pnls if pnl > 0]
     losses = [abs(pnl) for pnl in exit_pnls if pnl < 0]
-    total_journal_balance, account_balances = _account_balances(
+    total_journal_balance, account_balances, accounting_warnings = _account_balances(
         db,
         user_id=current_user.id,
     )
@@ -245,6 +254,8 @@ def get_dashboard_stats(
         open_positions=position_stats.open_positions or 0,
         closed_trades=position_stats.closed_trades or 0,
         account_balances=account_balances[:5],
+        accounting_degraded=bool(accounting_warnings),
+        accounting_warnings=accounting_warnings,
     )
 
 

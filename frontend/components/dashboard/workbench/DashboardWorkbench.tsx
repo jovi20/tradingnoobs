@@ -8,6 +8,7 @@ import {
 } from '@/lib/adapters/dashboard'
 import type { PositionViewModel } from '@/lib/adapters/trading'
 import type { DashboardStats } from '@/lib/api'
+import { AlertTriangle } from 'lucide-react'
 import { DashboardEvidenceStack } from './DashboardEvidenceStack'
 import { DashboardJournalGrid } from './DashboardJournalGrid'
 import { DashboardRealizedPnlHero } from './DashboardRealizedPnlHero'
@@ -49,6 +50,20 @@ export function DashboardWorkbench({
     return (
         <PageFrame className="space-y-6">
             <DashboardWorkbenchHeader />
+            {stats.accounting_degraded && (
+                <div
+                    role="alert"
+                    className="flex items-start gap-3 border-y border-warning/30 bg-warning/8 px-4 py-3 text-warning"
+                >
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <div>
+                        <p className="text-sm font-semibold">部分账户待完成账务对账</p>
+                        <p className="mt-1 text-xs">
+                            汇总余额仅包含账务健康的账户；待对账账户保留只读记录。
+                        </p>
+                    </div>
+                </div>
+            )}
             <DashboardStatusRail metrics={statusMetrics} />
             <DashboardRealizedPnlHero
                 periodOptions={periodOptions}

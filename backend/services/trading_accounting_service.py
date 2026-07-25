@@ -7,12 +7,13 @@ FIFO core so routers and read models can move off scattered average-cost logic.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_EVEN
 from typing import Iterable
 
 
 OPEN_EVENT_TYPES = {"OPEN", "ADD"}
 CLOSE_EVENT_TYPES = {"REDUCE", "CLOSE"}
+POSTING_QUANTUM = Decimal("0.00000001")
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,7 @@ class AccountingEventResult:
     realized_pnl_gross: Decimal
     realized_pnl_net: Decimal
     fee_amount_account_ccy: Decimal
+    consumed_open_fee_account_ccy: Decimal
     quantity_closed: Decimal
 
 
@@ -60,6 +62,7 @@ class MarkToMarketResult:
 class _FifoLot:
     quantity: Decimal
     price: Decimal
+    fee_remaining: Decimal
 
 
 def _to_decimal(value) -> Decimal:
@@ -74,6 +77,13 @@ def _event_type(value) -> str:
     return value.value if hasattr(value, "value") else str(value)
 
 
+def quantize_posting(value) -> Decimal:
+    return _to_decimal(value).quantize(
+        POSTING_QUANTUM,
+        rounding=ROUND_HALF_EVEN,
+    )
+
+
 def calculate_fifo_position_accounting(
     events: Iterable[AccountingEvent],
     *,
@@ -85,6 +95,7 @@ def calculate_fifo_position_accounting(
     opened_notional = Decimal("0")
     closed_notional = Decimal("0")
     realized_gross_total = Decimal("0")
+    realized_net_total = Decimal("0")
     total_fees = Decimal("0")
     event_results: dict[str, AccountingEventResult] = {}
     side_value = _event_type(side).upper()
@@ -93,11 +104,20 @@ def calculate_fifo_position_accounting(
         event_type = _event_type(event.event_type).upper()
         quantity = _to_decimal(event.quantity)
         price = _to_decimal(event.price)
-        fee_account_ccy = _to_decimal(event.fee_amount) * _to_decimal(event.fx_rate_to_account_ccy)
+        fee_account_ccy = quantize_posting(
+            _to_decimal(event.fee_amount)
+            * _to_decimal(event.fx_rate_to_account_ccy)
+        )
         total_fees += fee_account_ccy
 
         if event_type in OPEN_EVENT_TYPES:
-            lots.append(_FifoLot(quantity=quantity, price=price))
+            lots.append(
+                _FifoLot(
+                    quantity=quantity,
+                    price=price,
+                    fee_remaining=fee_account_ccy,
+                )
+            )
             quantity_opened += quantity
             opened_notional += quantity * price
             event_results[event.public_id] = AccountingEventResult(
@@ -105,6 +125,7 @@ def calculate_fifo_position_accounting(
                 realized_pnl_gross=Decimal("0"),
                 realized_pnl_net=Decimal("0"),
                 fee_amount_account_ccy=fee_account_ccy,
+                consumed_open_fee_account_ccy=Decimal("0"),
                 quantity_closed=Decimal("0"),
             )
             continue
@@ -115,12 +136,14 @@ def calculate_fifo_position_accounting(
                 realized_pnl_gross=Decimal("0"),
                 realized_pnl_net=Decimal("0"),
                 fee_amount_account_ccy=fee_account_ccy,
+                consumed_open_fee_account_ccy=Decimal("0"),
                 quantity_closed=Decimal("0"),
             )
             continue
 
         remaining = quantity
-        event_realized_gross = Decimal("0")
+        event_realized_gross_raw = Decimal("0")
+        consumed_open_fee = Decimal("0")
         while remaining > 0:
             if not lots:
                 raise ValueError(f"Cannot close {quantity} units without enough FIFO lots")
@@ -128,23 +151,40 @@ def calculate_fifo_position_accounting(
             lot = lots[0]
             matched = min(lot.quantity, remaining)
             if side_value == "SHORT":
-                event_realized_gross += (lot.price - price) * matched
+                event_realized_gross_raw += (lot.price - price) * matched
             else:
-                event_realized_gross += (price - lot.price) * matched
+                event_realized_gross_raw += (price - lot.price) * matched
+
+            if matched == lot.quantity:
+                fee_allocation = lot.fee_remaining
+            else:
+                fee_allocation = quantize_posting(
+                    lot.fee_remaining * matched / lot.quantity
+                )
+            consumed_open_fee += fee_allocation
 
             lot.quantity -= matched
+            lot.fee_remaining -= fee_allocation
             remaining -= matched
             if lot.quantity == 0:
                 lots.pop(0)
 
         quantity_closed += quantity
         closed_notional += quantity * price
+        event_realized_gross = quantize_posting(event_realized_gross_raw)
+        event_realized_net = quantize_posting(
+            event_realized_gross_raw
+            - fee_account_ccy
+            - consumed_open_fee
+        )
         realized_gross_total += event_realized_gross
+        realized_net_total += event_realized_net
         event_results[event.public_id] = AccountingEventResult(
             event_public_id=event.public_id,
             realized_pnl_gross=event_realized_gross,
-            realized_pnl_net=event_realized_gross - fee_account_ccy,
+            realized_pnl_net=event_realized_net,
             fee_amount_account_ccy=fee_account_ccy,
+            consumed_open_fee_account_ccy=consumed_open_fee,
             quantity_closed=quantity,
         )
 
@@ -162,7 +202,7 @@ def calculate_fifo_position_accounting(
         remaining_avg_open_price=remaining_avg_open_price,
         avg_close_price=avg_close_price,
         realized_pnl_gross=realized_gross_total,
-        realized_pnl_net=realized_gross_total - total_fees,
+        realized_pnl_net=realized_net_total,
         total_fees=total_fees,
         event_results=event_results,
     )

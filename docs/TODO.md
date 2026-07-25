@@ -15,7 +15,7 @@
 - `JRN-001` 不新增 Alembic revision，migration head 继续是 `9cad10111213`；其最终证据必须绑定稳定 scoped checkpoint。
 - `JRN-002` 至 `JRN-005` 已完成：最终 scoped checkpoint `876cda7`、`cacf8c0`、`575c67d`、`2c0e8d0` 均为远端验证提交 `68532b8` 的祖先；GitHub Actions run `30151924998` 的 `journal-baseline` job `89663633330` 与 artifact `8617918462` 成功。
 - GitHub ruleset `main-journal-baseline`（ID `19728078`）为 `Active`，仅目标 `refs/heads/main`，要求 GitHub Actions `journal-baseline`；`dev` 不受该 ruleset 限制。
-- `JRN-005` 已冻结 `JOURNAL_ACCOUNTING_V1`、ADR、posting matrix、错误码和可执行 golden vectors；当前 ledger 实现仍不符合该合同，属于下一任务 `JRN-006`。
+- `JRN-006` 已在本地实现 `JOURNAL_ACCOUNTING_V1`：migration head 为 `c3d4e5f6a7b8`，append-only、posting uniqueness、ledger replay、存量隔离、accounting health 与降级 UI 已通过统一 PostgreSQL 门禁；尚待 scoped checkpoint、精确 SHA 重验和远端 CI 后关闭。
 - IBKR 文件的重复、重叠、增量导入与 correction replay 只在 `JRN-013` 至 `JRN-015` 实现，当前合同冻结不代表功能已落地。
 - 本轮不自动 merge 到 `main`、不创建 PR、不打 tag；这些属于后续显式操作。
 - 旧 P0-P19 阶段计划已归档到 [superpowers/plans/archive/](./superpowers/plans/archive/)。
@@ -30,9 +30,9 @@
 | P0 | `COMPLETE` | `JRN-003` invite-only auth 与 release secret | `cacf8c0` 已通过精确 SHA 全量 gate、本地评审及共同远端验证提交 `68532b8` 的 required check。 | Active plan M0 |
 | P0 | `COMPLETE` | `JRN-004` tenant/owner 边界封闭 | `575c67d` 的两用户矩阵、混合 owner graph、public/internal ID 和 legacy import deny-only 边界已通过，并取得远端 CI 与 required-check 证据。 | Active plan M0 |
 | P0 | `COMPLETE` | `JRN-005` 会计 posting matrix 与 golden vectors | `2c0e8d0` 已冻结合同、逐事件矩阵、错误码、golden vectors 和脱敏存量扫描，并取得远端 CI 与 required-check 证据。 | Active plan M1 |
-| P0 | `READY_TO_START` | `JRN-006` append-only ledger 与 journal balance 收敛 | Remote-CI blocker 已解除；以全部 JRN-005 vectors 作为验收 oracle，实现 append-only、posting uniqueness、replay 和 balance 收敛。 | Active plan M1 |
+| P0 | `IN_PROGRESS` | `JRN-006` append-only ledger 与 journal balance 收敛 | 本地实现与统一 gate 已通过；待 scoped checkpoint、精确 SHA 重验、远端 `journal-baseline` 和 evidence record。 | Active plan M1 |
 
-JRN-000 至 JRN-005 已完成。JRN-006 的 remote-CI blocker 已解除，成为下一开发任务；产品整体仍为 `NOT_READY_FOR_PRODUCTION`。source-bound IBKR 实现仍严格等待 JRN-013 至 JRN-015。不得提前做新页面、模型拆分、在线 Broker Sync、Market、AI 或量化功能。
+JRN-000 至 JRN-005 已完成。JRN-006 已通过本地实现门禁但尚未形成远端闭环；产品整体仍为 `NOT_READY_FOR_PRODUCTION`。source-bound IBKR 实现仍严格等待 JRN-013 至 JRN-015。不得提前做新页面、模型拆分、在线 Broker Sync、Market、AI 或量化功能。
 
 ## 暂不做
 

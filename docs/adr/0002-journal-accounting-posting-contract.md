@@ -1,6 +1,6 @@
 # ADR-0002: Journal Accounting Posting Contract
 
-Status: Accepted and frozen for `JOURNAL_ACCOUNTING_V1`
+Status: Accepted, frozen, and implemented by JRN-006
 
 Date: 2026-07-25
 
@@ -10,7 +10,7 @@ Golden vectors: `backend/tests/fixtures/jrn005_accounting_golden_vectors_v1.json
 
 ## Decision
 
-JRN-005 freezes accounting semantics only. The current mutable/net-ledger implementation is transitional; JRN-006 must replace it and pass every golden vector before it becomes authoritative.
+JRN-005 froze the accounting semantics. JRN-006 implements them through Alembic revision `c3d4e5f6a7b8`; the append-only ledger and ledger replay are now authoritative for journal balance.
 
 All inputs and calculations use `Decimal`. Intermediate results are not quantized. Every persisted posting is quantized once to `0.00000001` with `ROUND_HALF_EVEN`. Export retains the persisted eight-decimal value.
 
@@ -73,6 +73,10 @@ Position facts sort by `(event_time_utc, sequence_no)`. `sequence_no` is monoton
 
 Reversal and void never update or delete an original fact or posting. They append one exact compensating posting for every posting produced by the reversed fact, then replay FIFO attribution from immutable facts. Product authorization and lifecycle conflict rules remain owned by JRN-009/JRN-010.
 
-## Implementation Consequences
+## Implementation Status
 
-JRN-006 must introduce explicit posting kinds, append-only database protection, uniqueness, reconciliation, and a ledger-derived journal balance. It must stop writing net PnL to the ledger and stop updating or deleting existing ledger rows. JRN-007/JRN-008 add canonical sequence allocation and transactional writers; JRN-009/JRN-010 add cash and trade reversals.
+JRN-006 introduces explicit posting kinds, `(source_fact_public_id, posting_kind)` uniqueness, ORM plus SQLite/PostgreSQL append-only guards, deterministic replay, accounting-health quarantine, audited compensation, and a ledger-derived journal balance. It writes realized gross and trade fees separately; realized net remains position attribution only.
+
+Migration preview and the reconciliation command do not silently rewrite divergent accounting facts. Duplicate legacy posting keys, unresolved net postings, owner-graph mismatches, currency mismatches, and account-currency amount mismatches are assigned unique `LEGACY_UNRESOLVED` facts, receive reconciliation cases, and mark the account `ACCOUNTING_RECONCILIATION_REQUIRED`. Such accounts remain read-only for financial mutations and are excluded from trusted aggregate balances until invariants pass.
+
+JRN-007/JRN-008 add canonical account/position locking, durable financial-command idempotency, and fully transactional truth-native writers. JRN-009/JRN-010 add immutable cash and product-complete trade reversal/void commands.

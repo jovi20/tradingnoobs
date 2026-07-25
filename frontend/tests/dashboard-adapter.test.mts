@@ -21,6 +21,8 @@ function makeStats(overrides: Partial<DashboardStats> = {}): DashboardStats {
     open_positions: 2,
     closed_trades: 8,
     account_balances: [],
+    accounting_degraded: false,
+    accounting_warnings: [],
     ...overrides,
   }
 }
@@ -41,7 +43,13 @@ test('calculateDashboardPeriodMetrics uses the latest cumulative realized values
 test('adaptDashboardPageData exposes only the journal-safe dashboard model', () => {
   const result = adaptDashboardPageData({
     stats: makeStats({
-      account_balances: [{ name: 'IBKR Main', broker: 'IBKR', journal_balance: 700 }],
+      account_balances: [{
+        name: 'IBKR Main',
+        broker: 'IBKR',
+        journal_balance: 700,
+        accounting_health: 'ACCOUNTING_HEALTHY',
+        journal_balance_trusted: true,
+      }],
     }),
     openPositions: [],
     pnlHistory: [{ pnl: 120, pnl_percent: 6, date: '2026-04-01' }],
@@ -58,7 +66,13 @@ test('adaptDashboardPageData exposes only the journal-safe dashboard model', () 
     openPositions: 2,
     closedTrades: 8,
   })
-  assert.deepEqual(result.accountRows, [{ name: 'IBKR Main', broker: 'IBKR', balanceLabel: '$700' }])
+  assert.deepEqual(result.accountRows, [{
+    name: 'IBKR Main',
+    broker: 'IBKR',
+    balanceLabel: '$700',
+    journalBalanceTrusted: true,
+    accountingHealth: 'ACCOUNTING_HEALTHY',
+  }])
   assert.deepEqual(result.periodMetrics, { periodPnl: 6, periodValue: 120 })
   assert.equal(Object.hasOwn(result, 'allocation'), false)
   assert.equal(Object.hasOwn(result, 'movers'), false)
@@ -95,13 +109,21 @@ test('dashboard status metrics use realized and journal-balance language', () =>
 
 test('dashboard account rows label ledger-derived balances without percentages', () => {
   const rows = formatDashboardAccountRows([
-    { name: 'IBKR Main', broker: 'IBKR', journal_balance: 12345.67 },
+    {
+      name: 'IBKR Main',
+      broker: 'IBKR',
+      journal_balance: 12345.67,
+      accounting_health: 'ACCOUNTING_RECONCILIATION_REQUIRED',
+      journal_balance_trusted: false,
+    },
   ], '$')
 
   assert.deepEqual(rows, [{
     name: 'IBKR Main',
     broker: 'IBKR',
     balanceLabel: '$12,346',
+    journalBalanceTrusted: false,
+    accountingHealth: 'ACCOUNTING_RECONCILIATION_REQUIRED',
   }])
 })
 

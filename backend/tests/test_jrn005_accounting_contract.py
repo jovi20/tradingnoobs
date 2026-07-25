@@ -23,8 +23,15 @@ def test_machine_contract_is_exact_and_points_to_vectors():
     contract = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
 
     assert contract["contract_id"] == "JOURNAL_ACCOUNTING_V1"
-    assert contract["status"] == "FROZEN_CONTRACT_ONLY"
+    assert contract["status"] == "IMPLEMENTED"
     assert contract["implementation_task"] == "JRN-006"
+    assert contract["implementation_migration"] == "c3d4e5f6a7b8"
+    assert contract["authoritative_balance"] == "LEDGER_REPLAY"
+    assert contract["append_only_guards"] == [
+        "SQLALCHEMY_BEFORE_FLUSH",
+        "SQLITE_TRIGGER",
+        "POSTGRESQL_TRIGGER",
+    ]
     assert ROOT / contract["golden_vectors"] == VECTORS_PATH
     assert contract["precision"] == {
         "numeric": "DECIMAL_ONLY",

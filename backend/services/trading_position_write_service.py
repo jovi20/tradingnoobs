@@ -6,11 +6,21 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app_config.release_contract import JOURNAL_BETA_CONTRACT
-from models import PositionEvent, PositionEventType, TradingPosition, TradingPositionStatus
-from services.account_ledger_service import sync_realized_pnl_event_to_account_ledger
+from models import (
+    PositionEvent,
+    PositionEventType,
+    TradingAccount,
+    TradingPosition,
+    TradingPositionStatus,
+)
+from services.account_ledger_service import (
+    require_accounting_healthy,
+    sync_realized_pnl_event_to_account_ledger,
+)
 from services.trading_accounting_service import AccountingEvent, calculate_fifo_position_accounting
 from services.truth_legacy_projection_service import project_truth_accounting_to_legacy
 
@@ -36,6 +46,17 @@ class ArchivedTradingPositionWriteError(ValueError):
 def require_truth_position_financial_write_allowed(position: TradingPosition) -> None:
     if position.status == TradingPositionStatus.ARCHIVED:
         raise ArchivedTradingPositionWriteError(position.public_id)
+
+
+def _require_position_accounting_healthy(
+    db: Session,
+    position: TradingPosition,
+) -> None:
+    account = db.query(TradingAccount).filter(
+        TradingAccount.id == position.account_id,
+        TradingAccount.user_id == position.user_id,
+    ).one()
+    require_accounting_healthy(account)
 
 
 def _coerce_decimal(value) -> Decimal:
@@ -67,7 +88,11 @@ def replay_truth_position_accounting(db: Session, *, position: TradingPosition) 
             PositionEvent.position_id == position.id,
             PositionEvent.event_type.in_(TRADE_EVENT_TYPES),
         )
-        .order_by(PositionEvent.event_time.asc(), PositionEvent.id.asc())
+        .order_by(
+            PositionEvent.event_time.asc(),
+            PositionEvent.sequence_no.asc(),
+            PositionEvent.id.asc(),
+        )
         .all()
     )
     active_events = [event for event in events if event.id not in reversed_event_ids]
@@ -155,6 +180,7 @@ def append_truth_trade_event(
     note: str | None = None,
 ) -> PositionEvent:
     require_truth_position_financial_write_allowed(position)
+    _require_position_accounting_healthy(db, position)
     if position.status == TradingPositionStatus.CLOSED:
         raise ValueError("Cannot append trade events to a closed trading position")
 
@@ -172,6 +198,12 @@ def append_truth_trade_event(
         instrument_id=position.instrument_id,
         event_type=event_type,
         event_time=occurred_at,
+        sequence_no=(
+            db.query(func.max(PositionEvent.sequence_no))
+            .filter(PositionEvent.position_id == position.id)
+            .scalar()
+            or 0
+        ) + 1,
         side_effect=position.side.value,
         quantity=quantity,
         price=price,
@@ -201,6 +233,7 @@ def reverse_latest_truth_trade_event(
     note: str | None = None,
 ) -> PositionEvent:
     require_truth_position_financial_write_allowed(position)
+    _require_position_accounting_healthy(db, position)
     if event.event_type not in TRADE_EVENT_TYPES:
         raise ValueError("Only trade events can be reversed")
     if event.event_type == PositionEventType.OPEN:
@@ -236,7 +269,11 @@ def reverse_latest_truth_trade_event(
                 PositionEvent.position_id == position.id,
                 PositionEvent.event_type.in_(TRADE_EVENT_TYPES),
             )
-            .order_by(PositionEvent.event_time.asc(), PositionEvent.id.asc())
+            .order_by(
+                PositionEvent.event_time.asc(),
+                PositionEvent.sequence_no.asc(),
+                PositionEvent.id.asc(),
+            )
             .all()
         )
         if item.id not in reversed_event_ids
@@ -251,6 +288,12 @@ def reverse_latest_truth_trade_event(
         instrument_id=position.instrument_id,
         event_type=PositionEventType.REVERSAL,
         event_time=occurred_at,
+        sequence_no=(
+            db.query(func.max(PositionEvent.sequence_no))
+            .filter(PositionEvent.position_id == position.id)
+            .scalar()
+            or 0
+        ) + 1,
         side_effect=position.side.value,
         currency=event.currency or position.base_currency,
         gross_amount=-_coerce_decimal(event.gross_amount),

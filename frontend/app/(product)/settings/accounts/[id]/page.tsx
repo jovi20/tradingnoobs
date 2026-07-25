@@ -201,6 +201,11 @@ export default function AccountDetailPage() {
                             <p className="text-2xl font-mono font-bold text-ink">
                                 {getCurrencySymbol(account.currency)} {Number(account.journal_balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </p>
+                            {!account.journal_balance_trusted && (
+                                <p className="mt-2 text-xs font-semibold text-warning">
+                                    该余额尚未通过账务对账
+                                </p>
+                            )}
                         </div>
                     </div>
 
@@ -217,12 +222,18 @@ export default function AccountDetailPage() {
                             <div>
                                 <h3 className="mb-4 text-sm font-semibold text-ink">记录新流水</h3>
                                 <div className="rounded-md border border-line bg-panel-subtle p-4">
-                                    <TransactionForm
-                                        token={token!}
-                                        accountId={account.routeId}
-                                        currency={account.currency}
-                                        onSuccess={refreshData}
-                                    />
+                                    {account.journal_balance_trusted ? (
+                                        <TransactionForm
+                                            token={token!}
+                                            accountId={account.routeId}
+                                            currency={account.currency}
+                                            onSuccess={refreshData}
+                                        />
+                                    ) : (
+                                        <div role="alert" className="text-sm font-medium text-warning">
+                                            账户待对账，财务录入暂不可用。
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 

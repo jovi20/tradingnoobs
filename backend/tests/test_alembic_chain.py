@@ -103,6 +103,9 @@ class AlembicChainTests(unittest.TestCase):
                 insight_artifact_columns = conn.execute(
                     "PRAGMA table_info(insight_artifacts)"
                 ).fetchall()
+                accounting_reconciliation_columns = conn.execute(
+                    "PRAGMA table_info(accounting_reconciliation_cases)"
+                ).fetchall()
                 broker_sync_run_columns = conn.execute(
                     "PRAGMA table_info(broker_sync_runs)"
                 ).fetchall()
@@ -132,6 +135,9 @@ class AlembicChainTests(unittest.TestCase):
             derived_timeline_snapshot_column_names = {row[1] for row in derived_timeline_snapshot_columns}
             insight_run_column_names = {row[1] for row in insight_run_columns}
             insight_artifact_column_names = {row[1] for row in insight_artifact_columns}
+            accounting_reconciliation_column_names = {
+                row[1] for row in accounting_reconciliation_columns
+            }
             broker_sync_run_column_names = {row[1] for row in broker_sync_run_columns}
             broker_execution_column_names = {row[1] for row in broker_execution_columns}
             expected_tables = {
@@ -171,6 +177,7 @@ class AlembicChainTests(unittest.TestCase):
                 "derived_timeline_snapshots",
                 "insight_runs",
                 "insight_artifacts",
+                "accounting_reconciliation_cases",
                 "broker_sync_runs",
                 "broker_executions",
                 "provider_symbol_mappings",
@@ -195,14 +202,27 @@ class AlembicChainTests(unittest.TestCase):
                 }.issubset(user_column_names),
                 msg=f"missing user columns: {sorted({'public_id', 'status', 'email_normalized', 'last_login_at', 'locale', 'timezone'} - user_column_names)}",
             )
-            self.assertIn("public_id", trading_account_column_names)
+            self.assertTrue(
+                {"public_id", "accounting_health"}.issubset(
+                    trading_account_column_names
+                )
+            )
             self.assertIn("public_id", position_column_names)
             self.assertIn("public_id", transaction_column_names)
             self.assertIn("public_id", trade_batch_column_names)
             self.assertTrue({"public_id", "canonical_code", "display_symbol"}.issubset(asset_master_column_names))
             self.assertTrue({"public_id", "asset_id", "instrument_type", "contract_symbol"}.issubset(trade_instrument_column_names))
             self.assertTrue({"public_id", "user_id", "account_id", "instrument_id", "cost_basis_method"}.issubset(trading_position_column_names))
-            self.assertTrue({"public_id", "position_id", "instrument_id", "event_type", "event_time"}.issubset(position_event_column_names))
+            self.assertTrue(
+                {
+                    "public_id",
+                    "position_id",
+                    "instrument_id",
+                    "event_type",
+                    "event_time",
+                    "sequence_no",
+                }.issubset(position_event_column_names)
+            )
             self.assertTrue(
                 {
                     "public_id",
@@ -211,11 +231,28 @@ class AlembicChainTests(unittest.TestCase):
                     "position_id",
                     "position_event_id",
                     "transaction_id",
+                    "reverses_ledger_entry_id",
                     "entry_type",
+                    "source_fact_public_id",
+                    "posting_kind",
                     "occurred_at",
                     "currency",
                     "amount",
                 }.issubset(account_ledger_entry_column_names)
+            )
+            self.assertTrue(
+                {
+                    "public_id",
+                    "user_id",
+                    "account_id",
+                    "original_ledger_entry_id",
+                    "status",
+                    "issue_code",
+                    "details_json",
+                    "resolution_note",
+                    "resolved_by_user_id",
+                    "resolved_at",
+                }.issubset(accounting_reconciliation_column_names)
             )
             self.assertTrue({"public_id", "key", "queue_name", "retry_policy"}.issubset(job_definition_column_names))
             self.assertTrue({"public_id", "job_definition_id", "status", "payload", "idempotency_key"}.issubset(job_run_column_names))

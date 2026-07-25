@@ -21,7 +21,6 @@ from app_config.release_contract import (
 )
 from models import (
     AccountLedgerEntry,
-    AccountLedgerEntryType,
     AssetMaster,
     Position,
     PositionDirection,
@@ -37,6 +36,7 @@ from models import (
     TradingPositionSide,
     TradingPositionStatus,
 )
+from services.account_ledger_service import sync_trade_event_postings
 from services.trading_accounting_service import AccountingEvent, calculate_fifo_position_accounting
 
 
@@ -309,7 +309,10 @@ def _sync_position_events(
     legacy_position: Position,
     instrument: TradeInstrument,
 ) -> tuple[list[PositionEvent], PositionEvent | None, PositionEvent | None]:
-    batches = sorted(legacy_position.batches or [], key=lambda batch: batch.time)
+    batches = sorted(
+        legacy_position.batches or [],
+        key=lambda batch: (batch.time, batch.id or 0),
+    )
     entry_batches = [batch for batch in batches if batch.type == batch.type.ENTRY]
     total_entry_qty = sum((_coerce_decimal(batch.quantity) for batch in entry_batches), Decimal("0"))
     cumulative_exit_qty = Decimal("0")
@@ -317,7 +320,7 @@ def _sync_position_events(
     opening_event = None
     closing_event = None
 
-    for batch in batches:
+    for sequence_no, batch in enumerate(batches, start=1):
         event_public_id = _deterministic_public_id("position_event", batch.public_id or str(batch.id))
         event = db.query(PositionEvent).filter(PositionEvent.public_id == event_public_id).first()
         if not event:
@@ -331,6 +334,7 @@ def _sync_position_events(
         event.instrument_id = instrument.id
         event.event_type = event_type
         event.event_time = batch.time
+        event.sequence_no = sequence_no
         event.side_effect = legacy_position.direction.value
         event.quantity = batch.quantity
         event.price = batch.price
@@ -375,32 +379,13 @@ def _sync_account_ledger_entries(
     ledger_entries: list[AccountLedgerEntry] = []
 
     for event in events:
-        realized_pnl = _coerce_decimal(event.realized_pnl_net)
-        if realized_pnl == 0:
-            continue
-
-        public_id = _deterministic_public_id("account_ledger_entry", f"{event.public_id}:realized_pnl")
-        ledger_entry = db.query(AccountLedgerEntry).filter(AccountLedgerEntry.public_id == public_id).first()
-        if not ledger_entry:
-            ledger_entry = AccountLedgerEntry(public_id=public_id)
-            db.add(ledger_entry)
-
-        ledger_entry.user_id = event.user_id
-        ledger_entry.account_id = event.account_id
-        ledger_entry.position_id = truth_position.id
-        ledger_entry.position_event_id = event.id
-        ledger_entry.entry_type = AccountLedgerEntryType.REALIZED_PNL
-        ledger_entry.occurred_at = event.event_time
-        ledger_entry.currency = event.currency or truth_position.base_currency
-        ledger_entry.amount = realized_pnl
-        ledger_entry.amount_account_ccy = realized_pnl
-        ledger_entry.fx_rate_to_account_ccy = Decimal("1")
-        ledger_entry.source = "LEGACY_BACKFILL"
-        ledger_entry.source_run_id = event.source_run_id
-        ledger_entry.description = f"{truth_position.instrument.contract_symbol} realized PnL"
-        ledger_entries.append(ledger_entry)
-
-    db.flush()
+        ledger_entries.extend(
+            sync_trade_event_postings(
+                db,
+                event=event,
+                position=truth_position,
+            )
+        )
     return ledger_entries
 
 

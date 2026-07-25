@@ -130,6 +130,8 @@ class RiskRouterTests(unittest.TestCase):
                 "open_positions",
                 "closed_trades",
                 "account_balances",
+                "accounting_degraded",
+                "accounting_warnings",
             },
         )
 

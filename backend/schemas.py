@@ -903,6 +903,8 @@ class DashboardAccountBalance(BaseModel):
     name: str
     broker: str
     journal_balance: float
+    accounting_health: str
+    journal_balance_trusted: bool
 
 
 class DashboardStats(BaseModel):
@@ -914,6 +916,8 @@ class DashboardStats(BaseModel):
     open_positions: int
     closed_trades: int
     account_balances: List[DashboardAccountBalance] = Field(default_factory=list)
+    accounting_degraded: bool = False
+    accounting_warnings: List[str] = Field(default_factory=list)
 
 
 # ============== Trading Account Schemas ==============
@@ -949,6 +953,8 @@ class TradingAccountResponse(BaseModel):
     currency: str
     initial_balance: Optional[Decimal]
     journal_balance: Decimal
+    accounting_health: str
+    journal_balance_trusted: bool
     description: Optional[str]
     is_active: bool
     created_at: datetime

@@ -15,6 +15,7 @@ import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect, select, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.engine import Engine, URL, make_url
 from sqlalchemy.orm import sessionmaker
 
@@ -23,6 +24,7 @@ from models import (
     AssetMaster,
     AuthRateLimitBucket,
     IdempotencyKey,
+    LedgerPostingKind,
     PositionEvent,
     PositionEventType,
     TradeInstrument,
@@ -33,7 +35,10 @@ from models import (
     TradingPositionStatus,
     User,
 )
-from services.account_ledger_service import sync_opening_balance_to_account_ledger
+from services.account_ledger_service import (
+    create_or_replay_posting,
+    sync_opening_balance_to_account_ledger,
+)
 from services.auth_rate_limit_service import consume_auth_attempt
 from services.auth_service import authenticate_user, create_user
 from services.idempotency_service import begin_idempotent_request
@@ -79,6 +84,214 @@ def _run_alembic(database_url: str, *arguments: str) -> None:
         f"alembic {' '.join(arguments)} failed\n"
         f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
     )
+
+
+def test_jrn006_postgresql_backfill_guard_and_reupgrade(
+    postgres_database: tuple[Engine, str],
+) -> None:
+    engine, database_url = postgres_database
+    _run_alembic(database_url, "upgrade", "b2c3d4e5f6a7")
+    with engine.begin() as connection:
+        user_id = connection.execute(
+            text(
+                """
+                INSERT INTO users (
+                    public_id, email, email_normalized, hashed_password,
+                    status, is_active, role, timezone
+                ) VALUES (
+                    'jrn006-pg-user', 'jrn006-pg@example.com',
+                    'jrn006-pg@example.com', 'hash',
+                    'ACTIVE', true, 'user', 'UTC'
+                ) RETURNING id
+                """
+            )
+        ).scalar_one()
+        account_id = connection.execute(
+            text(
+                """
+                INSERT INTO trading_accounts (
+                    public_id, user_id, name, broker, currency,
+                    initial_balance, cash_balance, is_active
+                ) VALUES (
+                    'jrn006-pg-account', :user_id, 'JRN006', 'MANUAL',
+                    'USD', 100, 9999, true
+                ) RETURNING id
+                """
+            ),
+            {"user_id": user_id},
+        ).scalar_one()
+        connection.execute(
+            text(
+                """
+                INSERT INTO account_ledger_entries (
+                    public_id, user_id, account_id, entry_type,
+                    occurred_at, currency, amount, amount_account_ccy,
+                    fx_rate_to_account_ccy, source
+                ) VALUES (
+                    'jrn006-pg-legacy', :user_id, :account_id,
+                    'REALIZED_PNL', '2026-07-24T10:00:00Z',
+                    'USD', 12, 12, 1, 'LEGACY_BACKFILL'
+                )
+                """
+            ),
+            {"user_id": user_id, "account_id": account_id},
+        )
+        transaction_id = connection.execute(
+            text(
+                """
+                INSERT INTO transactions (
+                    public_id, account_id, type, amount, currency, date
+                ) VALUES (
+                    'jrn006-pg-transaction', :account_id, 'DEPOSIT',
+                    5, 'USD', '2026-07-24T11:00:00Z'
+                ) RETURNING id
+                """
+            ),
+            {"account_id": account_id},
+        ).scalar_one()
+        connection.execute(
+            text(
+                """
+                INSERT INTO account_ledger_entries (
+                    public_id, user_id, account_id, transaction_id,
+                    entry_type, occurred_at, currency, amount,
+                    amount_account_ccy, fx_rate_to_account_ccy, source
+                ) VALUES
+                    (
+                        'jrn006-pg-duplicate-1', :user_id, :account_id,
+                        :transaction_id, 'DEPOSIT',
+                        '2026-07-24T11:00:00Z', 'USD', 5, 5, 1,
+                        'TRANSACTION'
+                    ),
+                    (
+                        'jrn006-pg-duplicate-2', :user_id, :account_id,
+                        :transaction_id, 'DEPOSIT',
+                        '2026-07-24T11:00:00Z', 'USD', 5, 5, 1,
+                        'TRANSACTION'
+                    ),
+                    (
+                        'jrn006-pg-amount-mismatch', :user_id, :account_id,
+                        NULL, 'CASH_ADJUSTMENT',
+                        '2026-07-24T12:00:00Z', 'USD', 3, 4, 1,
+                        'LEGACY_BACKFILL'
+                    )
+                """
+            ),
+            {
+                "user_id": user_id,
+                "account_id": account_id,
+                "transaction_id": transaction_id,
+            },
+        )
+
+    _run_alembic(database_url, "upgrade", "head")
+    with engine.connect() as connection:
+        row = connection.execute(
+            text(
+                """
+                SELECT accounting_health
+                FROM trading_accounts
+                WHERE public_id = 'jrn006-pg-account'
+                """
+            )
+        ).one()
+        assert row.accounting_health == "ACCOUNTING_RECONCILIATION_REQUIRED"
+        assert connection.execute(
+            text(
+                """
+                SELECT count(*)
+                FROM accounting_reconciliation_cases
+                WHERE account_id = :account_id
+                  AND status = 'OPEN'
+                """
+            ),
+            {"account_id": account_id},
+        ).scalar_one() == 4
+        assert connection.execute(
+            text(
+                """
+                SELECT count(DISTINCT source_fact_public_id)
+                FROM account_ledger_entries
+                WHERE account_id = :account_id
+                  AND posting_kind = 'LEGACY_UNRESOLVED'
+                """
+            ),
+            {"account_id": account_id},
+        ).scalar_one() == 4
+        assert connection.execute(
+            text(
+                """
+                SELECT count(*)
+                FROM account_ledger_entries
+                WHERE account_id = :account_id
+                  AND posting_kind = 'OPENING_BALANCE'
+                """
+            ),
+            {"account_id": account_id},
+        ).scalar_one() == 1
+
+    with engine.connect() as connection:
+        transaction = connection.begin()
+        with pytest.raises(DBAPIError, match="append-only"):
+            connection.execute(
+                text(
+                    """
+                    UPDATE account_ledger_entries
+                    SET amount = amount + 1
+                    WHERE public_id = 'jrn006-pg-legacy'
+                    """
+                )
+            )
+        transaction.rollback()
+
+    _run_alembic(database_url, "downgrade", "b2c3d4e5f6a7")
+    _run_alembic(database_url, "upgrade", "head")
+    with engine.connect() as connection:
+        assert connection.execute(
+            text(
+                """
+                SELECT count(*)
+                FROM accounting_reconciliation_cases
+                WHERE account_id = :account_id
+                  AND status = 'OPEN'
+                """
+            ),
+            {"account_id": account_id},
+        ).scalar_one() == 4
+
+    SessionLocal = sessionmaker(bind=engine)
+    occurred_at = datetime(2026, 7, 25, 12, 0, tzinfo=timezone.utc)
+
+    def create_same_posting() -> str:
+        with SessionLocal() as db:
+            entry = create_or_replay_posting(
+                db,
+                user_id=user_id,
+                account_id=account_id,
+                source_fact_public_id="jrn006-concurrent-fact",
+                posting_kind=LedgerPostingKind.DEPOSIT,
+                occurred_at=occurred_at,
+                currency="USD",
+                amount=Decimal("5"),
+                source="JRN006_TEST",
+            )
+            db.commit()
+            return entry.public_id
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        public_ids = list(executor.map(lambda _: create_same_posting(), range(2)))
+    assert public_ids[0] == public_ids[1]
+    with engine.connect() as connection:
+        assert connection.execute(
+            text(
+                """
+                SELECT count(*)
+                FROM account_ledger_entries
+                WHERE source_fact_public_id = 'jrn006-concurrent-fact'
+                  AND posting_kind = 'DEPOSIT'
+                """
+            )
+        ).scalar_one() == 1
 
 
 @pytest.fixture

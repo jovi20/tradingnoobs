@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Briefcase, ChevronRight, Plus, Wallet } from 'lucide-react'
+import { AlertTriangle, Briefcase, ChevronRight, Plus, Wallet } from 'lucide-react'
 
 import type { TradingAccountViewModel } from '@/lib/adapters/trading'
 import { getCurrencySymbol } from '@/lib/symbolUtils'
@@ -79,6 +79,12 @@ export function SettingsAccountsOverview({
                                         }`}>
                                             {account.is_active ? '启用' : '停用'}
                                         </span>
+                                        {!account.journal_balance_trusted && (
+                                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-warning">
+                                                <AlertTriangle className="h-3 w-3" />
+                                                待对账
+                                            </span>
+                                        )}
                                     </div>
                                     <p className="mt-1 truncate text-xs text-ink-muted">
                                         {account.broker} · {accountTypeLabels[account.account_type || ''] || account.account_type || '通用'} · {account.currency}
@@ -86,7 +92,10 @@ export function SettingsAccountsOverview({
                                 </div>
                             </div>
 
-                            <AccountValue label="日志余额" value={formatMoney(account, account.journal_balance)} />
+                            <AccountValue
+                                label={account.journal_balance_trusted ? '日志余额' : '日志余额（未确认）'}
+                                value={formatMoney(account, account.journal_balance)}
+                            />
 
                             <div className="hidden items-center justify-end text-ink-faint md:flex">
                                 <ChevronRight className="h-4 w-4" />

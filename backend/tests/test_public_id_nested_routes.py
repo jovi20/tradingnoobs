@@ -187,12 +187,22 @@ class PublicIdNestedRouteTests(unittest.TestCase):
 
         delete_response = self.client.delete(f"/api/transactions/{payload['public_id']}")
 
-        self.assertEqual(delete_response.status_code, 200)
+        self.assertEqual(delete_response.status_code, 409)
+        self.assertEqual(
+            delete_response.json()["detail"]["code"],
+            "POSTING_FACT_CONFLICT",
+        )
         self.assertEqual(
             self.db.query(AccountLedgerEntry).filter(
                 AccountLedgerEntry.transaction_id == payload["id"]
             ).count(),
-            0,
+            1,
+        )
+        self.assertEqual(
+            self.db.query(Transaction).filter(
+                Transaction.id == payload["id"]
+            ).count(),
+            1,
         )
 
     def test_transaction_create_rejects_transfer_and_non_usd_without_side_effects(self):

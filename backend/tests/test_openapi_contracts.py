@@ -150,15 +150,26 @@ class OpenAPIContractTests(unittest.TestCase):
                 "open_positions",
                 "closed_trades",
                 "account_balances",
+                "accounting_degraded",
+                "accounting_warnings",
             },
         )
         self.assertEqual(
             set(schemas["DashboardAccountBalance"]["properties"]),
-            {"name", "broker", "journal_balance"},
+            {
+                "name",
+                "broker",
+                "journal_balance",
+                "accounting_health",
+                "journal_balance_trusted",
+            },
         )
-        self.assertIn(
-            "journal_balance",
-            schemas["TradingAccountResponse"]["properties"],
+        self.assertTrue(
+            {
+                "journal_balance",
+                "accounting_health",
+                "journal_balance_trusted",
+            }.issubset(schemas["TradingAccountResponse"]["properties"]),
         )
 
         timeline_operation = openapi["paths"]["/api/timeline/home"]["get"]

@@ -227,6 +227,8 @@ export interface DashboardAccountBalance {
     name: string
     broker: string
     journal_balance: number
+    accounting_health: 'ACCOUNTING_HEALTHY' | 'ACCOUNTING_RECONCILIATION_REQUIRED'
+    journal_balance_trusted: boolean
 }
 
 export interface DashboardStats {
@@ -238,6 +240,8 @@ export interface DashboardStats {
     open_positions: number
     closed_trades: number
     account_balances: DashboardAccountBalance[]
+    accounting_degraded: boolean
+    accounting_warnings: string[]
 }
 
 export interface DailySummary {
@@ -260,6 +264,8 @@ export interface TradingAccount {
     currency: string
     initial_balance: number
     journal_balance: number
+    accounting_health: 'ACCOUNTING_HEALTHY' | 'ACCOUNTING_RECONCILIATION_REQUIRED'
+    journal_balance_trusted: boolean
     description?: string
     is_active: boolean
     created_at: string

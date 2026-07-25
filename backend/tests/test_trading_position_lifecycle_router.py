@@ -22,6 +22,7 @@ from main import app
 from models import (
     AccountLedgerEntry,
     AccountLedgerEntryType,
+    LedgerPostingKind,
     AssetMetadata,
     BatchType,
     IdempotencyKey,
@@ -932,12 +933,17 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         self.assertEqual(trade_event.realized_pnl_gross, Decimal("60.00000000"))
         self.assertEqual(trade_event.realized_pnl_net, Decimal("59.00000000"))
 
-        ledger_entry = self.db.query(AccountLedgerEntry).filter(
+        ledger_entries = self.db.query(AccountLedgerEntry).filter(
             AccountLedgerEntry.position_event_id == trade_event.id,
-        ).one()
-        self.assertEqual(ledger_entry.entry_type, AccountLedgerEntryType.REALIZED_PNL)
-        self.assertEqual(ledger_entry.amount, Decimal("59.00000000"))
-        self.assertEqual(ledger_entry.currency, "USD")
+        ).order_by(AccountLedgerEntry.id.asc()).all()
+        self.assertEqual(
+            [(entry.posting_kind, entry.amount) for entry in ledger_entries],
+            [
+                (LedgerPostingKind.REALIZED_GROSS.value, Decimal("60.00000000")),
+                (LedgerPostingKind.TRADE_FEE.value, Decimal("-1.00000000")),
+            ],
+        )
+        self.assertTrue(all(entry.currency == "USD" for entry in ledger_entries))
         outbox_event = self.db.query(OutboxEvent).filter(
             OutboxEvent.aggregate_type == "TradingPosition",
             OutboxEvent.aggregate_public_id == truth_position.public_id,
@@ -1130,9 +1136,19 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         reversal_node = payload["data"]["lifecycle_thread"]["nodes"][-1]
         self.assertEqual(reversal_node["reverses_event_public_id"], reduce_event.public_id)
         cash_effects = payload["data"]["ledger_summary"]["cash_effects"]
-        self.assertEqual([entry["entry_type"] for entry in cash_effects], ["REALIZED_PNL", "REALIZED_PNL"])
-        self.assertEqual(Decimal(str(cash_effects[0]["amount"])), Decimal("59.0"))
-        self.assertEqual(Decimal(str(cash_effects[1]["amount"])), Decimal("-59.0"))
+        self.assertEqual(
+            [entry["entry_type"] for entry in cash_effects],
+            ["REALIZED_PNL", "FEE", "REALIZED_PNL", "FEE"],
+        )
+        self.assertEqual(
+            [Decimal(str(entry["amount"])) for entry in cash_effects],
+            [
+                Decimal("60"),
+                Decimal("-1"),
+                Decimal("-60"),
+                Decimal("1"),
+            ],
+        )
 
         self.db.expire_all()
         reversal_event = self.db.query(PositionEvent).filter(
@@ -1144,9 +1160,14 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         self.assertEqual(reversal_event.realized_pnl_net, Decimal("-59.00000000"))
         reversal_ledger = self.db.query(AccountLedgerEntry).filter(
             AccountLedgerEntry.position_event_id == reversal_event.id,
-        ).one()
-        self.assertEqual(reversal_ledger.entry_type, AccountLedgerEntryType.REALIZED_PNL)
-        self.assertEqual(reversal_ledger.amount, Decimal("-59.00000000"))
+        ).order_by(AccountLedgerEntry.id.asc()).all()
+        self.assertEqual(
+            [(entry.posting_kind, entry.amount) for entry in reversal_ledger],
+            [
+                (LedgerPostingKind.REALIZED_GROSS.value, Decimal("-60.00000000")),
+                (LedgerPostingKind.TRADE_FEE.value, Decimal("1.00000000")),
+            ],
+        )
 
     def test_trade_event_reverse_rejects_open_event_until_void_semantics_exist(self):
         truth_position = self._seed_open_synced_position()
@@ -1275,11 +1296,16 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
             PositionEvent.position_id == truth_position.id,
             PositionEvent.event_type == PositionEventType.CLOSE,
         ).one()
-        ledger_entry = self.db.query(AccountLedgerEntry).filter(
+        ledger_entries = self.db.query(AccountLedgerEntry).filter(
             AccountLedgerEntry.position_event_id == close_event.id,
-        ).one()
-        self.assertEqual(ledger_entry.entry_type, AccountLedgerEntryType.REALIZED_PNL)
-        self.assertEqual(ledger_entry.amount, Decimal("149.00000000"))
+        ).order_by(AccountLedgerEntry.id.asc()).all()
+        self.assertEqual(
+            [(entry.posting_kind, entry.amount) for entry in ledger_entries],
+            [
+                (LedgerPostingKind.REALIZED_GROSS.value, Decimal("150.00000000")),
+                (LedgerPostingKind.TRADE_FEE.value, Decimal("-1.00000000")),
+            ],
+        )
 
         legacy_projection = self.db.query(Position).filter(
             Position.public_id == "legacy-open-position"

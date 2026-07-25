@@ -177,6 +177,7 @@ def _ledger_cash_effects(truth_position: TradingPosition) -> list[dict]:
         {
             "ledger_entry_public_id": entry.public_id,
             "entry_type": entry.entry_type.value,
+            "posting_kind": entry.posting_kind,
             "occurred_at": entry.occurred_at,
             "amount": entry.amount,
             "amount_account_ccy": entry.amount_account_ccy,
@@ -327,7 +328,7 @@ def build_trading_position_lifecycle_payload(
                 "cost_basis_method": truth_position.cost_basis_method,
                 "realized_definition": "EVENT_REALIZED",
                 "unrealized_definition": "MARK_TO_MARKET",
-                "fee_treatment": "NET_INCLUDED",
+                "fee_treatment": "SEPARATE_LEDGER_POSTING",
                 "fx_treatment": "EVENT_TIME_ACCOUNT_CCY",
             },
         },
