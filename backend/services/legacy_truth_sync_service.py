@@ -332,13 +332,43 @@ def _sync_position_events(
     closing_event = None
 
     for sequence_no, batch in enumerate(batches, start=1):
+        event_type = _batch_event_type(
+            batch,
+            entry_batches,
+            total_entry_qty,
+            cumulative_exit_qty,
+            legacy_position,
+        )
         event_public_id = _deterministic_public_id("position_event", batch.public_id or str(batch.id))
         event = db.query(PositionEvent).filter(PositionEvent.public_id == event_public_id).first()
+        if event is None and batch.public_id:
+            event = db.query(PositionEvent).filter(
+                PositionEvent.public_id == batch.public_id,
+                PositionEvent.position_id == truth_position.id,
+                PositionEvent.user_id == legacy_position.user_id,
+            ).first()
+            if event is not None:
+                if (
+                    event.event_type != event_type
+                    or _coerce_decimal(event.quantity) != _coerce_decimal(batch.quantity)
+                    or _coerce_decimal(event.price) != _coerce_decimal(batch.price)
+                    or event.event_time != batch.time
+                ):
+                    raise ValueError(
+                        f"Canonical event {event.public_id} diverges from its legacy projection"
+                    )
+                events.append(event)
+                if event_type == PositionEventType.OPEN:
+                    opening_event = event
+                if event_type == PositionEventType.CLOSE:
+                    closing_event = event
+                if batch.type == batch.type.EXIT:
+                    cumulative_exit_qty += _coerce_decimal(batch.quantity)
+                continue
         if not event:
             event = PositionEvent(public_id=event_public_id)
             db.add(event)
 
-        event_type = _batch_event_type(batch, entry_batches, total_entry_qty, cumulative_exit_qty, legacy_position)
         event.user_id = legacy_position.user_id
         event.position_id = truth_position.id
         event.account_id = legacy_position.account_id

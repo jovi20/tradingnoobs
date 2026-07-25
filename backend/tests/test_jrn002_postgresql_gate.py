@@ -43,7 +43,10 @@ from services.auth_rate_limit_service import consume_auth_attempt
 from services.auth_service import authenticate_user, create_user
 from services.idempotency_service import begin_idempotent_request
 from services.instrument_identity_service import InstrumentIdentity
-from services.trading_position_write_service import append_truth_trade_event
+from services.trading_position_write_service import (
+    append_truth_trade_event,
+    lock_owned_truth_position,
+)
 from services.truth_native_open_service import (
     OpenPositionExistsError,
     create_truth_native_open,
@@ -855,3 +858,154 @@ def test_jrn007_postgresql_open_slot_and_instrument_races(
         assert len(db.execute(select(AssetMaster)).scalars().all()) == 1
         assert len(db.execute(select(TradeInstrument)).scalars().all()) == 1
         assert len(db.execute(select(TradingPosition)).scalars().all()) == 5
+
+
+def test_jrn008_postgresql_lifecycle_lock_serializes_sequence_and_close_races(
+    postgres_database: tuple[Engine, str],
+) -> None:
+    engine, database_url = postgres_database
+    _run_alembic(database_url, "upgrade", "head")
+    SessionLocal = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=engine,
+    )
+    with SessionLocal() as db:
+        user = User(
+            public_id="jrn008-pg-user",
+            email="jrn008-pg@example.com",
+            email_normalized="jrn008-pg@example.com",
+            hashed_password="hash",
+            status="ACTIVE",
+            is_active=True,
+            role="user",
+            timezone="UTC",
+        )
+        account = TradingAccount(
+            public_id="jrn008-pg-account",
+            user=user,
+            name="JRN008",
+            broker="IBKR",
+            currency="USD",
+            is_active=True,
+        )
+        db.add_all([user, account])
+        db.commit()
+        user_id = user.id
+        account_id = account.id
+
+    identity = InstrumentIdentity(
+        asset_type="STOCK",
+        market="US",
+        exchange_code="NASDAQ",
+        normalized_symbol="MSFT",
+        instrument_type="SPOT",
+        quote_currency="USD",
+    )
+    with SessionLocal() as db:
+        account = lock_owned_trading_account(
+            db,
+            user_id=user_id,
+            account_id=account_id,
+        )
+        assert account is not None
+        _, position, _ = create_truth_native_open(
+            db,
+            user_id=user_id,
+            account=account,
+            strategy=None,
+            identity=identity,
+            side=TradingPositionSide.LONG,
+            quantity=Decimal("10"),
+            price=Decimal("100"),
+            occurred_at=datetime(2026, 7, 25, 10, 0, tzinfo=timezone.utc),
+        )
+        db.commit()
+        position_public_id = position.public_id
+
+    def append_and_commit(
+        event_type: PositionEventType,
+        quantity: Decimal,
+        price: Decimal,
+    ) -> str:
+        with SessionLocal() as db:
+            locked = lock_owned_truth_position(
+                db,
+                user_id=user_id,
+                position_public_id=position_public_id,
+            )
+            assert locked is not None
+            account, position = locked
+            try:
+                append_truth_trade_event(
+                    db,
+                    position=position,
+                    account=account,
+                    event_type=event_type,
+                    quantity=quantity,
+                    price=price,
+                    currency="USD",
+                    occurred_at=datetime(
+                        2026,
+                        7,
+                        25,
+                        11,
+                        0,
+                        tzinfo=timezone.utc,
+                    ),
+                )
+                db.commit()
+                return "CREATED"
+            except ValueError:
+                db.rollback()
+                return "REJECTED"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        add_results = list(
+            executor.map(
+                lambda price: append_and_commit(
+                    PositionEventType.ADD,
+                    Decimal("1"),
+                    price,
+                ),
+                (Decimal("101"), Decimal("102")),
+            )
+        )
+    assert add_results == ["CREATED", "CREATED"]
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        close_results = list(
+            executor.map(
+                lambda command: append_and_commit(*command),
+                (
+                    (
+                        PositionEventType.REDUCE,
+                        Decimal("8"),
+                        Decimal("110"),
+                    ),
+                    (
+                        PositionEventType.CLOSE,
+                        Decimal("12"),
+                        Decimal("111"),
+                    ),
+                ),
+            )
+        )
+    assert sorted(close_results) == ["CREATED", "REJECTED"]
+
+    with SessionLocal() as db:
+        position = db.execute(
+            select(TradingPosition).where(
+                TradingPosition.public_id == position_public_id,
+            )
+        ).scalar_one()
+        events = db.execute(
+            select(PositionEvent)
+            .where(PositionEvent.position_id == position.id)
+            .order_by(PositionEvent.sequence_no.asc())
+        ).scalars().all()
+        assert [event.sequence_no for event in events] == list(
+            range(1, len(events) + 1)
+        )
+        assert len(events) == 4
+        assert position.quantity_closed in {Decimal("8.00000000"), Decimal("12.00000000")}

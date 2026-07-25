@@ -46,10 +46,15 @@ from services.trading_position_read_service import (
 )
 from services.trading_position_write_service import (
     ArchivedTradingPositionWriteError,
+    SourceBoundTradeWriteError,
+    TradeEventChronologyError,
+    TradeEventQuantityError,
     append_truth_trade_event,
+    lock_owned_truth_position,
     require_truth_position_financial_write_allowed,
     reverse_latest_truth_trade_event,
 )
+from services.timezone_service import LocalDateTimeError, normalize_user_datetime_to_utc
 
 router = APIRouter(prefix="/api/trading-positions", tags=["Trading Positions"])
 
@@ -196,21 +201,31 @@ def _begin_idempotent_lifecycle_write(
     current_user: User,
     position_public_id: str,
     payload,
+    structured_errors: bool = False,
 ) -> tuple[object | None, JSONResponse | None]:
-    if not idempotency_key:
+    if idempotency_key is None:
         return None, None
+    normalized_key = idempotency_key.strip()
+    if not normalized_key:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "IDEMPOTENCY_KEY_REQUIRED",
+                "message": "Idempotency-Key must not be blank",
+            },
+        )
 
     try:
         idempotency_begin = begin_idempotent_request(
             db,
             scope=scope,
-            key=f"{current_user.public_id}:{idempotency_key}",
+            key=normalized_key,
             request_payload={
                 "position_public_id": position_public_id,
                 "payload": jsonable_encoder(payload),
             },
             user_id=current_user.id,
-            ttl_seconds=24 * 60 * 60,
+            ttl_seconds=None,
         )
     except (
         AccountingReconciliationRequiredError,
@@ -223,7 +238,15 @@ def _begin_idempotent_lifecycle_write(
         ) from exc
     except ValueError as exc:
         db.rollback()
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        if not structured_errors:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "IDEMPOTENCY_KEY_REUSED",
+                "message": str(exc),
+            },
+        ) from exc
 
     record = idempotency_begin.record
     if idempotency_begin.created:
@@ -244,16 +267,31 @@ def _begin_idempotent_lifecycle_write(
             content=jsonable_encoder(response_json),
         )
 
-    raise HTTPException(status_code=409, detail="Idempotent request is already in progress.")
+    detail = (
+        {
+            "code": "IDEMPOTENCY_REQUEST_IN_PROGRESS",
+            "message": "Idempotent request is already in progress",
+        }
+        if structured_errors
+        else "Idempotent request is already in progress."
+    )
+    raise HTTPException(status_code=409, detail=detail)
 
 
-def _complete_idempotent_lifecycle_write(db: Session, *, record, response_content: dict) -> None:
+def _complete_idempotent_lifecycle_write(
+    db: Session,
+    *,
+    record,
+    response_content: dict,
+    source_fact_public_id: str | None = None,
+) -> None:
     if record is None:
         return
     complete_idempotent_request(
         db,
         record=record,
         response_json=jsonable_encoder(response_content),
+        source_fact_public_id=source_fact_public_id,
     )
 
 
@@ -326,45 +364,65 @@ def update_trading_position_event_narrative(
 def create_trading_position_trade_event(
     position_public_id: str,
     payload: TradingPositionTradeEventCreate,
-    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    idempotency_key: str = Header(
+        ...,
+        alias="Idempotency-Key",
+        min_length=1,
+        max_length=255,
+    ),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    truth_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
-    if not truth_position:
-        raise HTTPException(status_code=404, detail="Trading position not found")
-
-    _require_financial_write_allowed(truth_position)
-    _require_exact_truth_instrument_provenance(truth_position)
-    _require_resolved_truth_accounting(truth_position)
-
-    currency, fee_currency = _require_same_currency_financial_fact(
-        truth_position,
-        currency=payload.currency,
-        fee_currency=payload.fee_currency,
-        fx_rate_to_account_ccy=payload.fx_rate_to_account_ccy,
-    )
-
-    idempotency_record, replay_response = _begin_idempotent_lifecycle_write(
-        db,
-        scope="trading_position.trade_event.create",
-        idempotency_key=idempotency_key,
-        current_user=current_user,
-        position_public_id=position_public_id,
-        payload=payload,
-    )
-    if replay_response is not None:
-        return replay_response
-
     try:
+        occurred_at = normalize_user_datetime_to_utc(
+            payload.occurred_at,
+            timezone_name=current_user.timezone,
+        )
+        locked = lock_owned_truth_position(
+            db,
+            user_id=current_user.id,
+            position_public_id=position_public_id,
+        )
+        if locked is None:
+            raise HTTPException(status_code=404, detail="Trading position not found")
+        account, truth_position = locked
+
+        normalized_payload = {
+            **payload.model_dump(),
+            "occurred_at": occurred_at,
+        }
+        idempotency_record, replay_response = _begin_idempotent_lifecycle_write(
+            db,
+            scope="POSITION_LIFECYCLE_APPEND",
+            idempotency_key=idempotency_key,
+            current_user=current_user,
+            position_public_id=position_public_id,
+            payload=normalized_payload,
+            structured_errors=True,
+        )
+        if replay_response is not None:
+            db.rollback()
+            return replay_response
+
+        _require_financial_write_allowed(truth_position)
+        _require_exact_truth_instrument_provenance(truth_position)
+        _require_resolved_truth_accounting(truth_position)
+        currency, fee_currency = _require_same_currency_financial_fact(
+            truth_position,
+            currency=payload.currency,
+            fee_currency=payload.fee_currency,
+            fx_rate_to_account_ccy=payload.fx_rate_to_account_ccy,
+        )
+
         event = append_truth_trade_event(
             db,
             position=truth_position,
+            account=account,
             event_type=PositionEventType(payload.event_type.value),
             quantity=payload.quantity,
             price=payload.price,
             currency=currency,
-            occurred_at=payload.occurred_at,
+            occurred_at=occurred_at,
             fee_amount=payload.fee_amount,
             fee_currency=fee_currency,
             fx_rate_to_account_ccy=payload.fx_rate_to_account_ccy,
@@ -374,6 +432,37 @@ def create_trading_position_trade_event(
             note=payload.note,
         )
         enqueue_position_event_created_outbox(db, position=truth_position, event=event)
+        db.flush()
+        db.expire_all()
+        updated_position = resolve_truth_position_by_public_id(
+            db,
+            current_user.id,
+            position_public_id,
+        )
+        response_content = _lifecycle_response_content(
+            db,
+            updated_position,
+            actor_key=current_user.public_id,
+            source="MANUAL",
+            include_ai_sidecar=False,
+        )
+        _complete_idempotent_lifecycle_write(
+            db,
+            record=idempotency_record,
+            response_content=response_content,
+            source_fact_public_id=event.public_id,
+        )
+        db.commit()
+        return JSONResponse(status_code=201, content=jsonable_encoder(response_content))
+    except HTTPException:
+        db.rollback()
+        raise
+    except LocalDateTimeError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=422,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
     except ArchivedTradingPositionWriteError as exc:
         db.rollback()
         raise HTTPException(
@@ -387,6 +476,9 @@ def create_trading_position_trade_event(
     except (
         AccountingReconciliationRequiredError,
         LedgerPostingConflictError,
+        SourceBoundTradeWriteError,
+        TradeEventChronologyError,
+        TradeEventQuantityError,
     ) as exc:
         db.rollback()
         raise HTTPException(
@@ -396,20 +488,9 @@ def create_trading_position_trade_event(
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    db.flush()
-    db.expire_all()
-    updated_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
-    response_content = _lifecycle_response_content(
-        db,
-        updated_position,
-        actor_key=current_user.public_id,
-        source="MANUAL",
-        include_ai_sidecar=False,
-    )
-    _complete_idempotent_lifecycle_write(db, record=idempotency_record, response_content=response_content)
-    db.commit()
-    return JSONResponse(status_code=201, content=jsonable_encoder(response_content))
+    except Exception:
+        db.rollback()
+        raise
 
 
 @router.post("/{position_public_id}/events/{event_public_id}/reverse", status_code=201)
@@ -420,9 +501,14 @@ def reverse_trading_position_trade_event(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    truth_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
-    if not truth_position:
+    locked = lock_owned_truth_position(
+        db,
+        user_id=current_user.id,
+        position_public_id=position_public_id,
+    )
+    if locked is None:
         raise HTTPException(status_code=404, detail="Trading position not found")
+    _, truth_position = locked
 
     _require_financial_write_allowed(truth_position)
     _require_exact_truth_instrument_provenance(truth_position)

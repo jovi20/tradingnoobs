@@ -6,13 +6,16 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app_config.release_contract import JOURNAL_BETA_CONTRACT
 from models import (
+    BatchType,
     PositionEvent,
     PositionEventType,
+    TradeBatch,
+    TradeSourceState,
     TradingAccount,
     TradingPosition,
     TradingPositionStatus,
@@ -43,6 +46,62 @@ class ArchivedTradingPositionWriteError(ValueError):
         super().__init__("Archived trading positions are read-only")
 
 
+class TradeEventChronologyError(ValueError):
+    code = "EVENT_CHRONOLOGY_VIOLATION"
+    http_status = 422
+
+
+class TradeEventQuantityError(ValueError):
+    code = "INVALID_LIFECYCLE_QUANTITY"
+    http_status = 422
+
+
+class SourceBoundTradeWriteError(ValueError):
+    code = "SOURCE_BOUND_ACCOUNT"
+    http_status = 409
+
+
+def lock_owned_truth_position(
+    db: Session,
+    *,
+    user_id: int,
+    position_public_id: str,
+) -> tuple[TradingAccount, TradingPosition] | None:
+    account_id_row = db.query(TradingPosition.account_id).filter(
+        TradingPosition.public_id == position_public_id,
+        TradingPosition.user_id == user_id,
+    ).first()
+    if account_id_row is None:
+        return None
+
+    account = db.query(TradingAccount).filter(
+        TradingAccount.id == account_id_row[0],
+        TradingAccount.user_id == user_id,
+    ).with_for_update().first()
+    if account is None:
+        return None
+    if db.get_bind().dialect.name == "sqlite":
+        db.execute(
+            text(
+                """
+                UPDATE trading_accounts
+                SET trade_source_state = trade_source_state
+                WHERE id = :account_id
+                """
+            ),
+            {"account_id": account.id},
+        )
+
+    position = db.query(TradingPosition).filter(
+        TradingPosition.public_id == position_public_id,
+        TradingPosition.user_id == user_id,
+        TradingPosition.account_id == account.id,
+    ).with_for_update().first()
+    if position is None:
+        return None
+    return account, position
+
+
 def require_truth_position_financial_write_allowed(position: TradingPosition) -> None:
     if position.status == TradingPositionStatus.ARCHIVED:
         raise ArchivedTradingPositionWriteError(position.public_id)
@@ -69,6 +128,87 @@ def _coerce_decimal(value) -> Decimal:
 
 def _remaining_open_quantity(position: TradingPosition) -> Decimal:
     return _coerce_decimal(position.quantity_opened) - _coerce_decimal(position.quantity_closed)
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _active_trade_events(db: Session, position: TradingPosition) -> list[PositionEvent]:
+    reversed_event_ids = {
+        row[0]
+        for row in db.query(PositionEvent.reverses_event_id)
+        .filter(
+            PositionEvent.position_id == position.id,
+            PositionEvent.event_type == PositionEventType.REVERSAL,
+            PositionEvent.reverses_event_id.isnot(None),
+        )
+        .all()
+    }
+    return [
+        event
+        for event in (
+            db.query(PositionEvent)
+            .filter(
+                PositionEvent.position_id == position.id,
+                PositionEvent.event_type.in_(TRADE_EVENT_TYPES),
+            )
+            .order_by(
+                PositionEvent.event_time.asc(),
+                PositionEvent.sequence_no.asc(),
+                PositionEvent.id.asc(),
+            )
+            .all()
+        )
+        if event.id not in reversed_event_ids
+    ]
+
+
+def _project_trade_event_to_legacy_batch(
+    db: Session,
+    *,
+    position: TradingPosition,
+    event: PositionEvent,
+) -> TradeBatch | None:
+    from services.truth_legacy_projection_service import resolve_legacy_position_for_truth
+
+    legacy_position = resolve_legacy_position_for_truth(
+        db,
+        truth_position=position,
+    )
+    if legacy_position is None:
+        return None
+
+    batch = db.query(TradeBatch).filter(
+        TradeBatch.public_id == event.public_id,
+        TradeBatch.position_id == legacy_position.id,
+    ).first()
+    if batch is None:
+        batch = TradeBatch(
+            public_id=event.public_id,
+            position_id=legacy_position.id,
+        )
+        db.add(batch)
+    batch.type = (
+        BatchType.ENTRY
+        if event.event_type in {PositionEventType.OPEN, PositionEventType.ADD}
+        else BatchType.EXIT
+    )
+    batch.price = event.price
+    batch.quantity = event.quantity
+    batch.time = event.event_time
+    batch.reason = event.reason
+    batch.emotion = event.emotion
+    batch.confidence = event.confidence
+    batch.pnl = (
+        event.realized_pnl_net
+        if event.event_type in {PositionEventType.REDUCE, PositionEventType.CLOSE}
+        else None
+    )
+    db.flush()
+    return batch
 
 
 def replay_truth_position_accounting(db: Session, *, position: TradingPosition) -> None:
@@ -179,16 +319,42 @@ def append_truth_trade_event(
     emotion: str | None = None,
     confidence: int | None = None,
     note: str | None = None,
+    account: TradingAccount | None = None,
 ) -> PositionEvent:
     require_truth_position_financial_write_allowed(position)
-    _require_position_accounting_healthy(db, position)
+    if account is None:
+        account = db.query(TradingAccount).filter(
+            TradingAccount.id == position.account_id,
+            TradingAccount.user_id == position.user_id,
+        ).one()
+    if account.id != position.account_id or account.user_id != position.user_id:
+        raise ValueError("Trading account and position owner mismatch")
+    require_accounting_healthy(account)
+    if account.trade_source_state == TradeSourceState.SOURCE_BOUND.value:
+        raise SourceBoundTradeWriteError(
+            "Source-bound accounts reject manual trade commands"
+        )
     if position.status == TradingPositionStatus.CLOSED:
         raise ValueError("Cannot append trade events to a closed trading position")
 
-    if event_type == PositionEventType.CLOSE:
+    active_events = _active_trade_events(db, position)
+    if active_events and _as_utc(occurred_at) < _as_utc(active_events[-1].event_time):
+        raise TradeEventChronologyError(
+            "Trade events cannot predate the latest active lifecycle event"
+        )
+
+    if event_type != PositionEventType.OPEN:
         remaining_open_quantity = _remaining_open_quantity(position)
-        if quantity != remaining_open_quantity:
-            raise ValueError(
+        if remaining_open_quantity <= 0:
+            raise TradeEventQuantityError(
+                "Trading position has no remaining open quantity"
+            )
+        if event_type == PositionEventType.REDUCE and quantity >= remaining_open_quantity:
+            raise TradeEventQuantityError(
+                f"REDUCE event quantity must be less than remaining open quantity ({remaining_open_quantity})"
+            )
+        if event_type == PositionEventType.CLOSE and quantity != remaining_open_quantity:
+            raise TradeEventQuantityError(
                 f"CLOSE event quantity must equal remaining open quantity ({remaining_open_quantity})"
             )
 
@@ -222,6 +388,13 @@ def append_truth_trade_event(
     db.add(event)
     db.flush()
     replay_truth_position_accounting(db, position=position)
+    _project_trade_event_to_legacy_batch(
+        db,
+        position=position,
+        event=event,
+    )
+    account.trade_source_state = TradeSourceState.MANUAL.value
+    db.flush()
     return event
 
 

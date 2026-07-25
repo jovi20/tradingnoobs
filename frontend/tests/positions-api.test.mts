@@ -26,13 +26,17 @@ test('createTradingPositionTradeEvent posts price and quantity changes to the tr
       currency: 'USD',
       occurred_at: '2026-04-03T15:30:00.000Z',
       reason: 'Add on continuation',
-    })
+    }, 'lifecycle-key-1')
 
     assert.equal(result.meta.source, 'MANUAL')
     assert.equal(calls.length, 1)
     assert.equal(String(calls[0].input), 'http://localhost:8000/api/trading-positions/tp-1/events')
     assert.equal(calls[0].init?.method, 'POST')
     assert.equal((calls[0].init?.headers as Record<string, string>).Authorization, 'Bearer token-1')
+    assert.equal(
+      (calls[0].init?.headers as Record<string, string>)['Idempotency-Key'],
+      'lifecycle-key-1',
+    )
     assert.deepEqual(JSON.parse(String(calls[0].init?.body)), {
       event_type: 'ADD',
       quantity: 3,

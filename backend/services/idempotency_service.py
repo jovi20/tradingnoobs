@@ -106,3 +106,21 @@ def complete_idempotent_request(
     db.add(record)
     db.flush()
     return record
+
+
+def cleanup_expired_idempotency_records(
+    db: Session,
+    *,
+    now: datetime | None = None,
+) -> int:
+    now = _as_utc(now or datetime.now(timezone.utc))
+    deleted = (
+        db.query(IdempotencyKey)
+        .filter(
+            IdempotencyKey.expires_at.isnot(None),
+            IdempotencyKey.expires_at <= now,
+        )
+        .delete(synchronize_session=False)
+    )
+    db.flush()
+    return deleted

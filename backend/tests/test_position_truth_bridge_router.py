@@ -78,8 +78,8 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         raw_post = self.client.post
         request_numbers = itertools.count(1)
 
-        def post_with_open_idempotency(url, *args, **kwargs):
-            if url == "/api/positions":
+        def post_with_financial_idempotency(url, *args, **kwargs):
+            if url == "/api/positions" or url.endswith("/events"):
                 headers = dict(kwargs.pop("headers", {}) or {})
                 headers.setdefault(
                     "Idempotency-Key",
@@ -88,7 +88,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
                 kwargs["headers"] = headers
             return raw_post(url, *args, **kwargs)
 
-        self.client.post = post_with_open_idempotency
+        self.client.post = post_with_financial_idempotency
 
     def tearDown(self):
         app.dependency_overrides.clear()

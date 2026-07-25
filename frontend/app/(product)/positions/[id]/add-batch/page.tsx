@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -33,6 +33,7 @@ export default function AddBatchPage() {
     const [isLoading, setIsLoading] = useState(true)
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState('')
+    const lifecycleRequestRef = useRef<{ payload: string; key: string } | null>(null)
 
     // Initialize type from query param
     const initType = (searchParams.get('type') === 'EXIT') ? 'EXIT' : 'ENTRY'
@@ -103,13 +104,22 @@ export default function AddBatchPage() {
             }
 
             if (truthPositionPublicId) {
+                const truthEvent = buildTruthTradeEventFromBatchForm(batchData, {
+                    total_quantity: currentOpenQuantity,
+                    asset_metadata: position.asset_metadata,
+                })
+                const serializedPayload = JSON.stringify(truthEvent)
+                if (lifecycleRequestRef.current?.payload !== serializedPayload) {
+                    lifecycleRequestRef.current = {
+                        payload: serializedPayload,
+                        key: crypto.randomUUID(),
+                    }
+                }
                 await positionsAPI.createTradingPositionTradeEvent(
                     token,
                     truthPositionPublicId,
-                    buildTruthTradeEventFromBatchForm(batchData, {
-                        total_quantity: currentOpenQuantity,
-                        asset_metadata: position.asset_metadata,
-                    })
+                    truthEvent,
+                    lifecycleRequestRef.current.key,
                 )
                 router.push(`/positions/${position.public_id}`)
             } else {

@@ -1372,10 +1372,12 @@ export const positionsAPI = {
     createTradingPositionTradeEvent: async (
         token: string,
         positionPublicId: string,
-        data: TradingPositionTradeEventCreate
+        data: TradingPositionTradeEventCreate,
+        idempotencyKey: string,
     ): Promise<LifecycleDetailResponse> => {
         return fetchAPI(`/api/trading-positions/${positionPublicId}/events`, {
             method: 'POST',
+            headers: { 'Idempotency-Key': idempotencyKey },
             body: JSON.stringify(data),
         }, token)
     },

@@ -310,7 +310,7 @@ effective_enabled = deployment_capability_allowlist AND runtime_rollout_flag
 - ADD/REDUCE/CLOSE 先锁 account、再锁 position，在同一事务内验证剩余数量、分配 sequence 并提交。
 - 不同 idempotency key 的并发 REDUCE/CLOSE 不能超量、重复平仓或覆盖新状态。
 - 普通 append 不接受 backdated trade event；同 timestamp 以 sequence 稳定重放。
-- legacy projection 与 canonical 同事务且可 reconciliation；legacy read bridge 保留期限和删除条件明确。
+- legacy projection 与 canonical 同事务且可 reconciliation。legacy read bridge 至少保留到 JRN-014 与 JRN-016 完成，并且 canonical backfill/reconciliation 100% 通过、正常产品调用 telemetry 连续一个发布周期为零、restore/rollback drill 不再依赖 legacy 写入后，才允许通过独立迁移任务删除；JRN-008 不提前删除 legacy 表、route 或 rollback 数据。
 - release-scope 财务 operation 的 idempotency record 以 `expires_at = NULL` 保留并关联 source fact；通用 cleanup 不得删除或把同 key 变成可复用状态。
 - 本任务只交付供 correction 使用的锁、幂等和 sequence 基础；latest reversal/whole-position void 的产品语义与端点在 JRN-010 启用。
 

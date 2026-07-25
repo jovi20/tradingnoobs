@@ -232,6 +232,7 @@ export default function NewPositionPage() {
 
     const [isAddingBatch, setIsAddingBatch] = useState(false)
     const openRequestRef = useRef<{ payload: string; key: string } | null>(null)
+    const addRequestRef = useRef<{ payload: string; key: string } | null>(null)
 
     // Check for an existing lifecycle only when the complete identity is valid.
     useEffect(() => {
@@ -439,10 +440,22 @@ export default function NewPositionPage() {
             const truthPositionPublicId = truthData?.data?.position_summary?.public_id
 
             if (truthPositionPublicId) {
+                const truthEvent = buildTruthTradeEventFromBatchForm(batchData, targetPosition)
+                const serializedPayload = JSON.stringify({
+                    positionPublicId: truthPositionPublicId,
+                    event: truthEvent,
+                })
+                if (addRequestRef.current?.payload !== serializedPayload) {
+                    addRequestRef.current = {
+                        payload: serializedPayload,
+                        key: crypto.randomUUID(),
+                    }
+                }
                 await positionsAPI.createTradingPositionTradeEvent(
                     token,
                     truthPositionPublicId,
-                    buildTruthTradeEventFromBatchForm(batchData, targetPosition)
+                    truthEvent,
+                    addRequestRef.current.key,
                 )
                 router.push(`/positions/${targetPosition.routeId}`)
             } else {

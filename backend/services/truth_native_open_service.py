@@ -244,6 +244,7 @@ def create_truth_native_open(
     db.flush()
     db.add(
         TradeBatch(
+            public_id=event.public_id,
             position_id=legacy.id,
             type=BatchType.ENTRY,
             price=price,

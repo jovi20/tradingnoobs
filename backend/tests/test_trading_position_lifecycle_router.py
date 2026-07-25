@@ -1,8 +1,9 @@
 import os
 import tempfile
 import unittest
+import itertools
 from unittest.mock import patch
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import sys
 import types
@@ -34,6 +35,7 @@ from models import (
     PositionDirection,
     PositionStatus,
     TradeBatch,
+    TradeSourceState,
     TradingAccount,
     TradingPosition,
     TradingPositionStatus,
@@ -46,6 +48,7 @@ from services.legacy_truth_sync_service import (
     sync_legacy_position_to_truth,
     validate_legacy_instrument_identity,
 )
+from services.idempotency_service import cleanup_expired_idempotency_records
 from services.trading_position_write_service import (
     ArchivedTradingPositionWriteError,
     append_truth_trade_event,
@@ -92,6 +95,20 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides[get_current_user] = override_get_current_user
         self.client = TestClient(app)
+        self.post_without_default_idempotency = self.client.post
+        request_numbers = itertools.count(1)
+
+        def post_with_lifecycle_idempotency(url, *args, **kwargs):
+            if url.endswith("/events"):
+                headers = dict(kwargs.pop("headers", {}) or {})
+                headers.setdefault(
+                    "Idempotency-Key",
+                    f"lifecycle-router-test-{next(request_numbers)}",
+                )
+                kwargs["headers"] = headers
+            return self.post_without_default_idempotency(url, *args, **kwargs)
+
+        self.client.post = post_with_lifecycle_idempotency
 
     def tearDown(self):
         app.dependency_overrides.clear()
@@ -890,7 +907,7 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         self.assertEqual(self.db.query(OutboxEvent).count(), before_outbox)
         self.assertEqual(
             self.db.query(IdempotencyKey).filter(
-                IdempotencyKey.scope == "trading_position.trade_event.create",
+                IdempotencyKey.scope == "POSITION_LIFECYCLE_APPEND",
             ).count(),
             0,
         )
@@ -1001,6 +1018,26 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
             Decimal("183.7500"),
         )
         self.assertEqual(legacy_projection.status, PositionStatus.OPEN)
+        projected_batch = self.db.query(TradeBatch).filter(
+            TradeBatch.public_id == add_event.public_id,
+        ).one()
+        self.assertEqual(projected_batch.position_id, legacy_projection.id)
+        self.assertEqual(projected_batch.type, BatchType.ENTRY)
+        self.assertEqual(projected_batch.quantity, Decimal("3.00000000"))
+        event_count = self.db.query(PositionEvent).filter(
+            PositionEvent.position_id == truth_position.id,
+        ).count()
+        sync_legacy_position_to_truth(
+            self.db,
+            legacy_projection.id,
+            expected_identity=self._expected_identity(legacy_projection),
+        )
+        self.assertEqual(
+            self.db.query(PositionEvent).filter(
+                PositionEvent.position_id == truth_position.id,
+            ).count(),
+            event_count,
+        )
 
     def test_trade_event_write_replays_completed_idempotency_key_without_duplicate_event(self):
         truth_position = self._seed_open_synced_position()
@@ -1021,7 +1058,7 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         )
         self.db.expire_all()
         idempotency_record = self.db.query(IdempotencyKey).filter(
-            IdempotencyKey.scope == "trading_position.trade_event.create",
+            IdempotencyKey.scope == "POSITION_LIFECYCLE_APPEND",
         ).one()
         historical_response = first_response.json()
         historical_response["data"]["ai_sidecar"]["items"] = [
@@ -1049,14 +1086,194 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         self.assertEqual(len(add_events), 1)
         self.assertEqual(self.db.query(OutboxEvent).filter(OutboxEvent.aggregate_public_id == truth_position.public_id).count(), 1)
         idempotency_record = self.db.query(IdempotencyKey).filter(
-            IdempotencyKey.scope == "trading_position.trade_event.create",
+            IdempotencyKey.scope == "POSITION_LIFECYCLE_APPEND",
         ).one()
         self.assertEqual(idempotency_record.status, "COMPLETED")
+        self.assertIsNone(idempotency_record.expires_at)
+        self.assertEqual(idempotency_record.source_fact_public_id, add_events[0].public_id)
         self.assertIsNotNone(idempotency_record.response_json)
         self.assertEqual(
             idempotency_record.response_json["data"]["ai_sidecar"]["items"][0]["conclusion"],
             "historical-ai-secret",
         )
+
+        idempotency_record.created_at = datetime.now(timezone.utc) - timedelta(days=365)
+        self.db.add(
+            IdempotencyKey(
+                user_id=self.user.id,
+                scope="EXPIRING_TEST",
+                key="expired-key",
+                request_hash="sha256:expired",
+                status="COMPLETED",
+                expires_at=datetime.now(timezone.utc) - timedelta(days=1),
+            )
+        )
+        self.db.flush()
+        deleted = cleanup_expired_idempotency_records(
+            self.db,
+            now=datetime.now(timezone.utc),
+        )
+        self.db.commit()
+        self.assertEqual(deleted, 1)
+        self.assertEqual(
+            self.db.query(IdempotencyKey).filter(
+                IdempotencyKey.scope == "POSITION_LIFECYCLE_APPEND",
+            ).count(),
+            1,
+        )
+
+    def test_trade_event_requires_idempotency_key_without_partial_writes(self):
+        truth_position = self._seed_open_synced_position()
+        before_events = self.db.query(PositionEvent).count()
+
+        response = self.post_without_default_idempotency(
+            f"/api/trading-positions/{truth_position.public_id}/events",
+            json={
+                "event_type": "ADD",
+                "quantity": "1",
+                "price": "190",
+                "currency": "USD",
+                "occurred_at": "2026-04-03T15:30:00+00:00",
+            },
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(self.db.query(PositionEvent).count(), before_events)
+        self.assertEqual(
+            self.db.query(IdempotencyKey).filter(
+                IdempotencyKey.scope == "POSITION_LIFECYCLE_APPEND",
+            ).count(),
+            0,
+        )
+
+    def test_trade_event_rejects_backdate_but_orders_equal_timestamps_by_sequence(self):
+        truth_position = self._seed_open_synced_position()
+        first = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events",
+            headers={"Idempotency-Key": "same-time-1"},
+            json={
+                "event_type": "ADD",
+                "quantity": "1",
+                "price": "190",
+                "currency": "USD",
+                "occurred_at": "2026-04-03T15:30:00+00:00",
+            },
+        )
+        second = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events",
+            headers={"Idempotency-Key": "same-time-2"},
+            json={
+                "event_type": "ADD",
+                "quantity": "1",
+                "price": "191",
+                "currency": "USD",
+                "occurred_at": "2026-04-03T15:30:00+00:00",
+            },
+        )
+        backdated = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events",
+            headers={"Idempotency-Key": "backdated-1"},
+            json={
+                "event_type": "REDUCE",
+                "quantity": "1",
+                "price": "195",
+                "currency": "USD",
+                "occurred_at": "2026-04-02T15:30:00+00:00",
+            },
+        )
+
+        self.assertEqual(first.status_code, 201, first.text)
+        self.assertEqual(second.status_code, 201, second.text)
+        self.assertEqual(backdated.status_code, 422, backdated.text)
+        self.assertEqual(
+            backdated.json()["detail"]["code"],
+            "EVENT_CHRONOLOGY_VIOLATION",
+        )
+        events = self.db.query(PositionEvent).filter(
+            PositionEvent.position_id == truth_position.id,
+            PositionEvent.event_type.in_(
+                {PositionEventType.OPEN, PositionEventType.ADD}
+            ),
+        ).order_by(PositionEvent.sequence_no.asc()).all()
+        self.assertEqual([event.sequence_no for event in events], [1, 2, 3])
+        self.assertEqual(events[1].event_time, events[2].event_time)
+
+    def test_trade_event_rejects_source_bound_and_dst_invalid_time(self):
+        truth_position = self._seed_open_synced_position()
+        account = self.db.query(TradingAccount).filter(
+            TradingAccount.id == truth_position.account_id,
+        ).one()
+        account.trade_source_state = TradeSourceState.SOURCE_BOUND.value
+        self.db.commit()
+
+        source_bound = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events",
+            headers={"Idempotency-Key": "source-bound-add"},
+            json={
+                "event_type": "ADD",
+                "quantity": "1",
+                "price": "190",
+                "currency": "USD",
+                "occurred_at": "2026-04-03T15:30:00+00:00",
+            },
+        )
+        self.assertEqual(source_bound.status_code, 409, source_bound.text)
+        self.assertEqual(source_bound.json()["detail"]["code"], "SOURCE_BOUND_ACCOUNT")
+
+        account.trade_source_state = TradeSourceState.MANUAL.value
+        self.user.timezone = "America/New_York"
+        self.db.commit()
+        for key, occurred_at, expected_code in (
+            ("lifecycle-dst-gap", "2026-03-08T02:30:00", "NONEXISTENT_LOCAL_TIME"),
+            ("lifecycle-dst-fold", "2026-11-01T01:30:00", "AMBIGUOUS_LOCAL_TIME"),
+        ):
+            response = self.client.post(
+                f"/api/trading-positions/{truth_position.public_id}/events",
+                headers={"Idempotency-Key": key},
+                json={
+                    "event_type": "ADD",
+                    "quantity": "1",
+                    "price": "190",
+                    "currency": "USD",
+                    "occurred_at": occurred_at,
+                },
+            )
+            self.assertEqual(response.status_code, 422, response.text)
+            self.assertEqual(response.json()["detail"]["code"], expected_code)
+
+    def test_trade_event_projection_failure_rolls_back_canonical_and_compatibility_rows(self):
+        truth_position = self._seed_open_synced_position()
+        baseline = {
+            model: self.db.query(model).count()
+            for model in (
+                PositionEvent,
+                TradeBatch,
+                AccountLedgerEntry,
+                OutboxEvent,
+                IdempotencyKey,
+            )
+        }
+
+        with patch(
+            "services.trading_position_write_service._project_trade_event_to_legacy_batch",
+            side_effect=RuntimeError("projection failed"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "projection failed"):
+                self.client.post(
+                    f"/api/trading-positions/{truth_position.public_id}/events",
+                    headers={"Idempotency-Key": "projection-failure"},
+                    json={
+                        "event_type": "REDUCE",
+                        "quantity": "1",
+                        "price": "210",
+                        "currency": "USD",
+                        "occurred_at": "2026-04-03T15:30:00+00:00",
+                    },
+                )
+
+        self.db.expire_all()
+        for model, count in baseline.items():
+            self.assertEqual(self.db.query(model).count(), count)
 
     def test_trade_event_write_rejects_idempotency_key_reuse_with_different_payload(self):
         truth_position = self._seed_open_synced_position()
@@ -1087,7 +1304,10 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
 
         self.assertEqual(first_response.status_code, 201)
         self.assertEqual(conflict_response.status_code, 409)
-        self.assertEqual(conflict_response.json()["detail"], "Idempotency key reuse with a different request payload.")
+        self.assertEqual(
+            conflict_response.json()["detail"]["code"],
+            "IDEMPOTENCY_KEY_REUSED",
+        )
 
         self.db.expire_all()
         add_events = self.db.query(PositionEvent).filter(
@@ -1330,7 +1550,10 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 422)
-        self.assertIn("CLOSE event quantity must equal remaining open quantity", response.json()["detail"])
+        self.assertIn(
+            "CLOSE event quantity must equal remaining open quantity",
+            response.json()["detail"]["message"],
+        )
 
         self.db.expire_all()
         events = self.db.query(PositionEvent).filter(PositionEvent.position_id == truth_position.id).all()

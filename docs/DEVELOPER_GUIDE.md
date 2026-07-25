@@ -195,6 +195,8 @@ Owner/tenant 边界遵循同一合同：普通 API 对非当前用户的 public 
 
 legacy 代码不会在 replacement、migration 和 rollback 明确前直接删除；但“代码保留”不等于 public mutation 可用。当前只能把保留面标为只读 bridge、create-and-sync bridge、unregistered historical reference 或 delete candidate，不能把普通产品路由称为 migration fallback。
 
+JRN-008 起，手工 ADD/REDUCE/CLOSE 以 canonical `PositionEvent` 为真相，并在同一事务写入 `Position` 汇总与 `TradeBatch` 兼容 projection。legacy read bridge 至少保留到 JRN-014/JRN-016 完成；只有 canonical backfill/reconciliation 全量通过、正常产品调用 telemetry 连续一个发布周期为零且 restore/rollback drill 不再依赖 legacy 写入，才可由独立迁移任务删除。
+
 ---
 
 ## 7. Schema 与迁移
