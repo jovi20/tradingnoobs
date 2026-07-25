@@ -463,7 +463,6 @@ async def stage_and_upload_ibkr_flex_preview(
 ) -> IbkrFlexUploadCommandResult:
     staged: StagedIbkrFlexFile | None = None
     try:
-        staged = await stage_ibkr_flex_upload(upload, temp_root=temp_root)
         account = lock_owned_account(
             db,
             user_id=user_id,
@@ -475,6 +474,7 @@ async def stage_and_upload_ibkr_flex_preview(
                 "Import account does not exist",
                 http_status=404,
             )
+        staged = await stage_ibkr_flex_upload(upload, temp_root=temp_root)
         return upload_ibkr_flex_preview(
             db,
             user_id=user_id,

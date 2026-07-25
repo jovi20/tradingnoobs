@@ -201,6 +201,68 @@ def run_upload(
     )
 
 
+def test_account_owner_is_checked_before_staging(
+    db,
+    owner_graph,
+    provider_contract,
+    tmp_path,
+    monkeypatch,
+):
+    owner, _ = owner_graph
+    other = User(
+        public_id="prestage-other-user",
+        email="prestage-other@example.com",
+        email_normalized="prestage-other@example.com",
+        hashed_password="hash",
+        timezone="UTC",
+    )
+    other_account = TradingAccount(
+        public_id="prestage-other-account",
+        user=other,
+        name="Other IBKR",
+        broker="IBKR",
+        currency="USD",
+        is_active=True,
+    )
+    db.add_all([other, other_account])
+    db.commit()
+    staged = {"called": False}
+
+    async def fail_if_staged(*args, **kwargs):
+        del args, kwargs
+        staged["called"] = True
+        raise AssertionError("invalid account must be rejected before staging")
+
+    monkeypatch.setattr(
+        "services.ibkr_flex_import_service.stage_ibkr_flex_upload",
+        fail_if_staged,
+    )
+
+    for account_public_id in ("missing-account", other_account.public_id):
+        upload = upload_file(statement_xml())
+        with pytest.raises(IbkrFlexImportError) as failure:
+            asyncio.run(
+                stage_and_upload_ibkr_flex_preview(
+                    db,
+                    user_id=owner.id,
+                    account_public_id=account_public_id,
+                    source_timezone="UTC",
+                    upload=upload,
+                    idempotency_key=f"prestage-{account_public_id}",
+                    provider_contract=provider_contract,
+                    temp_root=tmp_path,
+                )
+            )
+        assert failure.value.code == "IMPORT_ACCOUNT_NOT_FOUND"
+        assert failure.value.http_status == 404
+        assert upload.file.closed
+
+    assert staged["called"] is False
+    assert db.query(ImportSession).count() == 0
+    assert db.query(IdempotencyKey).count() == 0
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_bootstrap_upload_persists_masked_replayable_preview_only(
     db,
     owner_graph,
