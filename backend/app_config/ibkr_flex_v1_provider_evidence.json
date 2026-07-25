@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "adapter_kind": "IBKR_FLEX_XML_V1",
+  "status": "UNVERIFIED",
+  "query_template_id": null,
+  "query_template_sha256": null,
+  "field_contract": null,
+  "official_sources": [],
+  "fixtures": [],
+  "unverified_reasons": [
+    "No frozen IBKR Flex Query template has been supplied.",
+    "No official field-semantics evidence has been retained.",
+    "No redacted real statement pairs from the frozen query template have been supplied."
+  ]
+}

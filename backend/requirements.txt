@@ -16,6 +16,7 @@ psycopg2-binary>=2.9.9           # PostgreSQL sync driver
 pydantic>=2.5.0
 pydantic-settings>=2.1.0         # Settings management
 email-validator>=2.0.0           # Email validation for Pydantic
+lxml>=6.0.0                      # Hardened local IBKR Flex XML parsing
 
 # ============== Authentication ==============
 python-jose[cryptography]>=3.3.0 # JWT tokens
