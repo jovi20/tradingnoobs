@@ -148,6 +148,14 @@ class AlembicChainTests(unittest.TestCase):
             broker_execution_column_names = {row[1] for row in broker_execution_columns}
             import_session_column_names = {row[1] for row in import_session_columns}
             import_row_column_names = {row[1] for row in import_row_columns}
+            self.assertIn(
+                "source_preview_schema_version",
+                import_session_column_names,
+            )
+            self.assertIn(
+                "source_preview_digest",
+                import_session_column_names,
+            )
             expected_tables = {
                 "alembic_version",
                 "users",
@@ -359,6 +367,86 @@ class AlembicChainTests(unittest.TestCase):
                     "warnings_json",
                     "is_valid",
                 }.issubset(import_row_column_names)
+            )
+        finally:
+            if os.path.exists(db_path):
+                os.remove(db_path)
+
+    def test_source_preview_digest_revision_round_trip(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        fd, db_path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        env = os.environ.copy()
+        env["DATABASE_URL"] = f"sqlite:///{db_path}"
+        env["PYTHONPATH"] = str(repo_root / "backend")
+
+        def run_alembic(*arguments):
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "alembic",
+                    "-c",
+                    "backend/alembic.ini",
+                    *arguments,
+                ],
+                cwd=repo_root,
+                env=env,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(
+                result.returncode,
+                0,
+                msg=(
+                    f"alembic {' '.join(arguments)} failed\n"
+                    f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+                ),
+            )
+
+        def import_session_schema():
+            connection = sqlite3.connect(db_path)
+            try:
+                columns = {
+                    row[1]
+                    for row in connection.execute(
+                        "PRAGMA table_info(import_sessions)"
+                    ).fetchall()
+                }
+                table_sql = connection.execute(
+                    "SELECT sql FROM sqlite_master "
+                    "WHERE type = 'table' AND name = 'import_sessions'"
+                ).fetchone()[0]
+                return columns, table_sql
+            finally:
+                connection.close()
+
+        try:
+            run_alembic("upgrade", "head")
+            columns, table_sql = import_session_schema()
+            self.assertIn("source_preview_schema_version", columns)
+            self.assertIn("source_preview_digest", columns)
+            self.assertIn(
+                "ck_import_sessions_source_preview_digest_pair",
+                table_sql,
+            )
+
+            run_alembic("downgrade", "c9d0e1f2a3b4")
+            columns, table_sql = import_session_schema()
+            self.assertNotIn("source_preview_schema_version", columns)
+            self.assertNotIn("source_preview_digest", columns)
+            self.assertNotIn(
+                "ck_import_sessions_source_preview_digest_pair",
+                table_sql,
+            )
+
+            run_alembic("upgrade", "head")
+            columns, table_sql = import_session_schema()
+            self.assertIn("source_preview_schema_version", columns)
+            self.assertIn("source_preview_digest", columns)
+            self.assertIn(
+                "ck_import_sessions_source_preview_digest_pair",
+                table_sql,
             )
         finally:
             if os.path.exists(db_path):

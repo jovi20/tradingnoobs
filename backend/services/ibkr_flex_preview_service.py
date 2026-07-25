@@ -28,10 +28,8 @@ from models import (
     ImportSession,
     ImportSessionStatus,
     ImportSourceBinding,
-    SourceCompleteness,
     SourceReconciliationCase,
     SourceStatement,
-    StatementCoverageAcceptance,
     StatementExecutionSighting,
     TradeSourceState,
     TradingAccount,
@@ -48,6 +46,10 @@ from services.source_reconciliation_service import (
     create_or_attach_source_case,
     recompute_source_health,
     supersede_source_case_with_later_sighting,
+)
+from services.source_preview_projection_service import (
+    SourcePreviewProjectionError,
+    build_source_preview_projection,
 )
 from services.trade_lifecycle_simulation_service import (
     LifecycleSimulationError,
@@ -104,6 +106,10 @@ class BoundPreviewResult:
     source_health: str
     source_completeness: str
     coverage_gap: bool
+    source_preview_schema_version: int
+    source_preview_digest: str
+    pending_statement_count: int
+    pending_execution_count: int
     items: tuple[BoundPreviewItem, ...]
 
 
@@ -946,29 +952,19 @@ def preview_bound_ibkr_statement(
         items_by_row[event.row_number] = item
         economic_items[economic_key] = item
 
-    accepted = (
-        db.query(StatementCoverageAcceptance.id)
-        .filter(
-            StatementCoverageAcceptance.binding_id == binding.id,
-            StatementCoverageAcceptance.statement_id == statement.id,
-        )
-        .first()
-        is not None
-    )
-    coverage_gap = (
-        binding.accepted_coverage_through_exclusive is not None
-        and parsed.coverage_start
-        > binding.accepted_coverage_through_exclusive
-    )
-    if not accepted or any(
-        item.classification == "NEW" for item in items_by_row.values()
-    ):
-        binding.source_completeness = (
-            SourceCompleteness.PENDING_IMPORT.value
-        )
     recompute_source_health(db, binding=binding)
+    try:
+        projection = build_source_preview_projection(
+            db,
+            binding=binding,
+        )
+    except SourcePreviewProjectionError as exc:
+        raise IbkrFlexPreviewError(exc.code, str(exc)) from exc
+    binding.source_completeness = projection.source_completeness
+    session.source_preview_schema_version = projection.schema_version
+    session.source_preview_digest = projection.digest
 
-    if coverage_gap:
+    if projection.coverage_gap:
         status = ImportSessionStatus.CONFLICTED.value
         session.error_code = "SOURCE_COVERAGE_GAP"
         session.error_message = (
@@ -1016,7 +1012,11 @@ def preview_bound_ibkr_statement(
         status=status,
         source_health=binding.source_health,
         source_completeness=binding.source_completeness,
-        coverage_gap=coverage_gap,
+        coverage_gap=projection.coverage_gap,
+        source_preview_schema_version=projection.schema_version,
+        source_preview_digest=projection.digest,
+        pending_statement_count=len(projection.pending_coverage),
+        pending_execution_count=len(projection.pending_units),
         items=tuple(
             items_by_row[row_number]
             for row_number in sorted(items_by_row)

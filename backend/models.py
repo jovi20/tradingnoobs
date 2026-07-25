@@ -816,6 +816,13 @@ class ImportSession(Base):
             "'COMPLETED', 'COMPLETED_NOOP', 'CONFLICTED', 'FAILED', 'EXPIRED')",
             name="ck_import_sessions_status",
         ),
+        CheckConstraint(
+            "(source_preview_schema_version IS NULL "
+            "AND source_preview_digest IS NULL) OR "
+            "(source_preview_schema_version > 0 "
+            "AND source_preview_digest IS NOT NULL)",
+            name="ck_import_sessions_source_preview_digest_pair",
+        ),
         Index(
             "ix_import_sessions_owner_account_created",
             "user_id",
@@ -870,6 +877,8 @@ class ImportSession(Base):
     error_code = Column(String(100), nullable=True)
     error_message = Column(Text, nullable=True)
     response_schema_version = Column(Integer, nullable=False, default=1)
+    source_preview_schema_version = Column(Integer, nullable=True)
+    source_preview_digest = Column(String(71), nullable=True)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     status_changed_at = Column(
         DateTime(timezone=True),

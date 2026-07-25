@@ -25,6 +25,7 @@ from models import (
     SourceCaseEvidenceSighting,
     SourceReconciliationCase,
     SourceStatement,
+    StatementCoverageAcceptance,
     StatementExecutionSighting,
     TradingAccount,
     User,
@@ -36,6 +37,9 @@ from services.ibkr_flex_parser import (
 from services.ibkr_flex_preview_service import (
     IbkrFlexPreviewError,
     preview_bound_ibkr_statement,
+)
+from services.source_preview_projection_service import (
+    build_source_preview_projection,
 )
 
 
@@ -156,8 +160,8 @@ def source_graph(db):
         source_timezone="America/New_York",
         source_health="HEALTHY",
         source_completeness="CURRENT",
-        accepted_coverage_start=date(2026, 7, 1),
-        accepted_coverage_through_exclusive=date(2026, 7, 26),
+        accepted_coverage_start=None,
+        accepted_coverage_through_exclusive=None,
         source_state_revision=1,
     )
     db.add(binding)
@@ -291,7 +295,12 @@ def seed_accepted_execution(
         account=account,
         binding=binding,
         session=session,
-        parsed=parsed_statement(event, generation="2026-07-25T22:00:00+00:00"),
+        parsed=parsed_statement(
+            event,
+            generation="2026-07-25T22:00:00+00:00",
+            coverage_start=date(2026, 7, 1),
+            coverage_end=date(2026, 7, 26),
+        ),
         provider_contract=provider_contract,
     )
     observation = db.query(ExternalSourceObservation).filter_by(
@@ -322,9 +331,51 @@ def seed_accepted_execution(
         applied_import_session_id=session.id,
     )
     db.add(application)
+    statement = db.query(SourceStatement).filter_by(
+        public_id=result.statement_public_id
+    ).one()
+    db.add(
+        StatementCoverageAcceptance(
+            binding_id=binding.id,
+            user_id=user.id,
+            account_id=account.id,
+            statement_id=statement.id,
+            import_session_id=session.id,
+            operation_idempotency_id=session.upload_idempotency_id,
+            accepted_source_state_revision=1,
+        )
+    )
+    binding.accepted_coverage_start = date(2026, 7, 1)
+    binding.accepted_coverage_through_exclusive = date(2026, 7, 26)
     binding.source_completeness = "CURRENT"
     db.commit()
     return event, observation, execution
+
+
+def preview_empty_statement(
+    db,
+    *,
+    graph,
+    provider_contract,
+    suffix,
+    coverage_start,
+    coverage_end,
+):
+    user, _, account, _, binding = graph
+    session = make_session(db, user=user, account=account, suffix=suffix)
+    result = preview_bound_ibkr_statement(
+        db,
+        account=account,
+        binding=binding,
+        session=session,
+        parsed=parsed_statement(
+            generation=f"2026-07-26T22:00:{len(suffix):02d}+00:00",
+            coverage_start=coverage_start,
+            coverage_end=coverage_end,
+        ),
+        provider_contract=provider_contract,
+    )
+    return session, result
 
 
 def test_bound_preview_persists_new_statement_evidence_and_derives_add(
@@ -623,6 +674,7 @@ def test_duplicate_same_payload_combines_evidence_and_warns(
     assert result.items[0].post_quantity == result.items[1].post_quantity
     assert db.query(ExternalSourceObservation).count() == 1
     assert db.query(StatementExecutionSighting).count() == 1
+    assert result.pending_execution_count == 1
     assert db.query(ImportRow).count() == 2
     for row in db.query(ImportRow).all():
         assert "normalized_external_account_ref" not in (
@@ -631,6 +683,227 @@ def test_duplicate_same_payload_combines_evidence_and_warns(
         assert row.normalized_values_json["masked_external_account_ref"] == (
             "****4567"
         )
+
+
+def test_binding_wide_projection_digest_is_stable_and_tracks_pending_truth(
+    db,
+    source_graph,
+    provider_contract,
+):
+    accepted, _, _ = seed_accepted_execution(
+        db,
+        graph=source_graph,
+        provider_contract=provider_contract,
+    )
+    user, _, account, _, binding = source_graph
+    first_session = make_session(
+        db,
+        user=user,
+        account=account,
+        suffix="digest-one",
+    )
+    first_event = source_event(
+        event_id="EXEC-DIGEST-ONE",
+        transaction_id="200",
+        quantity="1",
+        occurred_at=accepted.occurred_at_utc + timedelta(days=1),
+        fingerprint=f"sha256:{'1' * 64}",
+    )
+    first = preview_bound_ibkr_statement(
+        db,
+        account=account,
+        binding=binding,
+        session=first_session,
+        parsed=parsed_statement(first_event),
+        provider_contract=provider_contract,
+    )
+    rebuilt = build_source_preview_projection(db, binding=binding)
+
+    assert first.source_preview_schema_version == 1
+    assert first.source_preview_digest == rebuilt.digest
+    assert first_session.source_preview_digest == rebuilt.digest
+    assert rebuilt.payload["pending_units"][0]["derived_action"] == "ADD"
+    assert rebuilt.payload["pending_units"][0]["pre_quantity"] == "2"
+    assert rebuilt.payload["pending_units"][0]["post_quantity"] == "3"
+
+    second_session = make_session(
+        db,
+        user=user,
+        account=account,
+        suffix="digest-two",
+    )
+    second_event = source_event(
+        event_id="EXEC-DIGEST-TWO",
+        transaction_id="201",
+        quantity="1",
+        occurred_at=accepted.occurred_at_utc + timedelta(days=1, minutes=1),
+        fingerprint=f"sha256:{'2' * 64}",
+    )
+    second = preview_bound_ibkr_statement(
+        db,
+        account=account,
+        binding=binding,
+        session=second_session,
+        parsed=parsed_statement(second_event),
+        provider_contract=provider_contract,
+    )
+
+    assert second.source_preview_digest != first.source_preview_digest
+    assert second.pending_execution_count == 2
+    assert build_source_preview_projection(db, binding=binding).digest == (
+        second.source_preview_digest
+    )
+
+
+def test_pending_coverage_fixed_point_handles_adjacent_overlap_gap_and_bridge(
+    db,
+    source_graph,
+    provider_contract,
+):
+    seed_accepted_execution(
+        db,
+        graph=source_graph,
+        provider_contract=provider_contract,
+    )
+
+    _, adjacent = preview_empty_statement(
+        db,
+        graph=source_graph,
+        provider_contract=provider_contract,
+        suffix="adjacent",
+        coverage_start=date(2026, 7, 26),
+        coverage_end=date(2026, 8, 1),
+    )
+    assert not adjacent.coverage_gap
+    assert adjacent.pending_statement_count == 1
+
+    _, overlap = preview_empty_statement(
+        db,
+        graph=source_graph,
+        provider_contract=provider_contract,
+        suffix="overlap",
+        coverage_start=date(2026, 7, 20),
+        coverage_end=date(2026, 8, 2),
+    )
+    assert not overlap.coverage_gap
+
+    _, gap = preview_empty_statement(
+        db,
+        graph=source_graph,
+        provider_contract=provider_contract,
+        suffix="far-gap",
+        coverage_start=date(2026, 8, 5),
+        coverage_end=date(2026, 8, 10),
+    )
+    assert gap.coverage_gap
+    assert gap.status == "CONFLICTED"
+
+    _, bridge = preview_empty_statement(
+        db,
+        graph=source_graph,
+        provider_contract=provider_contract,
+        suffix="bridge-gap",
+        coverage_start=date(2026, 8, 2),
+        coverage_end=date(2026, 8, 5),
+    )
+    assert not bridge.coverage_gap
+    assert bridge.pending_statement_count == 4
+    assert bridge.source_completeness == "PENDING_IMPORT"
+
+
+def test_projection_rejects_coverage_scalar_without_acceptance(
+    db,
+    source_graph,
+    provider_contract,
+):
+    user, _, account, _, binding = source_graph
+    binding.accepted_coverage_start = date(2026, 7, 1)
+    binding.accepted_coverage_through_exclusive = date(2026, 7, 26)
+    session = make_session(
+        db,
+        user=user,
+        account=account,
+        suffix="scalar-mismatch",
+    )
+
+    with pytest.raises(IbkrFlexPreviewError) as mismatch:
+        preview_bound_ibkr_statement(
+            db,
+            account=account,
+            binding=binding,
+            session=session,
+            parsed=parsed_statement(),
+            provider_contract=provider_contract,
+        )
+
+    assert mismatch.value.code == "SOURCE_COVERAGE_PROJECTION_MISMATCH"
+
+
+def test_prior_unconfirmed_observation_survives_session_expiry(
+    db,
+    source_graph,
+    provider_contract,
+):
+    accepted, _, _ = seed_accepted_execution(
+        db,
+        graph=source_graph,
+        provider_contract=provider_contract,
+    )
+    user, _, account, _, binding = source_graph
+    first_session = make_session(
+        db,
+        user=user,
+        account=account,
+        suffix="unconfirmed-old",
+    )
+    old = source_event(
+        event_id="EXEC-UNCONFIRMED-OLD",
+        transaction_id="200",
+        quantity="1",
+        occurred_at=accepted.occurred_at_utc + timedelta(days=1),
+        fingerprint=f"sha256:{'3' * 64}",
+    )
+    first = preview_bound_ibkr_statement(
+        db,
+        account=account,
+        binding=binding,
+        session=first_session,
+        parsed=parsed_statement(old),
+        provider_contract=provider_contract,
+    )
+    assert first.pending_execution_count == 1
+    first_session.status = "EXPIRED"
+
+    second_session = make_session(
+        db,
+        user=user,
+        account=account,
+        suffix="unconfirmed-new",
+    )
+    new = source_event(
+        event_id="EXEC-UNCONFIRMED-NEW",
+        transaction_id="201",
+        quantity="1",
+        occurred_at=accepted.occurred_at_utc + timedelta(days=1, minutes=1),
+        fingerprint=f"sha256:{'4' * 64}",
+    )
+    second = preview_bound_ibkr_statement(
+        db,
+        account=account,
+        binding=binding,
+        session=second_session,
+        parsed=parsed_statement(new),
+        provider_contract=provider_contract,
+    )
+
+    assert second.pending_execution_count == 2
+    assert {
+        unit.external_source_event_id
+        for unit in build_source_preview_projection(
+            db,
+            binding=binding,
+        ).pending_units
+    } == {"EXEC-UNCONFIRMED-OLD", "EXEC-UNCONFIRMED-NEW"}
 
 
 def test_owner_source_and_currency_mismatch_leave_no_source_evidence(
