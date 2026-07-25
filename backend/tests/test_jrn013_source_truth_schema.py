@@ -10,7 +10,7 @@ import sys
 import tempfile
 
 import pytest
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
@@ -289,6 +289,69 @@ def test_binding_slots_are_lifetime_unique_per_account_and_external_identity(
     other_owner = binding(db, second, accounts[2], "U1234567")
     db.commit()
     assert other_owner.id is not None
+
+
+def test_source_graph_rejects_owner_swaps_at_database_boundary(
+    db,
+    owner_graph,
+):
+    first, second, accounts = owner_graph
+    source_binding = binding(db, first, accounts[0], "UOWNER01")
+    source_session = import_session(db, first, accounts[0], "owner-swap")
+    source_statement = statement(
+        db,
+        source_binding,
+        source_session,
+        "owner-swap",
+    )
+    source_observation = observation(db, source_binding, "owner-swap")
+    source_sighting = sighting(
+        db,
+        source_binding,
+        source_statement,
+        source_observation,
+        "owner-swap",
+    )
+    source_execution = ExternalExecution(
+        public_id="external-execution-owner-swap",
+        binding_id=source_binding.id,
+        user_id=first.id,
+        account_id=accounts[0].id,
+        external_execution_id="EXEC-owner-swap",
+        current_trade_observation_id=source_observation.id,
+        disposition="ACTIVE",
+    )
+    source_case = SourceReconciliationCase(
+        public_id="source-case-owner-swap",
+        binding_id=source_binding.id,
+        user_id=first.id,
+        account_id=accounts[0].id,
+        conflict_observation_id=source_observation.id,
+        trigger_sighting_id=source_sighting.id,
+        case_kind="SOURCE_PAYLOAD_CONFLICT",
+        state="OPEN",
+        against_source_state_schema_version=1,
+        against_source_state_hash=f"sha256:{'f' * 64}",
+        against_source_state_snapshot_json={"revision": 0},
+    )
+    db.add_all([source_execution, source_case])
+    db.commit()
+
+    for model, record_id in (
+        (ImportSourceBinding, source_binding.id),
+        (ExternalSourceObservation, source_observation.id),
+        (StatementExecutionSighting, source_sighting.id),
+        (ExternalExecution, source_execution.id),
+        (SourceReconciliationCase, source_case.id),
+    ):
+        with pytest.raises(IntegrityError):
+            db.execute(
+                update(model)
+                .where(model.id == record_id)
+                .values(user_id=second.id)
+            )
+            db.commit()
+        db.rollback()
 
 
 def test_observation_identity_and_same_binding_graph_are_enforced(
