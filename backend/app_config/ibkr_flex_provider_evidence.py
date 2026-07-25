@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 import hashlib
 import json
 from pathlib import Path
@@ -10,6 +10,7 @@ import re
 from typing import Literal
 from urllib.parse import urlparse
 
+from lxml import etree
 from pydantic import BaseModel, ConfigDict
 
 
@@ -101,6 +102,7 @@ class IbkrFlexProviderEvidenceManifest(_EvidenceModel):
     adapter_kind: Literal["IBKR_FLEX_XML_V1"]
     status: Literal["UNVERIFIED", "VERIFIED"]
     query_template_id: str | None
+    query_template_relative_path: str | None = None
     query_template_sha256: str | None
     field_contract: IbkrFlexFieldContract | None
     official_sources: tuple[OfficialEvidenceSource, ...]
@@ -131,6 +133,196 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(chunk)
     return "sha256:" + digest.hexdigest()
+
+
+def _evidence_path(
+    *,
+    relative_path: str,
+    resolved_root: Path,
+    label: str,
+) -> tuple[Path | None, str | None]:
+    candidate = (resolved_root / relative_path).resolve()
+    if not candidate.is_relative_to(resolved_root):
+        return None, f"{label} escapes the evidence root: {relative_path}"
+    if not candidate.is_file():
+        return None, f"{label} is missing: {relative_path}"
+    return candidate, None
+
+
+def _local_name(element: etree._Element) -> str:
+    return etree.QName(element).localname
+
+
+def _elements(root: etree._Element, name: str) -> list[etree._Element]:
+    return [element for element in root.iter() if _local_name(element) == name]
+
+
+def _required_attributes(
+    element: etree._Element,
+    names: tuple[str, ...],
+) -> bool:
+    return all((element.attrib.get(name) or "").strip() for name in names)
+
+
+@dataclass(frozen=True)
+class _FixtureShape:
+    path: str
+    generation: datetime | None
+    coverage_start: date | None
+    coverage_end: date | None
+
+
+def _validate_fixture_semantics(
+    path: Path,
+    *,
+    relative_path: str,
+    semantics: tuple[str, ...],
+    contract: IbkrFlexFieldContract,
+) -> tuple[list[str], _FixtureShape]:
+    reasons: list[str] = []
+    empty_shape = _FixtureShape(relative_path, None, None, None)
+    try:
+        parser = etree.XMLParser(
+            resolve_entities=False,
+            no_network=True,
+            load_dtd=False,
+            recover=False,
+        )
+        root = etree.fromstring(path.read_bytes(), parser=parser)
+    except (OSError, etree.XMLSyntaxError) as exc:
+        return [f"Fixture is not valid XML: {relative_path}: {exc}"], empty_shape
+
+    statements = _elements(root, contract.statement_element)
+    if len(statements) != 1:
+        return [
+            f"Fixture must contain exactly one {contract.statement_element}: "
+            f"{relative_path}"
+        ], empty_shape
+    statement = statements[0]
+    trades = _elements(root, contract.trade_element)
+    corrections = _elements(root, contract.correction_element)
+    cancels = _elements(root, contract.cancel_bust_element)
+
+    generation: datetime | None = None
+    coverage_start: date | None = None
+    coverage_end: date | None = None
+    try:
+        generation = datetime.strptime(
+            statement.attrib[contract.generation_field],
+            contract.generation_time_format,
+        )
+    except (KeyError, ValueError):
+        reasons.append(
+            f"Fixture has invalid generation marker: {relative_path}"
+        )
+    try:
+        coverage_start = datetime.strptime(
+            statement.attrib[contract.from_date_field],
+            contract.statement_date_format,
+        ).date()
+        coverage_end = datetime.strptime(
+            statement.attrib[contract.to_date_field],
+            contract.statement_date_format,
+        ).date()
+    except (KeyError, ValueError):
+        reasons.append(f"Fixture has invalid statement coverage: {relative_path}")
+
+    claimed = set(semantics)
+    if "BASIC_EXECUTION_FIELDS" in claimed:
+        required_trade_fields = (
+            contract.execution_id_field,
+            contract.transaction_id_field,
+            contract.asset_category_field,
+            contract.conid_field,
+            contract.symbol_field,
+            contract.exchange_field,
+            contract.currency_field,
+            contract.side_field,
+            contract.quantity_field,
+            contract.price_field,
+            contract.trade_time_field,
+            contract.open_close_field,
+            contract.execution_status_field,
+        )
+        if not trades or not any(
+            _required_attributes(trade, required_trade_fields)
+            for trade in trades
+        ):
+            reasons.append(
+                f"Fixture does not prove BASIC_EXECUTION_FIELDS: {relative_path}"
+            )
+    if "TRANSACTION_AND_OPEN_CLOSE" in claimed:
+        if not trades or not any(
+            _required_attributes(
+                trade,
+                (
+                    contract.transaction_id_field,
+                    contract.open_close_field,
+                ),
+            )
+            for trade in trades
+        ):
+            reasons.append(
+                "Fixture does not prove TRANSACTION_AND_OPEN_CLOSE: "
+                f"{relative_path}"
+            )
+    if "COMMISSION_SIGN_CURRENCY" in claimed:
+        if not trades or not any(
+            _required_attributes(
+                trade,
+                (
+                    contract.commission_field,
+                    contract.commission_currency_field,
+                ),
+            )
+            for trade in trades
+        ):
+            reasons.append(
+                f"Fixture does not prove COMMISSION_SIGN_CURRENCY: {relative_path}"
+            )
+    if "CORRECTION_CANCEL_TARGETS" in claimed:
+        changes = corrections + cancels
+        if not changes or not all(
+            _required_attributes(
+                change,
+                (
+                    contract.change_event_id_field,
+                    contract.affected_execution_id_field,
+                ),
+            )
+            for change in changes
+        ):
+            reasons.append(
+                f"Fixture does not prove CORRECTION_CANCEL_TARGETS: {relative_path}"
+            )
+    if "FLAT_BOUNDARY" in claimed:
+        inception = (
+            statement.attrib.get(contract.account_inception_date_field) or ""
+        ).strip()
+        snapshots = _elements(root, contract.open_positions_element)
+        has_snapshot = any(
+            (snapshot.attrib.get(contract.open_positions_snapshot_date_field) or "")
+            .strip()
+            for snapshot in snapshots
+        )
+        if not inception and not has_snapshot:
+            reasons.append(
+                f"Fixture does not prove FLAT_BOUNDARY: {relative_path}"
+            )
+    if "COVERAGE_INCLUSIVITY_TIMEZONE" in claimed and (
+        coverage_start is None or coverage_end is None
+    ):
+        reasons.append(
+            "Fixture does not prove COVERAGE_INCLUSIVITY_TIMEZONE: "
+            f"{relative_path}"
+        )
+
+    return reasons, _FixtureShape(
+        relative_path,
+        generation,
+        coverage_start,
+        coverage_end,
+    )
 
 
 def read_provider_evidence_manifest(
@@ -173,6 +365,25 @@ def verify_provider_evidence(
     if manifest.field_contract is None:
         reasons.append("Frozen field contract is missing")
 
+    resolved_root = fixture_root.resolve()
+    if not manifest.query_template_relative_path:
+        reasons.append("Frozen query template artifact path is missing")
+    elif manifest.query_template_sha256 and SHA256_PATTERN.fullmatch(
+        manifest.query_template_sha256
+    ):
+        template_path, reason = _evidence_path(
+            relative_path=manifest.query_template_relative_path,
+            resolved_root=resolved_root,
+            label="Query template artifact",
+        )
+        if reason:
+            reasons.append(reason)
+        elif (
+            template_path is not None
+            and _sha256(template_path) != manifest.query_template_sha256
+        ):
+            reasons.append("Query template artifact hash mismatch")
+
     official_semantics: set[str] = set()
     for source in manifest.official_sources:
         official_semantics.update(source.semantics)
@@ -181,7 +392,7 @@ def verify_provider_evidence(
             reasons.append(reason)
 
     fixture_semantics: set[str] = set()
-    resolved_root = fixture_root.resolve()
+    fixture_shapes: list[tuple[RealFixtureEvidence, _FixtureShape]] = []
     for fixture in manifest.fixtures:
         fixture_semantics.update(fixture.semantics)
         if fixture.query_template_id != manifest.query_template_id:
@@ -191,17 +402,48 @@ def verify_provider_evidence(
         if not SHA256_PATTERN.fullmatch(fixture.sha256):
             reasons.append(f"Invalid fixture SHA-256: {fixture.relative_path}")
             continue
-        candidate = (resolved_root / fixture.relative_path).resolve()
-        if not candidate.is_relative_to(resolved_root):
-            reasons.append(
-                f"Fixture escapes the evidence root: {fixture.relative_path}"
-            )
+        candidate, reason = _evidence_path(
+            relative_path=fixture.relative_path,
+            resolved_root=resolved_root,
+            label="Fixture",
+        )
+        if reason:
+            reasons.append(reason)
             continue
-        if not candidate.is_file():
-            reasons.append(f"Fixture is missing: {fixture.relative_path}")
-            continue
+        assert candidate is not None
         if _sha256(candidate) != fixture.sha256:
             reasons.append(f"Fixture hash mismatch: {fixture.relative_path}")
+            continue
+        if manifest.field_contract is not None:
+            semantic_reasons, shape = _validate_fixture_semantics(
+                candidate,
+                relative_path=fixture.relative_path,
+                semantics=fixture.semantics,
+                contract=manifest.field_contract,
+            )
+            reasons.extend(semantic_reasons)
+            fixture_shapes.append((fixture, shape))
+
+    generation_shapes = [
+        shape
+        for fixture, shape in fixture_shapes
+        if "GENERATION_ORDERING" in fixture.semantics
+        and shape.generation is not None
+        and shape.coverage_start is not None
+        and shape.coverage_end is not None
+    ]
+    generation_pair_proven = any(
+        left.generation != right.generation
+        and left.coverage_start <= right.coverage_end
+        and right.coverage_start <= left.coverage_end
+        for index, left in enumerate(generation_shapes)
+        for right in generation_shapes[index + 1 :]
+    )
+    if "GENERATION_ORDERING" in fixture_semantics and not generation_pair_proven:
+        reasons.append(
+            "Real fixtures do not include an overlapping pair with distinct "
+            "generation markers"
+        )
 
     missing_official = sorted(REQUIRED_SEMANTICS - official_semantics)
     if missing_official:

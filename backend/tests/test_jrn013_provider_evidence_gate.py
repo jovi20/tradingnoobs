@@ -56,14 +56,59 @@ def field_contract() -> dict:
     }
 
 
-def verified_payload(fixture_hash: str) -> dict:
+def statement_xml(*, generation: str, to_date: str) -> bytes:
+    return f"""
+<FlexQueryResponse>
+  <FlexStatements>
+    <FlexStatement
+      accountId="REDACTED"
+      fromDate="20260701"
+      toDate="{to_date}"
+      whenGenerated="{generation}"
+      accountInceptionDate="20200101"
+    >
+      <Trades>
+        <Trade
+          ibExecID="REDACTED-EXEC-1"
+          transactionID="100"
+          assetCategory="STK"
+          conid="REDACTED-CONID"
+          symbol="REDACTED"
+          listingExchange="NASDAQ"
+          currency="USD"
+          buySell="BUY"
+          quantity="1"
+          tradePrice="100"
+          dateTime="20260701;093000"
+          openCloseIndicator="O"
+          tradeStatus="EXECUTED"
+          ibCommission="-1"
+          ibCommissionCurrency="USD"
+        />
+        <TradeCorrection
+          sourceEventID="REDACTED-CORRECTION-1"
+          affectedIBExecID="REDACTED-EXEC-1"
+        />
+      </Trades>
+    </FlexStatement>
+  </FlexStatements>
+</FlexQueryResponse>
+""".strip().encode("utf-8")
+
+
+def verified_payload(
+    first_fixture_hash: str,
+    second_fixture_hash: str,
+    template_hash: str,
+) -> dict:
     semantics = sorted(REQUIRED_SEMANTICS)
     return {
         "schema_version": 1,
         "adapter_kind": "IBKR_FLEX_XML_V1",
         "status": "VERIFIED",
         "query_template_id": "JOURNAL_FLEX_V1",
-        "query_template_sha256": f"sha256:{'a' * 64}",
+        "query_template_relative_path": "query-template.json",
+        "query_template_sha256": template_hash,
         "field_contract": field_contract(),
         "official_sources": [
             {
@@ -75,12 +120,20 @@ def verified_payload(fixture_hash: str) -> dict:
         ],
         "fixtures": [
             {
-                "relative_path": "statement.xml",
-                "sha256": fixture_hash,
+                "relative_path": "statement-1.xml",
+                "sha256": first_fixture_hash,
                 "classification": "REDACTED_REAL",
                 "redacted": True,
                 "query_template_id": "JOURNAL_FLEX_V1",
                 "semantics": semantics,
+            },
+            {
+                "relative_path": "statement-2.xml",
+                "sha256": second_fixture_hash,
+                "classification": "REDACTED_REAL",
+                "redacted": True,
+                "query_template_id": "JOURNAL_FLEX_V1",
+                "semantics": ["GENERATION_ORDERING"],
             }
         ],
         "unverified_reasons": [],
@@ -94,13 +147,22 @@ def test_repository_manifest_fails_closed():
 
 
 def test_complete_official_and_real_fixture_evidence_can_verify(tmp_path):
-    fixture = tmp_path / "statement.xml"
-    fixture.write_bytes(b"<redacted-real-fixture />")
-    fixture_hash = "sha256:" + hashlib.sha256(
-        fixture.read_bytes()
-    ).hexdigest()
+    template = tmp_path / "query-template.json"
+    template.write_bytes(b'{"query":"JOURNAL_FLEX_V1"}')
+    first = tmp_path / "statement-1.xml"
+    first.write_bytes(
+        statement_xml(generation="20260702;120000", to_date="20260701")
+    )
+    second = tmp_path / "statement-2.xml"
+    second.write_bytes(
+        statement_xml(generation="20260703;120000", to_date="20260702")
+    )
+    hashes = [
+        "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in (first, second, template)
+    ]
     manifest = IbkrFlexProviderEvidenceManifest.model_validate(
-        verified_payload(fixture_hash)
+        verified_payload(*hashes)
     )
 
     contract = verify_provider_evidence(manifest, fixture_root=tmp_path)
@@ -110,9 +172,19 @@ def test_complete_official_and_real_fixture_evidence_can_verify(tmp_path):
 
 
 def test_fixture_hash_and_semantic_gaps_fail_closed(tmp_path):
-    fixture = tmp_path / "statement.xml"
-    fixture.write_bytes(b"<changed />")
-    payload = verified_payload(f"sha256:{'b' * 64}")
+    template = tmp_path / "query-template.json"
+    template.write_bytes(b"{}")
+    first = tmp_path / "statement-1.xml"
+    first.write_bytes(b"<changed />")
+    second = tmp_path / "statement-2.xml"
+    second.write_bytes(
+        statement_xml(generation="20260703;120000", to_date="20260702")
+    )
+    payload = verified_payload(
+        f"sha256:{'b' * 64}",
+        "sha256:" + hashlib.sha256(second.read_bytes()).hexdigest(),
+        "sha256:" + hashlib.sha256(template.read_bytes()).hexdigest(),
+    )
     payload["official_sources"][0]["semantics"] = ["BASIC_EXECUTION_FIELDS"]
     manifest = IbkrFlexProviderEvidenceManifest.model_validate(payload)
 
@@ -126,10 +198,17 @@ def test_fixture_hash_and_semantic_gaps_fail_closed(tmp_path):
 def test_non_ibkr_official_url_and_fixture_path_escape_are_rejected(tmp_path):
     outside = tmp_path.parent / "outside.xml"
     outside.write_bytes(b"<outside />")
-    fixture_hash = "sha256:" + hashlib.sha256(
-        outside.read_bytes()
-    ).hexdigest()
-    payload = verified_payload(fixture_hash)
+    template = tmp_path / "query-template.json"
+    template.write_bytes(b"{}")
+    second = tmp_path / "statement-2.xml"
+    second.write_bytes(
+        statement_xml(generation="20260703;120000", to_date="20260702")
+    )
+    payload = verified_payload(
+        "sha256:" + hashlib.sha256(outside.read_bytes()).hexdigest(),
+        "sha256:" + hashlib.sha256(second.read_bytes()).hexdigest(),
+        "sha256:" + hashlib.sha256(template.read_bytes()).hexdigest(),
+    )
     payload["official_sources"][0]["url"] = "https://example.com/fields"
     payload["fixtures"][0]["relative_path"] = "../outside.xml"
     manifest = IbkrFlexProviderEvidenceManifest.model_validate(payload)
@@ -139,3 +218,23 @@ def test_non_ibkr_official_url_and_fixture_path_escape_are_rejected(tmp_path):
 
     assert "hosted by IBKR" in str(failure.value)
     assert "escapes the evidence root" in str(failure.value)
+
+
+def test_semantic_labels_cannot_verify_an_empty_xml_fixture(tmp_path):
+    template = tmp_path / "query-template.json"
+    template.write_bytes(b"{}")
+    first = tmp_path / "statement-1.xml"
+    first.write_bytes(b"<redacted-real-fixture />")
+    second = tmp_path / "statement-2.xml"
+    second.write_bytes(b"<redacted-real-fixture />")
+    payload = verified_payload(
+        "sha256:" + hashlib.sha256(first.read_bytes()).hexdigest(),
+        "sha256:" + hashlib.sha256(second.read_bytes()).hexdigest(),
+        "sha256:" + hashlib.sha256(template.read_bytes()).hexdigest(),
+    )
+    manifest = IbkrFlexProviderEvidenceManifest.model_validate(payload)
+
+    with pytest.raises(IbkrProviderEvidenceError) as failure:
+        verify_provider_evidence(manifest, fixture_root=tmp_path)
+
+    assert "exactly one FlexStatement" in str(failure.value)

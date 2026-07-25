@@ -3,6 +3,7 @@
   "adapter_kind": "IBKR_FLEX_XML_V1",
   "status": "UNVERIFIED",
   "query_template_id": null,
+  "query_template_relative_path": null,
   "query_template_sha256": null,
   "field_contract": null,
   "official_sources": [],
