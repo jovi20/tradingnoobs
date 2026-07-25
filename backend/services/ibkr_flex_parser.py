@@ -8,7 +8,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
-from typing import Any
+from typing import Any, Literal
 
 from lxml import etree
 
@@ -80,6 +80,14 @@ class ParsedIbkrFlexStatement:
     coverage_end_exclusive: date
     source_timezone: str
     events: tuple[NormalizedIbkrFlexEvent, ...]
+    account_inception_date: date | None = None
+    open_positions_snapshot_date: date | None = None
+    open_positions_nonzero_count: int | None = None
+    flat_boundary_evidence: Literal[
+        "ACCOUNT_INCEPTION",
+        "EMPTY_OPEN_POSITIONS",
+        "UNPROVEN",
+    ] = "UNPROVEN"
 
 
 def _local_name(element: etree._Element) -> str:
@@ -152,6 +160,22 @@ def _parse_fee(value: str | None, *, field_name: str) -> Decimal:
             f"IBKR commission must be finite: {field_name}",
         )
     return abs(parsed)
+
+
+def _parse_finite_decimal(value: str, *, field_name: str) -> Decimal:
+    try:
+        parsed = Decimal(value)
+    except InvalidOperation as exc:
+        raise IbkrFlexParseError(
+            "IBKR_INVALID_DECIMAL",
+            f"IBKR field must be numeric: {field_name}",
+        ) from exc
+    if not parsed.is_finite():
+        raise IbkrFlexParseError(
+            "IBKR_INVALID_DECIMAL",
+            f"IBKR field must be finite: {field_name}",
+        )
+    return parsed
 
 
 def _parse_local_time(
@@ -378,6 +402,93 @@ def parse_ibkr_flex_xml(
             "IBKR_STATEMENT_COVERAGE_INVALID",
             "IBKR statement coverage must be a non-empty interval",
         )
+    raw_inception_date = _optional_attribute(
+        statement,
+        fields.account_inception_date_field,
+    )
+    account_inception_date = (
+        _parse_statement_date(
+            raw_inception_date,
+            format_string=fields.statement_date_format,
+            field_name=fields.account_inception_date_field,
+        )
+        if raw_inception_date is not None
+        else None
+    )
+
+    open_positions_containers = [
+        item
+        for item in statement.iter()
+        if _local_name(item) == fields.open_positions_element
+    ]
+    if len(open_positions_containers) > 1:
+        raise IbkrFlexParseError(
+            "IBKR_OPEN_POSITIONS_SNAPSHOT_INVALID",
+            "IBKR statement must contain at most one OpenPositions snapshot",
+        )
+    open_positions_snapshot_date: date | None = None
+    open_positions_nonzero_count: int | None = None
+    if open_positions_containers:
+        container = open_positions_containers[0]
+        raw_snapshot_date = _required_attribute(
+            container,
+            fields.open_positions_snapshot_date_field,
+            code="IBKR_OPEN_POSITIONS_SNAPSHOT_INVALID",
+        )
+        open_positions_snapshot_date = _parse_statement_date(
+            raw_snapshot_date,
+            format_string=fields.statement_date_format,
+            field_name=fields.open_positions_snapshot_date_field,
+        )
+        if open_positions_snapshot_date != coverage_start:
+            raise IbkrFlexParseError(
+                "IBKR_OPEN_POSITIONS_SNAPSHOT_INVALID",
+                "IBKR OpenPositions snapshot must be at statement fromDate",
+            )
+        open_positions_nonzero_count = 0
+        for position in container:
+            if not isinstance(position.tag, str):
+                continue
+            if _local_name(position) != fields.open_position_element:
+                raise IbkrFlexParseError(
+                    "IBKR_OPEN_POSITIONS_SNAPSHOT_INVALID",
+                    "IBKR OpenPositions snapshot contains an unknown element",
+                )
+            position_account = _optional_attribute(
+                position,
+                fields.account_field,
+            )
+            if (
+                position_account is not None
+                and position_account.upper() != account_ref
+            ):
+                raise IbkrFlexParseError(
+                    "IBKR_MULTIPLE_ACCOUNTS",
+                    "IBKR XML must contain exactly one external account",
+                )
+            position_quantity = _parse_finite_decimal(
+                _required_attribute(
+                    position,
+                    fields.open_position_quantity_field,
+                    code="IBKR_OPEN_POSITIONS_SNAPSHOT_INVALID",
+                ),
+                field_name=fields.open_position_quantity_field,
+            )
+            if position_quantity != 0:
+                open_positions_nonzero_count += 1
+
+    if (
+        account_inception_date is not None
+        and coverage_start <= account_inception_date
+    ):
+        flat_boundary_evidence = "ACCOUNT_INCEPTION"
+    elif (
+        open_positions_snapshot_date == coverage_start
+        and open_positions_nonzero_count == 0
+    ):
+        flat_boundary_evidence = "EMPTY_OPEN_POSITIONS"
+    else:
+        flat_boundary_evidence = "UNPROVEN"
     generation_utc = _parse_local_time(
         generation,
         format_string=fields.generation_time_format,
@@ -576,5 +687,9 @@ def parse_ibkr_flex_xml(
         coverage_start=coverage_start,
         coverage_end_exclusive=coverage_end_exclusive,
         source_timezone=source_timezone,
+        account_inception_date=account_inception_date,
+        open_positions_snapshot_date=open_positions_snapshot_date,
+        open_positions_nonzero_count=open_positions_nonzero_count,
+        flat_boundary_evidence=flat_boundary_evidence,
         events=tuple(normalized_events),
     )

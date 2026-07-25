@@ -51,6 +51,11 @@ def provider_contract() -> VerifiedIbkrFlexProviderContract:
             "cancel_bust_element": "TradeCancel",
             "change_event_id_field": "sourceEventID",
             "affected_execution_id_field": "affectedIBExecID",
+            "account_inception_date_field": "accountInceptionDate",
+            "open_positions_element": "OpenPositions",
+            "open_position_element": "OpenPosition",
+            "open_positions_snapshot_date_field": "snapshotDate",
+            "open_position_quantity_field": "position",
         }
     )
     return VerifiedIbkrFlexProviderContract(
@@ -90,17 +95,23 @@ def document(
     *,
     generation: str = "20260725;180000",
     account_id: str = "U1234567",
+    statement_attributes: str = "",
+    statement_sections: str = "",
 ) -> str:
     return (
         '<FlexQueryResponse><FlexStatements count="1">'
         '<FlexStatement accountId="{account_id}" fromDate="20260701" '
-        'toDate="20260725" whenGenerated="{generation}">'
+        'toDate="20260725" whenGenerated="{generation}"'
+        '{statement_attributes}>'
         "<Trades>{events}</Trades>"
+        "{statement_sections}"
         "</FlexStatement></FlexStatements></FlexQueryResponse>"
     ).format(
         account_id=account_id,
         generation=generation,
         events=events,
+        statement_attributes=statement_attributes,
+        statement_sections=statement_sections,
     )
 
 
@@ -161,6 +172,112 @@ def test_fingerprint_excludes_statement_generation_and_file_provenance(
         == second.events[0].source_payload_fingerprint
     )
     assert first.generation_order_key != second.generation_order_key
+
+
+def test_flat_boundary_is_proven_by_account_inception(
+    tmp_path,
+    provider_contract,
+):
+    parsed = parse_ibkr_flex_xml(
+        write_xml(
+            tmp_path,
+            document(
+                trade(),
+                statement_attributes=' accountInceptionDate="20260701"',
+            ),
+        ),
+        source_timezone="UTC",
+        provider_contract=provider_contract,
+    )
+
+    assert parsed.account_inception_date.isoformat() == "2026-07-01"
+    assert parsed.flat_boundary_evidence == "ACCOUNT_INCEPTION"
+    assert parsed.open_positions_snapshot_date is None
+
+
+def test_flat_boundary_requires_explicit_empty_from_date_snapshot(
+    tmp_path,
+    provider_contract,
+):
+    empty = parse_ibkr_flex_xml(
+        write_xml(
+            tmp_path,
+            document(
+                trade(),
+                statement_sections=(
+                    '<OpenPositions snapshotDate="20260701" />'
+                ),
+            ),
+            "empty-positions.xml",
+        ),
+        source_timezone="UTC",
+        provider_contract=provider_contract,
+    )
+    assert empty.flat_boundary_evidence == "EMPTY_OPEN_POSITIONS"
+    assert empty.open_positions_nonzero_count == 0
+
+    nonzero = parse_ibkr_flex_xml(
+        write_xml(
+            tmp_path,
+            document(
+                trade(),
+                statement_sections=(
+                    '<OpenPositions snapshotDate="20260701">'
+                    '<OpenPosition accountId="U1234567" position="2" />'
+                    "</OpenPositions>"
+                ),
+            ),
+            "nonzero-positions.xml",
+        ),
+        source_timezone="UTC",
+        provider_contract=provider_contract,
+    )
+    assert nonzero.flat_boundary_evidence == "UNPROVEN"
+    assert nonzero.open_positions_nonzero_count == 1
+
+    missing = parse_ibkr_flex_xml(
+        write_xml(
+            tmp_path,
+            document(trade()),
+            "missing-positions.xml",
+        ),
+        source_timezone="UTC",
+        provider_contract=provider_contract,
+    )
+    assert missing.flat_boundary_evidence == "UNPROVEN"
+    assert missing.open_positions_nonzero_count is None
+
+
+@pytest.mark.parametrize(
+    "snapshot",
+    [
+        '<OpenPositions snapshotDate="20260630" />',
+        '<OpenPositions snapshotDate="20260701"><Unexpected /></OpenPositions>',
+        (
+            '<OpenPositions snapshotDate="20260701">'
+            '<OpenPosition accountId="U1234567" position="NaN" />'
+            "</OpenPositions>"
+        ),
+    ],
+)
+def test_invalid_open_positions_snapshot_fails_closed(
+    tmp_path,
+    provider_contract,
+    snapshot,
+):
+    with pytest.raises(IbkrFlexParseError) as failure:
+        parse_ibkr_flex_xml(
+            write_xml(
+                tmp_path,
+                document(trade(), statement_sections=snapshot),
+            ),
+            source_timezone="UTC",
+            provider_contract=provider_contract,
+        )
+    assert failure.value.code in {
+        "IBKR_OPEN_POSITIONS_SNAPSHOT_INVALID",
+        "IBKR_INVALID_DECIMAL",
+    }
 
 
 @pytest.mark.parametrize(

@@ -103,6 +103,11 @@ def provider_contract():
             "cancel_bust_element": "TradeCancel",
             "change_event_id_field": "sourceEventID",
             "affected_execution_id_field": "affectedIBExecID",
+            "account_inception_date_field": "accountInceptionDate",
+            "open_positions_element": "OpenPositions",
+            "open_position_element": "OpenPosition",
+            "open_positions_snapshot_date_field": "snapshotDate",
+            "open_position_quantity_field": "position",
         }
     )
     return VerifiedIbkrFlexProviderContract(

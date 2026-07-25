@@ -73,6 +73,11 @@ class IbkrFlexFieldContract(_EvidenceModel):
     cancel_bust_element: str
     change_event_id_field: str
     affected_execution_id_field: str
+    account_inception_date_field: str
+    open_positions_element: str
+    open_position_element: str
+    open_positions_snapshot_date_field: str
+    open_position_quantity_field: str
 
 
 class OfficialEvidenceSource(_EvidenceModel):
