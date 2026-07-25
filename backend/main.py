@@ -7,7 +7,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app_bootstrap import bootstrap_schema_if_enabled, resolve_auto_create_schema_enabled
-from config import get_settings
+from config import get_settings, validate_release_settings
 from database import Base, engine
 from observability import add_error_handlers, add_observability_middleware
 from release_profile import (
@@ -24,6 +24,7 @@ app_settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    validate_release_settings(app_settings)
     bootstrap_schema_if_enabled(
         metadata=Base.metadata,
         engine=engine,
@@ -68,6 +69,7 @@ def create_app(release_profile: ReleaseProfile | str | None = None) -> FastAPI:
         daily,
         dashboard,
         journal,
+        open_registration,
         positions,
         settings as settings_router,
         strategies,
@@ -78,22 +80,32 @@ def create_app(release_profile: ReleaseProfile | str | None = None) -> FastAPI:
 
     for router in (
         auth.router,
-        strategies.router,
         dashboard.router,
-        daily.router,
         settings_router.router,
-        accounts.router,
         admin.router,
-        positions.router,
-        journal.router,
-        transactions.router,
+        open_registration.router,
         timeline.build_router(
             include_ai_contract=False,
             include_optional_event_contract=False,
         ),
-        trading_positions.router,
     ):
         application.include_router(router)
+
+    from services.timezone_service import require_journal_write_timezone
+
+    for router in (
+        strategies.router,
+        daily.router,
+        accounts.router,
+        positions.router,
+        journal.router,
+        transactions.router,
+        trading_positions.router,
+    ):
+        application.include_router(
+            router,
+            dependencies=[Depends(require_journal_write_timezone)],
+        )
 
     from routers.disabled_capabilities import (
         ADMIN_AI_DISABLED_ROUTES,
@@ -109,8 +121,6 @@ def create_app(release_profile: ReleaseProfile | str | None = None) -> FastAPI:
         INSIGHT_RUNS_LAZY_ROUTES,
         MARKET_DISABLED_ROUTES,
         MARKET_LAZY_ROUTES,
-        OPEN_REGISTRATION_DISABLED_ROUTES,
-        OPEN_REGISTRATION_LAZY_ROUTES,
         PDF_EXPORT_DISABLED_ROUTES,
         PDF_EXPORT_LAZY_ROUTES,
         POSITION_MARKET_ANALYSIS_DISABLED_ROUTES,
@@ -205,15 +215,6 @@ def create_app(release_profile: ReleaseProfile | str | None = None) -> FastAPI:
             public_route=public_route,
         )
 
-    include_allowlisted_lazy_routes(
-        prefix="/api/auth",
-        capability=RuntimeCapability.OPEN_REGISTRATION,
-        module_name="routers.open_registration",
-        router_attribute="router",
-        lazy_routes=OPEN_REGISTRATION_LAZY_ROUTES,
-        disabled_routes=OPEN_REGISTRATION_DISABLED_ROUTES,
-        public_route=True,
-    )
     include_allowlisted_lazy_routes(
         prefix="/api/admin",
         capability=RuntimeCapability.AI_INSIGHTS,

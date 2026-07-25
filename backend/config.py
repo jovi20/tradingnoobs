@@ -6,13 +6,16 @@ from functools import lru_cache
 from typing import Optional
 
 
+DEFAULT_DEVELOPMENT_SECRET_KEY = "your-super-secret-key-change-in-production"
+
+
 class Settings(BaseSettings):
     # Database
     # In production, use "postgresql://user:pass@db_host:5432/db_name"
     database_url: str = "sqlite:///./tradingnoobs.db"
     
     # Security
-    secret_key: str = "your-super-secret-key-change-in-production"
+    secret_key: str = DEFAULT_DEVELOPMENT_SECRET_KEY
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 43200  # Default 30 days for better experience
     
@@ -78,3 +81,17 @@ def get_market_provider_settings() -> MarketProviderSettings:
 @lru_cache()
 def get_broker_provider_settings() -> BrokerProviderSettings:
     return BrokerProviderSettings()
+
+
+def validate_release_settings(settings: Settings) -> None:
+    if settings.env_name.strip().lower() != "production":
+        return
+    secret_key = settings.secret_key.strip()
+    if (
+        len(secret_key) < 32
+        or secret_key == DEFAULT_DEVELOPMENT_SECRET_KEY
+        or len(set(secret_key)) < 8
+    ):
+        raise RuntimeError(
+            "Production SECRET_KEY must be a non-default, high-entropy value of at least 32 characters"
+        )

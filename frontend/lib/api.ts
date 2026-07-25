@@ -55,18 +55,7 @@ export interface UserSettings {
     user_id: number
     theme: string
     up_color?: 'GREEN' | 'RED'
-    display_currency?: 'USD' | 'HKD' | 'CNY' | 'EUR' | 'GBP'
-    ibkr_flex_query_id?: string
-    ibkr_flex_token?: string
-    ibkr_flex_start_date?: string
-    binance_api_key?: string
-    binance_api_secret?: string
-    binance_api_secret_configured?: boolean
-    binance_market_type?: 'SPOT' | 'USD_M_FUTURES'
-    binance_symbols?: string[]
-    finnhub_api_key?: string
-    llm_api_url?: string
-    llm_model?: string
+    display_currency?: 'USD'
 }
 
 export interface BrokerConnectionTestResponse {
@@ -316,6 +305,13 @@ export interface UserProfileUpdate {
     timezone?: string
 }
 
+export interface InviteRegistrationRequest {
+    email: string
+    password: string
+    invite_code: string
+    timezone: string
+}
+
 export interface PasswordChangeRequest {
     current_password: string
     new_password: string
@@ -456,6 +452,13 @@ async function fetchAPI(
 // ============== Auth API ==============
 
 export const authAPI = {
+    register: async (data: InviteRegistrationRequest): Promise<User> => {
+        return fetchAPI('/auth/register', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        })
+    },
+
     login: async (email: string, password: string) => {
         const formData = new URLSearchParams()
         formData.append('username', email)

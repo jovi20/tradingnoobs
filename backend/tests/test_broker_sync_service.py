@@ -8,7 +8,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from database import Base
-from models import BrokerExecution, User, UserSettings
+from models import BrokerExecution, IntegrationCredential, User, UserSettings
+from services.credential_service import encrypt_secret
 from services.broker_sync.service import (
     _normalize_binance_trades,
     _parse_ibkr_flex_executions,
@@ -93,14 +94,24 @@ class BrokerSyncServiceTests(unittest.TestCase):
         self.assertEqual(execution.idempotency_key, f"BINANCE:{self.user.id}:SPOT:BTCUSDT:99")
 
     def test_binance_sync_persists_new_executions_idempotently(self):
-        self.db.add(
+        self.db.add_all(
+            [
             UserSettings(
                 user_id=self.user.id,
-                binance_api_key="api-key",
-                binance_api_secret="api-secret",
                 binance_market_type="SPOT",
                 binance_symbols=["BTCUSDT"],
-            )
+            ),
+            IntegrationCredential(
+                provider_key="binance",
+                credential_key="api_key",
+                secret_ciphertext=encrypt_secret("api-key"),
+            ),
+            IntegrationCredential(
+                provider_key="binance",
+                credential_key="api_secret",
+                secret_ciphertext=encrypt_secret("api-secret"),
+            ),
+            ]
         )
         self.db.commit()
 

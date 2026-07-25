@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useTheme } from '@/components/ThemeProvider'
 import Image from 'next/image'
+import Link from 'next/link'
 import { AlertCircle, BookOpen, Clock3, ClipboardCheck } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -129,6 +130,12 @@ export default function LoginPage() {
                         </Button>
                     </form>
 
+                    <p className="mt-6 text-center text-sm text-ink-muted">
+                        已收到邀请码？{' '}
+                        <Link href="/register" className="font-medium text-ink hover:underline">
+                            创建账户
+                        </Link>
+                    </p>
                 </div>
             </main>
         </div>

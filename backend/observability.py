@@ -8,6 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from services.redaction import sanitize_for_observability
 
 
 REQUEST_ID_HEADER = "X-Request-ID"
@@ -49,7 +50,9 @@ def log_event(logger: logging.Logger, level: str, event: str, **fields) -> None:
     log_method = getattr(logger, level_name, logger.info)
     field_parts = [f"event={event}"]
     for key in sorted(fields):
-        field_parts.append(f"{key}={fields[key]}")
+        field_parts.append(
+            f"{key}={sanitize_for_observability(fields[key], field_name=key)}"
+        )
     log_method(" ".join(field_parts))
 
 

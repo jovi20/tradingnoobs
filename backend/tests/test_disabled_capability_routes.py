@@ -14,7 +14,6 @@ from release_profile import DeploymentCapabilityPolicy, ReleaseProfile
 
 
 KNOWN_DISABLED_ROUTES = (
-    ("POST", "/api/auth/register", "OPEN_REGISTRATION"),
     ("POST", "/api/admin/test-llm", "AI_INSIGHTS"),
     ("GET", "/api/market/validate/AAPL", "MARKET"),
     ("GET", "/api/market/quote/AAPL", "MARKET"),
@@ -137,7 +136,7 @@ class DisabledCapabilityRouteContractTests(unittest.TestCase):
         self.assertFalse(any(path.startswith("/api/v1/insights") for path in paths))
         self.assertFalse(any(path.startswith("/api/risk") for path in paths))
         self.assertNotIn("/api/admin/test-llm", paths)
-        self.assertNotIn("/api/auth/register", paths)
+        self.assertIn("/api/auth/register", paths)
 
     def test_clean_baseline_process_does_not_import_real_optional_routers(self):
         backend_dir = Path(__file__).resolve().parents[1]

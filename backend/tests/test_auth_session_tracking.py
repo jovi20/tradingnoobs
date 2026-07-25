@@ -11,6 +11,8 @@ from database import Base, get_db
 from main import create_app
 from models import AuthToken, FeatureFlag, User, UserCredential, UserSession
 from release_profile import DeploymentCapabilityPolicy, ReleaseProfile, RuntimeCapability
+from services.auth_service import create_user
+from services.invitation_service import create_invitation
 
 
 class AuthSessionTrackingTests(unittest.TestCase):
@@ -38,6 +40,20 @@ class AuthSessionTrackingTests(unittest.TestCase):
                 )
             )
             db.commit()
+            admin = create_user(
+                db,
+                "invite-admin@example.com",
+                "password123",
+                timezone_name="UTC",
+            )
+            admin.role = "admin"
+            db.add(admin)
+            db.commit()
+            _, self.invite_code = create_invitation(
+                db,
+                actor=admin,
+                expires_in_hours=24,
+            )
         finally:
             db.close()
 
@@ -67,7 +83,8 @@ class AuthSessionTrackingTests(unittest.TestCase):
             json={
                 "email": "Trader@Example.com",
                 "password": "password123",
-                "invite_code": "bigme",
+                "invite_code": self.invite_code,
+                "timezone": "UTC",
             },
         )
         self.assertEqual(register_response.status_code, 201)
@@ -104,7 +121,8 @@ class AuthSessionTrackingTests(unittest.TestCase):
             json={
                 "email": "Trader@Example.com",
                 "password": "password123",
-                "invite_code": "bigme",
+                "invite_code": self.invite_code,
+                "timezone": "UTC",
             },
         )
 
@@ -153,7 +171,8 @@ class AuthSessionTrackingTests(unittest.TestCase):
             json={
                 "email": "Trader@Example.com",
                 "password": "password123",
-                "invite_code": "bigme",
+                "invite_code": self.invite_code,
+                "timezone": "UTC",
             },
         )
         login_response = self.client.post(
@@ -182,7 +201,8 @@ class AuthSessionTrackingTests(unittest.TestCase):
             json={
                 "email": "Trader@Example.com",
                 "password": "password123",
-                "invite_code": "bigme",
+                "invite_code": self.invite_code,
+                "timezone": "UTC",
             },
         )
         first_login = self.client.post(
@@ -244,7 +264,8 @@ class AuthSessionTrackingTests(unittest.TestCase):
             json={
                 "email": "Trader@Example.com",
                 "password": "password123",
-                "invite_code": "bigme",
+                "invite_code": self.invite_code,
+                "timezone": "UTC",
             },
         )
         login_response = self.client.post(

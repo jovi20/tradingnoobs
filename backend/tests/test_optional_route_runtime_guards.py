@@ -234,7 +234,6 @@ class OptionalRouteRuntimeGuardTests(unittest.TestCase):
             ("/api/admin/test-llm", RuntimeCapability.AI_INSIGHTS),
             ("/api/insights/analyze", RuntimeCapability.AI_INSIGHTS),
             ("/api/broker-sync/ibkr/sync", RuntimeCapability.BROKER_SYNC),
-            ("/api/auth/register", RuntimeCapability.OPEN_REGISTRATION),
         )
 
         for path, capability in requests:
@@ -347,120 +346,6 @@ class OptionalRouteRuntimeGuardTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertGreaterEqual(len(opened_paths), 2)
         self.assertEqual(closed_paths, opened_paths)
-
-    def test_non_global_registration_flag_fails_closed_without_user_creation(self):
-        flag_key = capability_rollout_flag_key(RuntimeCapability.OPEN_REGISTRATION)
-        for actor_targets, rollout_percentage in (
-            (["anonymous-user"], None),
-            ([], 100),
-        ):
-            with self.subTest(
-                actor_targets=actor_targets,
-                rollout_percentage=rollout_percentage,
-            ):
-                flag = FeatureFlag(
-                    key=flag_key,
-                    enabled=True,
-                    actor_targets=actor_targets,
-                    rollout_percentage=rollout_percentage,
-                )
-                self.db.add(flag)
-                self.db.commit()
-                before_count = self.db.query(User).count()
-
-                response = self.client.post(
-                    "/api/auth/register",
-                    json={
-                        "email": "blocked-nonglobal@example.com",
-                        "password": "password123",
-                        "invite_code": "bigme",
-                    },
-                )
-
-                self.assertEqual(response.status_code, 404, response.text)
-                self.assertEqual(
-                    response.json()["error"]["code"],
-                    "FEATURE_DISABLED",
-                )
-                self.db.expire_all()
-                self.assertEqual(self.db.query(User).count(), before_count)
-                self.db.delete(flag)
-                self.db.commit()
-
-    def test_enabled_public_request_imports_handler_only_after_preflight(self):
-        backend_dir = Path(__file__).resolve().parents[1]
-        with tempfile.TemporaryDirectory() as temp_dir:
-            database_path = Path(temp_dir) / "lazy-registration.db"
-            script = "\n".join(
-                (
-                    "import sys",
-                    "from database import Base, SessionLocal, engine",
-                    "from models import FeatureFlag",
-                    "Base.metadata.create_all(bind=engine)",
-                    "with SessionLocal() as db:",
-                    "    db.add(FeatureFlag(key='capability.open_registration.v1', enabled=True, actor_targets=[]))",
-                    "    db.commit()",
-                    "import main",
-                    "assert 'routers.open_registration' not in sys.modules",
-                    "from fastapi.testclient import TestClient",
-                    "with TestClient(main.app) as client:",
-                    "    response = client.post('/api/auth/register', json={",
-                    "        'email': 'lazy-import@example.com',",
-                    "        'password': 'password123',",
-                    "        'invite_code': 'invalid',",
-                    "    })",
-                    "assert response.status_code == 400, response.text",
-                    "assert 'routers.open_registration' in sys.modules",
-                )
-            )
-            env = os.environ.copy()
-            env["DATABASE_URL"] = f"sqlite:///{database_path}"
-            env["RELEASE_PROFILE"] = "DEVELOPMENT_FULL"
-            env["DEPLOYMENT_CAPABILITY_ALLOWLIST"] = "OPEN_REGISTRATION"
-            env["PYTHONPATH"] = str(backend_dir)
-            completed = subprocess.run(
-                [sys.executable, "-c", script],
-                cwd=backend_dir,
-                env=env,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-
-        self.assertEqual(completed.returncode, 0, completed.stderr or completed.stdout)
-
-    def test_missing_open_registration_flag_stops_user_creation(self):
-        before_count = self.db.query(User).count()
-
-        response = self.client.post(
-            "/api/auth/register",
-            json={
-                "email": "blocked-registration@example.com",
-                "password": "password123",
-                "invite_code": "bigme",
-            },
-        )
-
-        self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.json()["error"]["code"], "FEATURE_DISABLED")
-        self.assertEqual(response.json()["detail"]["capability"], "OPEN_REGISTRATION")
-        self.db.expire_all()
-        self.assertEqual(self.db.query(User).count(), before_count)
-
-    def test_enabled_open_registration_flag_reaches_legacy_handler(self):
-        self._enable(RuntimeCapability.OPEN_REGISTRATION)
-
-        response = self.client.post(
-            "/api/auth/register",
-            json={
-                "email": "enabled-registration@example.com",
-                "password": "password123",
-                "invite_code": "bigme",
-            },
-        )
-
-        self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.json()["email"], "enabled-registration@example.com")
 
     def test_market_capability_cannot_call_ai_classification(self):
         self._enable(RuntimeCapability.MARKET)

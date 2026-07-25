@@ -1,7 +1,12 @@
 const AUTH_ERROR_MESSAGES: Array<[pattern: RegExp, message: string]> = [
     [/incorrect email or password/i, '邮箱或密码错误'],
     [/login failed/i, '邮箱或密码错误'],
-    [/invalid invitation code/i, '邀请码无效，请检查后重试'],
+    [/invalid invitation code|invitation cannot be redeemed|INVITATION_INVALID/i, '邀请码无效，请检查后重试'],
+    [/INVITATION_EXPIRED/i, '邀请码已过期，请联系管理员重新获取'],
+    [/INVITATION_REVOKED/i, '邀请码已被撤销，请联系管理员'],
+    [/INVITATION_ALREADY_REDEEMED/i, '邀请码已使用，不能再次注册'],
+    [/TIMEZONE_INVALID|valid IANA timezone/i, '请选择有效的时区'],
+    [/AUTH_RATE_LIMITED|too many/i, '尝试次数过多，请稍后再试'],
     [/email already registered/i, '该邮箱已注册，请直接登录'],
     [/inactive user|user(?: account)? is inactive/i, '账户已停用，请联系管理员'],
     [/at least 8 characters/i, '密码至少需要 8 个字符'],

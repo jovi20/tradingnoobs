@@ -77,7 +77,7 @@ class ReleaseDocumentationBoundaryTests(unittest.TestCase):
         self.assertIn("SUPERSEDED", readiness_prefix)
         self.assertIn("SUPERSEDED", rollback_prefix)
 
-    def test_registration_docs_do_not_claim_the_shared_code_route_is_available(self):
+    def test_registration_docs_distinguish_invite_onboarding_from_open_registration(self):
         backend_readme = (self.repository_root / "backend" / "README.md").read_text(
             encoding="utf-8"
         )
@@ -88,13 +88,12 @@ class ReleaseDocumentationBoundaryTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertIn("/api/auth/register` 当前也属于 hard-off", backend_readme)
-        self.assertIn("`/register` 路由模块已删除", frontend_readme)
-        self.assertIn("`/register` 路由模块已删除", developer_guide)
-        self.assertIn("`/api/auth/register` 也未注册", developer_guide)
-        self.assertNotIn("invite-only `/api/auth/register` 仍是核心 onboarding 路径", backend_readme)
-        self.assertNotIn("`/register` 保留给 invite-only onboarding", frontend_readme)
-        self.assertNotIn("`/register` 是例外", developer_guide)
+        self.assertIn("invite-only onboarding 是独立的基线能力", backend_readme)
+        self.assertIn("`/register` 仅提供一次性、限时邀请码", frontend_readme)
+        self.assertIn("`OPEN_REGISTRATION` 继续关闭", developer_guide)
+        self.assertIn("有效 IANA 时区", developer_guide)
+        self.assertNotIn("`/register` 路由模块已删除", frontend_readme)
+        self.assertNotIn("`/api/auth/register` 也未注册", developer_guide)
 
     def test_active_docs_do_not_offer_public_migration_fallback_headers(self):
         developer_guide = (self.repository_root / "docs" / "DEVELOPER_GUIDE.md").read_text(

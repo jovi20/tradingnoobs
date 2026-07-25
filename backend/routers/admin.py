@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import re
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 from database import get_db
 from models import (
@@ -9,6 +9,7 @@ from models import (
     BusinessLockStatus,
     FeatureFlag,
     IntegrationCredential,
+    Invitation,
     JobDefinition,
     JobRun,
     JobRunStatus,
@@ -30,6 +31,9 @@ from schemas import (
     IntegrationCredentialActiveUpdate,
     IntegrationCredentialResponse,
     IntegrationCredentialUpdate,
+    InvitationCreate,
+    InvitationCreatedResponse,
+    InvitationResponse,
     PlatformSettingResponse,
     PlatformSettingUpdate,
     SystemSettingResponse,
@@ -50,6 +54,11 @@ from services.admin_user_service import (
 from services.backup_service import BackupProviderNotConfigured, detect_database_backend, list_database_backups, trigger_database_backup
 from services.credential_service import decrypt_secret, encrypt_secret, mask_secret
 from services.job_service import cancel_job_run, force_cancel_running_job_run, requeue_job_run
+from services.invitation_service import (
+    InvitationAlreadyRedeemed,
+    create_invitation,
+    revoke_invitation,
+)
 from services.capability_service import (
     CAPABILITY_ROLLOUT_FLAG_KEYS,
     is_effective_capability_enabled,
@@ -367,14 +376,8 @@ def _require_setting_capability(key: str) -> None:
     if _is_deployment_owned_setting_key(key) or _is_capability_namespace_key(key):
         _raise_configuration_key_unavailable()
     if _is_secret_identifier(key):
-        capability = _registered_capability_for_identifier(
-            key,
-            provider_prefix_only=False,
-        )
-        if capability is None:
-            _raise_secret_configuration_unavailable()
-    else:
-        capability = _optional_capability_for_identifiers(key)
+        _raise_secret_configuration_unavailable()
+    capability = _optional_capability_for_identifiers(key)
     _require_optional_capability(capability)
 
 
@@ -396,11 +399,7 @@ def _setting_key_is_visible(key: str) -> bool:
     if _is_deployment_owned_setting_key(key) or _is_capability_namespace_key(key):
         return False
     if _is_secret_identifier(key):
-        capability = _registered_capability_for_identifier(
-            key,
-            provider_prefix_only=False,
-        )
-        return capability is not None and is_capability_enabled(capability)
+        return False
     return _capability_is_visible(_optional_capability_for_identifiers(key))
 
 
@@ -724,6 +723,82 @@ def get_current_admin(current_user: User = Depends(get_current_user)):
             detail="The user doesn't have enough privileges"
         )
     return current_user
+
+
+@router.post(
+    "/invitations",
+    response_model=InvitationCreatedResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_onboarding_invitation(
+    invitation_in: InvitationCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    invitation, code = create_invitation(
+        db,
+        actor=current_admin,
+        expires_in_hours=invitation_in.expires_in_hours,
+        ip_address=request.client.host if request.client else None,
+    )
+    return InvitationCreatedResponse(
+        public_id=invitation.public_id,
+        code=code,
+        expires_at=invitation.expires_at,
+        redeemed_at=invitation.redeemed_at,
+        revoked_at=invitation.revoked_at,
+        created_at=invitation.created_at,
+    )
+
+
+@router.get("/invitations", response_model=List[InvitationResponse])
+def list_onboarding_invitations(
+    limit: int = Query(default=100, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    return (
+        db.query(Invitation)
+        .order_by(Invitation.created_at.desc(), Invitation.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+@router.post(
+    "/invitations/{invitation_public_id}/revoke",
+    response_model=InvitationResponse,
+)
+def revoke_onboarding_invitation(
+    invitation_public_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    invitation = (
+        db.query(Invitation)
+        .filter(Invitation.public_id == invitation_public_id)
+        .with_for_update()
+        .first()
+    )
+    if invitation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="INVITATION_NOT_FOUND",
+        )
+    try:
+        return revoke_invitation(
+            db,
+            invitation=invitation,
+            actor=current_admin,
+            ip_address=request.client.host if request.client else None,
+        )
+    except InvitationAlreadyRedeemed:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="INVITATION_ALREADY_REDEEMED",
+        ) from None
 
 
 def resolve_database_url_for_backup(db: Session) -> str:

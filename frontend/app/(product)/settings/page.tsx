@@ -57,7 +57,13 @@ const LOCALE_OPTIONS = [
 
 const TIMEZONE_OPTIONS = [
     { value: 'Asia/Shanghai', label: '上海（UTC+8）' },
+    { value: 'Asia/Hong_Kong', label: '香港（UTC+8）' },
+    { value: 'Asia/Singapore', label: '新加坡（UTC+8）' },
+    { value: 'Asia/Tokyo', label: '东京（UTC+9）' },
     { value: 'America/New_York', label: '纽约（美东时间）' },
+    { value: 'America/Chicago', label: '芝加哥（美中时间）' },
+    { value: 'Europe/London', label: '伦敦' },
+    { value: 'Europe/Paris', label: '巴黎' },
     { value: 'UTC', label: '协调世界时（UTC）' },
 ]
 
@@ -80,7 +86,7 @@ export default function SettingsPage() {
     })
     const [profileForm, setProfileForm] = useState({
         locale: user?.locale || 'zh-CN',
-        timezone: user?.timezone || 'Asia/Shanghai',
+        timezone: user?.timezone || '',
     })
     const [passwordForm, setPasswordForm] = useState({
         currentPassword: '',
@@ -110,7 +116,9 @@ export default function SettingsPage() {
         {
             label: '个人资料',
             done: Boolean(profileForm.locale && profileForm.timezone),
-            detail: `${LOCALE_LABELS[profileForm.locale] || '简体中文'} · ${TIMEZONE_LABELS[profileForm.timezone] || '上海（UTC+8）'}`,
+            detail: profileForm.timezone
+                ? `${LOCALE_LABELS[profileForm.locale] || '简体中文'} · ${TIMEZONE_LABELS[profileForm.timezone] || profileForm.timezone}`
+                : '请选择时区',
         },
         {
             label: '显示偏好',
@@ -181,6 +189,10 @@ export default function SettingsPage() {
 
     const handleSave = async () => {
         if (!token) return
+        if (!profileForm.timezone) {
+            setError('请先选择时区')
+            return
+        }
         setError('')
         setIsSaving(true)
         try {
@@ -194,7 +206,7 @@ export default function SettingsPage() {
                 settingsAPI.update(token, settingsPayload),
                 authAPI.updateMe(token, {
                     locale: profileForm.locale || 'zh-CN',
-                    timezone: profileForm.timezone || 'Asia/Shanghai',
+                    timezone: profileForm.timezone,
                 }),
             ])
 
@@ -403,6 +415,7 @@ export default function SettingsPage() {
                                     value={profileForm.timezone}
                                     onChange={(event) => setProfileForm((current) => ({ ...current, timezone: event.target.value }))}
                                 >
+                                    <option value="" disabled>请选择时区</option>
                                     {TIMEZONE_OPTIONS.map((item) => (
                                         <option key={item.value} value={item.value}>{item.label}</option>
                                     ))}

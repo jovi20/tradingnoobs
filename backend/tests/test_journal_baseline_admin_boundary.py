@@ -209,8 +209,14 @@ class JournalBaselineAdminBoundaryTests(unittest.TestCase):
             with self.subTest(path=path):
                 response = client.put(path, json=body)
                 self.assertEqual(response.status_code, 404)
-                self.assertEqual(response.json()["error"]["code"], "FEATURE_DISABLED")
-                self.assertEqual(response.json()["detail"]["capability"], capability)
+                if "/integrations/" in path or path.endswith("/llm_model"):
+                    self.assertEqual(response.json()["error"]["code"], "FEATURE_DISABLED")
+                    self.assertEqual(response.json()["detail"]["capability"], capability)
+                else:
+                    self.assertEqual(
+                        response.json()["detail"]["code"],
+                        "SECRET_CONFIGURATION_UNAVAILABLE",
+                    )
                 self.assertNotIn(body[next(iter(body))], response.text)
                 self.assertEqual(self._row_counts(), baseline_counts)
 
@@ -357,7 +363,11 @@ class JournalBaselineAdminBoundaryTests(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 response = client.put(path, json={"value": "registered-secret-value"})
-                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.status_code, 404)
+                self.assertEqual(
+                    response.json()["detail"]["code"],
+                    "SECRET_CONFIGURATION_UNAVAILABLE",
+                )
 
         list_response = client.get("/api/admin/platform/integrations")
         self.assertEqual(list_response.status_code, 200)
@@ -1065,9 +1075,9 @@ class JournalBaselineAdminBoundaryTests(unittest.TestCase):
         platform_response = client.get("/api/admin/platform/settings")
         integration_response = client.get("/api/admin/platform/integrations")
         self.assertEqual(system_response.status_code, 200)
-        self.assertEqual(len(system_response.json()), 3)
+        self.assertEqual(len(system_response.json()), 2)
         self.assertEqual(platform_response.status_code, 200)
-        self.assertEqual(len(platform_response.json()), 3)
+        self.assertEqual(len(platform_response.json()), 1)
         self.assertEqual(integration_response.status_code, 200)
         self.assertEqual(len(integration_response.json()), 2)
         self.assertNotIn("custom", integration_response.text)
@@ -1093,12 +1103,20 @@ class JournalBaselineAdminBoundaryTests(unittest.TestCase):
             json={"value": "replacement-broker-secret"},
         )
 
-        self.assertEqual(setting_response.status_code, 200)
+        self.assertEqual(setting_response.status_code, 404)
+        self.assertEqual(
+            setting_response.json()["detail"]["code"],
+            "SECRET_CONFIGURATION_UNAVAILABLE",
+        )
         self.assertEqual(credential_response.status_code, 200)
         self.assertEqual(active_response.status_code, 200)
         self.assertFalse(active_response.json()["is_active"])
         self.assertEqual(ordinary_response.status_code, 200)
-        self.assertEqual(system_optional_response.status_code, 200)
+        self.assertEqual(system_optional_response.status_code, 404)
+        self.assertEqual(
+            system_optional_response.json()["detail"]["code"],
+            "SECRET_CONFIGURATION_UNAVAILABLE",
+        )
 
     def test_invalid_optional_secret_payload_is_sanitized_before_response(self):
         client = self._client(allow_optional=False)

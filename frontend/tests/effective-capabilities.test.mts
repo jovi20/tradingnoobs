@@ -87,17 +87,25 @@ test('optional UI entries are gated or absent from journal-only surfaces', () =>
   assert.match(insightsClient, /\{canExportPdf && \(/)
 })
 
-test('registration stays unreachable until the invite workflow is implemented', () => {
+test('invite registration is a baseline onboarding path independent of open registration', () => {
   const login = readSource('app/(auth)/login/page.tsx')
   const registerPath = resolve(frontendRoot, 'app/(auth)/register/page.tsx')
   const authContext = readSource('contexts/AuthContext.tsx')
   const api = readSource('lib/api.ts')
 
-  assert.doesNotMatch(login, /\/register|凭邀请注册/)
-  assert.equal(existsSync(registerPath), false)
-  assert.doesNotMatch(
-    authContext,
-    /register:|authAPI\.register|['"]\/register['"]/
-  )
-  assert.doesNotMatch(api, /register:\s*async|['"]\/auth\/register['"]/)
+  assert.match(login, /\/register/)
+  assert.equal(existsSync(registerPath), true)
+  assert.match(authContext, /['"]\/register['"]/)
+  assert.match(api, /register:\s*async|['"]\/auth\/register['"]/)
+  const register = readSource('app/(auth)/register/page.tsx')
+  assert.match(register, /invite_code/)
+  assert.match(register, /timezone/)
+})
+
+test('legacy users must explicitly select a timezone before journal writes', () => {
+  const settings = readSource('app/(product)/settings/page.tsx')
+
+  assert.match(settings, /timezone:\s*user\?\.timezone\s*\|\|\s*['"]['"]/)
+  assert.match(settings, /请选择时区/)
+  assert.doesNotMatch(settings, /timezone:\s*profileForm\.timezone\s*\|\|\s*['"]Asia\/Shanghai['"]/)
 })

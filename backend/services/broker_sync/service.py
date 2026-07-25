@@ -20,6 +20,8 @@ import httpx
 from sqlalchemy.orm import Session
 
 from models import BrokerExecution, BrokerSyncRun, User, UserSettings
+from services.platform_config_service import get_integration_credential_secret
+from services.redaction import sanitize_for_observability
 
 
 BINANCE_SPOT_BASE_URL = "https://api.binance.com"
@@ -101,35 +103,22 @@ def _settings_for_user(db: Session, user: User) -> UserSettings:
 
 
 async def test_ibkr_flex_connection(db: Session, user: User) -> dict[str, Any]:
-    settings = _settings_for_user(db, user)
-    missing = []
-    if not settings.ibkr_flex_query_id:
-        missing.append("Flex Query ID")
-    if not settings.ibkr_flex_token:
-        missing.append("Flex Token")
-    if missing:
-        return {"ok": False, "provider": "IBKR", "message": f"缺少 {', '.join(missing)}"}
-
-    try:
-        reference_code = await _request_ibkr_flex_reference(settings.ibkr_flex_token, settings.ibkr_flex_query_id)
-    except Exception as exc:
-        return {"ok": False, "provider": "IBKR", "message": str(exc)}
-
     return {
-        "ok": True,
+        "ok": False,
         "provider": "IBKR",
-        "message": "Flex Web Service 已返回 reference code",
-        "reference_code": reference_code,
+        "message": "IBKR Flex 仅支持本地文件导入，不提供在线凭据连接",
     }
 
 
 async def test_binance_connection(db: Session, user: User) -> dict[str, Any]:
     settings = _settings_for_user(db, user)
+    api_key = get_integration_credential_secret(db, "binance", "api_key")
+    api_secret = get_integration_credential_secret(db, "binance", "api_secret")
     symbols = settings.binance_symbols or []
     missing = []
-    if not settings.binance_api_key:
+    if not api_key:
         missing.append("API Key")
-    if not settings.binance_api_secret:
+    if not api_secret:
         missing.append("API Secret")
     if not symbols:
         missing.append("同步交易对")
@@ -138,8 +127,8 @@ async def test_binance_connection(db: Session, user: User) -> dict[str, Any]:
 
     try:
         await _fetch_binance_account_trades(
-            api_key=settings.binance_api_key,
-            api_secret=settings.binance_api_secret,
+            api_key=api_key,
+            api_secret=api_secret,
             market_type=settings.binance_market_type or "SPOT",
             symbol=symbols[0],
             start_time=None,
@@ -147,7 +136,11 @@ async def test_binance_connection(db: Session, user: User) -> dict[str, Any]:
             limit=1,
         )
     except Exception as exc:
-        return {"ok": False, "provider": "Binance", "message": str(exc)}
+        return {
+            "ok": False,
+            "provider": "Binance",
+            "message": str(sanitize_for_observability(exc)),
+        }
 
     return {
         "ok": True,
@@ -163,43 +156,7 @@ async def sync_ibkr_flex_executions(
     start_date: date | None = None,
     end_date: date | None = None,
 ) -> BrokerSyncRun:
-    settings = _settings_for_user(db, user)
-    if not settings.ibkr_flex_query_id or not settings.ibkr_flex_token:
-        raise ValueError("IBKR Flex Query ID / Token 未配置")
-
-    requested_start = start_date or settings.ibkr_flex_start_date
-    run = _create_sync_run(
-        db,
-        user=user,
-        provider="IBKR",
-        market_type="FLEX",
-        requested_start_date=requested_start,
-        requested_end_date=end_date,
-        metadata={"query_id": settings.ibkr_flex_query_id},
-    )
-    db.commit()
-
-    try:
-        reference_code = await _request_ibkr_flex_reference(settings.ibkr_flex_token, settings.ibkr_flex_query_id)
-        statement_xml = await _request_ibkr_flex_statement(settings.ibkr_flex_token, reference_code)
-        executions = _parse_ibkr_flex_executions(statement_xml, user_id=user.id)
-        executions = _filter_by_date(executions, start_date=requested_start, end_date=end_date)
-        _persist_executions(db, user=user, run=run, executions=executions)
-        run.status = "SUCCEEDED"
-        run.finished_at = _utc_now()
-        run.metadata_json = {**(run.metadata_json or {}), "reference_code": reference_code}
-        db.commit()
-        db.refresh(run)
-        return run
-    except Exception as exc:
-        db.rollback()
-        run = db.query(BrokerSyncRun).filter(BrokerSyncRun.id == run.id).one()
-        run.status = "FAILED"
-        run.error_message = str(exc)
-        run.finished_at = _utc_now()
-        db.commit()
-        db.refresh(run)
-        raise
+    raise ValueError("IBKR Flex online sync is disabled; upload a local Flex XML file")
 
 
 async def sync_binance_executions(
@@ -210,8 +167,10 @@ async def sync_binance_executions(
     end_date: date | None = None,
 ) -> BrokerSyncRun:
     settings = _settings_for_user(db, user)
+    api_key = get_integration_credential_secret(db, "binance", "api_key")
+    api_secret = get_integration_credential_secret(db, "binance", "api_secret")
     symbols = settings.binance_symbols or []
-    if not settings.binance_api_key or not settings.binance_api_secret:
+    if not api_key or not api_secret:
         raise ValueError("Binance API Key / Secret 未配置")
     if not symbols:
         raise ValueError("Binance 同步交易对未配置")
@@ -232,8 +191,8 @@ async def sync_binance_executions(
         executions: list[NormalizedBrokerExecution] = []
         for symbol in symbols:
             raw_trades = await _fetch_binance_account_trades(
-                api_key=settings.binance_api_key,
-                api_secret=settings.binance_api_secret,
+                api_key=api_key,
+                api_secret=api_secret,
                 market_type=market_type,
                 symbol=symbol,
                 start_time=_as_datetime(start_date),

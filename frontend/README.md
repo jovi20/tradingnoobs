@@ -6,7 +6,7 @@ Next.js 前端，负责交易工作台、Timeline、Dashboard、仓位生命周�
 
 ## JOURNAL Beta 边界
 
-当前 Beta 默认关闭 Broker network sync、Market、AI/Insights、PDF export、risk cards 和 open registration。对应 optional 页面或组件即使仍存在于源码中，也必须从导航和普通设置中移除，并在直接访问时 fail-closed；不要把代码存在描述为用户可用能力。`/register` 路由模块已删除，受控 invite-only onboarding 由 `JRN-003` 实现后才重新开放。
+当前 Beta 默认关闭 Broker network sync、Market、AI/Insights、PDF export、risk cards 和 open registration。对应 optional 页面或组件即使仍存在于源码中，也必须从导航和普通设置中移除，并在直接访问时 fail-closed；不要把代码存在描述为用户可用能力。`/register` 仅提供一次性、限时邀请码 onboarding，不是开放注册；注册必须明确选择有效 IANA 时区。
 
 `IBKR_FLEX_XML_V1` 是 `JRN-013` 至 `JRN-015` 计划中的本地文件导入 adapter，目前尚未实现。前端当前不得展示 Broker Token/Query ID 配置、网络同步按钮或“已连接”状态。
 
@@ -71,5 +71,5 @@ npx tsc --noEmit
 - `lib/api.ts` 是当前 API client，不应继续演变成长期 DTO 契约层。
 - 新图表优先接入 `components/charts/ChartFrame.tsx` 和 `lib/chartSchemas.ts`。
 - Optional capability UI 必须同时服从 deployment ceiling 与 runtime rollout；隐藏入口之外，服务端仍必须独立拒绝。
-- 不要为 Broker Sync、Market、AI/Insights、PDF、risk cards 或 open registration 新增 Beta 导航、设置说明或可用性文案。
+- 不要为 Broker Sync、Market、AI/Insights、PDF、risk cards 或 open registration 新增 Beta 导航、设置说明或可用性文案；invite-only onboarding 不属于 open registration。
 - `tsconfig.tsbuildinfo` 是 TypeScript 增量编译缓存，不应作为源文件维护。

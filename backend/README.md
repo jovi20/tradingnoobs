@@ -2,15 +2,15 @@
 
 FastAPI 后端，负责认证、账户、交易 truth model、Timeline read model、交易日志异步任务和管理员运维 API。
 
-更新时间：2026-07-17
+更新时间：2026-07-25
 
 ## JOURNAL Beta 边界
 
 当前 Beta 默认关闭 `BROKER_SYNC`、`MARKET`、`AI_INSIGHTS`、`PDF_EXPORT`、`RISK_CARDS` 和 `OPEN_REGISTRATION`。仓库中可能保留相应 router、service、schema 和测试，但代码存在不表示路由已注册或功能可用；这些能力不得出现在 Beta OpenAPI、导航、设置或 job/outbox producer 中。
 
-`/api/auth/register` 当前也属于 hard-off：仓库内硬编码共享邀请码不是合格的 invite-only onboarding。`JRN-003` 完成一次性、限时、哈希存储且受审计的邀请码后，才重新开放受控注册路径。
+`OPEN_REGISTRATION` 仍为 hard-off，但 invite-only onboarding 是独立的基线能力：管理员通过 `/api/admin/invitations` 创建一次性、限时、随机且仅哈希存储的邀请码，用户通过 `/api/auth/register` 兑换并提交有效 IANA 时区。共享邀请码和无邀请码注册均不可用。
 
-- Broker 网络同步以及 Broker/行情/LLM 凭据读取和写入均为 `DISABLED`。
+- 普通用户不能保存 Broker、行情或 LLM 凭据。可选能力未来需要平台 secret 时，只能读取受管环境或加密 `IntegrationCredential`。
 - 缺失 `DEPLOYMENT_CAPABILITY_ALLOWLIST` 时 deployment ceiling 为空，数据库 FeatureFlag 不能越过该 ceiling。
 - `IBKR_FLEX_XML_V1` 是 `JRN-013` 至 `JRN-015` 计划中的本地文件 adapter，目前尚未实现；它不访问网络，也不使用 Flex Token 或 Query ID。
 

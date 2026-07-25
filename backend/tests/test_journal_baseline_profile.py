@@ -113,7 +113,7 @@ class JournalBaselineProfileTests(unittest.TestCase):
         paths = self.app.openapi()["paths"]
         self.assertFalse(any(path.startswith("/api/market") for path in paths))
         self.assertFalse(any(path.startswith("/api/broker-sync") for path in paths))
-        self.assertNotIn("/api/auth/register", paths)
+        self.assertIn("/api/auth/register", paths)
         self.assertNotIn("/api/positions/import/upload", paths)
         self.assertNotIn("/api/positions/import/confirm", paths)
         self.assertNotIn("/api/positions/import/template", paths)
@@ -130,25 +130,6 @@ class JournalBaselineProfileTests(unittest.TestCase):
             self.assertEqual(response.status_code, 404, response.text)
             self.assertEqual(response.json()["error"]["code"], "FEATURE_DISABLED")
             self.assertEqual(response.json()["detail"]["capability"], "GENERIC_BOOTSTRAP")
-
-    def test_open_registration_is_a_side_effect_free_disabled_route(self):
-        with patch(
-            "routers.open_registration.create_user",
-            side_effect=AssertionError("registration handler must not run"),
-        ) as create_user:
-            response = self.client.post(
-                "/api/auth/register",
-                json={
-                    "email": "should-not-exist@example.com",
-                    "password": "password123",
-                    "invite_code": "bigme",
-                },
-            )
-
-        self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.json()["error"]["code"], "FEATURE_DISABLED")
-        self.assertEqual(response.json()["detail"]["capability"], "OPEN_REGISTRATION")
-        create_user.assert_not_called()
 
     def test_short_user_secret_is_never_returned_verbatim(self):
         self.assertEqual(mask_api_key("shrt"), "********")
@@ -179,13 +160,19 @@ class JournalBaselineProfileTests(unittest.TestCase):
                 ),
                 lambda: _require_provider_capability("finnhub"),
                 lambda: _require_provider_capability("ibkr"),
-                lambda: _require_setting_capability("binance_api_secret"),
             )
             for guarded_call in guarded_calls:
                 with self.assertRaises(HTTPException) as raised:
                     guarded_call()
                 self.assertEqual(raised.exception.status_code, 404)
                 self.assertEqual(raised.exception.detail["code"], "FEATURE_DISABLED")
+            with self.assertRaises(HTTPException) as raised:
+                _require_setting_capability("binance_api_secret")
+            self.assertEqual(raised.exception.status_code, 404)
+            self.assertEqual(
+                raised.exception.detail["code"],
+                "SECRET_CONFIGURATION_UNAVAILABLE",
+            )
 
     def test_fx_fallback_does_not_call_market_provider(self):
         from services import exchange_rate_service
@@ -369,79 +356,52 @@ class JournalBaselineDatabaseBoundaryTests(unittest.TestCase):
         finally:
             db.close()
 
-    def test_authenticated_optional_secret_writes_return_404_without_db_side_effects(self):
+    def test_authenticated_optional_secret_writes_are_retired_without_db_side_effects(self):
         secret = "must-not-be-persisted"
-        requests = (
-            ("patch", "/api/settings", {"ibkr_flex_query_id": secret}, "BROKER_SYNC"),
-            ("patch", "/api/settings", {"ibkr_flex_token": secret}, "BROKER_SYNC"),
-            (
-                "patch",
-                "/api/settings",
-                {"ibkr_flex_start_date": "2026-07-17"},
-                "BROKER_SYNC",
-            ),
-            ("patch", "/api/settings", {"binance_api_key": secret}, "BROKER_SYNC"),
-            ("patch", "/api/settings", {"binance_api_secret": secret}, "BROKER_SYNC"),
-            (
-                "patch",
-                "/api/settings",
-                {"binance_market_type": "SPOT"},
-                "BROKER_SYNC",
-            ),
-            (
-                "patch",
-                "/api/settings",
-                {"binance_symbols": ["BTCUSDT"]},
-                "BROKER_SYNC",
-            ),
-            ("patch", "/api/settings", {"finnhub_api_key": secret}, "MARKET"),
-            (
-                "patch",
-                "/api/settings",
-                {"llm_api_url": "https://llm.invalid/v1"},
-                "AI_INSIGHTS",
-            ),
-            ("patch", "/api/settings", {"llm_api_key": secret}, "AI_INSIGHTS"),
-            ("patch", "/api/settings", {"llm_model": "test-model"}, "AI_INSIGHTS"),
-            (
-                "put",
-                "/api/admin/settings/binance_api_secret",
-                {"value": secret},
-                "BROKER_SYNC",
-            ),
-            (
-                "put",
-                "/api/admin/platform/settings/finnhub_api_key",
-                {"value": secret},
-                "MARKET",
-            ),
-            (
-                "put",
-                "/api/admin/platform/integrations/ibkr/flex_token",
-                {"secret_value": secret},
-                "BROKER_SYNC",
-            ),
-            (
-                "put",
-                "/api/admin/platform/integrations/finnhub/api_key",
-                {"secret_value": secret},
-                "MARKET",
-            ),
+        retired_user_payloads = (
+            {"ibkr_flex_query_id": secret},
+            {"ibkr_flex_token": secret},
+            {"ibkr_flex_start_date": "2026-07-17"},
+            {"binance_api_key": secret},
+            {"binance_api_secret": secret},
+            {"binance_market_type": "SPOT"},
+            {"binance_symbols": ["BTCUSDT"]},
+            {"finnhub_api_key": secret},
+            {"llm_api_url": "https://llm.invalid/v1"},
+            {"llm_api_key": secret},
+            {"llm_model": "test-model"},
         )
         baseline_counts = self._optional_persistence_counts()
 
-        for method, path, body, capability in requests:
-            with self.subTest(path=path):
-                response = self.client.request(method, path, json=body)
-                self.assertEqual(response.status_code, 404)
-                payload = response.json()
-                self.assertEqual(payload["error"]["code"], "FEATURE_DISABLED")
-                self.assertEqual(payload["detail"]["capability"], capability)
+        for body in retired_user_payloads:
+            with self.subTest(body=body):
+                response = self.client.patch("/api/settings", json=body)
+                self.assertEqual(response.status_code, 422)
                 self.assertNotIn(secret, response.text)
                 self.assertEqual(self._optional_persistence_counts(), baseline_counts)
 
+        for path in (
+            "/api/admin/settings/binance_api_secret",
+            "/api/admin/platform/settings/finnhub_api_key",
+        ):
+            response = self.client.put(path, json={"value": secret})
+            self.assertEqual(response.status_code, 404)
+            self.assertEqual(
+                response.json()["detail"]["code"],
+                "SECRET_CONFIGURATION_UNAVAILABLE",
+            )
+            self.assertEqual(self._optional_persistence_counts(), baseline_counts)
+
+        for path, capability in (
+            ("/api/admin/platform/integrations/ibkr/flex_token", "BROKER_SYNC"),
+            ("/api/admin/platform/integrations/finnhub/api_key", "MARKET"),
+        ):
+            response = self.client.put(path, json={"secret_value": secret})
+            self.assertEqual(response.status_code, 404)
+            self.assertEqual(response.json()["detail"]["capability"], capability)
+            self.assertEqual(self._optional_persistence_counts(), baseline_counts)
+
     def test_get_settings_projects_only_core_columns_when_optional_capabilities_are_disabled(self):
-        secret = "must-not-be-loaded"
         db = self.SessionLocal()
         try:
             db.add(
@@ -450,16 +410,9 @@ class JournalBaselineDatabaseBoundaryTests(unittest.TestCase):
                     theme="dark",
                     up_color="RED",
                     display_currency="HKD",
-                    ibkr_flex_query_id=secret,
-                    ibkr_flex_token=secret,
                     ibkr_flex_start_date=date(2026, 7, 17),
-                    binance_api_key=secret,
-                    binance_api_secret=secret,
                     binance_market_type="SPOT",
                     binance_symbols=["BTCUSDT"],
-                    finnhub_api_key=secret,
-                    llm_api_url="https://llm.invalid/v1",
-                    llm_api_key=secret,
                     llm_model="test-model",
                 )
             )
@@ -505,7 +458,6 @@ class JournalBaselineDatabaseBoundaryTests(unittest.TestCase):
         ):
             self.assertNotIn(field, payload)
         self.assertNotIn("binance_api_secret_configured", payload)
-        self.assertNotIn(secret, response.text)
 
         self.assertTrue(user_settings_selects)
         selected_sql = "\n".join(user_settings_selects)
@@ -557,7 +509,6 @@ class JournalBaselineDatabaseBoundaryTests(unittest.TestCase):
             db.close()
 
     def test_allowlisted_settings_stay_core_only_without_runtime_rollout(self):
-        secret = "runtime-disabled-secret"
         db = self.SessionLocal()
         try:
             db.add(
@@ -566,10 +517,6 @@ class JournalBaselineDatabaseBoundaryTests(unittest.TestCase):
                     theme="dark",
                     up_color="RED",
                     display_currency="USD",
-                    ibkr_flex_token=secret,
-                    finnhub_api_key=secret,
-                    llm_api_url="https://runtime-disabled.invalid/v1",
-                    llm_api_key=secret,
                     llm_model="runtime-disabled-model",
                 )
             )
@@ -620,10 +567,7 @@ class JournalBaselineDatabaseBoundaryTests(unittest.TestCase):
             set(response.json()),
             {"id", "user_id", "theme", "up_color", "display_currency"},
         )
-        self.assertNotIn(secret, response.text)
-        self.assertEqual(rejected.status_code, 404, rejected.text)
-        self.assertEqual(rejected.json()["error"]["code"], "FEATURE_DISABLED")
-        self.assertEqual(rejected.json()["detail"]["capability"], "AI_INSIGHTS")
+        self.assertEqual(rejected.status_code, 422, rejected.text)
 
         selected_sql = "\n".join(user_settings_selects)
         for column_name in (
@@ -642,7 +586,7 @@ class JournalBaselineDatabaseBoundaryTests(unittest.TestCase):
         finally:
             db.close()
 
-    def test_enabled_optional_settings_keep_compatible_persistence_and_masking(self):
+    def test_enabled_optional_settings_do_not_restore_user_secret_persistence(self):
         enabled_policy = DeploymentCapabilityPolicy(
             frozenset(
                 {
@@ -690,24 +634,12 @@ class JournalBaselineDatabaseBoundaryTests(unittest.TestCase):
                 },
             )
 
-        self.assertEqual(response.status_code, 200, response.text)
-        payload = response.json()
-        self.assertEqual(payload["ibkr_flex_query_id"], "query-123")
-        self.assertEqual(payload["ibkr_flex_token"], "ibkr*********oken")
-        self.assertEqual(payload["binance_api_key"], "bina*******-key")
-        self.assertTrue(payload["binance_api_secret_configured"])
-        self.assertEqual(payload["finnhub_api_key"], "finn*******-key")
-        self.assertEqual(payload["llm_api_url"], "https://llm.invalid/v1")
-        self.assertEqual(payload["llm_model"], "test-model")
+        self.assertEqual(response.status_code, 422, response.text)
         self.assertNotIn("llm-api-secret", response.text)
 
         db = self.SessionLocal()
         try:
-            settings = db.query(UserSettings).one()
-            self.assertEqual(settings.ibkr_flex_token, "ibkr-secret-token")
-            self.assertEqual(settings.binance_api_secret, "binance-api-secret")
-            self.assertEqual(settings.finnhub_api_key, "finnhub-api-key")
-            self.assertEqual(settings.llm_api_key, "llm-api-secret")
+            self.assertEqual(db.query(UserSettings).count(), 0)
         finally:
             db.close()
 

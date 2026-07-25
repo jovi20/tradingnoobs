@@ -1,6 +1,6 @@
 # Trading Noobs 当前代码库指南
 
-更新时间：2026-07-17
+更新时间：2026-07-25
 当前执行分支：`dev`
 当前 HEAD：以当前 `dev` 最新提交为准；阶段状态见 [TODO.md](./TODO.md)。
 
@@ -17,7 +17,7 @@
 - JOURNAL Beta 不执行 Broker 网络同步，不读取或要求 Broker、行情或 LLM 凭据。
 - `IBKR_FLEX_XML_V1` 是 `JRN-013` 至 `JRN-015` 计划实现的本地文件 adapter，不是在线 Broker Sync；重复、重叠、增量确认和 correction replay 截至本次更新均未实现或开放。
 - `GENERIC_BOOTSTRAP` 同样尚未实现。`POST /api/positions/import/upload`、`POST /api/positions/import/confirm` 和 `GET /api/positions/import/template` 当前仅由 deny-only stub 返回 `404 FEATURE_DISABLED`，不进入 OpenAPI，也不提供模板、上传、preview 或 confirm；前端没有 Import 入口，直达 `/positions/import` 进入 framework not-found 视图。
-- `/register` 路由模块已删除，`/api/auth/register` 也未注册；硬编码共享邀请码不能作为 invite-only onboarding。一次性哈希邀请码、兑换与审计由 `JRN-003` 完成后，才重新开放受控注册路径。
+- `OPEN_REGISTRATION` 继续关闭；`/register` 与 `/api/auth/register` 只承担 invite-only onboarding。管理员创建一次性、限时、哈希存储且受审计的邀请码，注册必须提交有效 IANA 时区。两者不能被解释为开放注册。
 
 ---
 
@@ -95,6 +95,8 @@
 
 源码中仍可见 Broker Sync、Market、Insights/AI、PDF export、risk cards、open registration 和 provider credential 路径；它们都是 `DISABLED / DEFERRED` optional surfaces，不是可调用 API 清单，也不得出现在 JOURNAL Beta OpenAPI、导航或普通设置中。
 
+普通用户设置仅保留主题、涨跌色和 USD 展示币种，不接受 Flex Query/Token、Broker API key、行情 key 或 LLM 配置。平台 secret 只能进入加密 `IntegrationCredential` 或受管环境，`SystemSetting`/`PlatformSetting` 的明文 secret key 写入稳定拒绝。
+
 前端当前主要页面：
 - `/`：默认入口，已转向 timeline-first，而不是旧 Dashboard-first。
 - `/timeline`：Timeline / Review Inbox 决策工作台。
@@ -110,8 +112,9 @@
 - `/strategies`
 - `/daily`
 - `/login`
+- `/register`：一次性邀请码注册，必须明确选择 IANA 时区。
 
-`/positions/import` 只是调用 `notFound()` 的禁用壳，不是当前主要页面或可用 Import UI。`/insights`、风险卡和 PDF 导出代码可能仍留在仓库中，但当前必须隐藏或不可达；`/register` 页面路由模块已删除。
+`/positions/import` 只是调用 `notFound()` 的禁用壳，不是当前主要页面或可用 Import UI。`/insights`、风险卡和 PDF 导出代码可能仍留在仓库中，但当前必须隐藏或不可达。
 
 前端 legacy DTO 边界：
 - 新功能不应直接从 `frontend/lib/api.ts` 引入 legacy `Position` / `TradeBatch` / `BatchCreate` / `Transaction`。

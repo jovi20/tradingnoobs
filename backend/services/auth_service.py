@@ -84,7 +84,14 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
     return user
 
 
-def create_user(db: Session, email: str, password: str) -> User:
+def create_user(
+    db: Session,
+    email: str,
+    password: str,
+    *,
+    timezone_name: str | None = None,
+    commit: bool = True,
+) -> User:
     """Create a new user"""
     hashed_password = get_password_hash(password)
     normalized = normalize_email(email)
@@ -93,6 +100,7 @@ def create_user(db: Session, email: str, password: str) -> User:
         email_normalized=normalized,
         hashed_password=hashed_password,
         status="ACTIVE",
+        timezone=timezone_name,
     )
     db.add(user)
     db.flush()
@@ -102,8 +110,9 @@ def create_user(db: Session, email: str, password: str) -> User:
         password_updated_at=utc_now(),
     )
     db.add(credential)
-    db.commit()
-    db.refresh(user)
+    if commit:
+        db.commit()
+        db.refresh(user)
     return user
 
 

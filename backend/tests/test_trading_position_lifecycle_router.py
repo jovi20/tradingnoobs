@@ -72,6 +72,7 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
             status="ACTIVE",
             is_active=True,
             role="user",
+            timezone="UTC",
         )
         self.db.add(self.user)
         self.db.commit()

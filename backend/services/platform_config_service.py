@@ -14,12 +14,33 @@ from models import FeatureFlag, IntegrationCredential, PlatformSetting, SystemSe
 from services.credential_service import decrypt_secret
 
 
+_PLAINTEXT_SECRET_MARKERS = (
+    "api_key",
+    "apikey",
+    "token",
+    "secret",
+    "password",
+    "credential",
+    "private_key",
+    "access_key",
+    "connection_string",
+    "flex_query_id",
+)
+
+
+def _is_plaintext_secret_setting_key(key: str) -> bool:
+    normalized = key.strip().lower().replace("-", "_")
+    return any(marker in normalized for marker in _PLAINTEXT_SECRET_MARKERS)
+
+
 def _stable_rollout_bucket(key: str, actor_key: str) -> int:
     digest = hashlib.sha256(f"{key}:{actor_key}".encode("utf-8")).hexdigest()
     return int(digest[:8], 16) % 100
 
 
 def get_platform_setting_value(db: Session, key: str) -> Optional[str]:
+    if _is_plaintext_secret_setting_key(key):
+        return None
     setting = db.query(PlatformSetting).filter(PlatformSetting.key == key).first()
     if setting and setting.value:
         return setting.value
@@ -115,7 +136,6 @@ def get_llm_runtime_config(db: Session) -> dict[str, Optional[str]]:
     api_key = (
         get_integration_credential_secret(db, "openai", "api_key")
         or get_integration_credential_secret(db, "llm", "api_key")
-        or get_platform_setting_value(db, "llm_api_key")
         or os.getenv("LLM_API_KEY")
         or settings.llm_api_key
     )
@@ -130,7 +150,6 @@ def get_finnhub_api_key(db: Session) -> Optional[str]:
     settings = get_market_provider_settings()
     return (
         get_integration_credential_secret(db, "finnhub", "api_key")
-        or get_platform_setting_value(db, "finnhub_api_key")
         or os.getenv("FINNHUB_API_KEY")
         or settings.finnhub_api_key
     )

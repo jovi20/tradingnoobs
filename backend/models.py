@@ -493,6 +493,58 @@ class AuthToken(Base):
     session = relationship("UserSession", back_populates="auth_tokens")
 
 
+class Invitation(Base):
+    __tablename__ = "invitations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    code_hash = Column(String(64), unique=True, index=True, nullable=False)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    redeemed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    revoked_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    redeemed_at = Column(DateTime(timezone=True), nullable=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class SecurityAuditEvent(Base):
+    __tablename__ = "security_audit_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    event_type = Column(String(80), nullable=False, index=True)
+    outcome = Column(String(20), nullable=False)
+    actor_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    subject_type = Column(String(50), nullable=True)
+    subject_public_id = Column(String(100), nullable=True)
+    ip_address = Column(String(64), nullable=True)
+    metadata_json = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class AuthRateLimitBucket(Base):
+    __tablename__ = "auth_rate_limit_buckets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    action = Column(String(40), nullable=False)
+    dimension = Column(String(20), nullable=False)
+    key_hash = Column(String(64), nullable=False)
+    window_started_at = Column(DateTime(timezone=True), nullable=False)
+    attempt_count = Column(Integer, nullable=False, default=0)
+    blocked_until = Column(DateTime(timezone=True), nullable=True)
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "action",
+            "dimension",
+            "key_hash",
+            name="uq_auth_rate_limit_bucket_dimension",
+        ),
+    )
+
+
 
 
 class Strategy(Base):
@@ -587,22 +639,13 @@ class UserSettings(Base):
     up_color = Column(String(20), default="GREEN") # GREEN or RED
     display_currency = Column(String(10), default="USD")  # 显示币种: USD/HKD/CNY/EUR/GBP
     
-    # Broker/data source credentials (legacy IBKR TWS fields kept for backward compatibility)
+    # Non-secret display/source preferences only. Provider credentials are platform-managed.
     ibkr_host = Column(String(255), nullable=True)
     ibkr_port = Column(Integer, nullable=True)
     ibkr_client_id = Column(Integer, nullable=True)
-    ibkr_flex_query_id = Column(String(100), nullable=True)
-    ibkr_flex_token = Column(String(255), nullable=True)
     ibkr_flex_start_date = Column(Date, nullable=True)
-    binance_api_key = Column(String(255), nullable=True)
-    binance_api_secret = Column(String(255), nullable=True)
     binance_market_type = Column(String(20), nullable=True)
     binance_symbols = Column(JSON, nullable=True)
-    finnhub_api_key = Column(String(255), nullable=True)
-    
-    # LLM API
-    llm_api_url = Column(String(500), nullable=True)
-    llm_api_key = Column(String(255), nullable=True)
     llm_model = Column(String(100), nullable=True)
     
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

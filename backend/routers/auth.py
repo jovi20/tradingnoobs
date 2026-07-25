@@ -19,6 +19,14 @@ from services.auth_service import (
     utc_now,
     verify_password,
 )
+from services.auth_rate_limit_service import (
+    RateLimitExceeded,
+    check_auth_rate_limit,
+    clear_auth_attempts,
+    consume_auth_attempt,
+)
+from services.security_audit_service import add_security_audit_event
+from services.timezone_service import normalize_iana_timezone
 from models import AuthToken, User, UserCredential, UserSession
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
@@ -31,19 +39,80 @@ def login(
     db: Session = Depends(get_db),
 ):
     """Login and get access token"""
+    ip_address = request.client.host if request.client else None
+    try:
+        check_auth_rate_limit(
+            db,
+            action="LOGIN",
+            dimension="IP",
+            value=ip_address,
+        )
+        check_auth_rate_limit(
+            db,
+            action="LOGIN",
+            dimension="ACCOUNT",
+            value=form_data.username,
+        )
+    except RateLimitExceeded as error:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={"code": "AUTH_RATE_LIMITED", "message": "Too many login attempts"},
+            headers={"Retry-After": str(error.retry_after_seconds)},
+        ) from None
+
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
+        try:
+            consume_auth_attempt(
+                db,
+                action="LOGIN",
+                dimension="IP",
+                value=ip_address,
+                limit=10,
+            )
+            consume_auth_attempt(
+                db,
+                action="LOGIN",
+                dimension="ACCOUNT",
+                value=form_data.username,
+                limit=5,
+            )
+        except RateLimitExceeded as error:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail={"code": "AUTH_RATE_LIMITED", "message": "Too many login attempts"},
+                headers={"Retry-After": str(error.retry_after_seconds)},
+            ) from None
+        add_security_audit_event(
+            db,
+            event_type="LOGIN_REJECTED",
+            outcome="INVALID_CREDENTIALS",
+            ip_address=ip_address,
+        )
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    clear_auth_attempts(
+        db,
+        action="LOGIN",
+        dimension="ACCOUNT",
+        value=form_data.username,
+    )
+    clear_auth_attempts(
+        db,
+        action="LOGIN",
+        dimension="IP",
+        value=ip_address,
+    )
     
     access_token = create_authenticated_session(
         db=db,
         user=user,
         user_agent=request.headers.get("user-agent"),
-        ip_address=request.client.host if request.client else None,
+        ip_address=ip_address,
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -62,6 +131,14 @@ async def update_me(
 ):
     """Update current user's profile preferences."""
     update_data = profile_data.model_dump(exclude_unset=True)
+    if "timezone" in update_data:
+        try:
+            update_data["timezone"] = normalize_iana_timezone(update_data["timezone"])
+        except ValueError as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"code": "TIMEZONE_INVALID", "message": str(error)},
+            ) from None
     for field, value in update_data.items():
         setattr(current_user, field, value.strip() if isinstance(value, str) else value)
     db.add(current_user)

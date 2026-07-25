@@ -546,6 +546,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8)
     invite_code: str = Field(..., min_length=1)
+    timezone: str = Field(..., min_length=1, max_length=50)
 
 
 class UserLogin(BaseModel):
@@ -575,6 +576,25 @@ class UserResponse(UserBase):
 class UserProfileUpdate(BaseModel):
     locale: Optional[str] = Field(None, max_length=20)
     timezone: Optional[str] = Field(None, max_length=50)
+
+
+class InvitationCreate(BaseModel):
+    expires_in_hours: int = Field(default=24, ge=1, le=168)
+
+
+class InvitationResponse(BaseModel):
+    public_id: str
+    expires_at: datetime
+    redeemed_at: Optional[datetime] = None
+    revoked_at: Optional[datetime] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class InvitationCreatedResponse(InvitationResponse):
+    code: str
 
 
 class PasswordChangeRequest(BaseModel):
@@ -705,82 +725,22 @@ class AISummaryResponse(BaseModel):
 # ============== User Settings Schemas ==============
 
 
-_USER_SETTINGS_OPTIONAL_SCHEMA_FIELDS = {
-    "BROKER_SYNC": {
-        "ibkr_flex_query_id",
-        "ibkr_flex_token",
-        "ibkr_flex_start_date",
-        "binance_api_key",
-        "binance_api_secret",
-        "binance_api_secret_configured",
-        "binance_market_type",
-        "binance_symbols",
-    },
-    "MARKET": {"finnhub_api_key"},
-    "AI_INSIGHTS": {"llm_api_url", "llm_api_key", "llm_model"},
-}
-
-
-def _prune_disabled_user_settings_schema(
-    schema: Dict[str, Any],
-    _model: type[BaseModel],
-) -> None:
-    """Keep optional secret fields out of the journal Beta OpenAPI artifact."""
-    properties = schema.get("properties")
-    if not isinstance(properties, dict):
-        return
-
-    required = schema.get("required")
-    for fields in _USER_SETTINGS_OPTIONAL_SCHEMA_FIELDS.values():
-        for field in fields:
-            properties.pop(field, None)
-        if isinstance(required, list):
-            required[:] = [field for field in required if field not in fields]
-
-
 class UserSettingsUpdate(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-        json_schema_extra=_prune_disabled_user_settings_schema,
-    )
+    model_config = ConfigDict(extra="forbid")
 
     theme: Optional[str] = Field(None, pattern="^(light|dark|system)$")
     up_color: Optional[str] = Field(None, pattern="^(GREEN|RED)$")
     display_currency: Literal["USD"] = "USD"
-    ibkr_flex_query_id: Optional[str] = None
-    ibkr_flex_token: Optional[str] = None
-    ibkr_flex_start_date: Optional[date] = None
-    binance_api_key: Optional[str] = None
-    binance_api_secret: Optional[str] = None
-    binance_market_type: Optional[str] = Field(None, pattern="^(SPOT|USD_M_FUTURES)$")
-    binance_symbols: Optional[List[str]] = None
-    finnhub_api_key: Optional[str] = None
-    llm_api_url: Optional[str] = None
-    llm_api_key: Optional[str] = None
-    llm_model: Optional[str] = None
 
 
 class UserSettingsResponse(BaseModel):
-    model_config = ConfigDict(
-        from_attributes=True,
-        json_schema_extra=_prune_disabled_user_settings_schema,
-    )
+    model_config = ConfigDict(from_attributes=True)
 
     id: int
     user_id: int
     theme: str
     up_color: str = "GREEN"
     display_currency: Literal["USD"] = "USD"
-    ibkr_flex_query_id: Optional[str] = None
-    ibkr_flex_token: Optional[str] = None  # Will be masked in response
-    ibkr_flex_start_date: Optional[date] = None
-    binance_api_key: Optional[str] = None  # Will be masked in response
-    binance_api_secret_configured: bool = False
-    binance_market_type: Optional[str] = None
-    binance_symbols: Optional[List[str]] = None
-    finnhub_api_key: Optional[str] = None  # Will be masked
-    llm_api_url: Optional[str] = None
-    llm_model: Optional[str] = None
 
 
 class BrokerSyncRequest(BaseModel):

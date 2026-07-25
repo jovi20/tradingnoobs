@@ -22,7 +22,7 @@ MARKET_TABLES = (
     "market_data_watermarks",
 )
 PREVIOUS_REVISION = "8b9cad101112"
-HEAD_REVISION = "9cad10111213"
+HEAD_REVISION = "a1b2c3d4e5f6"
 
 
 class MarketDataAlembicAdoptionTests(unittest.TestCase):
