@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "record_kind": "JRN_TASK_CHECKPOINT",
+  "task_id": "JRN-003",
+  "branch": "dev",
+  "status": "CHECKPOINT_LOCAL_REVIEW_PASS_REMOTE_CI_PENDING",
+  "release_status": "NOT_READY_FOR_PRODUCTION",
+  "recorded_at": "2026-07-25T14:43:54+08:00",
+  "implementation_base_commit": "0b588b9ae23393d0956d543dd5c29166a0e6dbf0",
+  "implementation_checkpoint_commit": "cacf8c049cf5966c724e725183aafae97ceba531",
+  "implementation_commits": [
+    "8ef8125fd798f05cb29febde17956452a93e0270",
+    "d6fbd6fda671a178d4228019d1d7a0f700e0faeb",
+    "cacf8c049cf5966c724e725183aafae97ceba531"
+  ],
+  "record_commit_resolution": "git log -1 --format=%H -- docs/superpowers/plans/2026-07-25-jrn-003-checkpoint-record.json",
+  "review_subject": {
+    "commit": "cacf8c049cf5966c724e725183aafae97ceba531",
+    "plan_path": "docs/superpowers/plans/2026-07-16-dev-trading-journal-development-plan.md",
+    "migration_head": "a1b2c3d4e5f6",
+    "migration_blob": "b2e88f19c9d36b278b405f97594edfec5dec60ec",
+    "rate_limit_service_blob": "17269548b97f3e0709e1c1f1dee72c4e58af6e0c",
+    "invitation_service_blob": "2b932266a17580841f198fc68295269045f098ae",
+    "redaction_service_blob": "ea3c2372a01cefa49eee0c7eb0349c71d3a72eb3",
+    "invite_security_test_blob": "09427dd7aefe89a651c8e2e3aef85aebe4e87dbe",
+    "secret_migration_test_blob": "557b76652278ba931f6520f3b79f546b3a6274cf",
+    "postgresql_gate_test_blob": "23475d07930bf8bfe4bd6939ab8f534084857d86",
+    "openapi_snapshot_blob": "fe8e09553eba25b2a59076a04970b1354f1e7ba3"
+  },
+  "scope_summary": [
+    "Implement administrator-created random, one-time, expiring, revocable, SHA-256-hashed invitations with persistent audit records.",
+    "Require an explicit valid IANA timezone during invitation redemption and before legacy users may write journal data.",
+    "Persist login and invitation redemption rate limits by IP and account, including concurrency-safe first-bucket creation.",
+    "Fail production startup for weak or default signing secrets.",
+    "Remove plaintext Broker, Market, and LLM secret columns and setting rows through forward migration a1b2c3d4e5f6.",
+    "Reject plaintext secret writes and resolve optional platform secrets only from environment configuration or encrypted IntegrationCredential rows.",
+    "Disable online IBKR Flex credential use while retaining the future local statement-file boundary.",
+    "Apply centralized URL, query, secret, metadata, exception, log, and audit redaction.",
+    "Restore the invite registration UI with explicit timezone selection while keeping open registration disabled."
+  ],
+  "changed_files": [
+    {"status": "M", "path": "backend/README.md"},
+    {"status": "A", "path": "backend/alembic/versions/a1b2c3d4e5f6_add_invite_security_governance.py"},
+    {"status": "M", "path": "backend/config.py"},
+    {"status": "M", "path": "backend/main.py"},
+    {"status": "M", "path": "backend/models.py"},
+    {"status": "M", "path": "backend/observability.py"},
+    {"status": "M", "path": "backend/openapi/journal-baseline.openapi.json"},
+    {"status": "M", "path": "backend/routers/admin.py"},
+    {"status": "M", "path": "backend/routers/auth.py"},
+    {"status": "M", "path": "backend/routers/open_registration.py"},
+    {"status": "M", "path": "backend/routers/settings.py"},
+    {"status": "M", "path": "backend/schemas.py"},
+    {"status": "A", "path": "backend/services/auth_rate_limit_service.py"},
+    {"status": "M", "path": "backend/services/auth_service.py"},
+    {"status": "M", "path": "backend/services/broker_sync/service.py"},
+    {"status": "A", "path": "backend/services/invitation_service.py"},
+    {"status": "M", "path": "backend/services/platform_config_service.py"},
+    {"status": "A", "path": "backend/services/redaction.py"},
+    {"status": "A", "path": "backend/services/security_audit_service.py"},
+    {"status": "A", "path": "backend/services/timezone_service.py"},
+    {"status": "M", "path": "backend/tests/test_auth_session_tracking.py"},
+    {"status": "M", "path": "backend/tests/test_broker_sync_service.py"},
+    {"status": "M", "path": "backend/tests/test_disabled_capability_routes.py"},
+    {"status": "M", "path": "backend/tests/test_journal_baseline_admin_boundary.py"},
+    {"status": "M", "path": "backend/tests/test_journal_baseline_profile.py"},
+    {"status": "M", "path": "backend/tests/test_jrn002_postgresql_gate.py"},
+    {"status": "A", "path": "backend/tests/test_jrn003_invite_security.py"},
+    {"status": "A", "path": "backend/tests/test_jrn003_secret_migration.py"},
+    {"status": "M", "path": "backend/tests/test_market_data_alembic_adoption.py"},
+    {"status": "M", "path": "backend/tests/test_optional_route_runtime_guards.py"},
+    {"status": "M", "path": "backend/tests/test_position_truth_bridge_router.py"},
+    {"status": "M", "path": "backend/tests/test_public_id_leaf_routes.py"},
+    {"status": "M", "path": "backend/tests/test_public_id_nested_routes.py"},
+    {"status": "M", "path": "backend/tests/test_public_id_routes.py"},
+    {"status": "M", "path": "backend/tests/test_release_docs_boundaries.py"},
+    {"status": "M", "path": "backend/tests/test_trading_position_lifecycle_router.py"},
+    {"status": "M", "path": "docs/DEVELOPER_GUIDE.md"},
+    {"status": "M", "path": "frontend/README.md"},
+    {"status": "M", "path": "frontend/app/(auth)/login/page.tsx"},
+    {"status": "A", "path": "frontend/app/(auth)/register/page.tsx"},
+    {"status": "M", "path": "frontend/app/(product)/settings/page.tsx"},
+    {"status": "M", "path": "frontend/contexts/AuthContext.tsx"},
+    {"status": "M", "path": "frontend/lib/api.ts"},
+    {"status": "M", "path": "frontend/lib/authErrors.ts"},
+    {"status": "M", "path": "frontend/tests/effective-capabilities.test.mts"}
+  ],
+  "verification_environment": {
+    "python": "3.13.5",
+    "node": "24.18.0",
+    "npm": "11.16.0",
+    "postgresql_server": "16.14 (Homebrew)"
+  },
+  "verification": [
+    {
+      "command": "JRN002_SECRET_SCAN_BASE=0b588b9 JRN002_SECRET_SCAN_HEAD=HEAD backend/venv/bin/python scripts/run_journal_baseline_gate.py",
+      "result": "PASS on exact commit cacf8c049cf5966c724e725183aafae97ceba531: 466 backend tests, current OpenAPI and release contracts, 160 frontend tests, typecheck, lint, and production build."
+    },
+    {
+      "command": "python scripts/check_added_secrets.py --base 0b588b9 --head cacf8c0",
+      "result": "PASS: ruleset added-secrets-v1, 2346 added lines, 0 findings."
+    },
+    {
+      "command": "PostgreSQL 16 empty upgrade, populated fixture upgrade, a1b2c3d4e5f6 downgrade/re-upgrade, and eight-way concurrent first rate-limit consumption",
+      "result": "PASS: migration head and secret-column removal are stable after re-upgrade; concurrent attempts persist one bucket with attempt_count 8 and no application error."
+    }
+  ],
+  "review": {
+    "reviewed_at": "2026-07-25T14:43:54+08:00",
+    "disposition": "LOCAL_APPROVE_WITH_REMOTE_CI_BLOCKER",
+    "blocking_findings_after_fix": [],
+    "fixed_findings": [
+      {
+        "severity": "P1",
+        "finding": "Concurrent first attempts for the same rate-limit key could both observe no bucket and expose the unique-constraint race as HTTP 500.",
+        "resolution": "cacf8c0 isolates first-row insertion in a savepoint, recovers the unique conflict, locks the winning row, increments it, and adds a real PostgreSQL concurrency regression."
+      },
+      {
+        "severity": "P2",
+        "finding": "The mandatory PostgreSQL gate did not exercise downgrade and re-upgrade of the plaintext-secret removal migration.",
+        "resolution": "cacf8c0 adds a PostgreSQL downgrade/re-upgrade test that verifies restored legacy columns on downgrade and their removal plus governance tables at head."
+      }
+    ],
+    "residual_risks": [
+      "GitHub Actions has not run for this checkpoint, so remote CI and required-check evidence remain unproven.",
+      "Security audit immutability is enforced by the absence of mutation APIs and normal application ownership, not by a database trigger or append-only database role.",
+      "Rate-limit bucket retention and cleanup are operational lifecycle work still to be specified before production release.",
+      "Existing Python, Alembic, Starlette, Browserslist, and Node module-type warnings remain non-blocking technical debt."
+    ]
+  },
+  "remote_ci": {
+    "status": "NOT_RUN",
+    "required_workflow": ".github/workflows/journal-baseline.yml",
+    "required_job": "journal-baseline",
+    "closure_condition": "Run the workflow for commit cacf8c049cf5966c724e725183aafae97ceba531, retain its gate summary, and record a successful required-check conclusion before marking JRN-003 COMPLETE."
+  },
+  "excluded_existing_worktree_changes": [
+    ".github/workflows/deploy.yml",
+    "backend/ops/migrate_db.py",
+    "backup_db.sh",
+    "docs/market_data_sources.md",
+    "start.ps1",
+    "start.sh",
+    "update_libs.sh",
+    ".claude/",
+    "backend/requirements-dev.txt",
+    "backend/routers/open_registration 2.py"
+  ],
+  "next_task_gate": "PARTIALLY_SATISFIED: JRN-003 implementation is locally approved; JRN-004 may be prepared locally but release closure remains gated on remote CI evidence for JRN-002 and JRN-003."
+}
