@@ -1,7 +1,7 @@
 # JRN-013 进度与设计评审
 
 日期：2026-07-26
-评审范围：`0b03f85..1f5ee72` 的 JRN-013 实现，以及 active plan 中
+评审范围：`0b03f85..c691edb` 的 JRN-013 实现，以及 active plan 中
 `JRN-013` 至 `JRN-015` 的 IBKR Flex 文件导入设计。
 
 ## 结论
@@ -70,8 +70,11 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
 - provider-gated 本地文件 upload API、双 adapter session DTO、跨 owner session
   deny 和 `CONFLICTED` preview 重启后行明细恢复；IBKR preview 永远不误报
   `confirm_available`。
-- 本次复验的全部 `test_jrn013_*.py` 共 115 项测试通过；完整统一
-  gate 在 PostgreSQL 16.14 上通过 656 个后端测试、165 个前端测试、OpenAPI、
+- upload 编排在读取或暂存文件前先锁定 owner-scoped account；不存在或跨 owner
+  account 均返回 `404 IMPORT_ACCOUNT_NOT_FOUND`，不调用上传读取、不创建临时文件、
+  `IdempotencyKey` 或 `ImportSession`，并始终关闭上传句柄。
+- 本次复验的全部 `test_jrn013_*.py` 共 116 项测试通过；完整统一
+  gate 在 PostgreSQL 16.14 上通过 657 个后端测试、165 个前端测试、OpenAPI、
   release contract、typecheck、lint 和 production build。
 
 ## 尚未实现或未满足
@@ -88,7 +91,7 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
 - JRN-014 的 source-bound canonical confirm、coverage acceptance/frontier
   推进与“只应用新增 execution”尚未实现。
 - JRN-015 的人工 correction/cancel-bust resolution 与 versioned replay 尚未实现。
-- `1f5ee72` 已通过当前工作树完整统一 gate 与真实 PostgreSQL migration gate；
+- `c691edb` 已通过当前工作树完整统一 gate 与真实 PostgreSQL migration gate；
   尚未取得远端 CI 和绑定该 SHA 的独立 review，因此仍只能视为进度 checkpoint。
 
 ## 设计必要性评估
