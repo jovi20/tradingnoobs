@@ -59,6 +59,8 @@ jobs:
       - name: Run journal baseline gate
         env:
           JRN002_POSTGRES_URL: postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/postgres
+          JRN002_SECRET_SCAN_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          JRN002_SECRET_SCAN_HEAD: ${{ github.sha }}
         run: python scripts/run_journal_baseline_gate.py
 
       - name: Upload gate summary

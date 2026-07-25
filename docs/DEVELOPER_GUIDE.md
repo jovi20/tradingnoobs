@@ -261,6 +261,9 @@ backend/venv/bin/python scripts/run_journal_baseline_gate.py
 ```
 
 结果摘要写入忽略目录 `.artifacts/jrn002/gate-summary.json`，包含 commit、工作树状态、Python/Node/npm/PostgreSQL 版本及逐项结果。
+本地默认扫描 `HEAD^..HEAD` 的新增 secret；需要验证更长 checkpoint 范围时设置
+`JRN002_SECRET_SCAN_BASE` 和 `JRN002_SECRET_SCAN_HEAD`。CI 会按 PR base/head 或 push before/head
+显式传入 exact-SHA 范围。
 
 只运行后端测试：
 

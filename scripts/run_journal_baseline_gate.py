@@ -144,7 +144,23 @@ class EphemeralPostgres:
 
 
 def _gate_commands() -> list[tuple[str, list[str]]]:
+    secret_scan_base = os.getenv("JRN002_SECRET_SCAN_BASE")
+    secret_scan_head = os.getenv("JRN002_SECRET_SCAN_HEAD", "HEAD")
+    if not secret_scan_base:
+        secret_scan_base = _run_output(["git", "rev-parse", "HEAD^"])
+
     return [
+        (
+            "added_secret_boundary",
+            [
+                sys.executable,
+                "scripts/check_added_secrets.py",
+                "--base",
+                secret_scan_base,
+                "--head",
+                secret_scan_head,
+            ],
+        ),
         (
             "dependency_locks",
             [
