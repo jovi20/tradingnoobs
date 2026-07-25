@@ -1,7 +1,7 @@
 # JRN-013 进度与设计评审
 
 日期：2026-07-26
-评审范围：`0b03f85..0188077` 的 JRN-013 实现，以及 active plan 中
+评审范围：`0b03f85..9a7b4ab` 的 JRN-013 实现，以及 active plan 中
 `JRN-013` 至 `JRN-015` 的 IBKR Flex 文件导入设计。
 
 ## 结论
@@ -10,9 +10,10 @@
 
 当前代码已经具备 source truth schema、安全 XML parser、provider evidence
 机器门、未绑定和已绑定 preview、生命周期模拟复用、持久 projection、上传编排、
-清理与边界测试。默认 evidence manifest 仍为 `UNVERIFIED`，公开
-`POST /api/import-sessions` 仍只接受 `GENERIC_BOOTSTRAP`，因此
-`IBKR_FLEX_XML_V1` 保持 fail-closed。
+清理与边界测试。`POST /api/positions/import/ibkr-flex/upload` 已发布机器合同，
+但它在文件 staging 前强制验证 provider evidence；默认 manifest 仍为
+`UNVERIFIED`，因此稳定返回 `404 FEATURE_DISABLED` 且不创建临时文件或数据库
+记录。前端没有该入口，`IBKR_FLEX_XML_V1` 继续保持 fail-closed。
 
 这不是“每月必须新建账户”的产品决定。目标语义仍是：同一 IBKR external
 account 绑定同一内部账户；后续可上传完全重复、区间重叠或纯增量的文件；系统按
@@ -25,14 +26,21 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
   source binding、statement、observation、sighting、execution、application、
   reconciliation case、coverage acceptance、preview digest 与 owner FK。
 - 版本化且可校验的 provider-evidence manifest；模板、官方语义、真实 fixture、
-  hash 或必需语义缺失时稳定拒绝。
+  hash 或必需语义缺失时稳定拒绝。官方来源必须属于 IBKR 官方站点、guides、
+  campus 或官方 GitHub，并留存 UTF-8 artifact、SHA-256、locator 和逐字引用；
+  只填写 URL/semantic 标签不能通过。
 - 禁止 DTD/entity/XInclude 的受限 XML parser，以及文件、execution、节点、
   属性、深度和字段长度限制。
 - source identity、fingerprint、flat-boundary、coverage、bootstrap change-chain、
   bound preview、冲突 episode 和生命周期模拟基础。
 - operation idempotency、owner/account 绑定、并发 session/rate limit、临时文件
   权限与清理路径。
-- 本次复验的 8 个 JRN-013 定向测试文件共 80 项测试通过。
+- provider-gated 本地文件 upload API、双 adapter session DTO、跨 owner session
+  deny 和 `CONFLICTED` preview 重启后行明细恢复；IBKR preview 永远不误报
+  `confirm_available`。
+- 本次复验的 JRN-013/OpenAPI/migration 定向集合共 101 项测试通过；完整统一
+  gate 在 PostgreSQL 16.14 上通过 630 个后端测试、165 个前端测试、OpenAPI、
+  release contract、typecheck、lint 和 production build。
 
 ## 尚未实现或未满足
 
@@ -44,12 +52,13 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
   Portal 中保存的模板；当前没有保留下足以逐字段证明 `ibExecID`、generation
   严格顺序、change target 和日期包含性的官方合同。不能据此猜测。
 - `backend/app_config/ibkr_flex_v1_provider_evidence.json` 因而保持
-  `UNVERIFIED`，也没有启用公开 IBKR upload/preview route。
+  `UNVERIFIED`；已发布 route 因 evidence-first gate 保持不可用。
 - JRN-014 的 source-bound canonical confirm、coverage acceptance/frontier
   推进与“只应用新增 execution”尚未实现。
 - JRN-015 的人工 correction/cancel-bust resolution 与 versioned replay 尚未实现。
-- 尚未为当前 JRN-013 精确 checkpoint 跑完整统一 gate、真实 PostgreSQL migration
-  gate、远端 CI 和独立 review，因此 `0188077` 只能视为进度 checkpoint。
+- `9a7b4ab` 已通过当前工作树完整统一 gate与真实 PostgreSQL migration gate；
+  尚未取得精确 clean-archive checkpoint、远端 CI 和独立 review，因此仍只能
+  视为进度 checkpoint。
 
 ## 设计必要性评估
 
@@ -71,7 +80,8 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
 控制复杂度的边界：
 
 - 当前只做本地文件 adapter，不做 Token、网络同步或后台调度。
-- JRN-013 只允许 schema/parser/preview；没有 provider evidence 不开放入口。
+- JRN-013 只允许 schema/parser/preview；没有 provider evidence 时 route 必须在
+  staging 前返回 `FEATURE_DISABLED`，前端不展示入口。
 - JRN-014 只做可证明的新 execution confirm；JRN-015 才启用 correction resolution。
 - 不把 provider 特有字段扩散到 canonical journal；量化能力继续消费 canonical
   events、ledger 和 source provenance。
@@ -83,11 +93,13 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
 2. 从同一模板取得最小脱敏 fixture 集：基础成交、两个有重叠区间且 generation
    不同的 statement、账户 inception 或完整空 OpenPositions、correction/cancel
    样本、commission/currency 和无成交 coverage 样本。
-3. 为每项必需语义保留 IBKR 官方字段合同；公开材料无法证明的语义必须通过正式
-   支持渠道确认，不能只用 fixture 猜合同。
+3. 为每项必需语义保留 IBKR 官方字段合同的 URL、取得日期、UTF-8 artifact、
+   SHA-256、locator 与逐字引用；公开材料无法证明的语义必须通过正式支持渠道
+   确认，不能只用 fixture 猜合同。
 4. 填充 evidence manifest，运行 artifact/hash/semantic gate、全部 JRN-013 测试、
    真实 PostgreSQL migration gate和统一 gate；再取得同一 SHA 独立评审。
-5. 只有第 4 步通过才开放 owner-bound upload/preview route 并关闭 JRN-013。
+5. 只有第 4 步通过才允许 evidence-first route 进入 owner-bound upload/preview，
+   并在前端开放入口、关闭 JRN-013。
 6. 按 JRN-014 实现同 binding 的重复、重叠、增量 canonical confirm；验证同一
    账户按月导入不会重复记账，也不需要新建内部账户。
 7. 按 JRN-015 实现 correction/cancel-bust resolution；完成前相关文件继续

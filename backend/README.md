@@ -12,7 +12,7 @@ FastAPI 后端，负责认证、账户、交易 truth model、Timeline read mode
 
 - 普通用户不能保存 Broker、行情或 LLM 凭据。可选能力未来需要平台 secret 时，只能读取受管环境或加密 `IntegrationCredential`。
 - 缺失 `DEPLOYMENT_CAPABILITY_ALLOWLIST` 时 deployment ceiling 为空，数据库 FeatureFlag 不能越过该 ceiling。
-- `IBKR_FLEX_XML_V1` 是 `JRN-013` 至 `JRN-015` 的本地文件 adapter。JRN-013 已有内部 schema/parser/preview 基础，但 provider evidence 尚未验证且路由保持关闭；它不访问网络，也不使用 Flex Token 或 Query ID。
+- `IBKR_FLEX_XML_V1` 是 `JRN-013` 至 `JRN-015` 的本地文件 adapter。JRN-013 已有 schema/parser/preview 与 evidence-first API；provider evidence 尚未验证时 `/api/positions/import/ibkr-flex/upload` 在 staging 前返回 `404 FEATURE_DISABLED`。它不访问网络，也不使用 Flex Token 或 Query ID。
 
 ## 目录结构
 

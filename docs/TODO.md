@@ -22,7 +22,7 @@
 - `JRN-010` 已完成。implementation checkpoint `5cdf55e` 已通过 514 个后端测试、162 个前端测试、完整本地统一 gate 与 GitHub Actions run `30159669100`、job `89682822970`、artifact `8619959551`；migration head 为 `f6a7b8c9d0e1`。
 - `JRN-011` 已完成。implementation checkpoint `c235e03` 已通过 531 个后端测试、164 个前端测试、真实 CSV 双视口浏览器验收、完整本地统一 gate 与 GitHub Actions run `30162055891`、job `89688870542`、artifact `8620551325`；migration head 为 `a7b8c9d0e1f2`，generic confirm 仍严格关闭。
 - `JRN-012` 已完成。implementation checkpoint `b7907b4` 已通过 539 个后端测试、165 个前端测试、真实三行 CSV 双视口 confirm 验收、完整本地统一 gate 与 GitHub Actions run `30164943748`、job `89696243794`、artifact `8621327988`；migration head 为 `b8c9d0e1f2a3`，generic bootstrap confirm 已按一次性账户资格合同开放。
-- `JRN-013` 已在进度 checkpoint `0188077` 完成大部分 source schema、安全 parser、evidence gate、preview 与上传编排内部实现；默认 evidence manifest 仍为 `UNVERIFIED`，公开 route 保持关闭，任务不能关闭。重复、重叠文件的 canonical 增量确认与 correction replay 仍分别属于 `JRN-014/015`。
+- `JRN-013` 最新进度 checkpoint 为 `9a7b4ab`：source schema、安全 parser、preview、上传编排、持久 conflict read 和 evidence-first API 已实现；官方 evidence 现在必须绑定留存 artifact/hash/locator/逐字引用。默认 manifest 仍为 `UNVERIFIED`，route 在 staging 前返回 `404 FEATURE_DISABLED`，前端不展示入口，任务不能关闭。重复、重叠文件的 canonical 增量确认与 correction replay 仍分别属于 `JRN-014/015`。
 - 本轮不自动 merge 到 `main`、不创建 PR、不打 tag；这些属于后续显式操作。
 - 旧 P0-P19 阶段计划已归档到 [superpowers/plans/archive/](./superpowers/plans/archive/)。
 

@@ -15,7 +15,7 @@
 - `BROKER_SYNC`、`MARKET`、`AI_INSIGHTS`、`PDF_EXPORT`、`RISK_CARDS` 和 `OPEN_REGISTRATION` 当前均为 `DISABLED / DEFERRED`。对应 API、导航、设置、凭据写入和 job/outbox producer 不属于 JOURNAL Beta 可用面。
 - 可选能力必须同时满足外部 deployment allowlist 和数据库 runtime rollout；缺失部署 allowlist 时 ceiling 为空。数据库配置不能扩大 ceiling。
 - JOURNAL Beta 不执行 Broker 网络同步，不读取或要求 Broker、行情或 LLM 凭据。
-- `IBKR_FLEX_XML_V1` 是 `JRN-013` 至 `JRN-015` 的本地文件 adapter，不是在线 Broker Sync。JRN-013 的 source schema、安全 parser、provider-evidence gate、preview 与上传编排已有内部实现，但 evidence manifest 仍为 `UNVERIFIED`、公开入口未开放；canonical 增量确认和 correction replay 仍等待 JRN-014/015。
+- `IBKR_FLEX_XML_V1` 是 `JRN-013` 至 `JRN-015` 的本地文件 adapter，不是在线 Broker Sync。JRN-013 的 source schema、安全 parser、preview、上传编排与 evidence-first API 已实现，但 evidence manifest 仍为 `UNVERIFIED`；`POST /api/positions/import/ibkr-flex/upload` 在 staging 前返回 `404 FEATURE_DISABLED`，前端不展示入口。canonical 增量确认和 correction replay 仍等待 JRN-014/015。
 - `GENERIC_BOOTSTRAP` 已完成 JRN-011/012 upload、preview 和一次性 canonical confirm：模板、owner-bound 持久 session、CSV/XLSX 校验、24 小时 TTL、30 天 row cleanup、逐行选择、完整 lifecycle-prefix validation、永久 confirm 幂等与单事务 replay 已开放。Preview 不写 position/event/ledger；非空 confirm 只接受 eligible `CLEAN` 账户并原子转为 `MANUAL`。
 - `OPEN_REGISTRATION` 继续关闭；`/register` 与 `/api/auth/register` 只承担 invite-only onboarding。管理员创建一次性、限时、哈希存储且受审计的邀请码，注册必须提交有效 IANA 时区。两者不能被解释为开放注册。
 

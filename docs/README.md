@@ -9,7 +9,7 @@
 
 JOURNAL Beta 当前关闭 Broker network sync、Market、AI/Insights、PDF export、risk cards 和 open registration。历史 runbook、旧路由、页面或 service 代码仍可能存在，但不能据此判断能力已启用，也不能作为当前凭据配置或可用接口说明。
 
-`IBKR_FLEX_XML_V1` 是 active plan 中 `JRN-013` 至 `JRN-015` 的本地文件 adapter。JRN-013 已有 schema/parser/preview 内部实现，但 provider evidence 尚未验证且公开入口保持关闭；它不等同于在线 Broker Sync，不访问网络或读取 Broker 凭据。
+`IBKR_FLEX_XML_V1` 是 active plan 中 `JRN-013` 至 `JRN-015` 的本地文件 adapter。JRN-013 已有 schema/parser/preview 与 evidence-first API；provider evidence 尚未验证时 route 在 staging 前返回 `404 FEATURE_DISABLED`，前端不展示入口。它不等同于在线 Broker Sync，不访问网络或读取 Broker 凭据。
 
 ## 推荐阅读顺序
 
