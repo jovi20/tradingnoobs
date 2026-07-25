@@ -208,12 +208,19 @@ def test_populated_pre_extension_fixture_upgrades_without_data_loss(
         column["name"] for column in inspector.get_columns("user_settings")
     }
     assert {
-        "ibkr_flex_query_id",
-        "ibkr_flex_token",
         "ibkr_flex_start_date",
         "binance_market_type",
         "binance_symbols",
     } <= user_settings_columns
+    assert {
+        "ibkr_flex_query_id",
+        "ibkr_flex_token",
+        "binance_api_key",
+        "binance_api_secret",
+        "finnhub_api_key",
+        "llm_api_url",
+        "llm_api_key",
+    }.isdisjoint(user_settings_columns)
     assert {"broker_sync_runs", "broker_executions"} <= set(
         inspector.get_table_names()
     )
