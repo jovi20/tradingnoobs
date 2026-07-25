@@ -59,12 +59,14 @@ test('chart freshness maps to stable UI tones', () => {
 })
 
 test('chart trust label keeps missing trust visible with localized copy', () => {
+  const asOf = '2026-06-10T08:00:00Z'
+
   assert.equal(formatChartTrustLabel({}), '本地视图')
   assert.equal(formatChartTrustLabel({
     freshness: 'FRESH',
     source: 'DASHBOARD_DERIVED_READ_MODEL',
-    as_of: '2026-06-10T08:00:00Z',
-  }), '实时 · 组合汇总 · 数据时间 2026/6/10 16:00:00')
+    as_of: asOf,
+  }), `实时 · 组合汇总 · 数据时间 ${new Date(asOf).toLocaleString('zh-CN')}`)
   assert.equal(formatChartTrustLabel({
     freshness: 'UNKNOWN_VENDOR_STATE',
     source: 'UNKNOWN_TECHNICAL_SOURCE',
