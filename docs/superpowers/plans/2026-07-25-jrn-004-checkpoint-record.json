@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "record_kind": "JRN_TASK_CHECKPOINT",
+  "task_id": "JRN-004",
+  "branch": "dev",
+  "status": "CHECKPOINT_LOCAL_REVIEW_PASS_REMOTE_CI_PENDING",
+  "release_status": "NOT_READY_FOR_PRODUCTION",
+  "recorded_at": "2026-07-25T15:09:13+08:00",
+  "implementation_base_commit": "b8aa0fce2833c854c6f7f0753b0079e2d7cde575",
+  "implementation_checkpoint_commit": "575c67d7418ca9b9346b0402d890c316c7f962dd",
+  "implementation_commits": [
+    "080f85a6ae80a4375c70bc6507fbd27dcc9144ac",
+    "575c67d7418ca9b9346b0402d890c316c7f962dd"
+  ],
+  "record_commit_resolution": "git log -1 --format=%H -- docs/superpowers/plans/2026-07-25-jrn-004-checkpoint-record.json",
+  "review_subject": {
+    "commit": "575c67d7418ca9b9346b0402d890c316c7f962dd",
+    "plan_path": "docs/superpowers/plans/2026-07-16-dev-trading-journal-development-plan.md",
+    "migration_head": "b2c3d4e5f6a7",
+    "migration_blob": "7d4375c024f0304b1dfcb331f1cfe79d4fca4517",
+    "idempotency_service_blob": "aaccb4471e5b2444850ddbd3da5fbe32a6f9a2b4",
+    "account_ledger_service_blob": "19cb5c3c65c9b8b1cfd5303570b9fe9b140684c1",
+    "public_id_service_blob": "5d63c357cfc88b316f86bd98847fc328c13ab7c5",
+    "owner_boundary_test_blob": "94e7cb89bca732a518a823a1683d0611c40bec9f",
+    "developer_guide_blob": "591a1de58481b9526e88083da995bb7ea2604b58"
+  },
+  "scope_summary": [
+    "Scope idempotency records by owner while preserving a separate unique namespace for system-owned records.",
+    "Resolve concurrent first-use idempotency key conflicts through a savepoint and row lock.",
+    "Require account and strategy ownership when creating, resolving, listing, exporting, projecting, or aggregating positions.",
+    "Fail closed when truth lifecycle events, reversal references, ledger rows, opening or closing references cross an owner or position boundary.",
+    "Validate transaction, event, position, account, and ledger ownership graphs before ledger writes and journal-balance aggregation.",
+    "Return 404 without side effects for foreign public IDs, internal IDs, nested IDs, and corrupted mixed-owner graphs.",
+    "Keep legacy Import routes deny-only until the JRN-011 replacement exists.",
+    "Freeze the owner contract and reusable two-user probe harness for future Import and source reconciliation resources without claiming nonexistent models are tested.",
+    "Require a separate audited interface for any future administrator cross-owner operation; the current administrator role has no implicit journal CRUD bypass."
+  ],
+  "changed_files": [
+    {"status": "A", "path": "backend/alembic/versions/b2c3d4e5f6a7_scope_idempotency_keys_by_owner.py"},
+    {"status": "M", "path": "backend/models.py"},
+    {"status": "M", "path": "backend/routers/dashboard.py"},
+    {"status": "M", "path": "backend/routers/positions.py"},
+    {"status": "M", "path": "backend/routers/timeline.py"},
+    {"status": "M", "path": "backend/services/account_ledger_service.py"},
+    {"status": "M", "path": "backend/services/idempotency_service.py"},
+    {"status": "M", "path": "backend/services/legacy_truth_sync_service.py"},
+    {"status": "M", "path": "backend/services/public_id_service.py"},
+    {"status": "M", "path": "backend/services/trading_position_read_service.py"},
+    {"status": "M", "path": "backend/services/truth_legacy_projection_service.py"},
+    {"status": "M", "path": "backend/tests/test_idempotency_service.py"},
+    {"status": "M", "path": "backend/tests/test_jrn002_postgresql_gate.py"},
+    {"status": "M", "path": "backend/tests/test_jrn003_secret_migration.py"},
+    {"status": "A", "path": "backend/tests/test_jrn004_owner_boundaries.py"},
+    {"status": "M", "path": "backend/tests/test_market_data_alembic_adoption.py"},
+    {"status": "M", "path": "docs/DEVELOPER_GUIDE.md"}
+  ],
+  "verification_environment": {
+    "python": "3.13.5",
+    "node": "24.18.0",
+    "npm": "11.16.0",
+    "postgresql_server": "16.14 (Homebrew)"
+  },
+  "verification": [
+    {
+      "command": "JRN002_SECRET_SCAN_BASE=b8aa0fc JRN002_SECRET_SCAN_HEAD=HEAD backend/venv/bin/python scripts/run_journal_baseline_gate.py",
+      "result": "PASS on exact commit 575c67d7418ca9b9346b0402d890c316c7f962dd: 477 backend tests, current OpenAPI and release contracts, 160 frontend tests, typecheck, lint, and production build."
+    },
+    {
+      "command": "python scripts/check_added_secrets.py --base b8aa0fc --head 575c67d",
+      "result": "PASS: ruleset added-secrets-v1, 1200 added lines, 0 findings."
+    },
+    {
+      "command": "PostgreSQL 16 empty upgrade, populated fixture upgrade, b2c3d4e5f6a7 downgrade/re-upgrade, owner-scoped idempotency reuse, and concurrent first-use key creation",
+      "result": "PASS: migration head is stable after re-upgrade; two owners may reuse a client key independently; concurrent same-owner attempts persist one record and one canonical response."
+    },
+    {
+      "command": "cd backend && venv/bin/python -m pytest tests/test_jrn004_owner_boundaries.py tests/test_public_id_leaf_routes.py tests/test_public_id_nested_routes.py tests/test_public_id_routes.py -q",
+      "result": "PASS: 23 focused owner/public-ID tests, including direct batch public/internal IDs on a corrupted cross-owner strategy graph."
+    }
+  ],
+  "review": {
+    "reviewed_at": "2026-07-25T15:09:13+08:00",
+    "disposition": "LOCAL_APPROVE_WITH_REMOTE_CI_BLOCKER",
+    "blocking_findings_after_fix": [],
+    "fixed_findings": [
+      {
+        "severity": "P1",
+        "finding": "A batch under a current-user position whose strategy belonged to another owner was hidden from position lists but could still be resolved directly by batch public or internal ID.",
+        "resolution": "575c67d applies the same account and optional-strategy owner graph to both direct batch resolver branches and adds no-side-effect regression probes for public and internal IDs."
+      }
+    ],
+    "residual_risks": [
+      "GitHub Actions has not run for this checkpoint, so remote CI and required-check evidence remain unproven for JRN-002, JRN-003, and JRN-004.",
+      "After different owners create the same scope/key pair, downgrade to the former global uniqueness constraint can fail. JRN-019 must define a preflight and forward-fix or data-disposition policy instead of assuming a lossless rollback.",
+      "Owner consistency is enforced by application queries and tests rather than composite database foreign keys, so direct out-of-band database writes can still create corrupt graphs that application reads must reject.",
+      "Journal-balance validation currently performs nested owner checks per ledger row. This is correct for the Beta boundary but may become an N+1 performance bottleneck; JRN-006 should replace it with constrained relational queries or database invariants before ledger volume grows.",
+      "ImportSession, source binding, execution, observation, application, and reconciliation resources do not exist yet and remain required to instantiate the frozen owner probe harness in JRN-011 through JRN-015."
+    ]
+  },
+  "remote_ci": {
+    "status": "NOT_RUN",
+    "required_workflow": ".github/workflows/journal-baseline.yml",
+    "required_job": "journal-baseline",
+    "closure_condition": "Run the workflow for commit 575c67d7418ca9b9346b0402d890c316c7f962dd, retain its gate summary, and record a successful required-check conclusion before marking JRN-004 COMPLETE."
+  },
+  "excluded_existing_worktree_changes": [
+    ".github/workflows/deploy.yml",
+    "backend/ops/migrate_db.py",
+    "backup_db.sh",
+    "docs/market_data_sources.md",
+    "start.ps1",
+    "start.sh",
+    "update_libs.sh",
+    ".claude/",
+    "backend/requirements-dev.txt",
+    "backend/routers/open_registration 2.py"
+  ],
+  "next_task_gate": "PARTIALLY_SATISFIED: JRN-004 implementation is locally approved; JRN-005 contract and golden-vector work may begin, but JRN-006 accounting implementation and M0 release closure remain blocked on required remote CI evidence."
+}
