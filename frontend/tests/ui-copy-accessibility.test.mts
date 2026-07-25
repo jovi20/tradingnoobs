@@ -73,6 +73,8 @@ test('auth errors are announced and primary product headings do not mix English 
   const dashboard = readSource('components/dashboard/workbench/DashboardWorkbenchHeader.tsx')
   const insights = readSource('app/(product)/insights/InsightsPageClient.tsx')
   const admin = readSource('app/(admin)/admin/ops/page.tsx')
+  const importPage = readSource('app/(product)/positions/import/page.tsx')
+  const importTable = readSource('components/import/ImportPreviewTable.tsx')
 
   assert.match(login, /role="alert"/)
   assert.doesNotMatch(sidebar, />Decision Journal</)
@@ -80,6 +82,10 @@ test('auth errors are announced and primary product headings do not mix English 
   assert.doesNotMatch(dashboard, /eyebrow="Macro Command Center"/)
   assert.doesNotMatch(insights, /title="Auditable Insight Artifacts"/)
   assert.doesNotMatch(admin, />\s*Admin Ops\s*</)
+  assert.doesNotMatch(importPage, />\s*Preview\s*</)
+  assert.doesNotMatch(importTable, />\s*Identity\s*</)
+  assert.doesNotMatch(importTable, /\{err\.message\}|\{warning\.message\}/)
+  assert.match(importTable, /LONG: '多头'/)
 })
 
 test('settings presents Chinese labels while retaining technical identifiers as metadata', () => {

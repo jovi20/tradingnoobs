@@ -150,7 +150,7 @@ class JournalBetaReleaseContractTests(unittest.TestCase):
                     validator(value)
                 self.assertEqual(raised.exception.code, expected_code)
 
-    def test_import_and_source_names_are_frozen_without_claiming_implementation(self):
+    def test_import_preview_availability_and_source_names_are_frozen(self):
         contract = JOURNAL_BETA_CONTRACT
         self.assertEqual(
             contract.imports.adapter_allowlist,
@@ -159,22 +159,26 @@ class JournalBetaReleaseContractTests(unittest.TestCase):
         self.assertFalse(contract.imports.ibkr_flex_xml_v1.network_access)
         self.assertFalse(contract.imports.ibkr_flex_xml_v1.credential_access)
         self.assertEqual(
-            contract.imports.generic_bootstrap.preimplementation_policy,
-            "DENY_ONLY_404_FEATURE_DISABLED",
+            contract.imports.generic_bootstrap.availability,
+            "UPLOAD_PREVIEW_ONLY",
         )
         self.assertEqual(
-            contract.imports.generic_bootstrap.legacy_known_paths,
+            contract.imports.generic_bootstrap.implemented_paths,
             (
                 "/api/positions/import/upload",
-                "/api/positions/import/confirm",
                 "/api/positions/import/template",
+                "/api/positions/import/sessions/{session_public_id}",
             ),
+        )
+        self.assertEqual(
+            contract.imports.generic_bootstrap.disabled_paths,
+            ("/api/positions/import/confirm",),
         )
         self.assertEqual(
             tuple(path for _method, path in GENERIC_BOOTSTRAP_DISABLED_ROUTES),
             tuple(
                 path.removeprefix("/api/positions")
-                for path in contract.imports.generic_bootstrap.legacy_known_paths
+                for path in contract.imports.generic_bootstrap.disabled_paths
             ),
         )
         self.assertTrue(contract.imports.ibkr_flex_xml_v1.repeat_overlap_incremental)

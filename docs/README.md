@@ -51,7 +51,7 @@ JOURNAL Beta 当前关闭 Broker network sync、Market、AI/Insights、PDF expor
 | 文档 | 用途 |
 |------|------|
 | [admin-operations-runbook.md](./admin-operations-runbook.md) | 管理员备份、用户操作、stale job、force-cancel 与恢复演练。 |
-| [import-template.md](./import-template.md) | 通用 CSV/Excel 历史模板说明；IBKR source-bound adapter 尚未实现。 |
+| [import-template.md](./import-template.md) | JRN-011 通用 CSV/XLSX template/upload/preview 合同、维护命令与历史 parser 边界；confirm 和 IBKR source-bound adapter 尚未实现。 |
 | [market_data_sources.md](./market_data_sources.md) | 历史/延期市场数据实现参考；Market 在 JOURNAL Beta 关闭，不作为当前配置指南。 |
 | [report-export.md](./report-export.md) | 历史 P14 PDF 实现证据；PDF export 在 JOURNAL Beta 关闭。 |
 | [script-inventory.md](./script-inventory.md) | 项目脚本清单、保留/删除判断和维护规则。 |

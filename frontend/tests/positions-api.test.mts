@@ -3,6 +3,112 @@ import assert from 'node:assert/strict'
 
 import { ApiRequestError, positionsAPI } from '../lib/api.ts'
 
+test('uploadImportPreview sends owner account, file, and stable idempotency key', async () => {
+  const calls: Array<{ input: string | URL | Request; init?: RequestInit }> = []
+  const originalFetch = globalThis.fetch
+  const responsePayload = {
+    schema_version: 1,
+    session_public_id: 'session-1',
+    account_public_id: 'account-1',
+    adapter_kind: 'GENERIC_BOOTSTRAP',
+    file_format: 'CSV_UTF8',
+    status: 'PREVIEW_READY',
+    expires_at: '2026-07-26T10:00:00Z',
+    total_rows: 1,
+    valid_rows: 0,
+    error_rows: 1,
+    warning_rows: 0,
+    rows: [],
+    confirm_available: false,
+  }
+  globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+    calls.push({ input, init })
+    return new Response(JSON.stringify(responsePayload), {
+      status: 422,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  try {
+    const file = new File(['symbol\nAAPL\n'], 'trades.csv', { type: 'text/csv' })
+    const result = await positionsAPI.uploadImportPreview(
+      'token-1',
+      'account-1',
+      file,
+      'upload-key-1',
+    )
+    assert.equal(result.session_public_id, 'session-1')
+    assert.equal(calls.length, 1)
+    assert.equal(
+      String(calls[0].input),
+      'http://localhost:8000/api/positions/import/upload',
+    )
+    assert.equal(calls[0].init?.method, 'POST')
+    const headers = calls[0].init?.headers as Record<string, string>
+    assert.equal(headers.Authorization, 'Bearer token-1')
+    assert.equal(headers['Idempotency-Key'], 'upload-key-1')
+    assert.ok(calls[0].init?.body instanceof FormData)
+    const form = calls[0].init?.body as FormData
+    assert.equal(form.get('account_id'), 'account-1')
+    assert.equal(form.get('adapter_kind'), 'GENERIC_BOOTSTRAP')
+    assert.equal((form.get('file') as File).name, 'trades.csv')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('import session read and template download remain authenticated', async () => {
+  const calls: Array<{ input: string | URL | Request; init?: RequestInit }> = []
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+    calls.push({ input, init })
+    if (String(input).endsWith('/template')) {
+      return new Response('asset_type,market\n', {
+        status: 200,
+        headers: { 'Content-Type': 'text/csv' },
+      })
+    }
+    return new Response(JSON.stringify({
+      schema_version: 1,
+      session_public_id: 'session%2F1',
+      account_public_id: 'account-1',
+      adapter_kind: 'GENERIC_BOOTSTRAP',
+      file_format: 'CSV_UTF8',
+      status: 'PREVIEW_READY',
+      expires_at: '2026-07-26T10:00:00Z',
+      total_rows: 0,
+      valid_rows: 0,
+      error_rows: 0,
+      warning_rows: 0,
+      rows: [],
+      confirm_available: false,
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  try {
+    await positionsAPI.getImportSession('token-1', 'session/1')
+    const blob = await positionsAPI.downloadImportTemplate('token-1')
+    assert.equal(await blob.text(), 'asset_type,market\n')
+    assert.equal(
+      String(calls[0].input),
+      'http://localhost:8000/api/positions/import/sessions/session%2F1',
+    )
+    assert.equal(
+      String(calls[1].input),
+      'http://localhost:8000/api/positions/import/template',
+    )
+    assert.equal(
+      (calls[1].init?.headers as Record<string, string>).Authorization,
+      'Bearer token-1',
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test('createTradingPositionTradeEvent posts price and quantity changes to the truth event route', async () => {
   const calls: Array<{ input: string | URL | Request; init?: RequestInit }> = []
   const originalFetch = globalThis.fetch

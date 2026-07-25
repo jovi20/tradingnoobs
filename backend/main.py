@@ -33,6 +33,9 @@ async def lifespan(app: FastAPI):
             explicit=app_settings.auto_create_schema,
         ),
     )
+    from services.generic_import_service import scavenge_orphan_import_files
+
+    scavenge_orphan_import_files()
     yield
 
 
@@ -68,6 +71,7 @@ def create_app(release_profile: ReleaseProfile | str | None = None) -> FastAPI:
         auth,
         daily,
         dashboard,
+        import_sessions,
         journal,
         open_registration,
         positions,
@@ -97,6 +101,7 @@ def create_app(release_profile: ReleaseProfile | str | None = None) -> FastAPI:
         strategies.router,
         daily.router,
         accounts.router,
+        import_sessions.router,
         positions.router,
         journal.router,
         transactions.router,

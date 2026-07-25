@@ -151,8 +151,12 @@ class GenericBootstrapContract(_FrozenModel):
     mode: Literal["ONE_TIME_BOOTSTRAP"]
     trusted_external_trade_ids: Literal[False]
     implementation_gate: Literal["JRN_011_AND_JRN_012"]
-    preimplementation_policy: Literal["DENY_ONLY_404_FEATURE_DISABLED"]
-    legacy_known_paths: tuple[str, ...]
+    availability: Literal["UPLOAD_PREVIEW_ONLY"]
+    implemented_paths: tuple[str, ...]
+    disabled_paths: tuple[str, ...]
+    confirm_policy: Literal[
+        "DENY_ONLY_404_FEATURE_DISABLED_UNTIL_JRN_012"
+    ]
 
 
 class OwnerUploadLimitsContract(_FrozenModel):
@@ -368,13 +372,18 @@ class JournalBetaReleaseContract(_FrozenModel):
         )
         require_exact(self.imports.generic_bootstrap.formats, ("CSV_UTF8", "XLSX"), "generic formats")
         require_exact(
-            self.imports.generic_bootstrap.legacy_known_paths,
+            self.imports.generic_bootstrap.implemented_paths,
             (
                 "/api/positions/import/upload",
-                "/api/positions/import/confirm",
                 "/api/positions/import/template",
+                "/api/positions/import/sessions/{session_public_id}",
             ),
-            "legacy generic import paths",
+            "implemented generic import paths",
+        )
+        require_exact(
+            self.imports.generic_bootstrap.disabled_paths,
+            ("/api/positions/import/confirm",),
+            "disabled generic import paths",
         )
         require_exact(self.imports.ibkr_flex_xml_v1.formats, ("XML",), "IBKR formats")
         require_exact(

@@ -12,7 +12,8 @@ import {
     ChevronUp,
     ArrowUpCircle,
     ArrowDownCircle,
-    ArrowRight
+    ArrowRight,
+    Upload
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { TradeBatch } from '@/lib/api'
@@ -190,6 +191,13 @@ export default function PositionsPage() {
             <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold">交易记录</h1>
                 <div className="flex gap-2">
+                    <Link
+                        href="/positions/import"
+                        className="btn btn-secondary flex items-center"
+                    >
+                        <Upload className="w-4 h-4 mr-1" />
+                        导入
+                    </Link>
                     <Link href="/positions/new" className="btn btn-primary flex items-center">
                         <Plus className="w-4 h-4 mr-1" />
                         新增交易

@@ -2,7 +2,7 @@
 
 Next.js 前端，负责交易工作台、Timeline、Dashboard、仓位生命周期、设置和管理员操作界面。
 
-更新时间：2026-07-17
+更新时间：2026-07-25
 
 ## JOURNAL Beta 边界
 
@@ -10,7 +10,7 @@ Next.js 前端，负责交易工作台、Timeline、Dashboard、仓位生命周�
 
 `IBKR_FLEX_XML_V1` 是 `JRN-013` 至 `JRN-015` 计划中的本地文件导入 adapter，目前尚未实现。前端当前不得展示 Broker Token/Query ID 配置、网络同步按钮或“已连接”状态。
 
-旧 CSV/Excel Import 不满足 owner-bound 持久会话和 canonical identity 合同，已在 API 与 UI 同时关闭；`/positions/import` 直达访问进入框架 not-found 视图。`JRN-011`/`JRN-012` 完成新的 `GENERIC_BOOTSTRAP` preview/confirm 后才可重新开放。
+`/positions/import` 已接入 JRN-011 owner-bound 持久 upload/preview，显示 normalization、逐行错误/warning 和 session expiry。JRN-012 前不展示 confirm 控件，也不把 preview 描述为已入账。
 
 ## 技术栈
 

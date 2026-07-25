@@ -1300,6 +1300,47 @@ export interface PositionOpenIdentity {
     quote_currency: ReleaseCurrency
 }
 
+export interface ImportIssue {
+    code: string
+    field?: string | null
+    message: string
+}
+
+export interface ImportPreviewRow {
+    public_id: string
+    row_number: number
+    raw_values: Record<string, unknown>
+    normalized_values: Record<string, unknown>
+    is_valid: boolean
+    errors: ImportIssue[]
+    warnings: ImportIssue[]
+}
+
+export interface ImportSession {
+    schema_version: 1
+    session_public_id: string
+    account_public_id: string
+    adapter_kind: 'GENERIC_BOOTSTRAP'
+    file_format: 'CSV_UTF8' | 'XLSX'
+    status:
+        | 'UPLOADING'
+        | 'PREVIEW_READY'
+        | 'CONFIRMING'
+        | 'COMPLETED'
+        | 'COMPLETED_NOOP'
+        | 'CONFLICTED'
+        | 'FAILED'
+        | 'EXPIRED'
+    expires_at: string
+    total_rows: number
+    valid_rows: number
+    error_rows: number
+    warning_rows: number
+    error?: ImportIssue | null
+    rows: ImportPreviewRow[]
+    confirm_available: false
+}
+
 export interface BatchCreate {
     type: 'ENTRY' | 'EXIT'
     price: number
@@ -1354,6 +1395,64 @@ export interface TradingPositionVoidCreate {
 // ============== Positions API ==============
 
 export const positionsAPI = {
+    uploadImportPreview: async (
+        token: string,
+        accountPublicId: string,
+        file: File,
+        idempotencyKey: string,
+    ): Promise<ImportSession> => {
+        const form = new FormData()
+        form.append('account_id', accountPublicId)
+        form.append('adapter_kind', 'GENERIC_BOOTSTRAP')
+        form.append('file', file)
+        const response = await fetch(`${API_BASE}/api/positions/import/upload`, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${token}`,
+                'Idempotency-Key': idempotencyKey,
+            },
+            body: form,
+        })
+        const payload = await response.json().catch(() => null)
+        if (
+            (response.ok || response.status === 422)
+            && payload
+            && typeof payload.session_public_id === 'string'
+        ) {
+            return payload as ImportSession
+        }
+        const error = resolveApiError(payload, response.status)
+        throw new ApiRequestError(
+            response.status,
+            error.message,
+            error.code,
+            error.positionPublicId,
+        )
+    },
+
+    getImportSession: async (
+        token: string,
+        sessionPublicId: string,
+    ): Promise<ImportSession> => {
+        return fetchAPI(
+            `/api/positions/import/sessions/${encodeURIComponent(sessionPublicId)}`,
+            {},
+            token,
+        )
+    },
+
+    downloadImportTemplate: async (token: string): Promise<Blob> => {
+        const response = await fetch(`${API_BASE}/api/positions/import/template`, {
+            headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!response.ok) {
+            const payload = await response.json().catch(() => null)
+            const error = resolveApiError(payload, response.status)
+            throw new ApiRequestError(response.status, error.message, error.code)
+        }
+        return response.blob()
+    },
+
     list: async (token: string, params?: {
         status?: string;
         symbol?: string;

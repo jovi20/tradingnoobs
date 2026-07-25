@@ -533,6 +533,30 @@
         "title": "Body_login_api_auth_login_post",
         "type": "object"
       },
+      "Body_upload_generic_import_api_positions_import_upload_post": {
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "adapter_kind": {
+            "default": "GENERIC_BOOTSTRAP",
+            "title": "Adapter Kind",
+            "type": "string"
+          },
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_id",
+          "file"
+        ],
+        "title": "Body_upload_generic_import_api_positions_import_upload_post",
+        "type": "object"
+      },
       "CashDividendEffectEnum": {
         "enum": [
           "RECEIVED",
@@ -1046,6 +1070,187 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "ImportIssue": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ImportIssue",
+        "type": "object"
+      },
+      "ImportPreviewRow": {
+        "properties": {
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ImportIssue"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "is_valid": {
+            "title": "Is Valid",
+            "type": "boolean"
+          },
+          "normalized_values": {
+            "additionalProperties": true,
+            "title": "Normalized Values",
+            "type": "object"
+          },
+          "public_id": {
+            "title": "Public Id",
+            "type": "string"
+          },
+          "raw_values": {
+            "additionalProperties": true,
+            "title": "Raw Values",
+            "type": "object"
+          },
+          "row_number": {
+            "title": "Row Number",
+            "type": "integer"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ImportIssue"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "public_id",
+          "row_number",
+          "raw_values",
+          "normalized_values",
+          "is_valid"
+        ],
+        "title": "ImportPreviewRow",
+        "type": "object"
+      },
+      "ImportSessionResponse": {
+        "properties": {
+          "account_public_id": {
+            "title": "Account Public Id",
+            "type": "string"
+          },
+          "adapter_kind": {
+            "const": "GENERIC_BOOTSTRAP",
+            "title": "Adapter Kind",
+            "type": "string"
+          },
+          "confirm_available": {
+            "const": false,
+            "default": false,
+            "title": "Confirm Available",
+            "type": "boolean"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImportIssue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error_rows": {
+            "title": "Error Rows",
+            "type": "integer"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "file_format": {
+            "enum": [
+              "CSV_UTF8",
+              "XLSX"
+            ],
+            "title": "File Format",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ImportPreviewRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "session_public_id": {
+            "title": "Session Public Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "UPLOADING",
+              "PREVIEW_READY",
+              "CONFIRMING",
+              "COMPLETED",
+              "COMPLETED_NOOP",
+              "CONFLICTED",
+              "FAILED",
+              "EXPIRED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "total_rows": {
+            "title": "Total Rows",
+            "type": "integer"
+          },
+          "valid_rows": {
+            "title": "Valid Rows",
+            "type": "integer"
+          },
+          "warning_rows": {
+            "title": "Warning Rows",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "session_public_id",
+          "account_public_id",
+          "adapter_kind",
+          "file_format",
+          "status",
+          "expires_at",
+          "total_rows",
+          "valid_rows",
+          "error_rows",
+          "warning_rows"
+        ],
+        "title": "ImportSessionResponse",
         "type": "object"
       },
       "InboxSeverityEnum": {
@@ -8183,6 +8388,141 @@
         "summary": "Export Positions Csv",
         "tags": [
           "positions"
+        ]
+      }
+    },
+    "/api/positions/import/sessions/{session_public_id}": {
+      "get": {
+        "operationId": "get_generic_import_session_api_positions_import_sessions__session_public_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_public_id",
+            "required": true,
+            "schema": {
+              "title": "Session Public Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportSessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Generic Import Session",
+        "tags": [
+          "position-import"
+        ]
+      }
+    },
+    "/api/positions/import/template": {
+      "get": {
+        "operationId": "download_generic_import_template_api_positions_import_template_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Download Generic Import Template",
+        "tags": [
+          "position-import"
+        ]
+      }
+    },
+    "/api/positions/import/upload": {
+      "post": {
+        "operationId": "upload_generic_import_api_positions_import_upload_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_generic_import_api_positions_import_upload_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportSessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Upload Generic Import",
+        "tags": [
+          "position-import"
         ]
       }
     },

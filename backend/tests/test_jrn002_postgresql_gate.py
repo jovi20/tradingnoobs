@@ -29,6 +29,7 @@ from models import (
     AssetMaster,
     AuthRateLimitBucket,
     IdempotencyKey,
+    ImportSession,
     LedgerPostingKind,
     PositionEvent,
     PositionEventType,
@@ -50,10 +51,13 @@ from services.account_ledger_service import (
 from services.auth_rate_limit_service import consume_auth_attempt
 from services.auth_service import authenticate_user, create_user
 from services.idempotency_service import begin_idempotent_request
-from services.financial_command_service import lock_owned_account
+from services.financial_command_service import (
+    lock_owned_account,
+    permanently_forbid_account_hard_delete,
+)
 from services.instrument_identity_service import InstrumentIdentity
 from schemas import TradingAccountUpdate
-from routers.accounts import update_account
+from routers.accounts import delete_account, update_account
 from services.trading_position_write_service import (
     append_truth_trade_event,
     lock_owned_truth_position,
@@ -1421,3 +1425,115 @@ def test_jrn010_postgresql_reverse_close_vs_new_open_allows_at_most_one(
         ["CONFLICT", "OPENED"],
         ["CONFLICT", "REVERSED"],
     )
+
+
+def test_jrn011_postgresql_session_create_serializes_account_delete(
+    postgres_database: tuple[Engine, str],
+) -> None:
+    engine, database_url = postgres_database
+    _run_alembic(database_url, "upgrade", "head")
+    SessionLocal = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=engine,
+    )
+    with SessionLocal() as db:
+        user = User(
+            public_id="jrn011-pg-user",
+            email="jrn011-pg@example.com",
+            email_normalized="jrn011-pg@example.com",
+            hashed_password="hash",
+            status="ACTIVE",
+            is_active=True,
+            role="user",
+            timezone="UTC",
+        )
+        account = TradingAccount(
+            public_id="jrn011-pg-account",
+            user=user,
+            name="JRN011",
+            broker="IBKR",
+            currency="USD",
+            is_active=True,
+        )
+        db.add_all([user, account])
+        db.commit()
+        user_id = user.id
+        account_id = account.id
+        account_public_id = account.public_id
+
+    account_locked = Event()
+    allow_commit = Event()
+
+    def create_session() -> None:
+        with SessionLocal() as db:
+            account = lock_owned_account(
+                db,
+                user_id=user_id,
+                account_public_id=account_public_id,
+            )
+            assert account is not None
+            command = begin_idempotent_request(
+                db,
+                scope="GENERIC_IMPORT_UPLOAD_V1",
+                key="sha256:jrn011-postgresql-race",
+                request_payload={
+                    "account_public_id": account_public_id,
+                    "adapter_kind": "GENERIC_BOOTSTRAP",
+                    "file_hash": "sha256:fixture",
+                },
+                user_id=user_id,
+                ttl_seconds=None,
+            )
+            db.add(
+                ImportSession(
+                    public_id="jrn011-pg-session",
+                    user_id=user_id,
+                    account_id=account.id,
+                    upload_idempotency_id=command.record.id,
+                    adapter_kind="GENERIC_BOOTSTRAP",
+                    file_format="CSV_UTF8",
+                    file_hash="sha256:fixture",
+                    file_size_bytes=0,
+                    original_filename="fixture.csv",
+                    status="UPLOADING",
+                    expires_at=datetime(
+                        2026,
+                        7,
+                        26,
+                        10,
+                        0,
+                        tzinfo=timezone.utc,
+                    ),
+                )
+            )
+            permanently_forbid_account_hard_delete(account)
+            db.flush()
+            account_locked.set()
+            assert allow_commit.wait(timeout=10)
+            db.commit()
+
+    def delete_after_session() -> None:
+        assert account_locked.wait(timeout=10)
+        with SessionLocal() as db:
+            user = db.get(User, user_id)
+            assert user is not None
+            asyncio.run(delete_account(account_public_id, user, db))
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        create_future = executor.submit(create_session)
+        delete_future = executor.submit(delete_after_session)
+        assert account_locked.wait(timeout=10)
+        time.sleep(0.2)
+        assert not delete_future.done()
+        allow_commit.set()
+        create_future.result(timeout=10)
+        delete_future.result(timeout=10)
+
+    with SessionLocal() as db:
+        account = db.get(TradingAccount, account_id)
+        assert account is not None
+        assert account.is_active is False
+        assert account.hard_delete_eligible is False
+        session = db.execute(select(ImportSession)).scalar_one()
+        assert session.account_id == account_id

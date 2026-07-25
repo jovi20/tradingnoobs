@@ -2,7 +2,7 @@
 
 import { useCallback } from 'react'
 import { useDropzone } from 'react-dropzone'
-import { UploadCloud, FileSpreadsheet, AlertCircle } from 'lucide-react'
+import { UploadCloud, AlertCircle, Loader2 } from 'lucide-react'
 
 interface FileDropzoneProps {
     onFileSelect: (file: File) => void
@@ -21,10 +21,10 @@ export function FileDropzone({ onFileSelect, isUploading, error }: FileDropzoneP
         onDrop,
         accept: {
             'text/csv': ['.csv'],
-            'application/vnd.ms-excel': ['.xls'],
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
         },
         maxFiles: 1,
+        maxSize: 10 * 1024 * 1024,
         disabled: isUploading
     })
 
@@ -42,7 +42,9 @@ export function FileDropzone({ onFileSelect, isUploading, error }: FileDropzoneP
 
                 <div className="flex flex-col items-center gap-4">
                     <div className="p-4 rounded-full bg-panel-subtle text-ink-soft">
-                        <UploadCloud className="w-8 h-8" />
+                        {isUploading
+                            ? <Loader2 className="w-8 h-8 animate-spin" />
+                            : <UploadCloud className="w-8 h-8" />}
                     </div>
 
                     <div>
@@ -50,7 +52,7 @@ export function FileDropzone({ onFileSelect, isUploading, error }: FileDropzoneP
                             {isDragActive ? '松开即可上传文件' : '点击或拖拽文件上传'}
                         </p>
                         <p className="text-sm text-ink-muted mt-1">
-                            支持 CSV 与 Excel（.xlsx、.xls）
+                            CSV 或 XLSX，最大 10 MB
                         </p>
                     </div>
                 </div>

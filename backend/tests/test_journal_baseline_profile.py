@@ -114,22 +114,39 @@ class JournalBaselineProfileTests(unittest.TestCase):
         self.assertFalse(any(path.startswith("/api/market") for path in paths))
         self.assertFalse(any(path.startswith("/api/broker-sync") for path in paths))
         self.assertIn("/api/auth/register", paths)
-        self.assertNotIn("/api/positions/import/upload", paths)
+        self.assertIn("/api/positions/import/upload", paths)
         self.assertNotIn("/api/positions/import/confirm", paths)
-        self.assertNotIn("/api/positions/import/template", paths)
-
-    def test_legacy_import_paths_are_side_effect_free_until_persistent_import_exists(self):
-        requests = (
-            ("post", "/api/positions/import/upload", {"files": {"file": ("trades.csv", b"symbol,date")}}),
-            ("post", "/api/positions/import/confirm", {"json": {"file_token": "untrusted", "account_id": 999}}),
-            ("get", "/api/positions/import/template", {}),
+        self.assertIn("/api/positions/import/template", paths)
+        self.assertIn(
+            "/api/positions/import/sessions/{session_public_id}",
+            paths,
         )
 
-        for method, path, kwargs in requests:
-            response = self.client.request(method, path, **kwargs)
-            self.assertEqual(response.status_code, 404, response.text)
-            self.assertEqual(response.json()["error"]["code"], "FEATURE_DISABLED")
-            self.assertEqual(response.json()["detail"]["capability"], "GENERIC_BOOTSTRAP")
+    def test_import_preview_is_published_while_confirm_stays_fail_closed(self):
+        template = self.client.get("/api/positions/import/template")
+        self.assertEqual(template.status_code, 401, template.text)
+        self.assertNotEqual(
+            template.json().get("error", {}).get("code"),
+            "FEATURE_DISABLED",
+        )
+        upload = self.client.post(
+            "/api/positions/import/upload",
+            files={"file": ("trades.csv", b"symbol,date")},
+        )
+        self.assertNotEqual(
+            upload.json().get("error", {}).get("code"),
+            "FEATURE_DISABLED",
+        )
+        confirm = self.client.post(
+            "/api/positions/import/confirm",
+            json={"session_public_id": "untrusted"},
+        )
+        self.assertEqual(confirm.status_code, 404, confirm.text)
+        self.assertEqual(confirm.json()["error"]["code"], "FEATURE_DISABLED")
+        self.assertEqual(
+            confirm.json()["detail"]["capability"],
+            "GENERIC_BOOTSTRAP",
+        )
 
     def test_short_user_secret_is_never_returned_verbatim(self):
         self.assertEqual(mask_api_key("shrt"), "********")

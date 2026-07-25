@@ -3,7 +3,8 @@ Trading Noobs Backend - Database Models
 """
 from sqlalchemy import (
     Column, Integer, String, Text, Boolean, DateTime, Date,
-    ForeignKey, Numeric, JSON, Enum as SQLEnum, Index, UniqueConstraint, text
+    ForeignKey, Numeric, JSON, Enum as SQLEnum, Index, UniqueConstraint,
+    CheckConstraint, text
 )
 from sqlalchemy import event, inspect
 from sqlalchemy.orm import Session, relationship
@@ -141,6 +142,22 @@ class TradeSourceState(str, enum.Enum):
     CLEAN = "CLEAN"
     MANUAL = "MANUAL"
     SOURCE_BOUND = "SOURCE_BOUND"
+
+
+class ImportAdapterKind(str, enum.Enum):
+    GENERIC_BOOTSTRAP = "GENERIC_BOOTSTRAP"
+    IBKR_FLEX_XML_V1 = "IBKR_FLEX_XML_V1"
+
+
+class ImportSessionStatus(str, enum.Enum):
+    UPLOADING = "UPLOADING"
+    PREVIEW_READY = "PREVIEW_READY"
+    CONFIRMING = "CONFIRMING"
+    COMPLETED = "COMPLETED"
+    COMPLETED_NOOP = "COMPLETED_NOOP"
+    CONFLICTED = "CONFLICTED"
+    FAILED = "FAILED"
+    EXPIRED = "EXPIRED"
 
 
 class JobRunStatus(str, enum.Enum):
@@ -752,6 +769,138 @@ class TradingAccount(Base):
         "AccountingReconciliationCase",
         back_populates="account",
     )
+    import_sessions = relationship("ImportSession", back_populates="account")
+
+
+class ImportSession(Base):
+    __tablename__ = "import_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            "adapter_kind IN ('GENERIC_BOOTSTRAP', 'IBKR_FLEX_XML_V1')",
+            name="ck_import_sessions_adapter_kind",
+        ),
+        CheckConstraint(
+            "status IN ('UPLOADING', 'PREVIEW_READY', 'CONFIRMING', "
+            "'COMPLETED', 'COMPLETED_NOOP', 'CONFLICTED', 'FAILED', 'EXPIRED')",
+            name="ck_import_sessions_status",
+        ),
+        Index(
+            "ix_import_sessions_owner_account_created",
+            "user_id",
+            "account_id",
+            "created_at",
+        ),
+        Index(
+            "ix_import_sessions_status_expiry",
+            "status",
+            "expires_at",
+        ),
+        Index(
+            "ix_import_sessions_terminal_cleanup",
+            "terminal_at",
+            "rows_cleaned_at",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    public_id = Column(
+        String(36),
+        unique=True,
+        index=True,
+        nullable=False,
+        default=lambda: str(uuid.uuid4()),
+    )
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    account_id = Column(Integer, ForeignKey("trading_accounts.id"), nullable=False)
+    upload_idempotency_id = Column(
+        Integer,
+        ForeignKey("idempotency_keys.id"),
+        unique=True,
+        nullable=False,
+    )
+    adapter_kind = Column(String(40), nullable=False)
+    file_format = Column(String(20), nullable=False)
+    file_hash = Column(String(71), nullable=False)
+    file_size_bytes = Column(Integer, nullable=False)
+    original_filename = Column(String(255), nullable=False)
+    media_type = Column(String(150), nullable=True)
+    status = Column(String(30), nullable=False)
+    total_rows = Column(Integer, nullable=False, default=0)
+    valid_rows = Column(Integer, nullable=False, default=0)
+    error_rows = Column(Integer, nullable=False, default=0)
+    warning_rows = Column(Integer, nullable=False, default=0)
+    error_code = Column(String(100), nullable=True)
+    error_message = Column(Text, nullable=True)
+    response_schema_version = Column(Integer, nullable=False, default=1)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    status_changed_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    terminal_at = Column(DateTime(timezone=True), nullable=True)
+    rows_cleaned_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User")
+    account = relationship("TradingAccount", back_populates="import_sessions")
+    upload_idempotency = relationship("IdempotencyKey")
+    rows = relationship(
+        "ImportRow",
+        back_populates="session",
+        order_by="ImportRow.row_number",
+    )
+
+
+class ImportRow(Base):
+    __tablename__ = "import_rows"
+    __table_args__ = (
+        UniqueConstraint(
+            "session_id",
+            "row_number",
+            name="uq_import_rows_session_row_number",
+        ),
+        Index(
+            "ix_import_rows_owner_session_row",
+            "user_id",
+            "session_id",
+            "row_number",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    public_id = Column(
+        String(36),
+        unique=True,
+        index=True,
+        nullable=False,
+        default=lambda: str(uuid.uuid4()),
+    )
+    session_id = Column(Integer, ForeignKey("import_sessions.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    account_id = Column(Integer, ForeignKey("trading_accounts.id"), nullable=False)
+    adapter_kind = Column(String(40), nullable=False)
+    file_hash = Column(String(71), nullable=False)
+    row_number = Column(Integer, nullable=False)
+    raw_values_json = Column(JSON, nullable=False, default=dict)
+    normalized_values_json = Column(JSON, nullable=False, default=dict)
+    validation_errors_json = Column(JSON, nullable=False, default=list)
+    warnings_json = Column(JSON, nullable=False, default=list)
+    is_valid = Column(Boolean, nullable=False, default=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    session = relationship("ImportSession", back_populates="rows")
+    user = relationship("User")
+    account = relationship("TradingAccount")
 
 
 class SystemSetting(Base):

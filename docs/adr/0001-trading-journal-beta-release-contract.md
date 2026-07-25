@@ -37,7 +37,7 @@ Both adapters use a 10 MiB file limit, 5,000 rows/executions, a 24-hour preview 
 
 Account trade source state is `CLEAN / MANUAL / SOURCE_BOUND`. Source health is an orthogonal `NOT_APPLICABLE / HEALTHY / RECONCILIATION_REQUIRED / SOURCE_DIVERGED` projection whose persistent truth belongs to the source binding. Source completeness is `CURRENT / PENDING_IMPORT`. The complete ImportSession state graph and legal transitions are frozen in the machine contract; later tasks implement those models without renaming the states.
 
-This ADR freezes names, limits, retention, identity, and source states. It does not claim that either new Import implementation exists yet. Until replacement, the three known legacy `/api/positions/import/*` paths are deny-only and absent from OpenAPI; the unsafe in-memory handler is not imported. The frontend has no Import entry, and direct `/positions/import` access renders the framework not-found view. Generic Import is implemented in JRN-011/012; the source-bound IBKR parser and binding are implemented in JRN-013, incremental confirmation in JRN-014, and reconciliation in JRN-015.
+This ADR freezes names, limits, retention, identity, and source states. JRN-011 now implements the generic template, persistent owner-bound upload/preview sessions, TTL, cleanup, and preview UI; the unsafe in-memory handler remains unregistered. Generic confirm stays deny-only until JRN-012 and preview cannot write financial facts. The source-bound IBKR parser and binding are implemented in JRN-013, incremental confirmation in JRN-014, and reconciliation in JRN-015.
 
 ## Capability Ceiling
 

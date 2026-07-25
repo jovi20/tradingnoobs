@@ -1,7 +1,7 @@
 import os
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
@@ -312,7 +312,9 @@ class PublicIdRouteTests(unittest.TestCase):
         historical_public_id = historical.json()["public_id"]
         historical_id = historical.json()["id"]
         reversal_body = {
-            "occurred_at": "2026-07-25T14:00:00+00:00",
+            "occurred_at": (
+                datetime.now(timezone.utc) + timedelta(days=1)
+            ).isoformat(),
             "reason": "Opening balance entered twice",
         }
         reversal_headers = {

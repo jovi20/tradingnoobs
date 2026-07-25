@@ -112,6 +112,12 @@ class AlembicChainTests(unittest.TestCase):
                 broker_execution_columns = conn.execute(
                     "PRAGMA table_info(broker_executions)"
                 ).fetchall()
+                import_session_columns = conn.execute(
+                    "PRAGMA table_info(import_sessions)"
+                ).fetchall()
+                import_row_columns = conn.execute(
+                    "PRAGMA table_info(import_rows)"
+                ).fetchall()
             finally:
                 conn.close()
 
@@ -140,6 +146,8 @@ class AlembicChainTests(unittest.TestCase):
             }
             broker_sync_run_column_names = {row[1] for row in broker_sync_run_columns}
             broker_execution_column_names = {row[1] for row in broker_execution_columns}
+            import_session_column_names = {row[1] for row in import_session_columns}
+            import_row_column_names = {row[1] for row in import_row_columns}
             expected_tables = {
                 "alembic_version",
                 "users",
@@ -180,6 +188,8 @@ class AlembicChainTests(unittest.TestCase):
                 "accounting_reconciliation_cases",
                 "broker_sync_runs",
                 "broker_executions",
+                "import_sessions",
+                "import_rows",
                 "provider_symbol_mappings",
                 "latest_market_quotes",
                 "price_bars_daily",
@@ -319,6 +329,36 @@ class AlembicChainTests(unittest.TestCase):
                     "idempotency_key",
                     "raw_payload",
                 }.issubset(broker_execution_column_names)
+            )
+            self.assertTrue(
+                {
+                    "public_id",
+                    "user_id",
+                    "account_id",
+                    "upload_idempotency_id",
+                    "adapter_kind",
+                    "file_hash",
+                    "status",
+                    "expires_at",
+                    "terminal_at",
+                    "rows_cleaned_at",
+                }.issubset(import_session_column_names)
+            )
+            self.assertTrue(
+                {
+                    "public_id",
+                    "session_id",
+                    "user_id",
+                    "account_id",
+                    "adapter_kind",
+                    "file_hash",
+                    "row_number",
+                    "raw_values_json",
+                    "normalized_values_json",
+                    "validation_errors_json",
+                    "warnings_json",
+                    "is_valid",
+                }.issubset(import_row_column_names)
             )
         finally:
             if os.path.exists(db_path):

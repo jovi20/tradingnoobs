@@ -1488,21 +1488,48 @@ class PositionMarketAnalysisResponse(PositionResponse):
 
 # ============== Import Schemas ==============
 
-class ImportPreviewRow(BaseModel):
-    index: int
-    data: dict  # Raw data from file
-    is_valid: bool
-    errors: List[str] = []
-    parsed: Optional[dict] = None  # Parsed and normalized data
+class ImportIssue(BaseModel):
+    code: str
+    field: Optional[str] = None
+    message: str
 
-class ImportPreviewResponse(BaseModel):
+
+class ImportPreviewRow(BaseModel):
+    public_id: str
+    row_number: int
+    raw_values: Dict[str, Any]
+    normalized_values: Dict[str, Any]
+    is_valid: bool
+    errors: List[ImportIssue] = Field(default_factory=list)
+    warnings: List[ImportIssue] = Field(default_factory=list)
+
+
+class ImportSessionResponse(BaseModel):
+    schema_version: Literal[1] = 1
+    session_public_id: str
+    account_public_id: str
+    adapter_kind: Literal["GENERIC_BOOTSTRAP"]
+    file_format: Literal["CSV_UTF8", "XLSX"]
+    status: Literal[
+        "UPLOADING",
+        "PREVIEW_READY",
+        "CONFIRMING",
+        "COMPLETED",
+        "COMPLETED_NOOP",
+        "CONFLICTED",
+        "FAILED",
+        "EXPIRED",
+    ]
+    expires_at: datetime
     total_rows: int
     valid_rows: int
     error_rows: int
-    preview_rows: List[ImportPreviewRow]  # First N rows or all validation errors
-    file_token: str  # Temporary token to reference uploaded file cache
+    warning_rows: int
+    error: Optional[ImportIssue] = None
+    rows: List[ImportPreviewRow] = Field(default_factory=list)
+    confirm_available: Literal[False] = False
+
 
 class ImportConfirmRequest(BaseModel):
-    file_token: str
-    account_id: Optional[int] = None # Target account if not specified in file
-    selected_indices: Optional[List[int]] = None # If None, import all valid rows
+    session_public_id: str
+    selected_row_public_ids: List[str] = Field(default_factory=list)

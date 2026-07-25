@@ -13,7 +13,7 @@
 - JRN-000 已固定 Alembic baseline head `9cad10111213`。JRN-001 不新增 Alembic revision，因此回退 JRN-001 不执行 schema downgrade，也不能改写 JRN-000 migration chain。
 - 回退前先让 `DEPLOYMENT_CAPABILITY_ALLOWLIST` 保持为空，并保持 Broker network sync、Market、AI/Insights、PDF、risk cards 和 open registration 全部 hard-off。runtime flag 不能作为扩大 ceiling 的回退手段。
 - JRN-001 的机器合同 `backend/app_config/journal_beta_v1.json`、严格 loader、ADR、frontend generator 与 `frontend/lib/generated/release-contract.ts` 必须锁步回退；不得只回退生成文件或只回退后端合同。
-- 回退 JRN-001 不得恢复 legacy in-memory Import handler 或 `/positions/import` UI。`GENERIC_BOOTSTRAP` 在 JRN-011/012 完成前始终保持三条 API deny-only、OpenAPI 隐藏和前端 not-found；否则回退会重新引入跨 owner 写入与非原子入账路径。
+- 回退 JRN-011 时必须成组关闭 template、upload、session read 和 `/positions/import` UI，并恢复 confirm-only 之外的完整 deny-only boundary；不得把路由切回 legacy in-memory Import handler。正常 JRN-011 状态只开放持久 preview，confirm 继续 hard-off。
 - 回退 JRN-001 不得恢复普通 `/api/positions` 路由上的 `X-Migration-Fallback` 信任式绕过，也不得恢复 `?migrationFallback=1` 前端入口。legacy review、position hard delete 与 batch create/edit/delete 在普通产品面保持 fail-closed；真正的迁移 mutation 必须等待受审计的 admin/CLI namespace，不能以客户端自报 header 代替。
 - 回退 JRN-001 不得恢复 `GET /api/positions/{id}/truth-lifecycle` 的惰性 legacy backfill。缺少 truth 时读取保持 not-found 和零 flush/commit；任何 explicit sync 在写入 asset、event 或 ledger 前都必须复验 legacy Position、TradingPosition 与 TradingAccount 的 owner/account 一致性。
 - capability router/secret/job/outbox 与 journal-only UI/API DTO 也必须按 scoped checkpoint 边界成组回退，避免出现 API、OpenAPI、前端和 producer 半开状态。
@@ -106,7 +106,7 @@
 正常路径：
 - Insights 周报 PDF 通过后端 PDF renderer 生成。
 - 前端导出按钮只调用既有 export API，不直接拼装 PDF。
-- 历史导入模板字段文档只是未注册 legacy parser 的参考；当前没有模板下载、upload 或 confirm 用户路径。
+- 通用模板下载与持久 upload/preview 已由 JRN-011 提供；confirm 仍关闭且 preview 不写任何财务事实。历史 legacy parser 只保留为不可达参考。
 
 安全回滚顺序：
 - 如果 PDF 生成失败，优先返回用户可读错误并保留页面可用性。

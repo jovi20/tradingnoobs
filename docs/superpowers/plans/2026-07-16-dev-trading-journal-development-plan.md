@@ -218,7 +218,7 @@ effective_enabled = deployment_capability_allowlist AND runtime_rollout_flag
 完成定义：
 
 - 产出机器可读 release profile 和 ADR，冻结唯一 Beta 币种、instrument/event allowlist、`HEDGE_BY_DIRECTION`、单 event 聚合 fee、timezone、idempotency namespace/retention、Import 限额、`GENERIC_BOOTSTRAP` 与 `IBKR_FLEX_XML_V1` adapter allowlist、source-state 合同和禁用能力。
-- `GENERIC_BOOTSTRAP` 与 `IBKR_FLEX_XML_V1` 在各自 implementation gate 关闭前都不等于已实现：旧 `/api/positions/import/upload|confirm|template` 必须由不 import legacy handler 的 deny-only stub 返回 404 `FEATURE_DISABLED`，从 OpenAPI 移除，前端入口不存在且 `/positions/import` 直达访问进入框架 not-found 视图；只有 JRN-011/012 或 JRN-013 至 015 的 owner-bound 持久会话实现通过后才能按对应 adapter 重新开放。
+- `GENERIC_BOOTSTRAP` 与 `IBKR_FLEX_XML_V1` 只能按各自 implementation gate 分段开放：JRN-011 通过后可开放不产生财务写入的 template/upload/persistent preview 与 UI，confirm 仍须由 deny-only stub 返回 404 `FEATURE_DISABLED`；JRN-012 通过后才开放 generic confirm。IBKR 路径在 JRN-013 至 015 的 owner-bound/source-bound gate 完成前继续 hard-off。任何阶段都不得导入 legacy in-memory handler。
 - 实现 deployment allowlist 与 runtime flag 的双层守卫；allowlist 只读环境/部署配置且不落业务数据库，Admin 不能强开 ceiling 外能力。
 - 在线 Broker、Market、AI、PDF、风险和开放注册的 API、UI、secret、job/outbox、文档同时 fail-closed；`IBKR_FLEX_XML_V1` 只允许本地文件解析，不得借 adapter 触发网络或读取凭据。
 - 未启用事件（stock split、option、transfer 等）即使直连 API 也稳定拒绝。

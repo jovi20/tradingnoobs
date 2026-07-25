@@ -17,6 +17,7 @@ from models import (
     AssetMaster,
     BatchType,
     DailySummary,
+    ImportSession,
     JournalEntry,
     Position,
     PositionDirection,
@@ -661,12 +662,33 @@ class JRN004OwnerBoundaryTests(unittest.TestCase):
         self.db.rollback()
         self.assertEqual(self.db.query(AccountLedgerEntry).count(), ledger_count)
 
-    def test_legacy_import_routes_remain_deny_only(self):
-        for method, path in (
-            ("POST", "/api/positions/import/upload"),
-            ("POST", "/api/positions/import/confirm"),
-            ("GET", "/api/positions/import/template"),
-        ):
-            response = self.client.request(method, path)
-            self.assertEqual(response.status_code, 404, response.text)
-            self.assertEqual(response.json()["detail"]["code"], "FEATURE_DISABLED")
+    def test_import_preview_is_owner_bound_while_confirm_remains_deny_only(self):
+        cross_owner = self.client.post(
+            "/api/positions/import/upload",
+            headers={"Idempotency-Key": "cross-owner-import"},
+            data={
+                "account_id": self.foreign_account.public_id,
+                "adapter_kind": "GENERIC_BOOTSTRAP",
+            },
+            files={
+                "file": (
+                    "trades.csv",
+                    (
+                        b"asset_type,market,exchange_code,symbol,"
+                        b"instrument_type,direction,action,timestamp,"
+                        b"price,quantity,currency\n"
+                    ),
+                )
+            },
+        )
+        self.assertEqual(cross_owner.status_code, 404, cross_owner.text)
+        self.assertEqual(self.db.query(ImportSession).count(), 0)
+
+        template = self.client.get("/api/positions/import/template")
+        self.assertEqual(template.status_code, 200, template.text)
+        confirm = self.client.post(
+            "/api/positions/import/confirm",
+            json={"session_public_id": "untrusted"},
+        )
+        self.assertEqual(confirm.status_code, 404, confirm.text)
+        self.assertEqual(confirm.json()["detail"]["code"], "FEATURE_DISABLED")

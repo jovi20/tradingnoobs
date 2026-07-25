@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from models import (
     AccountLedgerEntry,
     IdempotencyKey,
+    ImportSession,
     PositionEvent,
     Transaction,
     TradingAccount,
@@ -153,6 +154,13 @@ def account_has_financial_history(db: Session, *, account: TradingAccount) -> bo
         ),
     )
     return any(query.first() is not None for query in checks)
+
+
+def account_has_import_history(db: Session, *, account: TradingAccount) -> bool:
+    return db.query(ImportSession.id).filter(
+        ImportSession.account_id == account.id,
+        ImportSession.user_id == account.user_id,
+    ).first() is not None
 
 
 def permanently_forbid_account_hard_delete(account: TradingAccount) -> None:

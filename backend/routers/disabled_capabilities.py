@@ -87,12 +87,10 @@ OPEN_REGISTRATION_DISABLED_ROUTES = _disabled_routes(
     OPEN_REGISTRATION_LAZY_ROUTES
 )
 
-# The legacy import handlers predate the owner-bound, persistent ImportSession
-# contract. Keep every known path deny-only until JRN-011/JRN-012 replaces them.
+# JRN-011 replaces upload, preview read, and template with persistent,
+# owner-bound routes. Canonical confirm stays deny-only until JRN-012.
 GENERIC_BOOTSTRAP_DISABLED_ROUTES: tuple[DisabledRoute, ...] = (
-    ("POST", "/import/upload"),
     ("POST", "/import/confirm"),
-    ("GET", "/import/template"),
 )
 
 

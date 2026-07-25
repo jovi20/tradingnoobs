@@ -39,6 +39,7 @@ from services.auth_service import get_current_user
 from services.financial_command_service import (
     FinancialCommandError,
     account_has_financial_history,
+    account_has_import_history,
     begin_financial_command,
     complete_financial_command,
     financial_request_id,
@@ -211,6 +212,7 @@ async def update_account(
             and (
                 not account.hard_delete_eligible
                 or account_has_financial_history(db, account=account)
+                or account_has_import_history(db, account=account)
             )
         ):
             db.rollback()
@@ -248,6 +250,7 @@ async def delete_account(
     if (
         not account.hard_delete_eligible
         or account_has_financial_history(db, account=account)
+        or account_has_import_history(db, account=account)
     ):
         account.is_active = False
     else:

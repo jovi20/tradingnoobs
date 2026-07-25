@@ -16,7 +16,7 @@
 - 可选能力必须同时满足外部 deployment allowlist 和数据库 runtime rollout；缺失部署 allowlist 时 ceiling 为空。数据库配置不能扩大 ceiling。
 - JOURNAL Beta 不执行 Broker 网络同步，不读取或要求 Broker、行情或 LLM 凭据。
 - `IBKR_FLEX_XML_V1` 是 `JRN-013` 至 `JRN-015` 计划实现的本地文件 adapter，不是在线 Broker Sync；重复、重叠、增量确认和 correction replay 截至本次更新均未实现或开放。
-- `GENERIC_BOOTSTRAP` 同样尚未实现。`POST /api/positions/import/upload`、`POST /api/positions/import/confirm` 和 `GET /api/positions/import/template` 当前仅由 deny-only stub 返回 `404 FEATURE_DISABLED`，不进入 OpenAPI，也不提供模板、上传、preview 或 confirm；前端没有 Import 入口，直达 `/positions/import` 进入 framework not-found 视图。
+- `GENERIC_BOOTSTRAP` 已完成 JRN-011 upload/preview：模板、owner-bound 持久 session、CSV/XLSX 校验、24 小时 TTL、30 天 row cleanup 和 `/positions/import` preview UI 已开放。`POST /api/positions/import/confirm` 仍由 deny-only stub 返回 `404 FEATURE_DISABLED`；preview 不写 position/event/ledger，等待 JRN-012 canonical replay。
 - `OPEN_REGISTRATION` 继续关闭；`/register` 与 `/api/auth/register` 只承担 invite-only onboarding。管理员创建一次性、限时、哈希存储且受审计的邀请码，注册必须提交有效 IANA 时区。两者不能被解释为开放注册。
 
 ---
@@ -105,6 +105,7 @@ Owner/tenant 边界遵循同一合同：普通 API 对非当前用户的 public 
 - `/dashboard`：宏观 Dashboard 工作台。
 - `/positions`
 - `/positions/new`
+- `/positions/import`：JRN-011 持久 upload/preview；confirm 尚未开放。
 - `/positions/[id]`
 - `/positions/[id]/add-batch`
 - `/admin/jobs`
@@ -116,7 +117,7 @@ Owner/tenant 边界遵循同一合同：普通 API 对非当前用户的 public 
 - `/login`
 - `/register`：一次性邀请码注册，必须明确选择 IANA 时区。
 
-`/positions/import` 只是调用 `notFound()` 的禁用壳，不是当前主要页面或可用 Import UI。`/insights`、风险卡和 PDF 导出代码可能仍留在仓库中，但当前必须隐藏或不可达。
+`/insights`、风险卡和 PDF 导出代码可能仍留在仓库中，但当前必须隐藏或不可达。
 
 前端 legacy DTO 边界：
 - 新功能不应直接从 `frontend/lib/api.ts` 引入 legacy `Position` / `TradeBatch` / `BatchCreate` / `Transaction`。
@@ -138,6 +139,7 @@ Owner/tenant 边界遵循同一合同：普通 API 对非当前用户的 public 
 | 平台配置 | `核心存在 / optional secret hard-off` | FeatureFlag 等基础代码存在；Broker、Market、LLM 的普通设置、凭据写入与测试入口在 JOURNAL Beta 关闭。 |
 | 交易账户与资金记录 | `桥接完成 / 继续收敛` | `AccountLedgerEntry` 已落地，账户现金读模型已优先使用 ledger；legacy transaction 路径仍存在。 |
 | Trading truth model | `桥接完成 / 硬切推进中` | `TradingPosition / PositionEvent / AccountLedgerEntry`、FIFO、truth lifecycle、truth-first add/reduce/close、truth narrative、latest active event reversal 和 whole-position void 已落地；新建仓位会 create-and-sync 到 truth lifecycle，已有仓位的普通加仓/减仓/平仓/复盘/叙事不再静默写 legacy 字段。 |
+| 通用 Import | `JRN-011 preview complete / confirm hard-off` | `ImportSession/ImportRow`、owner/account 锁、永久 upload 幂等、CSV/XLSX limits、DST/identity normalization、临时文件清理和 preview UI 已落地；JRN-012 前不产生 canonical 财务事实。 |
 | Legacy 持仓路径 | `迁移期保留 / public mutation hard-off` | `Position / TradeBatch / Transaction / AssetMetadata / DailySnapshot` 仍被部分读取、create-and-sync bridge、Dashboard 和 Timeline fallback 使用；未注册的历史 Import parser 也仍引用其中部分模型，但不是可达路径。public legacy review、position hard delete 与 batch create/edit/delete 对已有 owner 资源稳定返回 `409`，任何 migration fallback header 都不能解锁。 |
 | Timeline 首页 | `truth/snapshot 默认` | Timeline / Review Inbox 已是产品中心，核心事件使用 `DerivedTimelineSnapshot`；AI artifact feed 代码当前 hard-off，legacy mixed feed 只作为 rollback。 |
 | Lifecycle Detail | `truth-first 已落地` | 单笔详情展示 truth lifecycle、evidence 和 ledger cash effects；AI sidecar 代码在 JOURNAL Beta 隐藏。canonical review lives in `PositionEvent` narrative，legacy review 只作为 migration context 展示；latest active event reversal 会追加 `REVERSAL`，`OPEN` 只能通过整仓 void 逆序补偿。撤销旧 REDUCE/CLOSE 或 void 较早 lifecycle 时，任何更晚 same-side non-void lifecycle 都返回 `POSITION_LIFECYCLE_ORDER_CONFLICT`，必须从最新向前作废。 |

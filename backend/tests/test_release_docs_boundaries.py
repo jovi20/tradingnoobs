@@ -130,62 +130,44 @@ class ReleaseDocumentationBoundaryTests(unittest.TestCase):
             with self.subTest(obsolete_instruction=obsolete_instruction):
                 self.assertNotIn(obsolete_instruction, rollback_playbook)
 
-    def test_generic_import_document_is_only_an_unregistered_historical_reference(self):
+    def test_generic_import_document_matches_jrn011_preview_boundary(self):
         import_reference = (
             self.repository_root / "docs" / "import-template.md"
         ).read_text(encoding="utf-8")
 
         for required_boundary in (
-            "`GENERIC_BOOTSTRAP` 尚未实现",
+            "`JRN-011` 已实现",
             "Historical unregistered legacy parser reference",
             "`POST /api/positions/import/upload`",
             "`POST /api/positions/import/confirm`",
             "`GET /api/positions/import/template`",
+            "`GET /api/positions/import/sessions/{session_public_id}`",
             "`404 FEATURE_DISABLED`",
-            "不进入 OpenAPI",
-            "当前不提供通用导入模板下载、文件上传、preview 或 confirm",
-            "直达 `/positions/import` 进入 framework not-found 视图",
-            "不是当前主要页面",
+            "不写入 position、event 或 ledger",
+            "10 MiB、5,000 行",
+            "`410 IMPORT_SESSION_EXPIRED`",
+            "永久失去 hard-delete 资格",
+            "`CREATE_ON_CONFIRM`",
+            "不删除 audit shell",
         ):
             with self.subTest(required_boundary=required_boundary):
                 self.assertIn(required_boundary, import_reference)
 
-        misleading_patterns = {
-            "zh_current_support_or_output": r"(?:当前|目前)(?:已经)?(?:支持|输出|提供)(?:[^。\n]{0,40})(?:CSV|Excel|模板|导入|列)",
-            "zh_upload_or_confirm_behavior": r"(?:上传时|上传后|确认导入时|confirm 时)(?:[^。\n]{0,20})(?:会|将)(?:解析|返回|写入|导入|持久化)",
-            "zh_financial_write_claim": r"(?:校验通过|已选择|有效)(?:[^。\n]{0,25})(?:会|将)(?:写入|导入|入账)",
-            "en_current_support_or_output": r"(?i)\bcurrently (?:supports?|outputs?|returns?|provides?)\b",
-            "en_upload_or_confirm_behavior": r"(?i)\b(?:on upload|on confirm(?:ation)?)\b[^.\n]{0,40}\b(?:will|writes?|persists?|imports?)\b",
-            "en_financial_write_claim": r"(?i)\b(?:valid|selected) rows?\b[^.\n]{0,40}\b(?:will be )?(?:written|imported|persisted)\b",
-        }
-        for claim, pattern in misleading_patterns.items():
-            with self.subTest(claim=claim):
-                self.assertIsNone(re.search(pattern, import_reference))
-
         for misleading_phrase in (
-            "## 支持文件类型",
-            "## 当前模板列",
-            "当前输出以下列名",
-            "当前后端模板",
-            "上传时系统会",
             "确认导入时写入",
-            "currently supported",
-            "currently returns",
             "will be written",
         ):
             with self.subTest(misleading_phrase=misleading_phrase):
                 self.assertNotIn(misleading_phrase, import_reference)
 
-        historical_field_table = import_reference.split("## 历史字段表", 1)[1].split(
-            "## 历史样例行", 1
+        canonical_table = import_reference.split("## Canonical 模板列", 1)[1].split(
+            "## 临时文件与维护",
+            1,
         )[0]
-        historical_field_rows = [
-            line for line in historical_field_table.splitlines() if line.startswith("| `")
+        canonical_rows = [
+            line for line in canonical_table.splitlines() if line.startswith("| `")
         ]
-        self.assertEqual(14, len(historical_field_rows))
-        for field_row in historical_field_rows:
-            with self.subTest(field_row=field_row):
-                self.assertIn("旧 parser 曾", field_row)
+        self.assertEqual(15, len(canonical_rows))
 
     def test_developer_guide_excludes_disabled_import_ui_and_freezes_legacy_mutations(self):
         developer_guide = (
@@ -195,11 +177,17 @@ class ReleaseDocumentationBoundaryTests(unittest.TestCase):
             "前端 legacy DTO 边界：", 1
         )[0]
 
-        self.assertNotIn("- `/positions/import`", current_pages)
-        self.assertIn("`GENERIC_BOOTSTRAP` 同样尚未实现", developer_guide)
-        self.assertIn("当前仅由 deny-only stub 返回 `404 FEATURE_DISABLED`", developer_guide)
-        self.assertIn("不进入 OpenAPI，也不提供模板、上传、preview 或 confirm", developer_guide)
-        self.assertIn("`/positions/import` 只是调用 `notFound()` 的禁用壳", developer_guide)
+        self.assertIn("- `/positions/import`", current_pages)
+        self.assertIn(
+            "`GENERIC_BOOTSTRAP` 已完成 JRN-011 upload/preview",
+            developer_guide,
+        )
+        self.assertIn(
+            "`POST /api/positions/import/confirm` 仍由 deny-only stub 返回 `404 FEATURE_DISABLED`",
+            developer_guide,
+        )
+        self.assertIn("preview 不写 position/event/ledger", developer_guide)
+        self.assertNotIn("只是调用 `notFound()` 的禁用壳", developer_guide)
 
         for mutation in (
             "legacy review `PATCH /api/positions/{position_id}`",
@@ -222,27 +210,22 @@ class ReleaseDocumentationBoundaryTests(unittest.TestCase):
             with self.subTest(stale_claim=stale_claim):
                 self.assertNotIn(stale_claim, developer_guide)
 
-    def test_active_metrics_do_not_treat_legacy_commission_parser_as_live_import(self):
+    def test_active_metrics_distinguish_preview_fee_from_canonical_posting(self):
         metrics = (
             self.repository_root / "docs" / "trading-metrics.md"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("状态：`部分实现 / Import fee 未实现`", metrics)
-        self.assertIn("`GENERIC_BOOTSTRAP` 尚未实现", metrics)
-        self.assertIn("三条 legacy Import API 当前仅返回 `404 FEATURE_DISABLED`", metrics)
-        self.assertIn("未注册 legacy parser 代码中保留的 `commission` 解析分支", metrics)
-        self.assertIn("只是一项 historical reference", metrics)
-        self.assertIn("不是当前 Import 路径，也不会产生 canonical fee 写入", metrics)
-        self.assertIn("`JRN-011`/`JRN-012` 必须按单 event 聚合 fee", metrics)
-        self.assertNotIn("导入流程支持解析 `commission`", metrics)
-        self.assertIsNone(
-            re.search(
-                r"(?:当前|现有)?导入流程[^。\n]{0,30}(?:支持|已经|会)[^。\n]{0,20}`?commission`?",
-                metrics,
-            )
+        self.assertIn(
+            "状态：`部分实现 / Import preview fee 已规范化、confirm 未实现`",
+            metrics,
         )
+        self.assertIn("JRN-011 upload/preview 已实现", metrics)
+        self.assertIn("不会写入 canonical ledger", metrics)
+        self.assertIn("legacy parser 的 `commission` 分支仍只是一项 historical reference", metrics)
+        self.assertIn("`JRN-012` 必须把 preview fee", metrics)
+        self.assertNotIn("导入流程支持解析 `commission`", metrics)
 
-    def test_active_roadmap_does_not_describe_legacy_import_as_reachable(self):
+    def test_active_roadmap_keeps_legacy_parser_unreachable(self):
         roadmap = (
             self.repository_root / "docs" / "project-summary-and-roadmap.md"
         ).read_text(encoding="utf-8")
@@ -251,7 +234,8 @@ class ReleaseDocumentationBoundaryTests(unittest.TestCase):
         )
 
         self.assertIn("未注册 historical Import parser", legacy_risk_row)
-        self.assertIn("不存在可达 Import 路径", legacy_risk_row)
+        self.assertIn("JRN-011 preview 不调用", legacy_risk_row)
+        self.assertIn("JRN-012 confirm 仍关闭", legacy_risk_row)
         self.assertNotRegex(legacy_risk_row, r"仍支撑[^|]*导入")
 
 
