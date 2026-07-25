@@ -437,10 +437,9 @@ def parse_ibkr_flex_xml(
                 code="IBKR_CHANGE_EVENT_ID_MISSING",
             )
             external_execution_id = None
-            affected_execution_id = _required_attribute(
+            affected_execution_id = _optional_attribute(
                 element,
                 fields.affected_execution_id_field,
-                code="IBKR_CHANGE_TARGET_MISSING",
             )
 
         transaction_id = _required_attribute(

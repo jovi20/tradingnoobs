@@ -268,6 +268,52 @@ def test_missing_execution_id_and_non_numeric_transaction_fail_closed(
     assert signed_order_failure.value.code == "IBKR_TRANSACTION_ID_INVALID"
 
 
+def test_change_requires_stable_identity_but_preserves_missing_target(
+    tmp_path,
+    provider_contract,
+):
+    correction = (
+        '<TradeCorrection accountId="U1234567" sourceEventID="CORR-1" '
+        'transactionID="102" assetCategory="STK" conid="265598" '
+        'symbol="AAPL" listingExchange="NASDAQ" currency="USD" '
+        'buySell="BUY" quantity="2" tradePrice="201" '
+        'dateTime="20260725;110000" openCloseIndicator="OPEN" '
+        'tradeStatus="CORRECTED" ibCommission="-1.25" '
+        'ibCommissionCurrency="USD" />'
+    )
+    parsed = parse_ibkr_flex_xml(
+        write_xml(
+            tmp_path,
+            document(correction),
+            "missing-change-target.xml",
+        ),
+        source_timezone="UTC",
+        provider_contract=provider_contract,
+    )
+    assert parsed.events[0].event_kind == "CORRECTION"
+    assert parsed.events[0].external_source_event_id == "CORR-1"
+    assert parsed.events[0].affected_external_execution_id is None
+    assert parsed.events[0].normalized_payload[
+        "provider_declared_target_id"
+    ] is None
+
+    missing_identity = correction.replace(
+        ' sourceEventID="CORR-1"',
+        "",
+    )
+    with pytest.raises(IbkrFlexParseError) as identity_failure:
+        parse_ibkr_flex_xml(
+            write_xml(
+                tmp_path,
+                document(missing_identity),
+                "missing-change-id.xml",
+            ),
+            source_timezone="UTC",
+            provider_contract=provider_contract,
+        )
+    assert identity_failure.value.code == "IBKR_CHANGE_EVENT_ID_MISSING"
+
+
 def test_unknown_event_and_hidden_second_account_fail_closed(
     tmp_path,
     provider_contract,
