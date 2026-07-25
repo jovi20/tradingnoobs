@@ -1,7 +1,7 @@
 # JRN-013 进度与设计评审
 
 日期：2026-07-26
-评审范围：`0b03f85..450ced4` 的 JRN-013 实现，以及 active plan 中
+评审范围：`0b03f85..cbabe32` 的 JRN-013 实现，以及 active plan 中
 `JRN-013` 至 `JRN-015` 的 IBKR Flex 文件导入设计。
 
 ## 结论
@@ -49,6 +49,10 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
   数据库写入前稳定返回 `IBKR_FIELD_TOO_LONG`。
 - 同 owner 的两个 CLEAN 内部账户可同时 preview 同一 external account，两个
   preview 均不提前创建 binding；未知资产只产生 session-only terminal conflict。
+- terminal normalized preview rows 在第 30 天前一微秒仍保留、恰好第 30 天
+  才可批量清理；cleanup 不删除 ImportSession、idempotency、binding、statement、
+  observation 或 sighting。OpenAPI 明确不发布 confirm/rebind/transfer/binding
+  mutation 路由。
 - source identity、fingerprint、flat-boundary、coverage、bootstrap change-chain、
   bound preview、冲突 episode 和生命周期模拟基础。
 - operation idempotency、owner/account 绑定、并发 session/rate limit、临时文件
@@ -74,7 +78,7 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
 - JRN-014 的 source-bound canonical confirm、coverage acceptance/frontier
   推进与“只应用新增 execution”尚未实现。
 - JRN-015 的人工 correction/cancel-bust resolution 与 versioned replay 尚未实现。
-- `450ced4` 已通过当前工作树完整统一 gate 与真实 PostgreSQL migration gate；
+- `cbabe32` 已通过当前工作树完整统一 gate 与真实 PostgreSQL migration gate；
   尚未取得远端 CI 和绑定该 SHA 的独立 review，因此仍只能视为进度 checkpoint。
 
 ## 设计必要性评估
