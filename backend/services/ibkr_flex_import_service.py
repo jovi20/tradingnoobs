@@ -486,5 +486,7 @@ async def stage_and_upload_ibkr_flex_preview(
             now=now,
         )
     finally:
-        remove_staged_ibkr_flex_file(staged)
-        await upload.close()
+        try:
+            remove_staged_ibkr_flex_file(staged)
+        finally:
+            await upload.close()

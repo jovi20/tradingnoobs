@@ -138,6 +138,23 @@ def test_invalid_extension_and_oversize_remove_partial_file(
     assert list(Path(tmp_path).iterdir()) == []
 
 
+def test_staging_cancellation_removes_partial_file(tmp_path):
+    class CancelledUpload(UploadFile):
+        async def read(self, size: int = -1) -> bytes:
+            del size
+            raise asyncio.CancelledError
+
+    upload = CancelledUpload(
+        filename="statement.xml",
+        file=BytesIO(b"partial"),
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(stage_ibkr_flex_upload(upload, temp_root=tmp_path))
+
+    assert list(Path(tmp_path).iterdir()) == []
+
+
 def test_generic_startup_scavenger_removes_expired_ibkr_orphan(tmp_path):
     boundary = datetime(2026, 7, 26, 12, tzinfo=timezone.utc)
     orphan = tmp_path / f"{IBKR_FILE_PREFIX}crashed.xml"

@@ -407,3 +407,35 @@ def test_parse_failure_is_terminal_and_permanently_replayable(
     assert replay.body == first.body
     assert db.query(IdempotencyKey).one().expires_at is None
     assert list(tmp_path.iterdir()) == []
+
+
+def test_unexpected_upload_failure_closes_handle_and_removes_staged_file(
+    db,
+    owner_graph,
+    provider_contract,
+    tmp_path,
+    monkeypatch,
+):
+    owner, account = owner_graph
+    upload = upload_file(statement_xml())
+    monkeypatch.setattr(
+        "services.ibkr_flex_import_service.upload_ibkr_flex_preview",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+
+    with pytest.raises(RuntimeError, match="boom"):
+        asyncio.run(
+            stage_and_upload_ibkr_flex_preview(
+                db,
+                user_id=owner.id,
+                account_public_id=account.public_id,
+                source_timezone="UTC",
+                upload=upload,
+                idempotency_key="unexpected-failure",
+                provider_contract=provider_contract,
+                temp_root=tmp_path,
+            )
+        )
+
+    assert upload.file.closed
+    assert list(tmp_path.iterdir()) == []
