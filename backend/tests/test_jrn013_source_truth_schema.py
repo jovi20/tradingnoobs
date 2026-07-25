@@ -30,6 +30,12 @@ from models import (
     TradingAccount,
     User,
 )
+from services.source_reconciliation_service import (
+    build_source_case_snapshot,
+    create_or_attach_source_case,
+    recompute_source_health,
+    supersede_source_case_with_later_sighting,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -496,6 +502,299 @@ def test_case_episode_partial_uniqueness_and_immutable_evidence(
     db.delete(evidence)
     with pytest.raises(ValueError, match="append-only"):
         db.flush()
+
+
+def test_case_domain_reuses_episode_attaches_evidence_and_recomputes_health(
+    db,
+    owner_graph,
+):
+    first, _, accounts = owner_graph
+    source_binding = binding(db, first, accounts[0], "UCASE001")
+    first_session = import_session(db, first, accounts[0], "domain-one")
+    second_session = import_session(db, first, accounts[0], "domain-two")
+    first_statement = statement(
+        db,
+        source_binding,
+        first_session,
+        "domain-one",
+    )
+    second_statement = statement(
+        db,
+        source_binding,
+        second_session,
+        "domain-two",
+    )
+    conflict = observation(db, source_binding, "domain")
+    first_sighting = sighting(
+        db,
+        source_binding,
+        first_statement,
+        conflict,
+        "domain-one",
+    )
+    second_sighting = sighting(
+        db,
+        source_binding,
+        second_statement,
+        conflict,
+        "domain-two",
+    )
+    snapshot = build_source_case_snapshot(
+        db,
+        binding=source_binding,
+        conflict_observation=conflict,
+        candidate_external_execution_ids=(),
+    )
+
+    created = create_or_attach_source_case(
+        db,
+        binding=source_binding,
+        conflict_observation=conflict,
+        trigger_sighting=first_sighting,
+        case_kind="SOURCE_PAYLOAD_CONFLICT",
+        snapshot=snapshot,
+    )
+    replay = create_or_attach_source_case(
+        db,
+        binding=source_binding,
+        conflict_observation=conflict,
+        trigger_sighting=first_sighting,
+        case_kind="SOURCE_PAYLOAD_CONFLICT",
+        snapshot=snapshot,
+    )
+    evidence = create_or_attach_source_case(
+        db,
+        binding=source_binding,
+        conflict_observation=conflict,
+        trigger_sighting=second_sighting,
+        case_kind="SOURCE_PAYLOAD_CONFLICT",
+        snapshot=snapshot,
+    )
+    db.flush()
+
+    assert created.created
+    assert replay.case.id == created.case.id
+    assert not replay.created
+    assert evidence.case.id == created.case.id
+    assert evidence.evidence_attached
+    assert (
+        db.query(SourceCaseEvidenceSighting)
+        .filter(SourceCaseEvidenceSighting.case_id == created.case.id)
+        .count()
+        == 1
+    )
+    assert source_binding.source_health == "RECONCILIATION_REQUIRED"
+
+    created.case.state = "DIVERGED_REJECTED"
+    assert recompute_source_health(db, binding=source_binding) == (
+        "SOURCE_DIVERGED"
+    )
+    created.case.state = "RESOLVED_APPLIED"
+    assert recompute_source_health(db, binding=source_binding) == "HEALTHY"
+
+
+def test_terminal_episode_allows_new_trigger_and_later_authority_supersedes(
+    db,
+    owner_graph,
+):
+    first, _, accounts = owner_graph
+    source_binding = binding(db, first, accounts[0], "UCASE002")
+    first_session = import_session(db, first, accounts[0], "authority-a")
+    later_session = import_session(db, first, accounts[0], "authority-z")
+    first_statement = statement(
+        db,
+        source_binding,
+        first_session,
+        "authority-a",
+    )
+    later_statement = statement(
+        db,
+        source_binding,
+        later_session,
+        "authority-z",
+    )
+    conflict = observation(db, source_binding, "authority")
+    first_sighting = sighting(
+        db,
+        source_binding,
+        first_statement,
+        conflict,
+        "authority-a",
+    )
+    later_sighting = sighting(
+        db,
+        source_binding,
+        later_statement,
+        conflict,
+        "authority-z",
+    )
+    snapshot = build_source_case_snapshot(
+        db,
+        binding=source_binding,
+        conflict_observation=conflict,
+    )
+    first_episode = create_or_attach_source_case(
+        db,
+        binding=source_binding,
+        conflict_observation=conflict,
+        trigger_sighting=first_sighting,
+        case_kind="CORRECTION",
+        snapshot=snapshot,
+    )
+    assert supersede_source_case_with_later_sighting(
+        db,
+        binding=source_binding,
+        case=first_episode.case,
+        winning_sighting=later_sighting,
+    )
+    assert first_episode.case.state == (
+        "RESOLVED_SUPERSEDED_BY_LATER_AUTHORITY"
+    )
+    assert first_episode.case.winning_sighting_id == later_sighting.id
+    assert source_binding.source_health == "HEALTHY"
+
+    later_episode = create_or_attach_source_case(
+        db,
+        binding=source_binding,
+        conflict_observation=conflict,
+        trigger_sighting=later_sighting,
+        case_kind="CORRECTION",
+        snapshot=snapshot,
+    )
+
+    assert later_episode.created
+    assert later_episode.case.id != first_episode.case.id
+    assert not supersede_source_case_with_later_sighting(
+        db,
+        binding=source_binding,
+        case=later_episode.case,
+        winning_sighting=first_sighting,
+    )
+    assert source_binding.source_health == "RECONCILIATION_REQUIRED"
+
+    unrelated_session = import_session(
+        db,
+        first,
+        accounts[0],
+        "authority-zz",
+    )
+    unrelated_statement = statement(
+        db,
+        source_binding,
+        unrelated_session,
+        "authority-zz",
+    )
+    unrelated = observation(db, source_binding, "unrelated-authority")
+    unrelated_sighting = sighting(
+        db,
+        source_binding,
+        unrelated_statement,
+        unrelated,
+        "unrelated-authority",
+    )
+    assert not supersede_source_case_with_later_sighting(
+        db,
+        binding=source_binding,
+        case=later_episode.case,
+        winning_sighting=unrelated_sighting,
+    )
+    assert later_episode.case.state == "OPEN"
+
+    later_episode.case.case_kind = "TARGET_UNRESOLVED"
+    assert not supersede_source_case_with_later_sighting(
+        db,
+        binding=source_binding,
+        case=later_episode.case,
+        winning_sighting=later_sighting,
+    )
+
+
+def test_case_snapshot_hash_is_stable_and_tracks_authority_application(
+    db,
+    owner_graph,
+):
+    first, _, accounts = owner_graph
+    source_binding = binding(db, first, accounts[0], "UCASE003")
+    source_session = import_session(db, first, accounts[0], "snapshot")
+    current = observation(db, source_binding, "snapshot-current")
+    conflict = observation(db, source_binding, "snapshot-conflict")
+    execution = ExternalExecution(
+        binding_id=source_binding.id,
+        user_id=first.id,
+        account_id=accounts[0].id,
+        external_execution_id="EXEC-snapshot-current",
+        current_trade_observation_id=current.id,
+        disposition="ACTIVE",
+    )
+    db.add(execution)
+    db.flush()
+    application = ExternalTradeApplication(
+        binding_id=source_binding.id,
+        user_id=first.id,
+        account_id=accounts[0].id,
+        external_execution_id=execution.id,
+        source_observation_id=current.id,
+        application_version=1,
+        is_active=True,
+        derived_direction="LONG",
+        derived_action="OPEN",
+        pre_quantity=Decimal("0"),
+        post_quantity=Decimal("1"),
+        applied_import_session_id=source_session.id,
+    )
+    db.add(application)
+    db.flush()
+
+    first_snapshot = build_source_case_snapshot(
+        db,
+        binding=source_binding,
+        conflict_observation=conflict,
+        target_execution=execution,
+        group_state={"append_boundary": "100|EXEC-snapshot-current"},
+    )
+    replay_snapshot = build_source_case_snapshot(
+        db,
+        binding=source_binding,
+        conflict_observation=conflict,
+        target_execution=execution,
+        group_state={"append_boundary": "100|EXEC-snapshot-current"},
+    )
+    assert replay_snapshot.digest == first_snapshot.digest
+    assert replay_snapshot.payload == first_snapshot.payload
+
+    application.is_active = False
+    application.superseded_at = datetime.now(timezone.utc)
+    replacement = ExternalTradeApplication(
+        binding_id=source_binding.id,
+        user_id=first.id,
+        account_id=accounts[0].id,
+        external_execution_id=execution.id,
+        source_observation_id=current.id,
+        application_version=2,
+        is_active=True,
+        derived_direction="LONG",
+        derived_action="ADD",
+        pre_quantity=Decimal("1"),
+        post_quantity=Decimal("2"),
+        applied_import_session_id=source_session.id,
+    )
+    db.add(replacement)
+    db.flush()
+
+    changed_snapshot = build_source_case_snapshot(
+        db,
+        binding=source_binding,
+        conflict_observation=conflict,
+        target_execution=execution,
+        group_state={"append_boundary": "100|EXEC-snapshot-current"},
+    )
+    assert changed_snapshot.digest != first_snapshot.digest
+    assert (
+        changed_snapshot.payload["authority_target"]["active_application"][
+            "application_version"
+        ]
+        == 2
+    )
 
 
 def test_coverage_acceptance_requires_same_binding_statement(
