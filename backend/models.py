@@ -81,6 +81,7 @@ class TradeInstrumentType(str, enum.Enum):
 class TradingPositionStatus(str, enum.Enum):
     OPEN = "OPEN"
     CLOSED = "CLOSED"
+    VOID = "VOID"
     ARCHIVED = "ARCHIVED"
     ERROR = "ERROR"
 

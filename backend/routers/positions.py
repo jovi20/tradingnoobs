@@ -143,6 +143,7 @@ def _truth_position_is_financially_open(truth_position: TradingPosition) -> bool
     # occupied so it cannot authorize a duplicate OPEN.
     return truth_position.status not in {
         TradingPositionStatus.CLOSED,
+        TradingPositionStatus.VOID,
         TradingPositionStatus.ARCHIVED,
     }
 

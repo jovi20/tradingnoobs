@@ -64,6 +64,7 @@ from services.capability_service import is_effective_capability_enabled
 from services.derived_timeline_read_service import list_recent_timeline_snapshots
 from services.platform_config_service import get_feature_flag_enabled
 from services.timeline_source_policy import get_timeline_source_mode
+from services.truth_legacy_projection_service import exclude_void_truth_legacy_positions
 from routers.disabled_capabilities import raise_feature_disabled
 
 if TYPE_CHECKING:
@@ -959,26 +960,30 @@ def _get_timeline_home(
         or 0
     )
 
-    positions = (
-        db.query(Position)
-        .join(
-            TradingAccount,
-            Position.account_id == TradingAccount.id,
-        )
-        .outerjoin(
-            Strategy,
-            Position.strategy_id == Strategy.id,
-        )
-        .filter(
-            Position.user_id == current_user.id,
-            TradingAccount.user_id == current_user.id,
-            or_(
-                Position.strategy_id.is_(None),
-                Strategy.user_id == current_user.id,
-            ),
-        )
-        .order_by(Position.opened_at.desc())
-        .all()
+    positions = exclude_void_truth_legacy_positions(
+        db,
+        user_id=current_user.id,
+        positions=(
+            db.query(Position)
+            .join(
+                TradingAccount,
+                Position.account_id == TradingAccount.id,
+            )
+            .outerjoin(
+                Strategy,
+                Position.strategy_id == Strategy.id,
+            )
+            .filter(
+                Position.user_id == current_user.id,
+                TradingAccount.user_id == current_user.id,
+                or_(
+                    Position.strategy_id.is_(None),
+                    Strategy.user_id == current_user.id,
+                ),
+            )
+            .order_by(Position.opened_at.desc())
+            .all()
+        ),
     )
     position_count = len(positions)
 

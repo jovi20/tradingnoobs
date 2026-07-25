@@ -57,6 +57,7 @@ from routers.accounts import update_account
 from services.trading_position_write_service import (
     append_truth_trade_event,
     lock_owned_truth_position,
+    reverse_latest_truth_trade_event,
 )
 from services.truth_native_open_service import (
     OpenPositionExistsError,
@@ -1275,3 +1276,148 @@ def test_jrn008_postgresql_lifecycle_lock_serializes_sequence_and_close_races(
         )
         assert len(events) == 4
         assert position.quantity_closed in {Decimal("8.00000000"), Decimal("12.00000000")}
+
+
+def test_jrn010_postgresql_reverse_close_vs_new_open_allows_at_most_one(
+    postgres_database: tuple[Engine, str],
+) -> None:
+    engine, database_url = postgres_database
+    _run_alembic(database_url, "upgrade", "head")
+    SessionLocal = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=engine,
+    )
+    identity = InstrumentIdentity(
+        asset_type="STOCK",
+        market="US",
+        exchange_code="NASDAQ",
+        normalized_symbol="NVDA",
+        instrument_type="SPOT",
+        quote_currency="USD",
+    )
+    with SessionLocal() as db:
+        user = User(
+            public_id="jrn010-pg-user",
+            email="jrn010-pg@example.com",
+            email_normalized="jrn010-pg@example.com",
+            hashed_password="hash",
+            status="ACTIVE",
+            is_active=True,
+            role="user",
+            timezone="UTC",
+        )
+        account = TradingAccount(
+            public_id="jrn010-pg-account",
+            user=user,
+            name="JRN010",
+            broker="IBKR",
+            currency="USD",
+            is_active=True,
+        )
+        db.add_all([user, account])
+        db.commit()
+        user_id = user.id
+        account_id = account.id
+
+        locked_account = lock_owned_trading_account(
+            db,
+            user_id=user_id,
+            account_id=account_id,
+        )
+        assert locked_account is not None
+        _, position, _ = create_truth_native_open(
+            db,
+            user_id=user_id,
+            account=locked_account,
+            strategy=None,
+            identity=identity,
+            side=TradingPositionSide.LONG,
+            quantity=Decimal("2"),
+            price=Decimal("100"),
+            occurred_at=datetime(2026, 7, 25, 10, 0, tzinfo=timezone.utc),
+        )
+        close = append_truth_trade_event(
+            db,
+            position=position,
+            account=locked_account,
+            event_type=PositionEventType.CLOSE,
+            quantity=Decimal("2"),
+            price=Decimal("110"),
+            currency="USD",
+            occurred_at=datetime(2026, 7, 25, 11, 0, tzinfo=timezone.utc),
+        )
+        db.commit()
+        position_public_id = position.public_id
+        close_public_id = close.public_id
+
+    def reverse_and_commit() -> str:
+        with SessionLocal() as db:
+            locked = lock_owned_truth_position(
+                db,
+                user_id=user_id,
+                position_public_id=position_public_id,
+            )
+            assert locked is not None
+            _, position = locked
+            close = db.execute(
+                select(PositionEvent).where(
+                    PositionEvent.public_id == close_public_id
+                )
+            ).scalar_one()
+            try:
+                reverse_latest_truth_trade_event(
+                    db,
+                    position=position,
+                    event=close,
+                    occurred_at=datetime(
+                        2026, 7, 25, 12, 0, tzinfo=timezone.utc
+                    ),
+                    actor_user_id=user_id,
+                    request_id="jrn010-race-reverse",
+                    reason="Race correction",
+                )
+                db.commit()
+                return "REVERSED"
+            except ValueError:
+                db.rollback()
+                return "CONFLICT"
+
+    def reopen_and_commit() -> str:
+        with SessionLocal() as db:
+            account = lock_owned_trading_account(
+                db,
+                user_id=user_id,
+                account_id=account_id,
+            )
+            assert account is not None
+            try:
+                create_truth_native_open(
+                    db,
+                    user_id=user_id,
+                    account=account,
+                    strategy=None,
+                    identity=identity,
+                    side=TradingPositionSide.LONG,
+                    quantity=Decimal("1"),
+                    price=Decimal("111"),
+                    occurred_at=datetime(
+                        2026, 7, 25, 11, 30, tzinfo=timezone.utc
+                    ),
+                )
+                db.commit()
+                return "OPENED"
+            except ValueError:
+                db.rollback()
+                return "CONFLICT"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        reverse_future = executor.submit(reverse_and_commit)
+        open_future = executor.submit(reopen_and_commit)
+        results = [reverse_future.result(), open_future.result()]
+
+    assert results.count("CONFLICT") == 1
+    assert sorted(results) in (
+        ["CONFLICT", "OPENED"],
+        ["CONFLICT", "REVERSED"],
+    )

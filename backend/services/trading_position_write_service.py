@@ -61,6 +61,21 @@ class SourceBoundTradeWriteError(ValueError):
     http_status = 409
 
 
+class PositionLifecycleOrderConflictError(ValueError):
+    code = "POSITION_LIFECYCLE_ORDER_CONFLICT"
+    http_status = 409
+
+
+class PositionSideConflictError(ValueError):
+    code = "POSITION_SIDE_CONFLICT"
+    http_status = 409
+
+
+class PositionEventReversalError(ValueError):
+    code = "POSITION_EVENT_REVERSAL_INVALID"
+    http_status = 422
+
+
 def lock_owned_truth_position(
     db: Session,
     *,
@@ -166,6 +181,65 @@ def _active_trade_events(db: Session, position: TradingPosition) -> list[Positio
     ]
 
 
+def _lock_later_non_void_same_side_lifecycles(
+    db: Session,
+    *,
+    position: TradingPosition,
+) -> list[TradingPosition]:
+    return (
+        db.query(TradingPosition)
+        .filter(
+            TradingPosition.user_id == position.user_id,
+            TradingPosition.account_id == position.account_id,
+            TradingPosition.instrument_id == position.instrument_id,
+            TradingPosition.side == position.side,
+            TradingPosition.id != position.id,
+            TradingPosition.status != TradingPositionStatus.VOID,
+            (
+                (TradingPosition.opened_at > position.opened_at)
+                | (
+                    (TradingPosition.opened_at == position.opened_at)
+                    & (TradingPosition.id > position.id)
+                )
+            ),
+        )
+        .order_by(TradingPosition.id.asc())
+        .with_for_update()
+        .all()
+    )
+
+
+def _require_reopen_conflicts_clear(
+    db: Session,
+    *,
+    position: TradingPosition,
+) -> None:
+    if _lock_later_non_void_same_side_lifecycles(db, position=position):
+        raise PositionLifecycleOrderConflictError(
+            "A later non-void same-side lifecycle must be voided before this "
+            "lifecycle can be reopened"
+        )
+    other_open = (
+        db.query(TradingPosition)
+        .filter(
+            TradingPosition.user_id == position.user_id,
+            TradingPosition.account_id == position.account_id,
+            TradingPosition.instrument_id == position.instrument_id,
+            TradingPosition.side == position.side,
+            TradingPosition.id != position.id,
+            TradingPosition.financially_open.is_(True),
+            TradingPosition.status != TradingPositionStatus.VOID,
+        )
+        .order_by(TradingPosition.id.asc())
+        .with_for_update()
+        .first()
+    )
+    if other_open is not None:
+        raise PositionSideConflictError(
+            "Another same-side lifecycle is financially open"
+        )
+
+
 def _project_trade_event_to_legacy_batch(
     db: Session,
     *,
@@ -265,7 +339,25 @@ def replay_truth_position_accounting(db: Session, *, position: TradingPosition) 
     opening_event = next((event for event in active_events if event.event_type == PositionEventType.OPEN), None)
     position.opening_event_id = opening_event.id if opening_event else None
 
-    if summary.open_quantity == 0 and summary.quantity_opened > 0:
+    if not active_events and events:
+        latest_reversal = (
+            db.query(PositionEvent)
+            .filter(
+                PositionEvent.position_id == position.id,
+                PositionEvent.event_type == PositionEventType.REVERSAL,
+                PositionEvent.reverses_event_id.isnot(None),
+            )
+            .order_by(
+                PositionEvent.event_time.desc(),
+                PositionEvent.sequence_no.desc(),
+                PositionEvent.id.desc(),
+            )
+            .first()
+        )
+        position.status = TradingPositionStatus.VOID
+        position.closed_at = latest_reversal.event_time if latest_reversal else position.closed_at
+        position.closing_event_id = latest_reversal.id if latest_reversal else None
+    elif summary.open_quantity == 0 and summary.quantity_opened > 0:
         closing_event = next(
             (event for event in reversed(active_events) if event.event_type in {PositionEventType.REDUCE, PositionEventType.CLOSE}),
             None,
@@ -404,14 +496,19 @@ def reverse_latest_truth_trade_event(
     position: TradingPosition,
     event: PositionEvent,
     occurred_at: datetime,
+    actor_user_id: int,
+    request_id: str,
+    reason: str,
     note: str | None = None,
 ) -> PositionEvent:
     require_truth_position_financial_write_allowed(position)
     _require_position_accounting_healthy(db, position)
     if event.event_type not in TRADE_EVENT_TYPES:
-        raise ValueError("Only trade events can be reversed")
+        raise PositionEventReversalError("Only trade events can be reversed")
     if event.event_type == PositionEventType.OPEN:
-        raise ValueError("OPEN events cannot be reversed until position void semantics exist")
+        raise PositionEventReversalError(
+            "OPEN must be reversed through whole-position void"
+        )
 
     existing_reversal = (
         db.query(PositionEvent)
@@ -423,7 +520,7 @@ def reverse_latest_truth_trade_event(
         .first()
     )
     if existing_reversal:
-        raise ValueError("Position event has already been reversed")
+        raise PositionEventReversalError("Position event has already been reversed")
 
     reversed_event_ids = {
         row[0]
@@ -453,7 +550,16 @@ def reverse_latest_truth_trade_event(
         if item.id not in reversed_event_ids
     ]
     if not active_trade_events or active_trade_events[-1].id != event.id:
-        raise ValueError("Only the latest active trade event can be reversed")
+        raise PositionEventReversalError(
+            "Only the latest active trade event can be reversed"
+        )
+    normalized_occurred_at = _as_utc(occurred_at)
+    if normalized_occurred_at < _as_utc(event.event_time):
+        raise TradeEventChronologyError(
+            "Trade-event reversal cannot predate the original event"
+        )
+    if event.event_type in {PositionEventType.REDUCE, PositionEventType.CLOSE}:
+        _require_reopen_conflicts_clear(db, position=position)
 
     reversal_event = PositionEvent(
         user_id=position.user_id,
@@ -461,7 +567,7 @@ def reverse_latest_truth_trade_event(
         account_id=position.account_id,
         instrument_id=position.instrument_id,
         event_type=PositionEventType.REVERSAL,
-        event_time=occurred_at,
+        event_time=normalized_occurred_at,
         sequence_no=(
             db.query(func.max(PositionEvent.sequence_no))
             .filter(PositionEvent.position_id == position.id)
@@ -477,6 +583,9 @@ def reverse_latest_truth_trade_event(
         realized_pnl_gross=-_coerce_decimal(event.realized_pnl_gross),
         realized_pnl_net=-_coerce_decimal(event.realized_pnl_net),
         input_source="MANUAL",
+        actor_user_id=actor_user_id,
+        request_id=request_id,
+        reason=reason.strip(),
         note=note or f"Reversal of {event.public_id}",
         is_adjustment=True,
         reverses_event_id=event.id,
@@ -486,3 +595,83 @@ def reverse_latest_truth_trade_event(
     replay_truth_position_accounting(db, position=position)
     sync_realized_pnl_event_to_account_ledger(db, event=reversal_event, position=position)
     return reversal_event
+
+
+def void_truth_position(
+    db: Session,
+    *,
+    position: TradingPosition,
+    occurred_at: datetime,
+    actor_user_id: int,
+    request_id: str,
+    reason: str,
+) -> list[PositionEvent]:
+    require_truth_position_financial_write_allowed(position)
+    _require_position_accounting_healthy(db, position)
+    active_trade_events = _active_trade_events(db, position)
+    if not active_trade_events:
+        raise PositionEventReversalError(
+            "Trading position has no active trade events to void"
+        )
+    if _lock_later_non_void_same_side_lifecycles(db, position=position):
+        raise PositionLifecycleOrderConflictError(
+            "Later non-void same-side lifecycles must be voided first"
+        )
+
+    normalized_occurred_at = _as_utc(occurred_at)
+    if normalized_occurred_at < max(
+        _as_utc(event.event_time) for event in active_trade_events
+    ):
+        raise TradeEventChronologyError(
+            "Position void cannot predate an active lifecycle event"
+        )
+
+    next_sequence = (
+        db.query(func.max(PositionEvent.sequence_no))
+        .filter(PositionEvent.position_id == position.id)
+        .scalar()
+        or 0
+    ) + 1
+    reversals: list[PositionEvent] = []
+    for offset, original in enumerate(reversed(active_trade_events)):
+        reversal = PositionEvent(
+            user_id=position.user_id,
+            position_id=position.id,
+            account_id=position.account_id,
+            instrument_id=position.instrument_id,
+            event_type=PositionEventType.REVERSAL,
+            event_time=normalized_occurred_at,
+            sequence_no=next_sequence + offset,
+            side_effect=position.side.value,
+            currency=original.currency or position.base_currency,
+            gross_amount=-_coerce_decimal(original.gross_amount),
+            fee_amount=Decimal("0"),
+            fee_currency=(
+                original.fee_currency
+                or original.currency
+                or position.base_currency
+            ),
+            fx_rate_to_account_ccy=_coerce_decimal(
+                original.fx_rate_to_account_ccy or 1
+            ),
+            realized_pnl_gross=-_coerce_decimal(original.realized_pnl_gross),
+            realized_pnl_net=-_coerce_decimal(original.realized_pnl_net),
+            input_source="MANUAL",
+            actor_user_id=actor_user_id,
+            request_id=request_id,
+            reason=reason.strip(),
+            note=f"Whole-position void reversal of {original.public_id}",
+            is_adjustment=True,
+            reverses_event_id=original.id,
+        )
+        db.add(reversal)
+        db.flush()
+        sync_realized_pnl_event_to_account_ledger(
+            db,
+            event=reversal,
+            position=position,
+        )
+        reversals.append(reversal)
+
+    replay_truth_position_accounting(db, position=position)
+    return reversals

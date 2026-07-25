@@ -13,7 +13,13 @@ interface LifecycleWorkbenchHeaderProps {
 export function LifecycleWorkbenchHeader({ lifecycle, legacyPosition }: LifecycleWorkbenchHeaderProps) {
     const reviewTone = getLifecycleReviewTone(lifecycle.reviewStatus)
     const isOpen = lifecycle.positionStatus === 'OPEN'
-    const positionStatusLabel = isOpen ? '持仓中' : '已平仓'
+    const positionStatusLabel = {
+        OPEN: '持仓中',
+        CLOSED: '已平仓',
+        VOID: '已作废',
+        ARCHIVED: '已归档',
+        ERROR: '账务异常',
+    }[lifecycle.positionStatus]
     const addBatchHref = isOpen && legacyPosition
         ? `/positions/${legacyPosition.routeId}/add-batch`
         : null

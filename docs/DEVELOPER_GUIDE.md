@@ -81,7 +81,7 @@
 - `/api/accounts`
 - `/api/accounts/{account_id}/transactions`
 - `/api/positions`：legacy 持仓/批次读取与 create-and-sync 过渡路径；新建仓位会立即同步 `TradingPosition` 并返回 `truth_position_public_id`。已有 legacy 行缺少 canonical truth 时，`GET /api/positions/{id}/truth-lifecycle` 只返回 not-found，不得在读取中触发 backfill、flush 或 commit；迁移必须由后续显式受审计流程执行。普通产品面上的 legacy review `PATCH /api/positions/{position_id}`、position hard delete `DELETE /api/positions/{position_id}`、batch create `POST /api/positions/{position_id}/batches` 以及 batch edit/delete `PATCH|DELETE /api/positions/batches/{batch_id}` 全部 fail-closed：对 owner 已验证且资源存在的请求稳定返回 `409`，不因 truth lifecycle 是否存在而改变。任何 `X-Migration-Fallback` header 或历史 token 都不能绕过；`X-Migration-Fallback` 不在 OpenAPI 中且不能授予迁移权限。受审计的 admin/CLI migration namespace 尚未实现，不能用隐藏 query/header 代替。
-- `/api/trading-positions`：truth lifecycle、允许的 truth trade event write、同币种 dividend 和 latest-event reversal；`manual adjustment` 兼容路径在 Beta 稳定拒绝且不写事实。
+- `/api/trading-positions`：truth lifecycle、允许的 truth trade event write、同币种 dividend、latest active trade-event reversal 和 whole-position void；reversal/void 都要求永久 `Idempotency-Key`、reason，并保存 actor/request ID。whole-position void 逆序追加补偿事实、保留原事件和 ledger，canonical 状态变为 `VOID`，释放同方向 financially-open 槽位并从交易统计排除。`manual adjustment` 兼容路径在 Beta 稳定拒绝且不写事实。
 - `/api/timeline/home`：Timeline 首页 read model，默认 `SNAPSHOT_ONLY`，由 `DerivedTimelineSnapshot` 驱动；optional AI artifact feed 不属于当前 Beta 可用面。
 - `/api/dashboard`
 - `/api/admin/jobs`
@@ -137,10 +137,10 @@ Owner/tenant 边界遵循同一合同：普通 API 对非当前用户的 public 
 | 认证与用户基础 | `invite-only 本地 checkpoint 已通过` | 登录、JWT、session/token、public_id、一次性邀请码、IANA 时区 gate 和最小 IP/account 限流已落地；公开注册仍为 `DISABLED`。JRN-003 远端 CI/required-check 证据仍待补。 |
 | 平台配置 | `核心存在 / optional secret hard-off` | FeatureFlag 等基础代码存在；Broker、Market、LLM 的普通设置、凭据写入与测试入口在 JOURNAL Beta 关闭。 |
 | 交易账户与资金记录 | `桥接完成 / 继续收敛` | `AccountLedgerEntry` 已落地，账户现金读模型已优先使用 ledger；legacy transaction 路径仍存在。 |
-| Trading truth model | `桥接完成 / 硬切推进中` | `TradingPosition / PositionEvent / AccountLedgerEntry`、FIFO、truth lifecycle、truth-first add/reduce/close、truth narrative、latest active event reversal 已落地；新建仓位会 create-and-sync 到 truth lifecycle，已有仓位的普通加仓/减仓/平仓/复盘/叙事不再静默写 legacy 字段。 |
+| Trading truth model | `桥接完成 / 硬切推进中` | `TradingPosition / PositionEvent / AccountLedgerEntry`、FIFO、truth lifecycle、truth-first add/reduce/close、truth narrative、latest active event reversal 和 whole-position void 已落地；新建仓位会 create-and-sync 到 truth lifecycle，已有仓位的普通加仓/减仓/平仓/复盘/叙事不再静默写 legacy 字段。 |
 | Legacy 持仓路径 | `迁移期保留 / public mutation hard-off` | `Position / TradeBatch / Transaction / AssetMetadata / DailySnapshot` 仍被部分读取、create-and-sync bridge、Dashboard 和 Timeline fallback 使用；未注册的历史 Import parser 也仍引用其中部分模型，但不是可达路径。public legacy review、position hard delete 与 batch create/edit/delete 对已有 owner 资源稳定返回 `409`，任何 migration fallback header 都不能解锁。 |
 | Timeline 首页 | `truth/snapshot 默认` | Timeline / Review Inbox 已是产品中心，核心事件使用 `DerivedTimelineSnapshot`；AI artifact feed 代码当前 hard-off，legacy mixed feed 只作为 rollback。 |
-| Lifecycle Detail | `truth-first 已落地` | 单笔详情展示 truth lifecycle、evidence 和 ledger cash effects；AI sidecar 代码在 JOURNAL Beta 隐藏。canonical review lives in `PositionEvent` narrative，legacy review 只作为 migration context 展示；latest active event reversal 会追加 `REVERSAL`，非最新 reversal 和 `OPEN` reversal 暂拒绝，直到补偿事件或 void/archive UX 明确。 |
+| Lifecycle Detail | `truth-first 已落地` | 单笔详情展示 truth lifecycle、evidence 和 ledger cash effects；AI sidecar 代码在 JOURNAL Beta 隐藏。canonical review lives in `PositionEvent` narrative，legacy review 只作为 migration context 展示；latest active event reversal 会追加 `REVERSAL`，`OPEN` 只能通过整仓 void 逆序补偿。撤销旧 REDUCE/CLOSE 或 void 较早 lifecycle 时，任何更晚 same-side non-void lifecycle 都返回 `POSITION_LIFECYCLE_ORDER_CONFLICT`，必须从最新向前作废。 |
 | Dashboard | `宏观视图已重构` | 已从默认首页退到宏观视图；chart schema/freshness/trust 包装已接入。 |
 | Insights / AI | `代码存在 / Beta hard-off` | 历史 artifact-first、LLM 和页面代码保留为 deferred implementation evidence；API、UI、凭据和 job producer 当前关闭，不能描述为 Beta 已落地能力。 |
 | 异步任务 | `基础已落地` | Job model、outbox relay、worker CLI、business lock、owner-scoped idempotency、admin jobs UI/API 已落地。 |

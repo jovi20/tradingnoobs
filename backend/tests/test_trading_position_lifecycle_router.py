@@ -99,7 +99,11 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         request_numbers = itertools.count(1)
 
         def post_with_lifecycle_idempotency(url, *args, **kwargs):
-            if url.endswith("/events"):
+            if (
+                url.endswith("/events")
+                or url.endswith("/reverse")
+                or url.endswith("/void")
+            ):
                 headers = dict(kwargs.pop("headers", {}) or {})
                 headers.setdefault(
                     "Idempotency-Key",
@@ -461,7 +465,10 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
             (
                 self.client.post(
                     f"/api/trading-positions/{truth_position.public_id}/events/{close_event.public_id}/reverse",
-                    json={"occurred_at": "2026-04-06T16:00:00+00:00"},
+                    json={
+                        "occurred_at": "2026-04-06T16:00:00+00:00",
+                        "reason": "Archived lifecycle must remain immutable",
+                    },
                 ),
                 self.client.post(
                     f"/api/trading-positions/{truth_position.public_id}/dividends",
@@ -499,6 +506,9 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
                 position=truth_position,
                 event=close_event,
                 occurred_at=datetime(2026, 4, 6, 17, 0, tzinfo=timezone.utc),
+                actor_user_id=self.user.id,
+                request_id="archived-direct-reversal",
+                reason="Archived lifecycle must remain immutable",
             )
 
         self.db.expire_all()
@@ -1413,6 +1423,7 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
             f"/api/trading-positions/{truth_position.public_id}/events/{reduce_event.public_id}/reverse",
             json={
                 "occurred_at": "2026-04-04T12:00:00+00:00",
+                "reason": "Broker correction",
                 "note": "Broker correction: reduction did not fill",
             },
         )
@@ -1460,7 +1471,7 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
             ],
         )
 
-    def test_trade_event_reverse_rejects_open_event_until_void_semantics_exist(self):
+    def test_trade_event_reverse_directs_open_to_whole_position_void(self):
         truth_position = self._seed_open_synced_position()
         open_event = self.db.query(PositionEvent).filter(
             PositionEvent.position_id == truth_position.id,
@@ -1471,12 +1482,20 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
             f"/api/trading-positions/{truth_position.public_id}/events/{open_event.public_id}/reverse",
             json={
                 "occurred_at": "2026-04-04T12:00:00+00:00",
+                "reason": "Opening execution was erroneous",
                 "note": "Attempt to void opening event",
             },
         )
 
         self.assertEqual(response.status_code, 422)
-        self.assertIn("OPEN events cannot be reversed", response.json()["detail"])
+        self.assertEqual(
+            response.json()["detail"]["code"],
+            "POSITION_EVENT_REVERSAL_INVALID",
+        )
+        self.assertIn(
+            "whole-position void",
+            response.json()["detail"]["message"],
+        )
         self.db.expire_all()
         self.assertEqual(
             self.db.query(PositionEvent).filter(
@@ -1518,11 +1537,21 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
         ).one()
         response = self.client.post(
             f"/api/trading-positions/{truth_position.public_id}/events/{reduce_event.public_id}/reverse",
-            json={"occurred_at": "2026-04-05T12:00:00+00:00"},
+            json={
+                "occurred_at": "2026-04-05T12:00:00+00:00",
+                "reason": "Incorrect reduction",
+            },
         )
 
         self.assertEqual(response.status_code, 422)
-        self.assertIn("Only the latest active trade event can be reversed", response.json()["detail"])
+        self.assertEqual(
+            response.json()["detail"]["code"],
+            "POSITION_EVENT_REVERSAL_INVALID",
+        )
+        self.assertIn(
+            "Only the latest active trade event can be reversed",
+            response.json()["detail"]["message"],
+        )
 
     def test_trade_event_reverse_rejects_duplicate_reversal(self):
         truth_position = self._seed_open_synced_position()
@@ -1546,16 +1575,214 @@ class TradingPositionLifecycleRouterTests(unittest.TestCase):
 
         first_response = self.client.post(
             f"/api/trading-positions/{truth_position.public_id}/events/{reduce_event.public_id}/reverse",
-            json={"occurred_at": "2026-04-04T12:00:00+00:00"},
+            json={
+                "occurred_at": "2026-04-04T12:00:00+00:00",
+                "reason": "Broker correction",
+            },
         )
         self.assertEqual(first_response.status_code, 201)
         second_response = self.client.post(
             f"/api/trading-positions/{truth_position.public_id}/events/{reduce_event.public_id}/reverse",
-            json={"occurred_at": "2026-04-05T12:00:00+00:00"},
+            json={
+                "occurred_at": "2026-04-05T12:00:00+00:00",
+                "reason": "Second correction attempt",
+            },
         )
 
         self.assertEqual(second_response.status_code, 422)
-        self.assertIn("already been reversed", second_response.json()["detail"])
+        self.assertEqual(
+            second_response.json()["detail"]["code"],
+            "POSITION_EVENT_REVERSAL_INVALID",
+        )
+        self.assertIn(
+            "already been reversed",
+            second_response.json()["detail"]["message"],
+        )
+
+    def test_whole_position_void_is_compensating_audited_and_idempotent(self):
+        truth_position = self._seed_open_synced_position()
+        before_stats = self.client.get("/api/dashboard/stats")
+        self.assertEqual(before_stats.status_code, 200, before_stats.text)
+        self.assertEqual(before_stats.json()["total_trades"], 1)
+        reduce_response = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/events",
+            json={
+                "event_type": "REDUCE",
+                "quantity": "2",
+                "price": "210",
+                "currency": "USD",
+                "occurred_at": "2026-04-03T15:30:00+00:00",
+                "fee_amount": "1.00",
+            },
+        )
+        self.assertEqual(reduce_response.status_code, 201, reduce_response.text)
+        headers = {
+            "Idempotency-Key": "void-position-1",
+            "X-Request-ID": "request-void-position-1",
+        }
+        body = {
+            "occurred_at": "2026-04-04T12:00:00+00:00",
+            "reason": "Broker confirmed the lifecycle never executed",
+        }
+
+        first = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/void",
+            headers=headers,
+            json=body,
+        )
+        replay = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/void",
+            headers=headers,
+            json=body,
+        )
+
+        self.assertEqual(first.status_code, 201, first.text)
+        self.assertEqual(replay.status_code, 201, replay.text)
+        self.assertEqual(replay.json(), first.json())
+        self.assertEqual(first.json()["data"]["position_summary"]["status"], "VOID")
+        self.assertEqual(first.json()["data"]["review_status"], "VOID")
+        after_stats = self.client.get("/api/dashboard/stats")
+        self.assertEqual(after_stats.status_code, 200, after_stats.text)
+        self.assertEqual(after_stats.json()["total_trades"], 0)
+        self.assertEqual(after_stats.json()["open_positions"], 0)
+        self.assertEqual(after_stats.json()["closed_trades"], 0)
+        self.assertEqual(
+            Decimal(str(first.json()["data"]["position_summary"]["quantity_opened"])),
+            Decimal("0"),
+        )
+        self.assertEqual(
+            Decimal(str(first.json()["data"]["position_summary"]["quantity_closed"])),
+            Decimal("0"),
+        )
+
+        self.db.expire_all()
+        persisted = self.db.query(TradingPosition).filter_by(
+            public_id=truth_position.public_id
+        ).one()
+        reversals = (
+            self.db.query(PositionEvent)
+            .filter(
+                PositionEvent.position_id == persisted.id,
+                PositionEvent.event_type == PositionEventType.REVERSAL,
+            )
+            .order_by(PositionEvent.sequence_no.asc())
+            .all()
+        )
+        self.assertEqual(persisted.status, TradingPositionStatus.VOID)
+        self.assertFalse(persisted.financially_open)
+        self.assertEqual(len(reversals), 2)
+        self.assertEqual(
+            [event.request_id for event in reversals],
+            ["request-void-position-1", "request-void-position-1"],
+        )
+        self.assertTrue(
+            all(
+                event.reason == "Broker confirmed the lifecycle never executed"
+                for event in reversals
+            )
+        )
+        self.assertEqual(
+            sum(
+                (
+                    entry.amount
+                    for entry in self.db.query(AccountLedgerEntry)
+                    .filter(AccountLedgerEntry.position_id == persisted.id)
+                    .all()
+                ),
+                Decimal("0"),
+            ),
+            Decimal("0"),
+        )
+        command = self.db.query(IdempotencyKey).filter_by(
+            scope="position.lifecycle.void.v1",
+            key="void-position-1",
+        ).one()
+        self.assertIsNone(command.expires_at)
+        self.assertEqual(command.status, "COMPLETED")
+
+    def test_trade_reversal_and_void_require_audit_contract(self):
+        truth_position = self._seed_open_synced_position()
+        open_event = self.db.query(PositionEvent).filter(
+            PositionEvent.position_id == truth_position.id,
+            PositionEvent.event_type == PositionEventType.OPEN,
+        ).one()
+        missing_key = self.post_without_default_idempotency(
+            f"/api/trading-positions/{truth_position.public_id}/events/{open_event.public_id}/reverse",
+            json={
+                "occurred_at": "2026-04-04T12:00:00+00:00",
+                "reason": "Incorrect event",
+            },
+        )
+        missing_reason = self.client.post(
+            f"/api/trading-positions/{truth_position.public_id}/void",
+            headers={"Idempotency-Key": "void-missing-reason"},
+            json={"occurred_at": "2026-04-04T12:00:00+00:00"},
+        )
+
+        self.assertEqual(missing_key.status_code, 422, missing_key.text)
+        self.assertEqual(
+            missing_key.json()["detail"]["code"],
+            "IDEMPOTENCY_KEY_REQUIRED",
+        )
+        self.assertEqual(missing_reason.status_code, 422, missing_reason.text)
+        self.assertEqual(
+            self.db.query(PositionEvent).filter(
+                PositionEvent.position_id == truth_position.id,
+                PositionEvent.event_type == PositionEventType.REVERSAL,
+            ).count(),
+            0,
+        )
+
+    def test_reopening_older_lifecycle_requires_later_lifecycle_void(self):
+        older = self._seed_synced_position()
+        close_event = self.db.query(PositionEvent).filter(
+            PositionEvent.position_id == older.id,
+            PositionEvent.event_type == PositionEventType.CLOSE,
+        ).one()
+        later = TradingPosition(
+            public_id="later-truth-lifecycle",
+            user_id=older.user_id,
+            account_id=older.account_id,
+            instrument_id=older.instrument_id,
+            status=TradingPositionStatus.CLOSED,
+            side=older.side,
+            opened_at=datetime(2026, 4, 5, tzinfo=timezone.utc),
+            closed_at=datetime(2026, 4, 6, tzinfo=timezone.utc),
+            base_currency=older.base_currency,
+            quantity_opened=Decimal("1"),
+            quantity_closed=Decimal("1"),
+            financially_open=False,
+        )
+        self.db.add(later)
+        self.db.commit()
+        body = {
+            "occurred_at": "2026-04-07T12:00:00+00:00",
+            "reason": "Incorrect close",
+        }
+
+        blocked = self.client.post(
+            f"/api/trading-positions/{older.public_id}/events/{close_event.public_id}/reverse",
+            headers={"Idempotency-Key": "reverse-older-blocked"},
+            json=body,
+        )
+        self.assertEqual(blocked.status_code, 409, blocked.text)
+        self.assertEqual(
+            blocked.json()["detail"]["code"],
+            "POSITION_LIFECYCLE_ORDER_CONFLICT",
+        )
+
+        later.status = TradingPositionStatus.VOID
+        self.db.commit()
+        allowed = self.client.post(
+            f"/api/trading-positions/{older.public_id}/events/{close_event.public_id}/reverse",
+            headers={"Idempotency-Key": "reverse-older-after-void"},
+            json=body,
+        )
+        self.assertEqual(allowed.status_code, 201, allowed.text)
+        self.assertEqual(
+            allowed.json()["data"]["position_summary"]["status"],
+            "OPEN",
+        )
 
     def test_trade_event_write_close_marks_position_closed_and_writes_ledger_entry(self):
         truth_position = self._seed_open_synced_position()

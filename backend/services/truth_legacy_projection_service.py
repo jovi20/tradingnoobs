@@ -104,7 +104,10 @@ def project_truth_accounting_to_legacy(
     legacy_position.realized_pnl = truth_position.realized_pnl_net or Decimal("0")
     legacy_position.status = (
         PositionStatus.CLOSED
-        if truth_position.status == TradingPositionStatus.CLOSED
+        if truth_position.status in {
+            TradingPositionStatus.CLOSED,
+            TradingPositionStatus.VOID,
+        }
         else PositionStatus.OPEN
     )
     legacy_position.opened_at = truth_position.opened_at
@@ -156,6 +159,26 @@ def resolve_user_truth_positions_for_legacy(
             and legacy_position.account_id == truth_position.account_id
         )
     }
+
+
+def exclude_void_truth_legacy_positions(
+    db: Session,
+    *,
+    user_id: int,
+    positions: list[Position],
+) -> list[Position]:
+    truth_by_legacy_id = resolve_user_truth_positions_for_legacy(
+        db,
+        user_id=user_id,
+    )
+    return [
+        position
+        for position in positions
+        if (
+            truth_by_legacy_id.get(position.id) is None
+            or truth_by_legacy_id[position.id].status != TradingPositionStatus.VOID
+        )
+    ]
 
 
 def project_user_truth_positions_to_legacy(

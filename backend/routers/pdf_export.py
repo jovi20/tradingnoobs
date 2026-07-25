@@ -5,13 +5,13 @@ from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database import get_db
 from models import Position, PositionStatus, User, WeeklyReport
 from services.auth_service import get_current_user
 from services.report_export_service import build_report_filename, build_weekly_report_pdf
+from services.truth_legacy_projection_service import exclude_void_truth_legacy_positions
 
 
 router = APIRouter(prefix="/api/insights", tags=["PDF Export"])
@@ -33,18 +33,23 @@ def _get_owned_weekly_report(
 
 
 def _build_report_portfolio_summary(db: Session, user_id: int) -> dict:
-    stats = db.query(
-        func.count(Position.id).label("total_positions"),
-        func.count(Position.id).filter(Position.status == PositionStatus.OPEN).label("open_positions"),
-        func.count(Position.id).filter(Position.status == PositionStatus.CLOSED).label("closed_positions"),
-        func.sum(Position.realized_pnl).label("realized_pnl"),
-    ).filter(Position.user_id == user_id).one()
+    positions = exclude_void_truth_legacy_positions(
+        db,
+        user_id=user_id,
+        positions=db.query(Position).filter(Position.user_id == user_id).all(),
+    )
 
     return {
-        "total_positions": int(stats.total_positions or 0),
-        "open_positions": int(stats.open_positions or 0),
-        "closed_positions": int(stats.closed_positions or 0),
-        "realized_pnl": float(stats.realized_pnl or 0),
+        "total_positions": len(positions),
+        "open_positions": sum(
+            1 for position in positions if position.status == PositionStatus.OPEN
+        ),
+        "closed_positions": sum(
+            1 for position in positions if position.status == PositionStatus.CLOSED
+        ),
+        "realized_pnl": float(
+            sum((position.realized_pnl or 0 for position in positions), 0)
+        ),
     }
 
 

@@ -30,7 +30,10 @@ from models import (
 from schemas import DashboardAccountBalance, DashboardStats
 from services.account_ledger_service import calculate_account_cash_balance_read_model
 from services.auth_service import get_current_user
-from services.truth_legacy_projection_service import resolve_user_truth_positions_for_legacy
+from services.truth_legacy_projection_service import (
+    exclude_void_truth_legacy_positions,
+    resolve_user_truth_positions_for_legacy,
+)
 
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
@@ -210,15 +213,7 @@ def get_dashboard_stats(
     exit_pnls = [float(event.realized_pnl_net or 0) for event in truth_events]
     exit_pnls.extend(float(batch.pnl or 0) for batch in legacy_batches)
 
-    position_query = db.query(
-        func.count(Position.id).label("total_trades"),
-        func.count(Position.id).filter(
-            Position.status == PositionStatus.CLOSED
-        ).label("closed_trades"),
-        func.count(Position.id).filter(
-            Position.status == PositionStatus.OPEN
-        ).label("open_positions"),
-    ).join(
+    position_query = db.query(Position).join(
         TradingAccount,
         Position.account_id == TradingAccount.id,
     ).outerjoin(
@@ -236,7 +231,20 @@ def get_dashboard_stats(
         position_query = position_query.filter(Position.opened_at >= start_date)
     if end_date:
         position_query = position_query.filter(Position.opened_at <= end_date)
-    position_stats = position_query.one()
+    counted_positions = exclude_void_truth_legacy_positions(
+        db,
+        user_id=current_user.id,
+        positions=position_query.all(),
+    )
+    total_trades = len(counted_positions)
+    closed_trades = sum(
+        1 for position in counted_positions
+        if position.status == PositionStatus.CLOSED
+    )
+    open_positions = sum(
+        1 for position in counted_positions
+        if position.status == PositionStatus.OPEN
+    )
 
     wins = [pnl for pnl in exit_pnls if pnl > 0]
     losses = [abs(pnl) for pnl in exit_pnls if pnl < 0]
@@ -250,9 +258,9 @@ def get_dashboard_stats(
         realized_pnl=sum(exit_pnls),
         win_rate=(len(wins) / len(exit_pnls) * 100) if exit_pnls else 0.0,
         avg_pnl_ratio=(sum(wins) / sum(losses)) if losses else 0.0,
-        total_trades=position_stats.total_trades or 0,
-        open_positions=position_stats.open_positions or 0,
-        closed_trades=position_stats.closed_trades or 0,
+        total_trades=total_trades,
+        open_positions=open_positions,
+        closed_trades=closed_trades,
         account_balances=account_balances[:5],
         accounting_degraded=bool(accounting_warnings),
         accounting_warnings=accounting_warnings,

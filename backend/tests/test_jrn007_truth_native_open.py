@@ -229,6 +229,43 @@ class TruthNativeOpenRouterTests(unittest.TestCase):
         )
         self.assertEqual(self.db.query(TradingPosition).count(), 1)
 
+    def test_void_releases_same_side_slot_and_allows_historical_rerecording(self):
+        opened = self.open("void-rerecord-original")
+        self.assertEqual(opened.status_code, 201, opened.text)
+        truth_public_id = opened.json()["truth_position_public_id"]
+        voided = self.client.post(
+            f"/api/trading-positions/{truth_public_id}/void",
+            headers={
+                "Idempotency-Key": "void-rerecord-command",
+                "X-Request-ID": "void-rerecord-request",
+            },
+            json={
+                "occurred_at": "2026-07-18T10:00:00+00:00",
+                "reason": "Original execution was entered against the wrong account",
+            },
+        )
+        self.assertEqual(voided.status_code, 201, voided.text)
+        self.assertEqual(
+            voided.json()["data"]["position_summary"]["status"],
+            "VOID",
+        )
+
+        rerecorded = self.open(
+            "void-rerecord-replacement",
+            self.payload(entry_time="2026-07-16T10:00:00+00:00"),
+        )
+        self.assertEqual(rerecorded.status_code, 201, rerecorded.text)
+        self.db.expire_all()
+        lifecycles = (
+            self.db.query(TradingPosition)
+            .order_by(TradingPosition.id.asc())
+            .all()
+        )
+        self.assertEqual(len(lifecycles), 2)
+        self.assertEqual(lifecycles[0].status.value, "VOID")
+        self.assertFalse(lifecycles[0].financially_open)
+        self.assertTrue(lifecycles[1].financially_open)
+
     def test_projection_failure_rolls_back_every_open_fact(self):
         with patch(
             "services.truth_native_open_service.project_truth_accounting_to_legacy",

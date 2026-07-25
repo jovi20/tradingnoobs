@@ -29,6 +29,7 @@ from schemas import (
     TradingPositionManualAdjustmentCreate,
     TradingPositionTradeEventCreate,
     TradingPositionTradeEventReverseCreate,
+    TradingPositionVoidCreate,
 )
 from services.account_ledger_service import (
     AccountingReconciliationRequiredError,
@@ -57,6 +58,9 @@ from services.trading_position_read_service import (
 )
 from services.trading_position_write_service import (
     ArchivedTradingPositionWriteError,
+    PositionEventReversalError,
+    PositionLifecycleOrderConflictError,
+    PositionSideConflictError,
     SourceBoundTradeWriteError,
     TradeEventChronologyError,
     TradeEventQuantityError,
@@ -64,6 +68,7 @@ from services.trading_position_write_service import (
     lock_owned_truth_position,
     require_truth_position_financial_write_allowed,
     reverse_latest_truth_trade_event,
+    void_truth_position,
 )
 from services.timezone_service import LocalDateTimeError, normalize_user_datetime_to_utc
 
@@ -509,39 +514,127 @@ def reverse_trading_position_trade_event(
     position_public_id: str,
     event_public_id: str,
     payload: TradingPositionTradeEventReverseCreate,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    request_id: str | None = Header(default=None, alias="X-Request-ID"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    locked = lock_owned_truth_position(
-        db,
-        user_id=current_user.id,
-        position_public_id=position_public_id,
-    )
-    if locked is None:
-        raise HTTPException(status_code=404, detail="Trading position not found")
-    _, truth_position = locked
-
-    _require_financial_write_allowed(truth_position)
-    _require_exact_truth_instrument_provenance(truth_position)
-    _require_resolved_truth_accounting(truth_position)
-
-    event = db.query(PositionEvent).filter(
-        PositionEvent.public_id == event_public_id,
-        PositionEvent.position_id == truth_position.id,
-        PositionEvent.user_id == current_user.id,
-    ).first()
-    if not event:
-        raise HTTPException(status_code=404, detail="Position event not found")
-
     try:
+        occurred_at = normalize_user_datetime_to_utc(
+            payload.occurred_at,
+            timezone_name=current_user.timezone,
+        )
+        locked = lock_owned_truth_position(
+            db,
+            user_id=current_user.id,
+            position_public_id=position_public_id,
+        )
+        if locked is None:
+            raise HTTPException(status_code=404, detail="Trading position not found")
+        account, truth_position = locked
+        event = (
+            db.query(PositionEvent)
+            .filter(
+                PositionEvent.public_id == event_public_id,
+                PositionEvent.position_id == truth_position.id,
+                PositionEvent.user_id == current_user.id,
+            )
+            .with_for_update()
+            .first()
+        )
+        if event is None:
+            raise HTTPException(status_code=404, detail="Position event not found")
+        command = begin_financial_command(
+            db,
+            user_id=current_user.id,
+            scope="position.trade-event.reverse.v1",
+            idempotency_key=idempotency_key,
+            request_payload={
+                "position_public_id": truth_position.public_id,
+                "event_public_id": event.public_id,
+                "payload": {
+                    **jsonable_encoder(payload),
+                    "occurred_at": jsonable_encoder(occurred_at),
+                },
+            },
+        )
+        if command.replay_response is not None:
+            return JSONResponse(status_code=201, content=command.replay_response)
+        _require_financial_write_allowed(truth_position)
+        _require_exact_truth_instrument_provenance(truth_position)
+        _require_resolved_truth_accounting(truth_position)
+        if not account.is_active:
+            raise FinancialCommandError(
+                "ACCOUNT_ARCHIVED",
+                "Archived accounts are read-only",
+                http_status=409,
+            )
+        normalized_reason = payload.reason.strip()
+        if not normalized_reason:
+            raise FinancialCommandError(
+                "REVERSAL_REASON_REQUIRED",
+                "Reversal reason must not be blank",
+                http_status=422,
+            )
         reversal_event = reverse_latest_truth_trade_event(
             db,
             position=truth_position,
             event=event,
-            occurred_at=payload.occurred_at,
+            occurred_at=occurred_at,
+            actor_user_id=current_user.id,
+            request_id=financial_request_id(
+                request_id,
+                fallback=idempotency_key or "",
+            ),
+            reason=normalized_reason,
             note=payload.note,
         )
         enqueue_position_event_created_outbox(db, position=truth_position, event=reversal_event)
+        db.flush()
+        db.expire_all()
+        updated_position = resolve_truth_position_by_public_id(
+            db,
+            current_user.id,
+            position_public_id,
+        )
+        response_content = _lifecycle_response_content(
+            db,
+            updated_position,
+            actor_key=current_user.public_id,
+            source="MANUAL",
+            include_ai_sidecar=False,
+        )
+        complete_financial_command(
+            db,
+            record=command.record,
+            response_json=jsonable_encoder(response_content),
+            source_fact_public_id=reversal_event.public_id,
+        )
+        db.commit()
+        return JSONResponse(status_code=201, content=jsonable_encoder(response_content))
+    except HTTPException:
+        db.rollback()
+        raise
+    except LocalDateTimeError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=422,
+            detail={"code": exc.code, "message": str(exc), "field": "occurred_at"},
+        ) from exc
+    except (
+        AccountingReconciliationRequiredError,
+        LedgerPostingConflictError,
+        FinancialCommandError,
+        PositionEventReversalError,
+        PositionLifecycleOrderConflictError,
+        PositionSideConflictError,
+        TradeEventChronologyError,
+    ) as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
     except ArchivedTradingPositionWriteError as exc:
         db.rollback()
         raise HTTPException(
@@ -552,28 +645,139 @@ def reverse_trading_position_trade_event(
                 "position_public_id": exc.position_public_id,
             },
         ) from exc
+    except Exception:
+        db.rollback()
+        raise
+
+
+@router.post("/{position_public_id}/void", status_code=201)
+def void_trading_position(
+    position_public_id: str,
+    payload: TradingPositionVoidCreate,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    request_id: str | None = Header(default=None, alias="X-Request-ID"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        occurred_at = normalize_user_datetime_to_utc(
+            payload.occurred_at,
+            timezone_name=current_user.timezone,
+        )
+        locked = lock_owned_truth_position(
+            db,
+            user_id=current_user.id,
+            position_public_id=position_public_id,
+        )
+        if locked is None:
+            raise HTTPException(status_code=404, detail="Trading position not found")
+        account, truth_position = locked
+        command = begin_financial_command(
+            db,
+            user_id=current_user.id,
+            scope="position.lifecycle.void.v1",
+            idempotency_key=idempotency_key,
+            request_payload={
+                "position_public_id": truth_position.public_id,
+                "payload": {
+                    **jsonable_encoder(payload),
+                    "occurred_at": jsonable_encoder(occurred_at),
+                },
+            },
+        )
+        if command.replay_response is not None:
+            return JSONResponse(status_code=201, content=command.replay_response)
+        _require_financial_write_allowed(truth_position)
+        _require_exact_truth_instrument_provenance(truth_position)
+        _require_resolved_truth_accounting(truth_position)
+        if not account.is_active:
+            raise FinancialCommandError(
+                "ACCOUNT_ARCHIVED",
+                "Archived accounts are read-only",
+                http_status=409,
+            )
+        normalized_reason = payload.reason.strip()
+        if not normalized_reason:
+            raise FinancialCommandError(
+                "VOID_REASON_REQUIRED",
+                "Void reason must not be blank",
+                http_status=422,
+            )
+        command_request_id = financial_request_id(
+            request_id,
+            fallback=idempotency_key or "",
+        )
+        reversals = void_truth_position(
+            db,
+            position=truth_position,
+            occurred_at=occurred_at,
+            actor_user_id=current_user.id,
+            request_id=command_request_id,
+            reason=normalized_reason,
+        )
+        for reversal in reversals:
+            enqueue_position_event_created_outbox(
+                db,
+                position=truth_position,
+                event=reversal,
+            )
+        db.flush()
+        db.expire_all()
+        updated_position = resolve_truth_position_by_public_id(
+            db,
+            current_user.id,
+            position_public_id,
+        )
+        response_content = _lifecycle_response_content(
+            db,
+            updated_position,
+            actor_key=current_user.public_id,
+            source="MANUAL",
+            include_ai_sidecar=False,
+        )
+        complete_financial_command(
+            db,
+            record=command.record,
+            response_json=jsonable_encoder(response_content),
+            source_fact_public_id=reversals[-1].public_id,
+        )
+        db.commit()
+        return JSONResponse(status_code=201, content=jsonable_encoder(response_content))
+    except HTTPException:
+        db.rollback()
+        raise
+    except LocalDateTimeError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=422,
+            detail={"code": exc.code, "message": str(exc), "field": "occurred_at"},
+        ) from exc
     except (
         AccountingReconciliationRequiredError,
         LedgerPostingConflictError,
+        FinancialCommandError,
+        PositionEventReversalError,
+        PositionLifecycleOrderConflictError,
+        TradeEventChronologyError,
     ) as exc:
         db.rollback()
         raise HTTPException(
             status_code=exc.http_status,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
-    except ValueError as exc:
+    except ArchivedTradingPositionWriteError as exc:
         db.rollback()
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    db.commit()
-
-    updated_position = resolve_truth_position_by_public_id(db, current_user.id, position_public_id)
-    return _lifecycle_response(
-        db,
-        updated_position,
-        actor_key=current_user.public_id,
-        source="MANUAL",
-        status_code=201,
-    )
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail={
+                "code": exc.code,
+                "message": str(exc),
+                "position_public_id": exc.position_public_id,
+            },
+        ) from exc
+    except Exception:
+        db.rollback()
+        raise
 
 
 @router.post("/{position_public_id}/dividends", status_code=201)

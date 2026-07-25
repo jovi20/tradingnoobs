@@ -4567,10 +4567,17 @@
             "format": "date-time",
             "title": "Occurred At",
             "type": "string"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
           }
         },
         "required": [
-          "occurred_at"
+          "occurred_at",
+          "reason"
         ],
         "title": "TradingPositionTradeEventReverseCreate",
         "type": "object"
@@ -4583,6 +4590,27 @@
         ],
         "title": "TradingPositionTradeEventTypeEnum",
         "type": "string"
+      },
+      "TradingPositionVoidCreate": {
+        "properties": {
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "occurred_at",
+          "reason"
+        ],
+        "title": "TradingPositionVoidCreate",
+        "type": "object"
       },
       "TransactionCreate": {
         "additionalProperties": false,
@@ -9216,6 +9244,38 @@
               "title": "Event Public Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
           }
         ],
         "requestBody": {
@@ -9301,6 +9361,93 @@
           }
         ],
         "summary": "Get Trading Position Lifecycle",
+        "tags": [
+          "Trading Positions"
+        ]
+      }
+    },
+    "/api/trading-positions/{position_public_id}/void": {
+      "post": {
+        "operationId": "void_trading_position_api_trading_positions__position_public_id__void_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "position_public_id",
+            "required": true,
+            "schema": {
+              "title": "Position Public Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TradingPositionVoidCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Void Trading Position",
         "tags": [
           "Trading Positions"
         ]

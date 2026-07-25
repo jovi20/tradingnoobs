@@ -1,4 +1,4 @@
-import { Edit3, Loader2, RotateCcw } from 'lucide-react'
+import { Ban, Edit3, Loader2, RotateCcw } from 'lucide-react'
 
 import { Surface } from '@/components/ui/Surface'
 import type { LifecyclePrimaryActions } from '@/lib/adapters/lifecycle'
@@ -6,11 +6,13 @@ import type { LifecyclePrimaryActions } from '@/lib/adapters/lifecycle'
 interface LifecycleActionPanelProps {
     actions: LifecyclePrimaryActions
     isReversing: boolean
+    isVoiding: boolean
     onEditNarrative: () => void
     onReverseLatest: () => void
+    onVoid: () => void
 }
 
-export function LifecycleActionPanel({ actions, isReversing, onEditNarrative, onReverseLatest }: LifecycleActionPanelProps) {
+export function LifecycleActionPanel({ actions, isReversing, isVoiding, onEditNarrative, onReverseLatest, onVoid }: LifecycleActionPanelProps) {
     return (
         <Surface className="border-ai/30 bg-ai/8 p-5">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -29,6 +31,10 @@ export function LifecycleActionPanel({ actions, isReversing, onEditNarrative, on
                     <button type="button" onClick={onReverseLatest} disabled={!actions.reversal.canRun || isReversing} title={actions.reversal.reason} className="inline-flex items-center justify-center gap-2 rounded-md border border-line bg-panel-subtle px-4 py-2 text-sm font-medium text-ink-soft transition-colors hover:bg-panel disabled:cursor-not-allowed disabled:opacity-60">
                         {isReversing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
                         {actions.reversal.label}
+                    </button>
+                    <button type="button" onClick={onVoid} disabled={!actions.void.canRun || isVoiding} title={actions.void.reason} className="inline-flex items-center justify-center gap-2 rounded-md border border-loss/40 bg-loss/8 px-4 py-2 text-sm font-medium text-loss transition-colors hover:bg-loss/15 disabled:cursor-not-allowed disabled:opacity-60">
+                        {isVoiding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
+                        {actions.void.label}
                     </button>
                 </div>
             </div>

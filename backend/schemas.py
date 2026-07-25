@@ -1250,7 +1250,13 @@ class TradingPositionTradeEventCreate(BaseModel):
 
 class TradingPositionTradeEventReverseCreate(BaseModel):
     occurred_at: datetime
+    reason: str = Field(..., min_length=1, max_length=1000)
     note: Optional[str] = None
+
+
+class TradingPositionVoidCreate(BaseModel):
+    occurred_at: datetime
+    reason: str = Field(..., min_length=1, max_length=1000)
 
 
 class TradeBatchResponse(BaseModel):

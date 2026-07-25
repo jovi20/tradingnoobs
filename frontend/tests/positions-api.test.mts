@@ -68,18 +68,49 @@ test('reverseTradingPositionTradeEvent posts guarded reversals to the truth even
   try {
     const result = await positionsAPI.reverseTradingPositionTradeEvent('token-1', 'tp-1', 'evt-2', {
       occurred_at: '2026-04-04T12:00:00.000Z',
+      reason: 'Broker correction',
       note: 'Broker correction',
-    })
+    }, 'reverse-key-1', 'request-reverse-1')
 
     assert.equal(result.meta.source, 'MANUAL')
     assert.equal(calls.length, 1)
     assert.equal(String(calls[0].input), 'http://localhost:8000/api/trading-positions/tp-1/events/evt-2/reverse')
     assert.equal(calls[0].init?.method, 'POST')
     assert.equal((calls[0].init?.headers as Record<string, string>).Authorization, 'Bearer token-1')
+    assert.equal((calls[0].init?.headers as Record<string, string>)['Idempotency-Key'], 'reverse-key-1')
+    assert.equal((calls[0].init?.headers as Record<string, string>)['X-Request-ID'], 'request-reverse-1')
     assert.deepEqual(JSON.parse(String(calls[0].init?.body)), {
       occurred_at: '2026-04-04T12:00:00.000Z',
+      reason: 'Broker correction',
       note: 'Broker correction',
     })
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('voidTradingPosition posts an audited idempotent whole-position void', async () => {
+  const calls: Array<{ input: string | URL | Request; init?: RequestInit }> = []
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+    calls.push({ input, init })
+    return new Response(JSON.stringify({
+      data: { position_summary: { public_id: 'tp-1', status: 'VOID' } },
+      meta: { source: 'MANUAL' },
+    }), {
+      status: 201,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+  try {
+    await positionsAPI.voidTradingPosition('token-1', 'tp-1', {
+      occurred_at: '2026-04-05T12:00:00.000Z',
+      reason: 'Execution never occurred',
+    }, 'void-key-1')
+    assert.equal(String(calls[0].input), 'http://localhost:8000/api/trading-positions/tp-1/void')
+    assert.equal(calls[0].init?.method, 'POST')
+    assert.equal((calls[0].init?.headers as Record<string, string>)['Idempotency-Key'], 'void-key-1')
+    assert.equal((calls[0].init?.headers as Record<string, string>)['X-Request-ID'], 'void-key-1')
   } finally {
     globalThis.fetch = originalFetch
   }

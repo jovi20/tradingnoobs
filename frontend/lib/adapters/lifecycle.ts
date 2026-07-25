@@ -65,6 +65,12 @@ export interface LifecycleReversalAction {
     reason: string
 }
 
+export interface LifecycleVoidAction {
+    canVoid: boolean
+    label: string
+    reason: string
+}
+
 export type LifecycleWorkbenchTone = 'neutral' | 'positive' | 'negative' | 'warning' | 'danger' | 'entry' | 'exit' | 'review' | 'ai'
 export type LifecycleViewport = 'desktop' | 'mobile'
 export type LifecyclePageSection = 'header' | 'hero' | 'actions' | 'rail' | 'ai' | 'evidence' | 'cash' | 'migration' | 'legacy-fallback'
@@ -86,6 +92,7 @@ export interface LifecyclePrimaryAction {
 export interface LifecyclePrimaryActions {
     narrative: LifecyclePrimaryAction
     reversal: LifecyclePrimaryAction
+    void: LifecyclePrimaryAction
 }
 
 export interface LifecycleEventRailItem {
@@ -150,6 +157,9 @@ export function adaptLifecycleDetail(response: LifecycleDetailResponse): Lifecyc
 }
 
 export function getLifecyclePreviewSummary(input: { reviewStatus: LifecycleDetailViewModel['reviewStatus']; nodeCount: number }) {
+    if (input.reviewStatus === 'VOID') {
+        return `审计生命周期已同步 ${input.nodeCount} 个事件节点，这笔交易已整仓作废。`
+    }
     if (input.reviewStatus === 'CLOSED_PENDING_REVIEW') {
         return `审计生命周期已同步 ${input.nodeCount} 个事件节点，这笔交易仍待完成复盘。`
     }
@@ -180,6 +190,13 @@ export function getLifecycleReviewTone(reviewStatus: LifecycleDetailViewModel['r
     tone: LifecycleWorkbenchTone
     description: string
 } {
+    if (reviewStatus === 'VOID') {
+        return {
+            label: '已作废',
+            tone: 'danger',
+            description: '该 lifecycle 已由补偿事实完整抵销，原始审计记录仍保留。',
+        }
+    }
     if (reviewStatus === 'CLOSED_PENDING_REVIEW') {
         return {
             label: '待复盘',
@@ -245,6 +262,7 @@ function getLifecycleNodeTone(nodeType: string): LifecycleWorkbenchTone {
 export function getLifecyclePrimaryActions(input: {
     hasEditableNarrativeEvent: boolean
     reversal: LifecycleReversalAction
+    voidAction: LifecycleVoidAction
 }): LifecyclePrimaryActions {
     return {
         narrative: {
@@ -258,6 +276,11 @@ export function getLifecyclePrimaryActions(input: {
             canRun: input.reversal.canReverse,
             label: input.reversal.label,
             reason: input.reversal.reason,
+        },
+        void: {
+            canRun: input.voidAction.canVoid,
+            label: input.voidAction.label,
+            reason: input.voidAction.reason,
         },
     }
 }
@@ -314,6 +337,12 @@ export function getLifecycleEmptyState(input: {
 }
 
 export function getLifecyclePreviewBadge(reviewStatus: LifecycleDetailViewModel['reviewStatus']) {
+    if (reviewStatus === 'VOID') {
+        return {
+            label: '已作废',
+            className: 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-200',
+        }
+    }
     if (reviewStatus === 'CLOSED_PENDING_REVIEW') {
         return {
             label: '待复盘',
@@ -434,7 +463,7 @@ export function getLifecycleReversalAction(input: Pick<LifecycleDetailViewModel,
             canReverse: false,
             eventPublicId: null,
             label: '暂无可撤销事件',
-            reason: '开仓事件需要完整的作废或归档语义，当前不可撤销。',
+            reason: '开仓事件不能单独撤销；需要使用整仓作废。',
         }
     }
 
@@ -443,5 +472,40 @@ export function getLifecycleReversalAction(input: Pick<LifecycleDetailViewModel,
         eventPublicId: null,
         label: '暂无可撤销事件',
         reason: '当前生命周期还没有可撤销的交易事件。',
+    }
+}
+
+export function getLifecycleVoidAction(
+    input: Pick<LifecycleDetailViewModel, 'nodes' | 'positionStatus'>
+): LifecycleVoidAction {
+    if (input.positionStatus === 'VOID') {
+        return {
+            canVoid: false,
+            label: '已整仓作废',
+            reason: '该生命周期已经通过补偿事实完成作废。',
+        }
+    }
+    if (input.positionStatus === 'ARCHIVED') {
+        return {
+            canVoid: false,
+            label: '整仓作废',
+            reason: '已归档持仓只读，不能追加财务补偿事实。',
+        }
+    }
+    const reversedEventPublicIds = new Set(
+        input.nodes
+            .filter((node) => node.node_type === 'REVERSAL' && node.reverses_event_public_id)
+            .map((node) => String(node.reverses_event_public_id))
+    )
+    const hasActiveTradeEvent = input.nodes.some(
+        (node) => ['OPEN', 'ADD', 'REDUCE', 'CLOSE'].includes(node.node_type)
+            && !reversedEventPublicIds.has(node.node_public_id)
+    )
+    return {
+        canVoid: hasActiveTradeEvent,
+        label: '整仓作废',
+        reason: hasActiveTradeEvent
+            ? '按逆序追加全部补偿事实；原事件和账本记录永久保留。'
+            : '当前生命周期没有可作废的 active trade facts。',
     }
 }

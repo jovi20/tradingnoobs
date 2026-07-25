@@ -3,6 +3,7 @@ import {
     getLifecycleLegacyPanelState,
     getLifecyclePrimaryActions,
     getLifecycleReversalAction,
+    getLifecycleVoidAction,
     type LifecycleDetailViewModel,
 } from '@/lib/adapters/lifecycle'
 import {
@@ -23,8 +24,10 @@ interface LifecycleWorkbenchProps {
     legacyPosition: PositionViewModel | null
     sortedBatches: TradeBatchViewModel[]
     isReversing: boolean
+    isVoiding: boolean
     onEditNarrative: () => void
     onReverseLatest: () => void
+    onVoid: () => void
     onEditBatch: (batch: TradeBatchViewModel) => void
 }
 
@@ -33,14 +36,18 @@ export function LifecycleWorkbench({
     legacyPosition,
     sortedBatches,
     isReversing,
+    isVoiding,
     onEditNarrative,
     onReverseLatest,
+    onVoid,
     onEditBatch,
 }: LifecycleWorkbenchProps) {
     const reversal = getLifecycleReversalAction(lifecycle)
+    const voidAction = getLifecycleVoidAction(lifecycle)
     const actions = getLifecyclePrimaryActions({
         hasEditableNarrativeEvent: Boolean(lifecycle.thesisSourceEventPublicId || lifecycle.nodes[0]?.node_public_id),
         reversal,
+        voidAction,
     })
     const legacyPanel = getLifecycleLegacyPanelState({
         hasTruthLifecycle: true,
@@ -58,8 +65,10 @@ export function LifecycleWorkbench({
                     <LifecycleActionPanel
                         actions={actions}
                         isReversing={isReversing}
+                        isVoiding={isVoiding}
                         onEditNarrative={onEditNarrative}
                         onReverseLatest={onReverseLatest}
+                        onVoid={onVoid}
                     />
                     <LifecycleEvidencePanel lifecycle={lifecycle} />
                 </div>

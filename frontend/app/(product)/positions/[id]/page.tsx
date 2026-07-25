@@ -30,6 +30,7 @@ import {
     adaptLifecycleDetail,
     getLifecycleNarrativeDraft,
     getLifecycleReversalAction,
+    getLifecycleVoidAction,
     type LifecycleDetailViewModel,
     type LifecycleNarrativeDraft,
 } from '@/lib/adapters/lifecycle'
@@ -85,6 +86,7 @@ export default function PositionDetailPage() {
     const [editingTruthNarrative, setEditingTruthNarrative] = useState(false)
     const [isSavingTruthNarrative, setIsSavingTruthNarrative] = useState(false)
     const [isReversingTruthEvent, setIsReversingTruthEvent] = useState(false)
+    const [isVoidingTruthPosition, setIsVoidingTruthPosition] = useState(false)
     const [truthNarrativeForm, setTruthNarrativeForm] = useState<LifecycleNarrativeDraft>(emptyTruthNarrativeForm)
 
     useEffect(() => {
@@ -220,6 +222,9 @@ export default function PositionDetailPage() {
             return
         }
         if (!window.confirm(`确定要撤销最新 ${reversalAction.nodeType} truth event 吗？系统会追加 REVERSAL 节点，而不是静默删除历史事件。`)) return
+        const reason = window.prompt('请输入撤销原因')
+        if (!reason?.trim()) return
+        const commandId = crypto.randomUUID()
 
         setIsReversingTruthEvent(true)
         try {
@@ -229,8 +234,11 @@ export default function PositionDetailPage() {
                 reversalAction.eventPublicId,
                 {
                     occurred_at: new Date().toISOString(),
+                    reason: reason.trim(),
                     note: `从持仓详情撤销 ${reversalAction.nodeType} 事件`,
-                }
+                },
+                commandId,
+                commandId,
             )
             setTruthLifecycle(adaptLifecycleDetail(updatedLifecycle))
             setError('')
@@ -238,6 +246,38 @@ export default function PositionDetailPage() {
             alert(err.message || '撤销审计事件失败')
         } finally {
             setIsReversingTruthEvent(false)
+        }
+    }
+
+    const handleVoidTruthPosition = async () => {
+        if (!token || !truthLifecycle) return
+        const voidAction = getLifecycleVoidAction(truthLifecycle)
+        if (!voidAction.canVoid) {
+            setError(voidAction.reason)
+            return
+        }
+        const reason = window.prompt('请输入整仓作废原因')
+        if (!reason?.trim()) return
+        if (!window.confirm('整仓作废会按逆序追加补偿事实，并从统计中移除该 lifecycle。原始事件不会删除。确定继续吗？')) return
+        const commandId = crypto.randomUUID()
+        setIsVoidingTruthPosition(true)
+        try {
+            const updatedLifecycle = await positionsAPI.voidTradingPosition(
+                token,
+                truthLifecycle.truthPositionPublicId,
+                {
+                    occurred_at: new Date().toISOString(),
+                    reason: reason.trim(),
+                },
+                commandId,
+                commandId,
+            )
+            setTruthLifecycle(adaptLifecycleDetail(updatedLifecycle))
+            setError('')
+        } catch (err: any) {
+            alert(err.message || '整仓作废失败')
+        } finally {
+            setIsVoidingTruthPosition(false)
         }
     }
 
@@ -340,8 +380,10 @@ export default function PositionDetailPage() {
                     legacyPosition={position}
                     sortedBatches={sortedBatches}
                     isReversing={isReversingTruthEvent}
+                    isVoiding={isVoidingTruthPosition}
                     onEditNarrative={openTruthNarrativeModal}
                     onReverseLatest={handleReverseLatestTruthEvent}
+                    onVoid={handleVoidTruthPosition}
                     onEditBatch={openEditModal}
                 />
             )}

@@ -297,14 +297,14 @@ export interface JournalTimelineHomeResponse extends Omit<TimelineHomeResponse, 
     meta: JournalTrustMeta
 }
 
-export type LifecycleReviewStatus = 'OPEN' | 'CLOSED_PENDING_REVIEW' | 'REVIEWED'
+export type LifecycleReviewStatus = 'OPEN' | 'CLOSED_PENDING_REVIEW' | 'REVIEWED' | 'VOID'
 export type LifecycleNodeType = 'OPEN' | 'ADD' | 'REDUCE' | 'CLOSE' | 'REVERSAL' | 'MANUAL_ADJUSTMENT' | 'REVIEW' | 'AI_CONCLUSION'
 
 export interface LifecyclePositionSummary {
     public_id: string
     route_public_id?: string
     title: string
-    status: 'OPEN' | 'CLOSED' | 'ARCHIVED' | 'ERROR'
+    status: 'OPEN' | 'CLOSED' | 'VOID' | 'ARCHIVED' | 'ERROR'
     side: 'LONG' | 'SHORT'
     account: {
         public_id: string

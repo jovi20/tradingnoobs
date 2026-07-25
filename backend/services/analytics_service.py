@@ -8,6 +8,7 @@ import numpy as np
 
 from models import Position, PositionStatus, TradeBatch, BatchType
 from schemas import AnalysisType
+from services.truth_legacy_projection_service import exclude_void_truth_legacy_positions
 
 class AnalyticsService:
     def __init__(self, db: Session):
@@ -28,7 +29,11 @@ class AnalyticsService:
         if end_date:
             query = query.filter(Position.closed_at <= end_date)
             
-        positions = query.all()
+        positions = exclude_void_truth_legacy_positions(
+            self.db,
+            user_id=user_id,
+            positions=query.all(),
+        )
         
         if analysis_type == "holding_period":
             return self._analyze_holding_period(positions)
@@ -167,7 +172,11 @@ class AnalyticsService:
         if start_date: query = query.filter(Position.closed_at >= start_date)
         if end_date: query = query.filter(Position.closed_at <= end_date)
         
-        positions = query.all()
+        positions = exclude_void_truth_legacy_positions(
+            self.db,
+            user_id=user_id,
+            positions=query.all(),
+        )
         data = []
         for p in positions:
             emotion = self._get_entry_emotion(p) or "Neutral/None"
@@ -248,4 +257,3 @@ class AnalyticsService:
         ).to_dict(orient="index")
         
         return {"stats": stats}
-

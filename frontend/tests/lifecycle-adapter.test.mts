@@ -311,7 +311,7 @@ test('getLifecycleReversalAction only exposes the latest unreversed truth trade 
       canReverse: false,
       eventPublicId: null,
       label: '暂无可撤销事件',
-      reason: '开仓事件需要完整的作废或归档语义，当前不可撤销。',
+      reason: '开仓事件不能单独撤销；需要使用整仓作废。',
     },
   )
 })
@@ -421,7 +421,7 @@ test('lifecycle legacy panel state makes old DTO surfaces migration-only when tr
   })
 })
 
-test('lifecycle primary actions expose only narrative and reversal states', () => {
+test('lifecycle primary actions expose narrative, reversal, and void states', () => {
   const actions = lifecycleAdapter.getLifecyclePrimaryActions({
     hasEditableNarrativeEvent: true,
     reversal: {
@@ -431,13 +431,41 @@ test('lifecycle primary actions expose only narrative and reversal states', () =
       label: '撤销最新事件',
       reason: '将追加 REVERSAL 节点并重放 FIFO，不会静默改写历史事件。',
     },
+    voidAction: {
+      canVoid: true,
+      label: '整仓作废',
+      reason: '按逆序追加全部补偿事实；原事件和账本记录永久保留。',
+    },
   })
 
   assert.equal(actions.narrative.canRun, true)
   assert.equal(actions.narrative.label, '编辑交易叙事')
   assert.equal(actions.reversal.canRun, true)
   assert.equal(actions.reversal.label, '撤销最新事件')
-  assert.deepEqual(Object.keys(actions), ['narrative', 'reversal'])
+  assert.equal(actions.void.canRun, true)
+  assert.deepEqual(Object.keys(actions), ['narrative', 'reversal', 'void'])
+})
+
+test('lifecycle void action distinguishes active, void, and archived states', () => {
+  const openNode = {
+    node_public_id: 'evt-open',
+    node_type: 'OPEN' as const,
+    occurred_at: '2026-04-01T09:30:00Z',
+    title: 'MSFT OPEN',
+    summary: 'Initial entry',
+  }
+  assert.equal(lifecycleAdapter.getLifecycleVoidAction({
+    positionStatus: 'OPEN',
+    nodes: [openNode],
+  }).canVoid, true)
+  assert.equal(lifecycleAdapter.getLifecycleVoidAction({
+    positionStatus: 'VOID',
+    nodes: [openNode],
+  }).canVoid, false)
+  assert.equal(lifecycleAdapter.getLifecycleVoidAction({
+    positionStatus: 'ARCHIVED',
+    nodes: [openNode],
+  }).canVoid, false)
 })
 
 test('lifecycle event rail items expose node tone and date labels', () => {

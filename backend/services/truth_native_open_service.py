@@ -157,6 +157,7 @@ def create_truth_native_open(
         TradingPosition.account_id == account.id,
         TradingPosition.instrument_id == instrument.id,
         TradingPosition.side == side,
+        TradingPosition.status != TradingPositionStatus.VOID,
         TradingPosition.closed_at.isnot(None),
     ).order_by(TradingPosition.closed_at.desc()).first()
     if (
