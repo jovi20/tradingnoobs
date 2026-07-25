@@ -25,6 +25,7 @@ from models import (
     ImportSession,
     ImportSourceBinding,
     SourceStatement,
+    StatementExecutionSighting,
     TradingAccount,
     User,
 )
@@ -338,18 +339,30 @@ def test_existing_binding_upload_uses_bound_preview_and_persists_provenance(
     assert EXTERNAL_ACCOUNT not in str(result.body)
     assert db.query(SourceStatement).count() == 1
     assert db.query(ExternalSourceObservation).count() == 1
+    assert db.query(StatementExecutionSighting).count() == 1
     assert db.query(ImportSourceBinding).count() == 1
     assert list(tmp_path.iterdir()) == []
 
+    retention_boundary = datetime(2026, 8, 25, tzinfo=timezone.utc)
     assert cleanup_terminal_import_rows(
         db,
-        now=datetime(2026, 8, 25, tzinfo=timezone.utc),
+        now=retention_boundary - timedelta(microseconds=1),
+    ) == 0
+    db.commit()
+    assert db.query(ImportRow).count() == 1
+    assert db.query(ImportSession).one().rows_cleaned_at is None
+
+    assert cleanup_terminal_import_rows(
+        db,
+        now=retention_boundary,
     ) == 1
     db.commit()
     assert db.query(ImportRow).count() == 0
     assert db.query(ImportSession).count() == 1
     assert db.query(SourceStatement).count() == 1
     assert db.query(ExternalSourceObservation).count() == 1
+    assert db.query(StatementExecutionSighting).count() == 1
+    assert db.query(ImportSourceBinding).count() == 1
     assert db.query(IdempotencyKey).count() == 1
 
     restarted_db = sessionmaker(bind=db.get_bind(), autoflush=False)()

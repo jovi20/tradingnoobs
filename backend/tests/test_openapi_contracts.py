@@ -51,6 +51,16 @@ class OpenAPIContractTests(unittest.TestCase):
             "/api/positions/import/ibkr-flex/confirm",
             paths,
         )
+        self.assertFalse(
+            any(
+                path.startswith("/api/positions/import/ibkr-flex/")
+                and any(
+                    forbidden in path.lower()
+                    for forbidden in ("binding", "rebind", "transfer")
+                )
+                for path in paths
+            )
+        )
 
         session_schema = self.openapi["components"]["schemas"][
             "ImportSessionResponse"
