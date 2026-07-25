@@ -1508,8 +1508,8 @@ class ImportSessionResponse(BaseModel):
     schema_version: Literal[1] = 1
     session_public_id: str
     account_public_id: str
-    adapter_kind: Literal["GENERIC_BOOTSTRAP"]
-    file_format: Literal["CSV_UTF8", "XLSX"]
+    adapter_kind: Literal["GENERIC_BOOTSTRAP", "IBKR_FLEX_XML_V1"]
+    file_format: Literal["CSV_UTF8", "XLSX", "XML"]
     status: Literal[
         "UPLOADING",
         "PREVIEW_READY",
@@ -1528,6 +1528,7 @@ class ImportSessionResponse(BaseModel):
     error: Optional[ImportIssue] = None
     rows: List[ImportPreviewRow] = Field(default_factory=list)
     confirm_available: bool = False
+    source_preview: Optional[Dict[str, Any]] = None
 
 
 class ImportConfirmRequest(BaseModel):

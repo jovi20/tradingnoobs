@@ -557,6 +557,30 @@
         "title": "Body_upload_generic_import_api_positions_import_upload_post",
         "type": "object"
       },
+      "Body_upload_ibkr_flex_import_api_positions_import_ibkr_flex_upload_post": {
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          },
+          "source_timezone": {
+            "title": "Source Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_id",
+          "source_timezone",
+          "file"
+        ],
+        "title": "Body_upload_ibkr_flex_import_api_positions_import_ibkr_flex_upload_post",
+        "type": "object"
+      },
       "CashDividendEffectEnum": {
         "enum": [
           "RECEIVED",
@@ -1261,7 +1285,10 @@
             "type": "string"
           },
           "adapter_kind": {
-            "const": "GENERIC_BOOTSTRAP",
+            "enum": [
+              "GENERIC_BOOTSTRAP",
+              "IBKR_FLEX_XML_V1"
+            ],
             "title": "Adapter Kind",
             "type": "string"
           },
@@ -1292,7 +1319,8 @@
           "file_format": {
             "enum": [
               "CSV_UTF8",
-              "XLSX"
+              "XLSX",
+              "XML"
             ],
             "title": "File Format",
             "type": "string"
@@ -1313,6 +1341,18 @@
           "session_public_id": {
             "title": "Session Public Id",
             "type": "string"
+          },
+          "source_preview": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Preview"
           },
           "status": {
             "enum": [
@@ -8553,6 +8593,70 @@
           }
         ],
         "summary": "Confirm Generic Import",
+        "tags": [
+          "position-import"
+        ]
+      }
+    },
+    "/api/positions/import/ibkr-flex/upload": {
+      "post": {
+        "operationId": "upload_ibkr_flex_import_api_positions_import_ibkr_flex_upload_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_ibkr_flex_import_api_positions_import_ibkr_flex_upload_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportSessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Upload Ibkr Flex Import",
         "tags": [
           "position-import"
         ]

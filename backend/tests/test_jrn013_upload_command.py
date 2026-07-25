@@ -8,6 +8,7 @@ import tempfile
 
 import pytest
 from fastapi import UploadFile
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
@@ -15,7 +16,8 @@ from app_config.ibkr_flex_provider_evidence import (
     IbkrFlexFieldContract,
     VerifiedIbkrFlexProviderContract,
 )
-from database import Base
+from database import Base, get_db
+from main import app
 from models import (
     ExternalSourceObservation,
     IdempotencyKey,
@@ -34,6 +36,7 @@ from services.generic_import_service import (
     cleanup_terminal_import_rows,
     expire_due_import_sessions,
 )
+from services.auth_service import get_current_user
 
 
 EXTERNAL_ACCOUNT = "U1234567"
@@ -438,4 +441,149 @@ def test_unexpected_upload_failure_closes_handle_and_removes_staged_file(
         )
 
     assert upload.file.closed
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_public_route_fails_closed_before_staging_without_provider_evidence(
+    db,
+    owner_graph,
+    tmp_path,
+    monkeypatch,
+):
+    owner, account = owner_graph
+    monkeypatch.setenv("TRADINGNOOBS_IMPORT_TMP_DIR", str(tmp_path))
+
+    def override_get_db():
+        yield db
+
+    async def override_get_current_user():
+        return owner
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/positions/import/ibkr-flex/upload",
+                headers={"Idempotency-Key": "disabled-upload"},
+                data={
+                    "account_id": account.public_id,
+                    "source_timezone": "UTC",
+                },
+                files={
+                    "file": (
+                        "statement.xml",
+                        statement_xml(),
+                        "application/xml",
+                    )
+                },
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "FEATURE_DISABLED"
+    assert db.query(ImportSession).count() == 0
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_verified_public_route_persists_replayable_preview_and_denies_owner_swap(
+    db,
+    owner_graph,
+    provider_contract,
+    tmp_path,
+    monkeypatch,
+):
+    owner, account = owner_graph
+    other = User(
+        public_id="upload-command-other",
+        email="upload-command-other@example.com",
+        email_normalized="upload-command-other@example.com",
+        hashed_password="hash",
+        timezone="UTC",
+    )
+    db.add(other)
+    db.commit()
+    current_user = {"value": owner}
+    monkeypatch.setenv("TRADINGNOOBS_IMPORT_TMP_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        "routers.import_sessions.require_verified_ibkr_flex_provider_contract",
+        lambda: provider_contract,
+    )
+
+    def override_get_db():
+        yield db
+
+    async def override_get_current_user():
+        return current_user["value"]
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    try:
+        with TestClient(app) as client:
+            uploaded = client.post(
+                "/api/positions/import/ibkr-flex/upload",
+                headers={"Idempotency-Key": "verified-upload"},
+                data={
+                    "account_id": account.public_id,
+                    "source_timezone": "UTC",
+                },
+                files={
+                    "file": (
+                        "statement.xml",
+                        statement_xml(),
+                        "application/xml",
+                    )
+                },
+            )
+            assert uploaded.status_code == 201, uploaded.text
+            payload = uploaded.json()
+            assert payload["adapter_kind"] == "IBKR_FLEX_XML_V1"
+            assert payload["file_format"] == "XML"
+            assert payload["status"] == "PREVIEW_READY"
+            assert payload["confirm_available"] is False
+            assert payload["source_preview"]["mode"] == "BOOTSTRAP"
+            assert EXTERNAL_ACCOUNT not in uploaded.text
+
+            reloaded = client.get(
+                "/api/positions/import/sessions/"
+                + payload["session_public_id"]
+            )
+            assert reloaded.status_code == 200, reloaded.text
+            reloaded_payload = reloaded.json()
+            assert reloaded_payload["adapter_kind"] == "IBKR_FLEX_XML_V1"
+            assert reloaded_payload["file_format"] == "XML"
+            assert reloaded_payload["confirm_available"] is False
+            assert len(reloaded_payload["rows"]) == 1
+            assert EXTERNAL_ACCOUNT not in reloaded.text
+
+            session = (
+                db.query(ImportSession)
+                .filter(
+                    ImportSession.public_id
+                    == payload["session_public_id"]
+                )
+                .one()
+            )
+            session.status = "CONFLICTED"
+            session.error_code = "SOURCE_RECONCILIATION_REQUIRED"
+            session.error_message = "Synthetic persisted conflict"
+            db.commit()
+            conflicted = client.get(
+                "/api/positions/import/sessions/"
+                + payload["session_public_id"]
+            )
+            assert conflicted.status_code == 200, conflicted.text
+            assert conflicted.json()["status"] == "CONFLICTED"
+            assert len(conflicted.json()["rows"]) == 1
+
+            current_user["value"] = other
+            denied = client.get(
+                "/api/positions/import/sessions/"
+                + payload["session_public_id"]
+            )
+            assert denied.status_code == 404
+    finally:
+        app.dependency_overrides.clear()
+
     assert list(tmp_path.iterdir()) == []

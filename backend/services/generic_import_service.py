@@ -841,6 +841,8 @@ def serialize_import_session(
         "rows": [_serialize_row(row) for row in rows],
         "confirm_available": (
             session.status == ImportSessionStatus.PREVIEW_READY.value
+            and session.adapter_kind
+            == ImportAdapterKind.GENERIC_BOOTSTRAP.value
         ),
     }
 

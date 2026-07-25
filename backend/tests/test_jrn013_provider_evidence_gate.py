@@ -9,6 +9,7 @@ from app_config.ibkr_flex_provider_evidence import (
     REQUIRED_SEMANTICS,
     IbkrFlexProviderEvidenceManifest,
     IbkrProviderEvidenceError,
+    read_provider_evidence_manifest,
     require_verified_ibkr_flex_provider_contract,
     verify_provider_evidence,
 )
@@ -96,10 +97,23 @@ def statement_xml(*, generation: str, to_date: str) -> bytes:
 """.strip().encode("utf-8")
 
 
+def official_artifact_text() -> str:
+    return "\n".join(
+        f"Evidence for {semantic}" for semantic in sorted(REQUIRED_SEMANTICS)
+    )
+
+
+def write_official_artifact(root: Path) -> str:
+    artifact = root / "official-fields.html"
+    artifact.write_text(official_artifact_text(), encoding="utf-8")
+    return "sha256:" + hashlib.sha256(artifact.read_bytes()).hexdigest()
+
+
 def verified_payload(
     first_fixture_hash: str,
     second_fixture_hash: str,
     template_hash: str,
+    official_artifact_hash: str,
 ) -> dict:
     semantics = sorted(REQUIRED_SEMANTICS)
     return {
@@ -115,7 +129,16 @@ def verified_payload(
                 "url": "https://www.interactivebrokers.com/example",
                 "title": "IBKR Flex field reference",
                 "retrieved_at": "2026-07-26",
-                "semantics": semantics,
+                "artifact_relative_path": "official-fields.html",
+                "artifact_sha256": official_artifact_hash,
+                "excerpts": [
+                    {
+                        "semantic": semantic,
+                        "locator": f"section-{index}",
+                        "quote": f"Evidence for {semantic}",
+                    }
+                    for index, semantic in enumerate(semantics, start=1)
+                ],
             }
         ],
         "fixtures": [
@@ -161,6 +184,7 @@ def test_complete_official_and_real_fixture_evidence_can_verify(tmp_path):
         "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
         for path in (first, second, template)
     ]
+    hashes.append(write_official_artifact(tmp_path))
     manifest = IbkrFlexProviderEvidenceManifest.model_validate(
         verified_payload(*hashes)
     )
@@ -180,12 +204,16 @@ def test_fixture_hash_and_semantic_gaps_fail_closed(tmp_path):
     second.write_bytes(
         statement_xml(generation="20260703;120000", to_date="20260702")
     )
+    official_hash = write_official_artifact(tmp_path)
     payload = verified_payload(
         f"sha256:{'b' * 64}",
         "sha256:" + hashlib.sha256(second.read_bytes()).hexdigest(),
         "sha256:" + hashlib.sha256(template.read_bytes()).hexdigest(),
+        official_hash,
     )
-    payload["official_sources"][0]["semantics"] = ["BASIC_EXECUTION_FIELDS"]
+    payload["official_sources"][0]["excerpts"] = [
+        payload["official_sources"][0]["excerpts"][0]
+    ]
     manifest = IbkrFlexProviderEvidenceManifest.model_validate(payload)
 
     with pytest.raises(IbkrProviderEvidenceError) as failure:
@@ -204,10 +232,12 @@ def test_non_ibkr_official_url_and_fixture_path_escape_are_rejected(tmp_path):
     second.write_bytes(
         statement_xml(generation="20260703;120000", to_date="20260702")
     )
+    official_hash = write_official_artifact(tmp_path)
     payload = verified_payload(
         "sha256:" + hashlib.sha256(outside.read_bytes()).hexdigest(),
         "sha256:" + hashlib.sha256(second.read_bytes()).hexdigest(),
         "sha256:" + hashlib.sha256(template.read_bytes()).hexdigest(),
+        official_hash,
     )
     payload["official_sources"][0]["url"] = "https://example.com/fields"
     payload["fixtures"][0]["relative_path"] = "../outside.xml"
@@ -227,10 +257,12 @@ def test_semantic_labels_cannot_verify_an_empty_xml_fixture(tmp_path):
     first.write_bytes(b"<redacted-real-fixture />")
     second = tmp_path / "statement-2.xml"
     second.write_bytes(b"<redacted-real-fixture />")
+    official_hash = write_official_artifact(tmp_path)
     payload = verified_payload(
         "sha256:" + hashlib.sha256(first.read_bytes()).hexdigest(),
         "sha256:" + hashlib.sha256(second.read_bytes()).hexdigest(),
         "sha256:" + hashlib.sha256(template.read_bytes()).hexdigest(),
+        official_hash,
     )
     manifest = IbkrFlexProviderEvidenceManifest.model_validate(payload)
 
@@ -238,3 +270,94 @@ def test_semantic_labels_cannot_verify_an_empty_xml_fixture(tmp_path):
         verify_provider_evidence(manifest, fixture_root=tmp_path)
 
     assert "exactly one FlexStatement" in str(failure.value)
+
+
+@pytest.mark.parametrize(
+    "url",
+    (
+        "https://www.ibkrguides.com/reportingreference/",
+        "https://ibkrcampus.com/ibkr-api-page/flex-web-service/",
+        "https://github.com/InteractiveBrokers/api-docs",
+        "https://interactivebrokers.github.io/",
+    ),
+)
+def test_known_ibkr_official_document_hosts_are_accepted(tmp_path, url):
+    template = tmp_path / "query-template.json"
+    template.write_bytes(b"{}")
+    first = tmp_path / "statement-1.xml"
+    first.write_bytes(
+        statement_xml(generation="20260702;120000", to_date="20260701")
+    )
+    second = tmp_path / "statement-2.xml"
+    second.write_bytes(
+        statement_xml(generation="20260703;120000", to_date="20260702")
+    )
+    hashes = [
+        "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in (first, second, template)
+    ]
+    hashes.append(write_official_artifact(tmp_path))
+    payload = verified_payload(*hashes)
+    payload["official_sources"][0]["url"] = url
+    manifest = IbkrFlexProviderEvidenceManifest.model_validate(payload)
+
+    assert verify_provider_evidence(
+        manifest,
+        fixture_root=tmp_path,
+    ).query_template_id == "JOURNAL_FLEX_V1"
+
+
+def test_official_artifact_hash_quote_and_path_are_verified(tmp_path):
+    template = tmp_path / "query-template.json"
+    template.write_bytes(b"{}")
+    first = tmp_path / "statement-1.xml"
+    first.write_bytes(
+        statement_xml(generation="20260702;120000", to_date="20260701")
+    )
+    second = tmp_path / "statement-2.xml"
+    second.write_bytes(
+        statement_xml(generation="20260703;120000", to_date="20260702")
+    )
+    hashes = [
+        "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in (first, second, template)
+    ]
+    hashes.append(write_official_artifact(tmp_path))
+    payload = verified_payload(*hashes)
+    payload["official_sources"][0]["artifact_sha256"] = f"sha256:{'0' * 64}"
+    payload["official_sources"][0]["excerpts"][0]["quote"] = "Invented quote"
+    manifest = IbkrFlexProviderEvidenceManifest.model_validate(payload)
+
+    with pytest.raises(IbkrProviderEvidenceError) as failure:
+        verify_provider_evidence(manifest, fixture_root=tmp_path)
+    assert "artifact hash mismatch" in str(failure.value)
+
+    payload = verified_payload(*hashes)
+    payload["official_sources"][0]["artifact_relative_path"] = "../outside.txt"
+    manifest = IbkrFlexProviderEvidenceManifest.model_validate(payload)
+    with pytest.raises(IbkrProviderEvidenceError) as failure:
+        verify_provider_evidence(manifest, fixture_root=tmp_path)
+    assert "escapes the evidence root" in str(failure.value)
+
+    payload = verified_payload(*hashes)
+    payload["official_sources"][0]["excerpts"][0]["quote"] = "Invented quote"
+    manifest = IbkrFlexProviderEvidenceManifest.model_validate(payload)
+    with pytest.raises(IbkrProviderEvidenceError) as failure:
+        verify_provider_evidence(manifest, fixture_root=tmp_path)
+    assert "quote is absent" in str(failure.value)
+
+
+@pytest.mark.parametrize(
+    "content",
+    (
+        "{",
+        '{"schema_version": 1}',
+    ),
+)
+def test_unreadable_or_invalid_manifest_fails_closed(tmp_path, content):
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(content, encoding="utf-8")
+
+    with pytest.raises(IbkrProviderEvidenceError) as failure:
+        read_provider_evidence_manifest(manifest_path)
+    assert "unreadable or invalid" in str(failure.value)

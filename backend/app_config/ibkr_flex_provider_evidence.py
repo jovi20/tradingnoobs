@@ -11,7 +11,7 @@ from typing import Literal
 from urllib.parse import urlparse
 
 from lxml import etree
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 
 EVIDENCE_PATH = Path(__file__).with_name(
@@ -81,11 +81,19 @@ class IbkrFlexFieldContract(_EvidenceModel):
     open_position_quantity_field: str
 
 
+class OfficialEvidenceExcerpt(_EvidenceModel):
+    semantic: str
+    locator: str
+    quote: str
+
+
 class OfficialEvidenceSource(_EvidenceModel):
     url: str
     title: str
     retrieved_at: date
-    semantics: tuple[str, ...]
+    artifact_relative_path: str
+    artifact_sha256: str
+    excerpts: tuple[OfficialEvidenceExcerpt, ...]
 
 
 class RealFixtureEvidence(_EvidenceModel):
@@ -328,21 +336,109 @@ def _validate_fixture_semantics(
 def read_provider_evidence_manifest(
     path: Path = EVIDENCE_PATH,
 ) -> IbkrFlexProviderEvidenceManifest:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    return IbkrFlexProviderEvidenceManifest.model_validate(payload)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return IbkrFlexProviderEvidenceManifest.model_validate(payload)
+    except (OSError, json.JSONDecodeError, ValidationError) as exc:
+        raise IbkrProviderEvidenceError(
+            ("Provider evidence manifest is unreadable or invalid",)
+        ) from exc
 
 
-def _official_source_reason(source: OfficialEvidenceSource) -> str | None:
+def _official_source_host_is_allowed(source: OfficialEvidenceSource) -> bool:
     parsed = urlparse(source.url)
     hostname = (parsed.hostname or "").lower()
-    if parsed.scheme != "https":
-        return f"Official evidence must use HTTPS: {source.url}"
-    if not (
+    if (
         hostname == "interactivebrokers.com"
         or hostname.endswith(".interactivebrokers.com")
+        or hostname == "ibkrguides.com"
+        or hostname.endswith(".ibkrguides.com")
+        or hostname == "ibkrcampus.com"
+        or hostname.endswith(".ibkrcampus.com")
+        or hostname == "interactivebrokers.github.io"
     ):
-        return f"Official evidence must be hosted by IBKR: {source.url}"
-    return None
+        return True
+    path_parts = tuple(
+        part.lower() for part in parsed.path.split("/") if part
+    )
+    return (
+        hostname == "github.com"
+        and bool(path_parts)
+        and path_parts[0] == "interactivebrokers"
+    )
+
+
+def _validate_official_source(
+    source: OfficialEvidenceSource,
+    *,
+    resolved_root: Path,
+) -> tuple[list[str], set[str]]:
+    reasons: list[str] = []
+    parsed = urlparse(source.url)
+    if parsed.scheme != "https":
+        reasons.append(f"Official evidence must use HTTPS: {source.url}")
+    if not _official_source_host_is_allowed(source):
+        reasons.append(
+            f"Official evidence must be hosted by IBKR: {source.url}"
+        )
+    if not SHA256_PATTERN.fullmatch(source.artifact_sha256):
+        reasons.append(
+            f"Invalid official artifact SHA-256: "
+            f"{source.artifact_relative_path}"
+        )
+        return reasons, set()
+    artifact, path_reason = _evidence_path(
+        relative_path=source.artifact_relative_path,
+        resolved_root=resolved_root,
+        label="Official evidence artifact",
+    )
+    if path_reason:
+        reasons.append(path_reason)
+        return reasons, set()
+    assert artifact is not None
+    if _sha256(artifact) != source.artifact_sha256:
+        reasons.append(
+            f"Official evidence artifact hash mismatch: "
+            f"{source.artifact_relative_path}"
+        )
+        return reasons, set()
+    try:
+        artifact_text = artifact.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        reasons.append(
+            f"Official evidence artifact must be retained as UTF-8 text: "
+            f"{source.artifact_relative_path}"
+        )
+        return reasons, set()
+
+    verified_semantics: set[str] = set()
+    if not source.excerpts:
+        reasons.append(
+            f"Official evidence has no reviewed excerpts: {source.url}"
+        )
+    for excerpt in source.excerpts:
+        if excerpt.semantic not in REQUIRED_SEMANTICS:
+            reasons.append(
+                f"Unknown official evidence semantic "
+                f"{excerpt.semantic}: {source.url}"
+            )
+            continue
+        if not excerpt.locator.strip() or not excerpt.quote.strip():
+            reasons.append(
+                f"Official evidence excerpt is incomplete for "
+                f"{excerpt.semantic}: {source.url}"
+            )
+            continue
+        if excerpt.quote not in artifact_text:
+            reasons.append(
+                f"Official evidence quote is absent from retained artifact "
+                f"for {excerpt.semantic}: {source.url}"
+            )
+            continue
+        verified_semantics.add(excerpt.semantic)
+    if reasons:
+        return reasons, set()
+    return reasons, verified_semantics
 
 
 def verify_provider_evidence(
@@ -386,10 +482,12 @@ def verify_provider_evidence(
 
     official_semantics: set[str] = set()
     for source in manifest.official_sources:
-        official_semantics.update(source.semantics)
-        reason = _official_source_reason(source)
-        if reason:
-            reasons.append(reason)
+        source_reasons, source_semantics = _validate_official_source(
+            source,
+            resolved_root=resolved_root,
+        )
+        reasons.extend(source_reasons)
+        official_semantics.update(source_semantics)
 
     fixture_semantics: set[str] = set()
     fixture_shapes: list[tuple[RealFixtureEvidence, _FixtureShape]] = []

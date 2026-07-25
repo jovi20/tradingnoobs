@@ -34,6 +34,36 @@ class OpenAPIContractTests(unittest.TestCase):
         self.assertIn("JournalTimelineHomeResponse", schemas)
         self.assertIn("TradingPositionLifecycleResponse", schemas)
 
+    def test_ibkr_file_preview_contract_is_published_but_confirm_is_not(self):
+        paths = self.openapi["paths"]
+        upload_path = "/api/positions/import/ibkr-flex/upload"
+        self.assertIn(upload_path, paths)
+        request_schema = paths[upload_path]["post"]["requestBody"]["content"][
+            "multipart/form-data"
+        ]["schema"]
+        body_schema_name = request_schema["$ref"].rsplit("/", 1)[-1]
+        body_schema = self.openapi["components"]["schemas"][body_schema_name]
+        self.assertEqual(
+            set(body_schema["required"]),
+            {"account_id", "source_timezone", "file"},
+        )
+        self.assertNotIn(
+            "/api/positions/import/ibkr-flex/confirm",
+            paths,
+        )
+
+        session_schema = self.openapi["components"]["schemas"][
+            "ImportSessionResponse"
+        ]
+        self.assertEqual(
+            set(session_schema["properties"]["adapter_kind"]["enum"]),
+            {"GENERIC_BOOTSTRAP", "IBKR_FLEX_XML_V1"},
+        )
+        self.assertEqual(
+            set(session_schema["properties"]["file_format"]["enum"]),
+            {"CSV_UTF8", "XLSX", "XML"},
+        )
+
     def test_position_create_publishes_raw_and_canonical_identity_contract(self):
         schemas = self.openapi["components"]["schemas"]
         create_schema = schemas["PositionCreate"]
