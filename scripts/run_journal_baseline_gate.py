@@ -191,6 +191,18 @@ def _gate_commands() -> list[tuple[str, list[str]]]:
     ]
 
 
+def _clean_frontend_generated_cache() -> CommandResult:
+    started_at = time.monotonic()
+    relative_path = Path("frontend") / ".next"
+    shutil.rmtree(REPO_ROOT / relative_path, ignore_errors=True)
+    return CommandResult(
+        name="frontend_generated_cache_cleanup",
+        command=["internal", "remove_generated_cache", str(relative_path)],
+        returncode=0,
+        duration_seconds=round(time.monotonic() - started_at, 3),
+    )
+
+
 def main() -> int:
     started_at = time.time()
     ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
@@ -208,6 +220,7 @@ def main() -> int:
         env["JRN002_POSTGRES_URL"] = postgres_url
         env["PYTHONPATH"] = str(REPO_ROOT / "backend")
         env["NEXT_TELEMETRY_DISABLED"] = "1"
+        results.append(_clean_frontend_generated_cache())
 
         for name, command in _gate_commands():
             command_started = time.monotonic()
