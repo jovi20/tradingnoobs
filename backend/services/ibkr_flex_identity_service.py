@@ -1,6 +1,9 @@
 """Shared IBKR Flex instrument identity normalization."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
+from typing import Iterable
+
 from app_config.release_contract import (
     ReleaseContractViolation,
     require_allowed_asset_type,
@@ -63,4 +66,64 @@ def ibkr_group_key(
         identity["instrument_type"],
         identity["quote_currency"],
         direction,
+    )
+
+
+def ibkr_direction_from_source_fields(
+    raw_side: str,
+    raw_open_close: str,
+) -> str:
+    return (
+        "LONG"
+        if (raw_side, raw_open_close)
+        in {("BUY", "OPEN"), ("SELL", "CLOSE")}
+        else "SHORT"
+    )
+
+
+def ibkr_provisional_direction(event: NormalizedIbkrFlexEvent) -> str:
+    return ibkr_direction_from_source_fields(
+        event.raw_side,
+        event.raw_open_close,
+    )
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def ibkr_ambiguous_order_keys(
+    events: Iterable[NormalizedIbkrFlexEvent],
+) -> frozenset[tuple[str, str]]:
+    buckets: dict[
+        tuple[tuple[str, ...], datetime, int],
+        set[tuple[str, str]],
+    ] = {}
+    for event in events:
+        identity = derive_ibkr_instrument_identity(event)
+        group = ibkr_group_key(
+            identity,
+            ibkr_provisional_direction(event),
+        )
+        bucket = (
+            group,
+            _as_utc(event.occurred_at_utc),
+            int(event.transaction_id),
+        )
+        buckets.setdefault(bucket, set()).add(
+            (
+                event.external_source_event_id,
+                event.source_payload_fingerprint,
+            )
+        )
+
+    # Distinct positive-quantity facts in one lifecycle cannot commute:
+    # swapping them changes at least each fact's event-level pre/post quantity.
+    return frozenset(
+        economic_key
+        for economic_keys in buckets.values()
+        if len(economic_keys) > 1
+        for economic_key in economic_keys
     )

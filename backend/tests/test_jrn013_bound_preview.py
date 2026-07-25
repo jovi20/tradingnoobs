@@ -690,6 +690,108 @@ def test_duplicate_same_payload_combines_evidence_and_warns(
         )
 
 
+def test_duplicate_provider_order_creates_reconciliation_cases(
+    db,
+    source_graph,
+    provider_contract,
+):
+    accepted, _, _ = seed_accepted_execution(
+        db,
+        graph=source_graph,
+        provider_contract=provider_contract,
+    )
+    user, _, account, _, binding = source_graph
+    session = make_session(
+        db,
+        user=user,
+        account=account,
+        suffix="provider-order-tie",
+    )
+    occurred_at = accepted.occurred_at_utc + timedelta(days=1)
+    first = source_event(
+        event_id="EXEC-TIE-1",
+        transaction_id="200",
+        quantity="1",
+        occurred_at=occurred_at,
+        fingerprint=f"sha256:{'5' * 64}",
+    )
+    second = source_event(
+        row_number=2,
+        event_id="EXEC-TIE-2",
+        transaction_id="200",
+        quantity="1",
+        occurred_at=occurred_at,
+        fingerprint=f"sha256:{'6' * 64}",
+    )
+
+    result = preview_bound_ibkr_statement(
+        db,
+        account=account,
+        binding=binding,
+        session=session,
+        parsed=parsed_statement(first, second),
+        provider_contract=provider_contract,
+    )
+
+    assert result.status == "CONFLICTED"
+    assert {
+        item.classification for item in result.items
+    } == {"UNSUPPORTED_ORDER_CONFLICT"}
+    assert (
+        db.query(SourceReconciliationCase)
+        .filter(
+            SourceReconciliationCase.case_kind
+            == "UNSUPPORTED_ORDER_CONFLICT"
+        )
+        .count()
+        == 2
+    )
+    assert result.pending_execution_count == 0
+
+
+def test_new_event_tied_with_accepted_boundary_is_order_conflict(
+    db,
+    source_graph,
+    provider_contract,
+):
+    accepted, _, _ = seed_accepted_execution(
+        db,
+        graph=source_graph,
+        provider_contract=provider_contract,
+    )
+    user, _, account, _, binding = source_graph
+    session = make_session(
+        db,
+        user=user,
+        account=account,
+        suffix="accepted-boundary-tie",
+    )
+    tied = source_event(
+        event_id="ZZZ-TIED-WITH-ACCEPTED",
+        transaction_id=accepted.transaction_id,
+        occurred_at=accepted.occurred_at_utc,
+        fingerprint=f"sha256:{'7' * 64}",
+    )
+
+    result = preview_bound_ibkr_statement(
+        db,
+        account=account,
+        binding=binding,
+        session=session,
+        parsed=parsed_statement(tied),
+        provider_contract=provider_contract,
+    )
+
+    assert result.status == "CONFLICTED"
+    assert result.items[0].classification == "UNSUPPORTED_ORDER_CONFLICT"
+    case = db.query(SourceReconciliationCase).filter(
+        SourceReconciliationCase.case_kind
+        == "UNSUPPORTED_ORDER_CONFLICT"
+    ).one()
+    assert case.conflict_observation_id is not None
+    assert result.pending_execution_count == 0
+
+
 def test_binding_wide_projection_digest_is_stable_and_tracks_pending_truth(
     db,
     source_graph,

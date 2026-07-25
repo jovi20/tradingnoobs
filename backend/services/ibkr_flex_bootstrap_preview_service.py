@@ -34,7 +34,9 @@ from services.generic_import_service import transition_import_session
 from services.ibkr_flex_identity_service import (
     IbkrFlexIdentityError,
     derive_ibkr_instrument_identity,
+    ibkr_ambiguous_order_keys,
     ibkr_group_key,
+    ibkr_provisional_direction,
 )
 from services.ibkr_flex_parser import (
     NormalizedIbkrFlexEvent,
@@ -396,12 +398,7 @@ def _simulate_effective_units(
             identity = derive_ibkr_instrument_identity(event)
         except IbkrFlexIdentityError as exc:
             return {}, exc.code
-        provisional_direction = (
-            "LONG"
-            if (event.raw_side, event.raw_open_close)
-            in {("BUY", "OPEN"), ("SELL", "CLOSE")}
-            else "SHORT"
-        )
+        provisional_direction = ibkr_provisional_direction(event)
         group = ibkr_group_key(identity, provisional_direction)
         try:
             step = derive_broker_lifecycle_step(
@@ -547,9 +544,24 @@ def preview_ibkr_source_bootstrap(
             ),
             event.row_number,
         )
-    lineages, classifications, conflict_reason = _fold_change_chains(
-        unique_events
-    )
+    try:
+        ambiguous_order_keys = ibkr_ambiguous_order_keys(unique_events)
+    except IbkrFlexIdentityError as exc:
+        ambiguous_order_keys = frozenset()
+        conflict_reason = exc.code
+    else:
+        conflict_reason = (
+            "UNSUPPORTED_ORDER_CONFLICT"
+            if ambiguous_order_keys
+            else None
+        )
+    if conflict_reason is None:
+        lineages, classifications, conflict_reason = _fold_change_chains(
+            unique_events
+        )
+    else:
+        lineages = []
+        classifications = {}
     applications: dict[tuple[str, str], dict[str, Any]] = {}
     if conflict_reason is None:
         applications, conflict_reason = _simulate_effective_units(lineages)

@@ -331,6 +331,68 @@ def test_flat_bootstrap_replays_effective_units_without_source_writes(
         ] == "****4567"
 
 
+def test_duplicate_provider_order_is_allowed_only_across_independent_groups(
+    db,
+    owner_graph,
+    provider_contract,
+):
+    owner, _, account, _ = owner_graph
+    tied_first = source_event(
+        row_number=1,
+        event_id="EXEC-TIE-1",
+        transaction_id=100,
+    )
+    tied_second = source_event(
+        row_number=2,
+        event_id="EXEC-TIE-2",
+        transaction_id=100,
+        fingerprint_char="b",
+    )
+    conflicted_session = make_session(
+        db,
+        owner=owner,
+        account=account,
+        suffix="order-tie-conflict",
+    )
+    conflicted = preview_ibkr_source_bootstrap(
+        db,
+        account=account,
+        session=conflicted_session,
+        parsed=parsed(tied_first, tied_second),
+        provider_contract=provider_contract,
+    )
+
+    assert conflicted.status == "CONFLICTED"
+    assert conflicted.conflict_reason == "UNSUPPORTED_ORDER_CONFLICT"
+    assert {
+        item.conflict_reason for item in conflicted.items
+    } == {"UNSUPPORTED_ORDER_CONFLICT"}
+    assert_no_permanent_source_truth(db)
+
+    independent_session = make_session(
+        db,
+        owner=owner,
+        account=account,
+        suffix="order-tie-independent",
+    )
+    independent_second = replace(
+        tied_second,
+        conid="272093",
+        symbol="MSFT",
+    )
+    independent = preview_ibkr_source_bootstrap(
+        db,
+        account=account,
+        session=independent_session,
+        parsed=parsed(tied_first, independent_second),
+        provider_contract=provider_contract,
+    )
+
+    assert independent.status == "PREVIEW_READY"
+    assert [item.action for item in independent.items] == ["OPEN", "OPEN"]
+    assert_no_permanent_source_truth(db)
+
+
 def test_complete_correction_chain_folds_to_winning_economic_unit(
     db,
     owner_graph,

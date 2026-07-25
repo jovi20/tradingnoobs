@@ -35,7 +35,9 @@ from services.ibkr_flex_parser import (
 from services.ibkr_flex_identity_service import (
     IbkrFlexIdentityError,
     derive_ibkr_instrument_identity,
+    ibkr_direction_from_source_fields,
     ibkr_group_key,
+    ibkr_provisional_direction,
 )
 from services.source_reconciliation_service import (
     NONTERMINAL_CASE_STATES,
@@ -63,6 +65,7 @@ CONFLICT_CLASSIFICATIONS = frozenset(
         "CANCEL_BUST",
         "TARGET_UNRESOLVED",
         "UNSUPPORTED_CROSS_ZERO",
+        "UNSUPPORTED_ORDER_CONFLICT",
     }
 )
 class IbkrFlexPreviewError(ValueError):
@@ -533,6 +536,63 @@ def _target_execution(
     )
 
 
+def _pending_order_conflict_keys(
+    db: Session,
+    *,
+    binding: ImportSourceBinding,
+) -> frozenset[tuple[str, str]]:
+    observations = (
+        db.query(ExternalSourceObservation)
+        .outerjoin(
+            ExternalExecution,
+            (
+                ExternalExecution.binding_id
+                == ExternalSourceObservation.binding_id
+            )
+            & (
+                ExternalExecution.external_execution_id
+                == ExternalSourceObservation.external_execution_id
+            ),
+        )
+        .filter(
+            ExternalSourceObservation.binding_id == binding.id,
+            ExternalSourceObservation.event_kind == "TRADE",
+            ExternalExecution.id.is_(None),
+        )
+        .all()
+    )
+    buckets: dict[
+        tuple[tuple[str, ...], datetime, int],
+        set[tuple[str, str]],
+    ] = {}
+    for observation in observations:
+        provisional_direction = ibkr_direction_from_source_fields(
+            observation.raw_side,
+            observation.raw_open_close,
+        )
+        group = _group_key(
+            observation.instrument_identity_json or {},
+            provisional_direction,
+        )
+        bucket = (
+            group,
+            _as_utc(observation.occurred_at),
+            int(observation.transaction_id),
+        )
+        buckets.setdefault(bucket, set()).add(
+            (
+                observation.external_source_event_id,
+                observation.source_payload_fingerprint,
+            )
+        )
+    return frozenset(
+        economic_key
+        for economic_keys in buckets.values()
+        if len(economic_keys) > 1
+        for economic_key in economic_keys
+    )
+
+
 def _classify(
     db: Session,
     *,
@@ -795,6 +855,10 @@ def preview_bound_ibkr_statement(
         db,
         binding=binding,
     )
+    order_conflict_keys = _pending_order_conflict_keys(
+        db,
+        binding=binding,
+    )
     statement_fingerprints: dict[str, set[str]] = {}
     items_by_row: dict[int, BoundPreviewItem] = {}
     economic_items: dict[tuple[str, str], BoundPreviewItem] = {}
@@ -827,12 +891,7 @@ def preview_bound_ibkr_statement(
             )
             continue
         identity = persisted.observation.instrument_identity_json
-        provisional_direction = (
-            "LONG"
-            if (event.raw_side, event.raw_open_close)
-            in {("BUY", "OPEN"), ("SELL", "CLOSE")}
-            else "SHORT"
-        )
+        provisional_direction = ibkr_provisional_direction(event)
         key = _group_key(identity, provisional_direction)
         target = _target_execution(
             db,
@@ -847,6 +906,18 @@ def preview_bound_ibkr_statement(
             group_boundary=boundaries.get(key),
             statement_event_fingerprints=statement_fingerprints,
         )
+        if (
+            classification == "NEW"
+            and (
+                economic_key in order_conflict_keys
+                or (
+                    key in boundaries
+                    and _event_order_key(event)[:2]
+                    == boundaries[key][:2]
+                )
+            )
+        ):
+            classification = "UNSUPPORTED_ORDER_CONFLICT"
         step: LifecycleStep | None = None
         if classification == "NEW":
             try:

@@ -21,6 +21,9 @@ from models import (
     SourceStatement,
     StatementCoverageAcceptance,
 )
+from services.ibkr_flex_identity_service import (
+    ibkr_direction_from_source_fields,
+)
 from services.source_reconciliation_service import NONTERMINAL_CASE_STATES
 from services.trade_lifecycle_simulation_service import (
     LifecycleSimulationError,
@@ -427,13 +430,39 @@ def _pending_units(
         _pending_trade_observations(db, binding=binding),
         key=_observation_order_key,
     )
+    order_buckets: dict[
+        tuple[tuple[str, ...], datetime, int],
+        set[tuple[str, str]],
+    ] = {}
+    for observation in observations:
+        provisional_direction = ibkr_direction_from_source_fields(
+            observation.raw_side,
+            observation.raw_open_close,
+        )
+        bucket = (
+            _group_key(
+                observation.instrument_identity_json or {},
+                provisional_direction,
+            ),
+            _as_utc(observation.occurred_at),
+            int(observation.transaction_id),
+        )
+        order_buckets.setdefault(bucket, set()).add(
+            (
+                observation.external_source_event_id,
+                observation.source_payload_fingerprint,
+            )
+        )
+    if any(len(economic_keys) > 1 for economic_keys in order_buckets.values()):
+        raise SourcePreviewProjectionError(
+            "UNSUPPORTED_ORDER_CONFLICT",
+            "Pending source events have a financially significant provider-order tie",
+        )
     pending: list[PendingSourceUnit] = []
     for observation in observations:
-        provisional_direction = (
-            "LONG"
-            if (observation.raw_side, observation.raw_open_close)
-            in {("BUY", "OPEN"), ("SELL", "CLOSE")}
-            else "SHORT"
+        provisional_direction = ibkr_direction_from_source_fields(
+            observation.raw_side,
+            observation.raw_open_close,
         )
         key = _group_key(
             observation.instrument_identity_json or {},
