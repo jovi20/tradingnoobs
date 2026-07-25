@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "record_kind": "JRN_TASK_CHECKPOINT",
+  "task_id": "JRN-009",
+  "branch": "dev",
+  "status": "COMPLETE",
+  "release_status": "NOT_READY_FOR_PRODUCTION",
+  "recorded_at": "2026-07-25T20:54:21+08:00",
+  "implementation_base_commit": "024a5ad20677ddd2db5a67b0f9dee8f2c21789ad",
+  "implementation_checkpoint_commit": "d6130280045e88e0205668f8cf294421093d4084",
+  "implementation_commits": [
+    "d6130280045e88e0205668f8cf294421093d4084"
+  ],
+  "record_commit_resolution": "git log -1 --format=%H -- docs/superpowers/plans/2026-07-25-jrn-009-checkpoint-record.json",
+  "review_subject": {
+    "commit": "d6130280045e88e0205668f8cf294421093d4084",
+    "migration_head": "e5f6a7b8c9d0",
+    "migration_blob": "f16b57f09ba450a2040a570d3a693c30d0c1ae71",
+    "models_blob": "60d24b2d80d16ea892c8eaad7909c8904a74581f",
+    "accounts_router_blob": "e3e066d78dac9cad7d2d20a7f42a406ca29df7d7",
+    "transactions_router_blob": "55c862e9868702ebbc9cdef6477f6b3272017a67",
+    "trading_positions_router_blob": "386dd2f02e33dc53631d5bd23a85e569430dd77b",
+    "financial_command_service_blob": "4d8572f3893056f002ed40633cd2bdbc47b4ccab",
+    "account_ledger_service_blob": "7b34e27a8c5cbeb3b0c1f7c9e44384fadab95c85",
+    "postgresql_test_blob": "bf396f40c350e77f7e931f491efa5167f202306a",
+    "cash_route_test_blob": "80a5fff9a6faf30c3869df039d0e4d26539af8b4",
+    "lifecycle_test_blob": "369065eaee88eb073a585776003eba0193378c42",
+    "openapi_blob": "55fdb6d2880618cf1b12ed9952c9b3007d226868",
+    "frontend_api_blob": "f12f2078fad36c6a9c3d1d7b998b3f53e411c7bc"
+  },
+  "scope_summary": [
+    "Make opening balances, deposits, withdrawals, account fees, interest, received dividends, and paid-in-lieu dividends use positive input magnitude with type-derived ledger sign.",
+    "Require permanent owner-scoped idempotency for financial create and reversal commands, replay completed responses before mutable-state checks, and commit facts, postings, and responses atomically.",
+    "Replace transaction deletion with append-only compensating reversals and add linked dividend and opening-balance reversals carrying actor, reason, and request identity.",
+    "Enforce transaction immutability and position-event financial-field immutability in both the ORM and PostgreSQL/SQLite database layers.",
+    "Serialize account then position access for dividend commands, allocate lifecycle sequence under lock, and prevent duplicate or concurrent reversals.",
+    "Hard-delete only accounts that have never held a financial fact; permanently archive historical accounts, preserve read access and retries, and reject new financial writes.",
+    "Freeze account base currency under the same account lock used by first-fact and future ImportSession commands, including a PostgreSQL race regression.",
+    "Disable transfer and destructive transaction controls in the release API/UI and expose stable retry keys and reversal controls in the frontend."
+  ],
+  "verification_environment": {
+    "python": "3.13.5",
+    "node": "24.18.0",
+    "npm": "11.16.0",
+    "postgresql_server": "16.14 (Homebrew)"
+  },
+  "verification": [
+    {
+      "command": "backend/venv/bin/python scripts/run_journal_baseline_gate.py",
+      "result": "PASS on the final pre-commit worktree matching d613028: 509 backend tests including PostgreSQL migration, immutability, reversal, and currency-lock races; current OpenAPI and release contracts; 160 frontend tests; typecheck; lint; and 15-page production build."
+    },
+    {
+      "command": "backend/venv/bin/python scripts/check_added_secrets.py --base 024a5ad20677ddd2db5a67b0f9dee8f2c21789ad --head d6130280045e88e0205668f8cf294421093d4084",
+      "result": "PASS: ruleset added-secrets-v1, 2,580 added lines, 0 findings."
+    },
+    {
+      "command": "DATABASE_URL=sqlite:////private/tmp/tradingnoobs-jrn009-20260725-continued.sqlite alembic upgrade head; downgrade d4e5f6a7b8c9; upgrade head",
+      "result": "PASS: empty SQLite database upgraded, downgraded across JRN-009, and re-upgraded to e5f6a7b8c9d0."
+    },
+    {
+      "command": "PYTHONPATH=backend backend/venv/bin/python -m pytest backend/tests/test_public_id_nested_routes.py -q",
+      "result": "PASS: all four account cash types create and reverse with derived sign, posting linkage, and compensating amount."
+    },
+    {
+      "command": "git diff --cached --check",
+      "result": "PASS before implementation commit; scoped staged paths excluded all recorded user WIP."
+    }
+  ],
+  "review": {
+    "disposition": "APPROVE_REMOTE_CI_CLOSED",
+    "blocking_findings_after_fix": [],
+    "fixed_findings": [
+      {
+        "severity": "P1",
+        "finding": "Account currency PATCH originally did not participate in the account row-lock protocol, so a future expanded currency allowlist could race the first financial fact and bypass the freeze decision.",
+        "resolution": "Account metadata updates now acquire the shared account lock and re-evaluate both the permanent hard-delete marker and persisted financial history; a PostgreSQL race test proves the update waits and fails frozen."
+      },
+      {
+        "severity": "P1",
+        "finding": "A history-only hard-delete check could become false again after future session cleanup and could not close the JRN-011 session-create-versus-delete race.",
+        "resolution": "A one-way hard_delete_eligible marker is backfilled from existing history and flipped by opening balance, transaction, dividend, and truth-native OPEN commands under the account lock."
+      },
+      {
+        "severity": "P2",
+        "finding": "The original test matrix fully exercised withdrawal reversal but did not directly prove create and reversal sign behavior for deposit, interest, and account fee.",
+        "resolution": "An end-to-end four-type matrix now verifies original posting kind and sign, reversal linkage, and compensating ledger amount."
+      }
+    ],
+    "residual_risks": [
+      "JRN-010 still owns released latest-event reversal, whole-position void, lifecycle ordering conflicts, and legacy mutation isolation.",
+      "JRN-011 must create every ImportSession under the same account lock and permanently flip hard_delete_eligible before commit; JRN-009 provides the marker and delete-side enforcement only.",
+      "JRN-013 through JRN-015 still own IBKR source binding, incremental import identity, correction replay, and canonical source application.",
+      "The local npm install reports 15 high-severity transitive dependency audit findings; the locked install, tests, lint, typecheck, and production build pass, but dependency remediation remains separate release-hardening work.",
+      "The product remains NOT_READY_FOR_PRODUCTION until the remaining active-plan exit gates are closed."
+    ]
+  },
+  "remote_ci": {
+    "status": "PASS",
+    "required_workflow": ".github/workflows/journal-baseline.yml",
+    "required_job": "journal-baseline",
+    "verified_commit": "d6130280045e88e0205668f8cf294421093d4084",
+    "workflow_run_id": 30158560164,
+    "workflow_run_url": "https://github.com/jovi20/tradingnoobs/actions/runs/30158560164",
+    "workflow_run_conclusion": "success",
+    "job_id": 89679981059,
+    "job_url": "https://github.com/jovi20/tradingnoobs/actions/runs/30158560164/job/89679981059",
+    "job_conclusion": "success",
+    "artifact": {
+      "id": 8619637664,
+      "name": "jrn002-gate-summary",
+      "digest": "sha256:b92fca9eb0477b8d96e170863f611b42ce2c542122bd91fa9c0da2cbf7b7bd73",
+      "expired": false
+    }
+  },
+  "required_check_enforcement": {
+    "ruleset_id": 19728078,
+    "ruleset_name": "main-journal-baseline",
+    "ruleset_url": "https://github.com/jovi20/tradingnoobs/settings/rules/19728078",
+    "enforcement": "active",
+    "target_ref": "refs/heads/main",
+    "required_check": "journal-baseline",
+    "integration": "GitHub Actions",
+    "dev_is_targeted": false
+  },
+  "next_task_gate": "SATISFIED: JRN-009 is closed; JRN-010 may start from migration head e5f6a7b8c9d0 and the immutable financial command, reversal, account lifecycle, and locking contracts."
+}
