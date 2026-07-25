@@ -43,6 +43,11 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
   该合同分类并规范为 canonical `TRADE/CORRECTION/CANCEL_BUST`、`BUY/SELL` 和
   `OPEN/CLOSE`；未知 discriminator/value 稳定拒绝。混用两种策略、缺少值或重复值
   在 manifest 校验阶段拒绝。
+- statement/generation/execution 的 source-timezone 语义、execution status 来源和
+  change identity 模式也必须显式冻结。status 可来自 provider attribute，或在真实
+  wire 没有该字段时由已验证 event kind 派生；change 可使用独立 event/target ID，
+  或声明 event ID 即 target。未被所选合同消费的 `tradeStatus/affectedIBExecID`
+  不再被误列为必需 wire token。
 - IBKR 官方 Flex Codes 页面已作为第二份 hash-bound artifact 入库，准确保留
   `Ca=Cancelled`、`Co=Corrected Trade`、`O=Opening Trade`、`C=Closing Trade`。
   它只计为 `EVENT_CODE_VALUES` supporting evidence，不会满足
@@ -58,6 +63,10 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
   `fromDate <= accountInceptionDate` 时有效；否则必须恰好有一个 snapshotDate 等于
   fromDate 的 OpenPositions，子元素类型/账户必须一致且每个 quantity 都是 finite
   zero。旧日期 inception、非零仓位、非法数量或不完整 snapshot 均不能证明空仓。
+- `COVERAGE_INCLUSIVITY_TIMEZONE` fixture 不再只检查日期可解析；必须在冻结的本地
+  日期语义下出现 coverage 两端的实际成交。`CORRECTION_CANCEL_TARGETS` 必须同时有
+  correction 与 cancel，符合冻结的 same-ID/distinct-ID 关系，并把每个 target
+  链接到同一 evidence set 中实际出现的 trade execution。
 - 禁止 DTD/entity/XInclude 的受限 XML parser，以及文件、execution、节点、
   属性、深度和字段长度限制；5,000 execution 边界接受，5,001 拒绝。
 - provider contract 固定 generation 按 UTC instant 升序；同一 binding 下同一
@@ -102,8 +111,8 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
 - upload 编排在读取或暂存文件前先锁定 owner-scoped account；不存在或跨 owner
   account 均返回 `404 IMPORT_ACCOUNT_NOT_FOUND`，不调用上传读取、不创建临时文件、
   `IdempotencyKey` 或 `ImportSession`，并始终关闭上传句柄。
-- 本次复验的全部 `test_jrn013_*.py` 共 135 项测试通过；完整统一
-  gate 在 PostgreSQL 16.14 上通过 676 个后端测试、165 个前端测试、OpenAPI、
+- 本次复验的全部 `test_jrn013_*.py` 共 142 项测试通过；完整统一
+  gate 在 PostgreSQL 16.14 上通过 683 个后端测试、165 个前端测试、OpenAPI、
   release contract、typecheck、lint 和 production build。
 
 ## 尚未实现或未满足
@@ -120,8 +129,9 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
 - **P0 provider-contract blocker：**现有 synthetic fixtures 假设 correction 与
   cancel 是独立 `TradeCorrection/TradeCancel` 元素，以
   `sourceEventID/affectedIBExecID` 关联目标，并使用 `tradeStatus` 和
-  `OPEN/CLOSE`；可配置 parser 也有 attribute-discriminator synthetic coverage，
-  但默认 manifest 尚未选择任何真实 field contract。IBKR 官方 Trades Reference
+  `OPEN/CLOSE`；可配置 parser 已能表达 attribute discriminator、可选 status 和
+  same-ID/distinct-ID change identity，但默认 manifest 尚未选择任何真实 field
+  contract。IBKR 官方 Trades Reference
   没有证明上述 raw XML 名或枚举值，
   且其 “Original Trade ID”等取消字段与公开第三方 parser 暴露的
   `Trade transactionType=TradeCorrect|TradeCancel`、original/related ID、`O/C`
@@ -134,7 +144,7 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
 - JRN-014 的 source-bound canonical confirm、coverage acceptance/frontier
   推进与“只应用新增 execution”尚未实现。
 - JRN-015 的人工 correction/cancel-bust resolution 与 versioned replay 尚未实现。
-- `a46887b` 已通过完整统一 gate 与真实 PostgreSQL migration gate；尚未取得
+- `03632e1` 已通过完整统一 gate 与真实 PostgreSQL migration gate；尚未取得
   远端 CI 和绑定该 SHA 的独立 review，因此仍只能视为进度 checkpoint。
 
 ## 设计必要性评估
