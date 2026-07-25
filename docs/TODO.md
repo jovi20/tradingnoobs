@@ -20,6 +20,7 @@
 - `JRN-008` 已完成。implementation checkpoint `61979cf` 已通过精确本地统一 gate 与 GitHub Actions run `30156750813`、job `89675818444`、artifact `8619240913`；migration head 仍为 `d4e5f6a7b8c9`。
 - `JRN-009` 已完成。implementation checkpoint `d613028` 已通过精确本地统一 gate 与 GitHub Actions run `30158560164`、job `89679981059`、artifact `8619637664`；migration head 为 `e5f6a7b8c9d0`。
 - `JRN-010` 已完成。implementation checkpoint `5cdf55e` 已通过 514 个后端测试、162 个前端测试、完整本地统一 gate 与 GitHub Actions run `30159669100`、job `89682822970`、artifact `8619959551`；migration head 为 `f6a7b8c9d0e1`。
+- `JRN-011` 已完成。implementation checkpoint `c235e03` 已通过 531 个后端测试、164 个前端测试、真实 CSV 双视口浏览器验收、完整本地统一 gate 与 GitHub Actions run `30162055891`、job `89688870542`、artifact `8620551325`；migration head 为 `a7b8c9d0e1f2`，generic confirm 仍严格关闭。
 - IBKR 文件的重复、重叠、增量导入与 correction replay 只在 `JRN-013` 至 `JRN-015` 实现，当前合同冻结不代表功能已落地。
 - 本轮不自动 merge 到 `main`、不创建 PR、不打 tag；这些属于后续显式操作。
 - 旧 P0-P19 阶段计划已归档到 [superpowers/plans/archive/](./superpowers/plans/archive/)。
@@ -39,8 +40,9 @@
 | P0 | `COMPLETE` | `JRN-008` Lifecycle 并发、幂等与 legacy projection | `61979cf` 已交付 account→position lock、永久 lifecycle 幂等、backdate/sequence 规则、并发 REDUCE/CLOSE 防超量和单事务 legacy projection，并由远端 run `30156750813` 闭环。 | Active plan M1 |
 | P0 | `COMPLETE` | `JRN-009` 不可变资金流水、cash dividend 与账户 lifecycle | `d613028` 已交付不可变资金命令、dividend/reversal、archive/delete、base-currency 冻结和 `e5f6a7b8c9d0` migration，并由远端 run `30158560164` 闭环。 | Active plan M1 |
 | P0 | `COMPLETE` | `JRN-010` 交易 reversal/void 与 legacy mutation 隔离 | `5cdf55e` 已交付 latest-event reversal、whole-position void、lifecycle 顺序冲突、并发锁、VOID 读模型隔离和 `f6a7b8c9d0e1` migration，并由远端 run `30159669100` 闭环。 | Active plan M1 |
+| P0 | `COMPLETE` | `JRN-011` 持久化通用 Import upload/preview session | `c235e03` 已交付 owner-bound 持久 session/row、永久上传幂等、CSV/XLSX 预览、TTL/清理、账户归档语义和响应式 UI，并由远端 run `30162055891` 闭环。 | Active plan M1 |
 
-JRN-000 至 JRN-010 已完成，下一开发任务为 JRN-011；产品整体仍为 `NOT_READY_FOR_PRODUCTION`。source-bound IBKR 实现仍严格等待 JRN-013 至 JRN-015。不得提前做新页面、模型拆分、在线 Broker Sync、Market、AI 或量化功能。
+JRN-000 至 JRN-011 已完成，下一开发任务为 JRN-012；产品整体仍为 `NOT_READY_FOR_PRODUCTION`。source-bound IBKR 实现仍严格等待 JRN-013 至 JRN-015。不得提前做新页面、模型拆分、在线 Broker Sync、Market、AI 或量化功能。
 
 ## 暂不做
 

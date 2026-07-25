@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "record_kind": "JRN_TASK_CHECKPOINT",
+  "task_id": "JRN-011",
+  "branch": "dev",
+  "status": "COMPLETE",
+  "release_status": "NOT_READY_FOR_PRODUCTION",
+  "recorded_at": "2026-07-25T22:50:36+08:00",
+  "implementation_base_commit": "1249fc11eb17f90870e6697956de0837b0d8399c",
+  "implementation_checkpoint_commit": "c235e03c01c8722073f162441719a6be1127f5bb",
+  "implementation_commits": [
+    "c235e03c01c8722073f162441719a6be1127f5bb"
+  ],
+  "record_commit_resolution": "git log -1 --format=%H -- docs/superpowers/plans/2026-07-25-jrn-011-checkpoint-record.json",
+  "review_subject": {
+    "commit": "c235e03c01c8722073f162441719a6be1127f5bb",
+    "migration_head": "a7b8c9d0e1f2",
+    "migration_blob": "f95b0ad61ef0dadaa26b25dd34a60b6452f8c6f0",
+    "models_blob": "a9e9705479a314ae0678bef2d5a66dc13da6ed35",
+    "import_service_blob": "1c1859159b8ec55f3aef6dd1e8e2cd4e299647f2",
+    "import_router_blob": "1f0b669b487a74930ad91aa01e3bcf0969460335",
+    "import_test_blob": "f1b821e094fc670c4d95a87e86d70fcec6e5f7f3",
+    "postgresql_test_blob": "b1de0f893419decae731b680894aac46668a81ba",
+    "openapi_blob": "c815007ff0de35aa1abf5facc5373d5d13b22d1d",
+    "frontend_import_page_blob": "a28205504eeb66572c6f027b842b5bbdd4852716"
+  },
+  "scope_summary": [
+    "Add persistent owner/account-bound ImportSession and ImportRow audit models and append migration head a7b8c9d0e1f2 without database cascade deletion.",
+    "Implement authenticated generic CSV UTF-8 and XLSX upload/preview with 10 MiB, 5,000-row, 24-hour TTL, canonical identity normalization, row-order preservation, and no position/event/ledger writes.",
+    "Provide permanent owner-scoped upload idempotency keyed by account, adapter, and file hash; exact replay survives preview expiry and account archive while payload conflicts fail with 409.",
+    "Persist structural failures, row validation, warnings, untrusted source-ID notices, duplicate-row notices, and DST gap/fold errors without trusting generic source identity.",
+    "Freeze account hard deletion and base currency after the first ImportSession, serialize session creation against account deletion, and preserve original replay after archive while rejecting new sessions.",
+    "Use private temporary files with close/unlink on every request path, startup orphan scavenging, bounded session expiry, and 30-day terminal row cleanup that preserves the audit shell.",
+    "Publish template, upload, persistent session read, and a responsive localized preview UI while keeping generic confirm fail-closed until JRN-012.",
+    "Update the release machine contract, OpenAPI snapshot, operational documentation, rollback guidance, metrics, and canonical import-template contract."
+  ],
+  "verification_environment": {
+    "python": "3.13.5",
+    "node": "24.18.0",
+    "npm": "11.16.0",
+    "postgresql_server": "16.14 (Homebrew)"
+  },
+  "verification": [
+    {
+      "command": "backend/venv/bin/python scripts/run_journal_baseline_gate.py",
+      "result": "PASS on the final pre-commit worktree matching c235e03: 531 backend tests including PostgreSQL migration, account-lock concurrency, owner isolation, permanent idempotency, cleanup, malformed CSV/XLSX, limits, and zero financial side effects; current OpenAPI and release contracts; 164 frontend tests; typecheck; lint; and production build."
+    },
+    {
+      "command": "PYTHONPATH=backend backend/venv/bin/python -m pytest backend/tests/test_jrn011_import_preview.py -q",
+      "result": "PASS: 16 focused upload/preview, persistence, failure, cleanup, account lifecycle, CSV/XLSX, DST, boundary, and confirm-deny cases."
+    },
+    {
+      "command": "Alembic empty upgrade -> downgrade f6a7b8c9d0e1 -> upgrade head against an isolated SQLite database",
+      "result": "PASS: JRN-011 revision upgraded, downgraded, and re-upgraded to a7b8c9d0e1f2."
+    },
+    {
+      "command": "Browser validation at 1280x720 and 390x844 against temporary authenticated FastAPI and SQLite services",
+      "result": "PASS: real CSV upload produced one valid and one invalid preview row; localized errors rendered without raw English; the page had no document-level horizontal overflow or overlap; the wide preview table scrolled inside its own container."
+    },
+    {
+      "command": "backend/venv/bin/python scripts/check_added_secrets.py --base 1249fc11eb17f90870e6697956de0837b0d8399c --head c235e03c01c8722073f162441719a6be1127f5bb",
+      "result": "PASS: ruleset added-secrets-v1, 3,577 added lines, 0 findings."
+    },
+    {
+      "command": "git diff --cached --check",
+      "result": "PASS before implementation commit; the 41 staged JRN-011 paths excluded all recorded user WIP."
+    }
+  ],
+  "review": {
+    "disposition": "APPROVE_REMOTE_CI_CLOSED",
+    "blocking_findings_after_fix": [],
+    "fixed_findings": [
+      {
+        "severity": "P1",
+        "finding": "An XLSX that opened successfully but failed during worksheet access or iteration escaped as HTTP 500 and rolled back the persistent failed session.",
+        "resolution": "The complete XLSX read phase now maps parser failures to INVALID_XLSX_FILE; a workbook-without-sheets regression proves a persistent FAILED response and temporary-file cleanup."
+      },
+      {
+        "severity": "P1",
+        "finding": "The preview UI exposed raw English validation text and English Preview, Identity, and LONG labels in the Chinese product surface.",
+        "resolution": "The UI now localizes stable issue codes, headings, identity, and direction while retaining machine codes for diagnostics; source-contract tests and real browser upload verify the result."
+      },
+      {
+        "severity": "P2",
+        "finding": "A pre-existing public-route test used a fixed timestamp that became a backdate as the wall clock advanced.",
+        "resolution": "The fixture now derives a future UTC timestamp, removing date-dependent failure without weakening the backdate rule."
+      }
+    ],
+    "residual_risks": [
+      "JRN-012 still owns generic confirm, canonical replay, full-session validation, and atomic posting application; JRN-011 intentionally exposes no confirm control.",
+      "IBKR repeat, overlap, incremental source binding, source completeness, and correction replay remain assigned to JRN-013 through JRN-015.",
+      "Terminal normalized rows require the documented maintenance command; the audit shell and permanent idempotency response remain durable when row detail is cleaned.",
+      "The product remains NOT_READY_FOR_PRODUCTION until the remaining active-plan exit gates are closed."
+    ]
+  },
+  "remote_ci": {
+    "status": "PASS",
+    "required_workflow": ".github/workflows/journal-baseline.yml",
+    "required_job": "journal-baseline",
+    "verified_commit": "c235e03c01c8722073f162441719a6be1127f5bb",
+    "workflow_run_id": 30162055891,
+    "workflow_run_url": "https://github.com/jovi20/tradingnoobs/actions/runs/30162055891",
+    "workflow_run_conclusion": "success",
+    "job_id": 89688870542,
+    "job_url": "https://github.com/jovi20/tradingnoobs/actions/runs/30162055891/job/89688870542",
+    "job_conclusion": "success",
+    "artifact": {
+      "id": 8620551325,
+      "name": "jrn002-gate-summary",
+      "digest": "sha256:df0e0ec8d1f0e60ac079e5b0727a80cfb07ebde910b9af4a0af1dede64edab90",
+      "expired": false
+    }
+  },
+  "required_check_enforcement": {
+    "ruleset_id": 19728078,
+    "ruleset_name": "main-journal-baseline",
+    "ruleset_url": "https://github.com/jovi20/tradingnoobs/settings/rules/19728078",
+    "enforcement": "active",
+    "target_ref": "refs/heads/main",
+    "required_check": "journal-baseline",
+    "integration": "GitHub Actions",
+    "dev_is_targeted": false
+  },
+  "next_task_gate": "SATISFIED: JRN-011 is closed; JRN-012 may implement generic bootstrap confirm from migration head a7b8c9d0e1f2 and the persistent owner-bound preview contract."
+}
