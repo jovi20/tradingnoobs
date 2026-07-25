@@ -2,11 +2,11 @@
 Trading Noobs Backend - Positions Router
 Handles Position CRUD and Batch operations
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, status, Query
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, or_
+from sqlalchemy import desc, or_, text
 from typing import List, Optional
 from decimal import Decimal, InvalidOperation
 import csv
@@ -40,7 +40,7 @@ from schemas import (
     TradeBatchCreate, TradeBatchUpdate, TradeBatchResponse,
     PositionStatusEnum,
 )
-from models import TradingPosition, TradingPositionStatus
+from models import TradingPosition, TradingPositionSide, TradingPositionStatus
 from release_profile import RuntimeCapability
 from services.capability_service import is_effective_capability_enabled
 from services.public_id_service import resolve_position, resolve_trade_batch, resolve_trading_account
@@ -49,6 +49,15 @@ from services.legacy_truth_sync_service import (
     sync_legacy_position_to_truth,
     validate_legacy_instrument_identity,
 )
+from services.account_ledger_service import (
+    AccountingReconciliationRequiredError,
+    LedgerPostingConflictError,
+)
+from services.idempotency_service import (
+    begin_idempotent_request,
+    complete_idempotent_request,
+)
+from services.instrument_identity_service import InstrumentIdentity
 from services.position_instrument_projection_service import (
     PositionInstrumentProjection,
     project_position_instrument,
@@ -66,6 +75,15 @@ from services.truth_legacy_projection_service import (
 from services.trading_accounting_service import (
     AccountingEvent,
     calculate_fifo_position_accounting,
+)
+from services.timezone_service import (
+    LocalDateTimeError,
+    normalize_user_datetime_to_utc,
+)
+from services.truth_native_open_service import (
+    TruthNativeOpenError,
+    create_truth_native_open,
+    lock_owned_trading_account,
 )
 
 router = APIRouter(prefix="/api/positions", tags=["positions"])
@@ -686,120 +704,238 @@ async def get_position_truth_lifecycle(
 )
 async def create_position(
     position_data: PositionCreate,
+    idempotency_key: str = Header(
+        ...,
+        alias="Idempotency-Key",
+        min_length=1,
+        max_length=255,
+    ),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Create a new position with the first entry batch"""
-    # Verify account belongs to user
-    account = db.query(TradingAccount).filter(
-        TradingAccount.id == position_data.account_id,
-        TradingAccount.user_id == current_user.id
-    ).first()
-    
-    if not account:
-        raise HTTPException(status_code=404, detail="Account not found")
+    """Create one canonical OPEN and its compatibility projection atomically."""
+    try:
+        normalized_idempotency_key = idempotency_key.strip()
+        if not normalized_idempotency_key:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "IDEMPOTENCY_KEY_REQUIRED",
+                    "message": "Idempotency-Key must not be blank",
+                },
+            )
+        account = lock_owned_trading_account(
+            db,
+            user_id=current_user.id,
+            account_id=position_data.account_id,
+        )
+        if account is None:
+            raise HTTPException(status_code=404, detail="Account not found")
+        if db.get_bind().dialect.name == "sqlite":
+            # SQLite SELECT ... FOR UPDATE is a no-op. Start a physical write
+            # transaction before any race-recovery savepoint is released.
+            db.execute(
+                text(
+                    """
+                    UPDATE trading_accounts
+                    SET trade_source_state = trade_source_state
+                    WHERE id = :account_id
+                    """
+                ),
+                {"account_id": account.id},
+            )
 
-    if position_data.strategy_id is not None:
-        strategy = db.query(Strategy).filter(
-            Strategy.id == position_data.strategy_id,
-            Strategy.user_id == current_user.id,
-        ).first()
-        if not strategy:
-            raise HTTPException(status_code=404, detail="Strategy not found")
-    
-    _release_contract_value(
-        require_release_currency,
-        account.currency,
-        field="account.currency",
-    )
-    detected_type = _release_contract_value(
-        require_allowed_asset_type,
-        position_data.asset_type,
-    )
-    symbol_upper = _release_contract_value(
-        require_normalized_symbol,
-        position_data.symbol,
-    )
-    exchange_code = _release_contract_value(
-        require_exchange_code,
-        position_data.exchange_code,
-    )
+        strategy = None
+        if position_data.strategy_id is not None:
+            strategy = db.query(Strategy).filter(
+                Strategy.id == position_data.strategy_id,
+                Strategy.user_id == current_user.id,
+            ).first()
+            if strategy is None:
+                raise HTTPException(status_code=404, detail="Strategy not found")
 
-    metadata_create = position_data.asset_metadata.model_dump()
-    identity = _release_contract_value(
-        validate_legacy_instrument_identity,
-        position_asset_type=detected_type,
-        account_currency=account.currency,
-        symbol=symbol_upper,
-        exchange_code=exchange_code,
-        metadata_core_type=metadata_create["core_type"],
-        metadata_market=metadata_create["market"],
-        metadata_currency=metadata_create["currency"],
-        metadata_instrument=metadata_create["instrument"],
-    )
-    requested_direction = PositionDirection[position_data.direction.value]
-    _raise_open_position_conflict(
         _release_contract_value(
-            _matching_open_positions,
+            require_release_currency,
+            account.currency,
+            field="account.currency",
+        )
+        if position_data.fee_currency is not None:
+            fee_currency = _release_contract_value(
+                require_release_currency,
+                position_data.fee_currency,
+                field="fee_currency",
+            )
+            if fee_currency != account.currency:
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "code": "INSTRUMENT_IDENTITY_MISMATCH",
+                        "field": "fee_currency",
+                        "message": "Fee currency must equal account currency",
+                    },
+                )
+
+        detected_type = _release_contract_value(
+            require_allowed_asset_type,
+            position_data.asset_type,
+        )
+        symbol_upper = _release_contract_value(
+            require_normalized_symbol,
+            position_data.symbol,
+        )
+        exchange_code = _release_contract_value(
+            require_exchange_code,
+            position_data.exchange_code,
+        )
+        metadata_create = position_data.asset_metadata.model_dump()
+        legacy_identity = _release_contract_value(
+            validate_legacy_instrument_identity,
+            position_asset_type=detected_type,
+            account_currency=account.currency,
+            symbol=symbol_upper,
+            exchange_code=exchange_code,
+            metadata_core_type=metadata_create["core_type"],
+            metadata_market=metadata_create["market"],
+            metadata_currency=metadata_create["currency"],
+            metadata_instrument=metadata_create["instrument"],
+        )
+        identity = InstrumentIdentity(
+            asset_type=legacy_identity.asset_type,
+            market=legacy_identity.market,
+            exchange_code=legacy_identity.exchange_code,
+            normalized_symbol=legacy_identity.normalized_symbol,
+            instrument_type=legacy_identity.instrument_type,
+            quote_currency=legacy_identity.quote_currency,
+        )
+        occurred_at = normalize_user_datetime_to_utc(
+            position_data.entry_time,
+            timezone_name=current_user.timezone,
+        )
+
+        normalized_request = jsonable_encoder(
+            {
+                **position_data.model_dump(),
+                "entry_time": occurred_at,
+                "symbol": identity.normalized_symbol,
+                "exchange_code": identity.exchange_code,
+                "asset_type": identity.asset_type,
+                "asset_metadata": {
+                    "core_type": identity.asset_type,
+                    "market": identity.market,
+                    "currency": identity.quote_currency,
+                    "instrument": identity.instrument_type,
+                },
+            }
+        )
+        try:
+            idempotency = begin_idempotent_request(
+                db,
+                scope="POSITION_OPEN",
+                key=normalized_idempotency_key,
+                request_payload=normalized_request,
+                user_id=current_user.id,
+                ttl_seconds=None,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "IDEMPOTENCY_KEY_REUSED",
+                    "message": str(exc),
+                },
+            ) from exc
+
+        if not idempotency.created:
+            if (
+                idempotency.record.status == "COMPLETED"
+                and idempotency.record.response_json is not None
+            ):
+                return JSONResponse(
+                    status_code=status.HTTP_201_CREATED,
+                    content=jsonable_encoder(idempotency.record.response_json),
+                )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "IDEMPOTENCY_REQUEST_IN_PROGRESS",
+                    "message": "Idempotent request is already in progress",
+                },
+            )
+
+        requested_direction = PositionDirection(position_data.direction.value)
+        _raise_open_position_conflict(
+            _release_contract_value(
+                _matching_open_positions,
+                db,
+                user_id=current_user.id,
+                account=account,
+                identity=legacy_identity,
+                direction=requested_direction,
+            )
+        )
+        legacy, truth_position, event = create_truth_native_open(
             db,
             user_id=current_user.id,
             account=account,
+            strategy=strategy,
             identity=identity,
-            direction=requested_direction,
+            side=TradingPositionSide(position_data.direction.value),
+            quantity=position_data.quantity,
+            price=position_data.entry_price,
+            occurred_at=occurred_at,
+            fee_amount=position_data.fee_amount,
+            reason=position_data.entry_reason,
+            emotion=position_data.entry_emotion,
+            confidence=position_data.entry_confidence,
+            planned_entry_price=position_data.planned_entry_price,
+            planned_stop_loss=position_data.planned_stop_loss,
+            planned_take_profit=position_data.planned_take_profit,
+            checklist_responses=position_data.checklist_responses,
         )
-    )
-    # The global legacy AssetMetadata(symbol) table is read-only for ordinary
-    # users. JRN-007 replaces this bridge with canonical full-identity storage.
-    position = Position(
-        user_id=current_user.id,
-        account_id=position_data.account_id,
-        strategy_id=position_data.strategy_id,
-        symbol=symbol_upper,
-        exchange=exchange_code,
-        asset_type=detected_type,
-        asset_metadata_symbol=None,
-        direction=requested_direction,
-        status=PositionStatus.OPEN,
-        total_quantity=position_data.quantity,
-        average_entry_price=position_data.entry_price,
-        realized_pnl=Decimal(0),
-        opened_at=position_data.entry_time,
-        # Phase 1: Plan Drift Detection
-        planned_entry_price=position_data.planned_entry_price,
-        planned_stop_loss=position_data.planned_stop_loss,
-        planned_take_profit=position_data.planned_take_profit,
-        # Phase 1: Checklist Responses
-        checklist_responses=position_data.checklist_responses
-    )
-    db.add(position)
-    db.flush()  # Get position ID
-    
-    # Create first entry batch
-    first_batch = TradeBatch(
-        position_id=position.id,
-        type=BatchType.ENTRY,
-        price=position_data.entry_price,
-        quantity=position_data.quantity,
-        time=position_data.entry_time,
-        reason=position_data.entry_reason,
-        emotion=position_data.entry_emotion,
-        confidence=position_data.entry_confidence
-    )
-    db.add(first_batch)
-    db.flush()
-
-    truth_position = _release_contract_value(
-        sync_legacy_position_to_truth,
-        db,
-        position.id,
-        expected_identity=identity,
-    )
-    db.refresh(position)
-    return _position_response_payload(
-        db,
-        position,
-        truth_position=truth_position,
-    )
+        response_content = jsonable_encoder(
+            _position_response_payload(
+                db,
+                legacy,
+                truth_position=truth_position,
+            )
+        )
+        complete_idempotent_request(
+            db,
+            record=idempotency.record,
+            response_json=response_content,
+            source_fact_public_id=event.public_id,
+        )
+        db.commit()
+        return JSONResponse(
+            status_code=status.HTTP_201_CREATED,
+            content=response_content,
+        )
+    except HTTPException:
+        db.rollback()
+        raise
+    except LocalDateTimeError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=422,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except (
+        TruthNativeOpenError,
+        AccountingReconciliationRequiredError,
+        LedgerPostingConflictError,
+    ) as exc:
+        db.rollback()
+        detail = {"code": exc.code, "message": str(exc)}
+        position_public_id = getattr(exc, "position_public_id", None)
+        if position_public_id is not None:
+            detail["position_public_id"] = position_public_id
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail=detail,
+        ) from exc
+    except Exception:
+        db.rollback()
+        raise
 
 
 @router.patch("/{position_id}", response_model=PositionResponse)

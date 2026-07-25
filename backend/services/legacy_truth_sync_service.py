@@ -63,7 +63,18 @@ def _deterministic_public_id(kind: str, source: str) -> str:
 
 
 def legacy_position_truth_public_id(legacy_position: Position) -> str:
-    return _deterministic_public_id("trading_position", legacy_position.public_id or str(legacy_position.id))
+    return legacy_position_truth_public_id_from_public_id(
+        legacy_position.public_id or str(legacy_position.id)
+    )
+
+
+def legacy_position_truth_public_id_from_public_id(
+    legacy_position_public_id: str,
+) -> str:
+    return _deterministic_public_id(
+        "trading_position",
+        legacy_position_public_id,
+    )
 
 
 def _coerce_decimal(value) -> Decimal:

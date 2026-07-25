@@ -120,6 +120,7 @@ def replay_truth_position_accounting(db: Session, *, position: TradingPosition) 
     position.realized_pnl_gross = summary.realized_pnl_gross
     position.realized_pnl_net = summary.realized_pnl_net
     position.total_fees = summary.total_fees
+    position.financially_open = summary.open_quantity > 0
 
     opening_event = next((event for event in active_events if event.event_type == PositionEventType.OPEN), None)
     position.opening_event_id = opening_event.id if opening_event else None

@@ -540,6 +540,7 @@ class JRN004OwnerBoundaryTests(unittest.TestCase):
         }
         response = self.client.post(
             "/api/positions",
+            headers={"Idempotency-Key": "foreign-strategy-open"},
             json={
                 "account_id": self.owner_account.id,
                 "strategy_id": self.foreign_strategy.id,

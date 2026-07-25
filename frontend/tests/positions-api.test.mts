@@ -156,7 +156,7 @@ test('duplicate OPEN conflict surfaces a readable localized structured API error
           currency: 'USD',
           instrument: 'SPOT',
         },
-      }),
+      }, 'open-aapl-1'),
       (error: unknown) => {
         assert.ok(error instanceof ApiRequestError)
         assert.equal(error.status, 409)

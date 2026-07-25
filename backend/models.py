@@ -136,6 +136,12 @@ class AccountingHealth(str, enum.Enum):
     RECONCILIATION_REQUIRED = "ACCOUNTING_RECONCILIATION_REQUIRED"
 
 
+class TradeSourceState(str, enum.Enum):
+    CLEAN = "CLEAN"
+    MANUAL = "MANUAL"
+    SOURCE_BOUND = "SOURCE_BOUND"
+
+
 class JobRunStatus(str, enum.Enum):
     QUEUED = "QUEUED"
     RUNNING = "RUNNING"
@@ -229,6 +235,14 @@ class AssetMaster(Base):
 
 class TradeInstrument(Base):
     __tablename__ = "trade_instruments"
+    __table_args__ = (
+        UniqueConstraint(
+            "asset_id",
+            "instrument_type",
+            "contract_symbol",
+            name="uq_trade_instrument_journal_identity",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
@@ -715,6 +729,11 @@ class TradingAccount(Base):
         nullable=False,
         default=AccountingHealth.HEALTHY.value,
     )
+    trade_source_state = Column(
+        String(20),
+        nullable=False,
+        default=TradeSourceState.CLEAN.value,
+    )
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -784,6 +803,17 @@ class FeatureFlag(Base):
 
 class TradingPosition(Base):
     __tablename__ = "trading_positions"
+    __table_args__ = (
+        Index(
+            "uq_trading_position_financially_open_side",
+            "account_id",
+            "instrument_id",
+            "side",
+            unique=True,
+            postgresql_where=text("financially_open"),
+            sqlite_where=text("financially_open = 1"),
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
@@ -806,6 +836,7 @@ class TradingPosition(Base):
     realized_pnl_gross = Column(Numeric(20, 8), nullable=True, default=0)
     realized_pnl_net = Column(Numeric(20, 8), nullable=True, default=0)
     total_fees = Column(Numeric(20, 8), nullable=True, default=0)
+    financially_open = Column(Boolean, nullable=False, default=True)
     holding_period_seconds = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -825,6 +856,13 @@ class TradingPosition(Base):
 
 class PositionEvent(Base):
     __tablename__ = "position_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "position_id",
+            "sequence_no",
+            name="uq_position_event_sequence",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     public_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
@@ -1156,6 +1194,7 @@ class IdempotencyKey(Base):
     status = Column(String(40), nullable=False, default="IN_PROGRESS")
     response_json = Column(JSON, nullable=True)
     job_run_id = Column(Integer, ForeignKey("job_runs.id"), nullable=True)
+    source_fact_public_id = Column(String(36), nullable=True, index=True)
     expires_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

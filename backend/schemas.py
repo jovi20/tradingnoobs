@@ -954,6 +954,7 @@ class TradingAccountResponse(BaseModel):
     initial_balance: Optional[Decimal]
     journal_balance: Decimal
     accounting_health: str
+    trade_source_state: str
     journal_balance_trusted: bool
     description: Optional[str]
     is_active: bool
@@ -1338,6 +1339,8 @@ class PositionCreate(BaseModel):
     entry_reason: Optional[str] = None
     entry_emotion: Optional[str] = None
     entry_confidence: Optional[int] = Field(None, ge=1, le=5)
+    fee_amount: Decimal = Field(default=Decimal("0"), ge=0)
+    fee_currency: Optional[str] = None
     # Phase 1: Plan Drift Detection
     planned_entry_price: Optional[Decimal] = None
     planned_stop_loss: Optional[Decimal] = None

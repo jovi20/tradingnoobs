@@ -42,7 +42,13 @@ from services.account_ledger_service import (
 from services.auth_rate_limit_service import consume_auth_attempt
 from services.auth_service import authenticate_user, create_user
 from services.idempotency_service import begin_idempotent_request
+from services.instrument_identity_service import InstrumentIdentity
 from services.trading_position_write_service import append_truth_trade_event
+from services.truth_native_open_service import (
+    OpenPositionExistsError,
+    create_truth_native_open,
+    lock_owned_trading_account,
+)
 
 
 POSTGRES_URL_ENV = "JRN002_POSTGRES_URL"
@@ -729,3 +735,123 @@ def test_postgresql_idempotency_keys_are_owner_scoped_and_concurrency_safe(
         }
         assert len(concurrent_rows) == 1
         assert created_results.count(True) == 1
+
+
+def test_jrn007_postgresql_open_slot_and_instrument_races(
+    postgres_database: tuple[Engine, str],
+) -> None:
+    engine, database_url = postgres_database
+    _run_alembic(database_url, "upgrade", "head")
+    SessionLocal = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=engine,
+    )
+    with SessionLocal() as db:
+        user = User(
+            public_id="jrn007-pg-user",
+            email="jrn007-pg@example.com",
+            email_normalized="jrn007-pg@example.com",
+            hashed_password="hash",
+            status="ACTIVE",
+            is_active=True,
+            role="user",
+            timezone="UTC",
+        )
+        db.add(user)
+        db.flush()
+        accounts = [
+            TradingAccount(
+                public_id=f"jrn007-pg-account-{index}",
+                user_id=user.id,
+                name=f"JRN007 {index}",
+                broker="IBKR",
+                currency="USD",
+                is_active=True,
+            )
+            for index in range(4)
+        ]
+        db.add_all(accounts)
+        db.commit()
+        user_id = user.id
+        account_ids = [account.id for account in accounts]
+
+    identity = InstrumentIdentity(
+        asset_type="STOCK",
+        market="US",
+        exchange_code="NASDAQ",
+        normalized_symbol="AAPL",
+        instrument_type="SPOT",
+        quote_currency="USD",
+    )
+
+    def open_and_commit(account_id: int, side: TradingPositionSide) -> str:
+        with SessionLocal() as db:
+            account = lock_owned_trading_account(
+                db,
+                user_id=user_id,
+                account_id=account_id,
+            )
+            assert account is not None
+            try:
+                create_truth_native_open(
+                    db,
+                    user_id=user_id,
+                    account=account,
+                    strategy=None,
+                    identity=identity,
+                    side=side,
+                    quantity=Decimal("1"),
+                    price=Decimal("200"),
+                    occurred_at=datetime(
+                        2026,
+                        7,
+                        25,
+                        10,
+                        0,
+                        tzinfo=timezone.utc,
+                    ),
+                )
+                db.commit()
+                return "CREATED"
+            except OpenPositionExistsError:
+                db.rollback()
+                return "CONFLICT"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        instrument_results = list(
+            executor.map(
+                lambda account_id: open_and_commit(
+                    account_id,
+                    TradingPositionSide.LONG,
+                ),
+                account_ids[:2],
+            )
+        )
+    assert instrument_results == ["CREATED", "CREATED"]
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        same_side_results = list(
+            executor.map(
+                lambda _: open_and_commit(
+                    account_ids[2],
+                    TradingPositionSide.LONG,
+                ),
+                range(2),
+            )
+        )
+    assert sorted(same_side_results) == ["CONFLICT", "CREATED"]
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        opposite_side_results = list(
+            executor.map(
+                lambda side: open_and_commit(account_ids[3], side),
+                (TradingPositionSide.LONG, TradingPositionSide.SHORT),
+            )
+        )
+    assert opposite_side_results == ["CREATED", "CREATED"]
+
+    with SessionLocal() as db:
+        assert len(db.execute(select(AssetMaster)).scalars().all()) == 1
+        assert len(db.execute(select(TradeInstrument)).scalars().all()) == 1
+        assert len(db.execute(select(TradingPosition)).scalars().all()) == 5

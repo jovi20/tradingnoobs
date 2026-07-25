@@ -12,6 +12,10 @@ from services.legacy_truth_sync_service import (
     LegacyInstrumentIdentity,
     validate_legacy_instrument_identity,
 )
+from services.instrument_identity_service import (
+    InstrumentIdentity,
+    canonical_asset_code,
+)
 
 
 _JOURNAL_IDENTITY_METADATA_KEY = "journal_identity_v1"
@@ -26,8 +30,11 @@ def _asset_has_exact_identity(
     asset: AssetMaster,
     identity: LegacyInstrumentIdentity,
 ) -> bool:
+    expected_code = canonical_asset_code(
+        InstrumentIdentity(**asdict(identity))
+    )
     return (
-        asset.canonical_code == identity.normalized_symbol
+        asset.canonical_code in {identity.normalized_symbol, expected_code}
         and _enum_value(asset.asset_type) == identity.asset_type
         and _enum_value(asset.quote_currency) == identity.quote_currency
         and isinstance(asset.metadata_json, dict)

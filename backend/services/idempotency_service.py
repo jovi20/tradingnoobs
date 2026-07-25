@@ -97,10 +97,12 @@ def complete_idempotent_request(
     record: IdempotencyKey,
     response_json: dict | list | str | int | float | bool | None,
     now: datetime | None = None,
+    source_fact_public_id: str | None = None,
 ) -> IdempotencyKey:
     _as_utc(now or datetime.now(timezone.utc))
     record.status = "COMPLETED"
     record.response_json = response_json
+    record.source_fact_public_id = source_fact_public_id
     db.add(record)
     db.flush()
     return record

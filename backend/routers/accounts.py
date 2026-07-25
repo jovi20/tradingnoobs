@@ -50,6 +50,11 @@ def _journal_account_response(
         initial_balance=account.initial_balance,
         journal_balance=calculate_account_cash_balance_read_model(db, account=account),
         accounting_health=health_value,
+        trade_source_state=(
+            account.trade_source_state.value
+            if hasattr(account.trade_source_state, "value")
+            else str(account.trade_source_state)
+        ),
         journal_balance_trusted=health_value == AccountingHealth.HEALTHY.value,
         description=account.description,
         is_active=account.is_active,

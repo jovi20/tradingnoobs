@@ -265,6 +265,7 @@ export interface TradingAccount {
     initial_balance: number
     journal_balance: number
     accounting_health: 'ACCOUNTING_HEALTHY' | 'ACCOUNTING_RECONCILIATION_REQUIRED'
+    trade_source_state: 'CLEAN' | 'MANUAL' | 'SOURCE_BOUND'
     journal_balance_trusted: boolean
     description?: string
     is_active: boolean
@@ -1238,6 +1239,8 @@ export interface PositionCreate {
     entry_reason?: string
     entry_emotion?: string
     entry_confidence?: number
+    fee_amount?: number
+    fee_currency?: ReleaseCurrency
     // Phase 1: Plan Drift Detection
     planned_entry_price?: number
     planned_stop_loss?: number
@@ -1389,9 +1392,10 @@ export const positionsAPI = {
         }, token)
     },
 
-    create: async (token: string, data: PositionCreate): Promise<Position> => {
+    create: async (token: string, data: PositionCreate, idempotencyKey: string): Promise<Position> => {
         return fetchAPI('/api/positions', {
             method: 'POST',
+            headers: { 'Idempotency-Key': idempotencyKey },
             body: JSON.stringify(data),
         }, token)
     },

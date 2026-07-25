@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+import itertools
 from unittest.mock import patch
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -74,6 +75,20 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides[get_current_user] = override_get_current_user
         self.client = TestClient(app)
+        raw_post = self.client.post
+        request_numbers = itertools.count(1)
+
+        def post_with_open_idempotency(url, *args, **kwargs):
+            if url == "/api/positions":
+                headers = dict(kwargs.pop("headers", {}) or {})
+                headers.setdefault(
+                    "Idempotency-Key",
+                    f"legacy-route-test-{next(request_numbers)}",
+                )
+                kwargs["headers"] = headers
+            return raw_post(url, *args, **kwargs)
+
+        self.client.post = post_with_open_idempotency
 
     def tearDown(self):
         app.dependency_overrides.clear()
@@ -1476,7 +1491,10 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         self.db.expire_all()
         position = self.db.query(Position).filter(Position.symbol == "NVDA").one()
         self.assertEqual(position.exchange, "NASDAQ")
-        asset = self.db.query(AssetMaster).filter(AssetMaster.canonical_code == "NVDA").one()
+        asset = self.db.query(AssetMaster).filter(
+            AssetMaster.display_symbol == "NVDA",
+            AssetMaster.asset_type == "STOCK",
+        ).one()
         self.assertEqual(asset.asset_type, "STOCK")
         self.assertEqual(asset.quote_currency, "USD")
         self.assertEqual(
@@ -1505,17 +1523,12 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
         )
         self.assertEqual(opposite_side.status_code, 201, opposite_side.text)
 
-        # JRN-007 replaces the legacy symbol-only AssetMaster key. Until then,
-        # a same-symbol cross-exchange create must fail closed rather than alias.
+        # Full identity keeps same-symbol positions on different exchanges isolated.
         conflicting_exchange = request(symbol="NVDA", exchange_code="NYSE")
-        self.assertEqual(conflicting_exchange.status_code, 422)
-        self.assertEqual(
-            conflicting_exchange.json()["detail"]["code"],
-            "INSTRUMENT_IDENTITY_MISMATCH",
-        )
+        self.assertEqual(conflicting_exchange.status_code, 201)
         self.assertEqual(
             self.db.query(Position).filter(Position.symbol == "NVDA").count(),
-            2,
+            3,
         )
 
         self.db.add(AssetMetadata(symbol="NULLMETA", name=None))
@@ -1885,19 +1898,11 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
             bad_currency_response,
             bad_instrument_response,
             mismatch_response,
+            bad_master_response,
+            alias_master_response,
             valid_response,
         ):
             self.assertEqual(response.status_code, 201, response.text)
-        self.assertEqual(bad_master_response.status_code, 422)
-        self.assertEqual(
-            bad_master_response.json()["detail"]["code"],
-            "INSTRUMENT_IDENTITY_MISMATCH",
-        )
-        self.assertEqual(alias_master_response.status_code, 422)
-        self.assertEqual(
-            alias_master_response.json()["detail"]["code"],
-            "INSTRUMENT_IDENTITY_MISMATCH",
-        )
         self.assertEqual(
             self.db.query(Position).filter(
                 Position.symbol.in_([
@@ -1905,7 +1910,7 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
                     "ALIASMASTER",
                 ])
             ).count(),
-            0,
+            2,
         )
         self.assertEqual(
             self.db.query(Position).filter(
@@ -1928,7 +1933,9 @@ class PositionTruthBridgeRouterTests(unittest.TestCase):
             self.db.query(AssetMetadata).filter(AssetMetadata.symbol == "BADCCY").one().currency.value,
             "HKD",
         )
-        asset = self.db.query(AssetMaster).filter(AssetMaster.canonical_code == "GOODMETA").one()
+        asset = self.db.query(AssetMaster).filter(
+            AssetMaster.display_symbol == "GOODMETA",
+        ).one()
         self.assertEqual(asset.asset_type, "STOCK")
         self.assertEqual(asset.quote_currency, "USD")
 

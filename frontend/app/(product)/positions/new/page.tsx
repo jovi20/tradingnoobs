@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -231,6 +231,7 @@ export default function NewPositionPage() {
     const [showChecklistModal, setShowChecklistModal] = useState(false)
 
     const [isAddingBatch, setIsAddingBatch] = useState(false)
+    const openRequestRef = useRef<{ payload: string; key: string } | null>(null)
 
     // Check for an existing lifecycle only when the complete identity is valid.
     useEffect(() => {
@@ -326,7 +327,18 @@ export default function NewPositionPage() {
                 }
             }
 
-            const createdPosition = await positionsAPI.create(token, data)
+            const serializedPayload = JSON.stringify(data)
+            if (openRequestRef.current?.payload !== serializedPayload) {
+                openRequestRef.current = {
+                    payload: serializedPayload,
+                    key: crypto.randomUUID(),
+                }
+            }
+            const createdPosition = await positionsAPI.create(
+                token,
+                data,
+                openRequestRef.current.key,
+            )
             if (createdPosition.truth_position_public_id) {
                 router.push(`/positions/${createdPosition.public_id}`)
             } else {

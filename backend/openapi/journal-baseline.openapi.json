@@ -2314,6 +2314,31 @@
             "x-normalization": "ASCII_TRIM_UPPER",
             "x-normalized-pattern": "^[A-Z0-9][A-Z0-9._-]{0,31}$"
           },
+          "fee_amount": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "0",
+            "title": "Fee Amount"
+          },
+          "fee_currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fee Currency"
+          },
           "planned_entry_price": {
             "anyOf": [
               {
@@ -4026,6 +4051,10 @@
             "title": "Public Id",
             "type": "string"
           },
+          "trade_source_state": {
+            "title": "Trade Source State",
+            "type": "string"
+          },
           "updated_at": {
             "anyOf": [
               {
@@ -4054,6 +4083,7 @@
           "initial_balance",
           "journal_balance",
           "accounting_health",
+          "trade_source_state",
           "journal_balance_trusted",
           "description",
           "is_active",
@@ -7570,8 +7600,21 @@
         ]
       },
       "post": {
-        "description": "Create a new position with the first entry batch",
+        "description": "Create one canonical OPEN and its compatibility projection atomically.",
         "operationId": "create_position_api_positions_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
