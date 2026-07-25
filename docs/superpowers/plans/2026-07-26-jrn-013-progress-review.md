@@ -1,7 +1,7 @@
 # JRN-013 进度与设计评审
 
 日期：2026-07-26
-评审范围：`0b03f85..3ddbb0d` 的 JRN-013 实现，以及 active plan 中
+评审范围：`0b03f85..450ced4` 的 JRN-013 实现，以及 active plan 中
 `JRN-013` 至 `JRN-015` 的 IBKR Flex 文件导入设计。
 
 ## 结论
@@ -44,6 +44,11 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
   winning sighting，并为仍冲突的 payload 建立新 OPEN episode。
 - fingerprint payload 字段集合与 provenance/derived 排除项已锁定；fingerprint
   version 改变时创建新 observation 并 fail-closed 为 conflict，不静默匹配旧版本。
+- parser 对齐永久 source schema 的字段宽度：external account/event/target/transaction
+  为 255，conid/status 为 100，currency 为 10，组合 order key 为 512；超限在
+  数据库写入前稳定返回 `IBKR_FIELD_TOO_LONG`。
+- 同 owner 的两个 CLEAN 内部账户可同时 preview 同一 external account，两个
+  preview 均不提前创建 binding；未知资产只产生 session-only terminal conflict。
 - source identity、fingerprint、flat-boundary、coverage、bootstrap change-chain、
   bound preview、冲突 episode 和生命周期模拟基础。
 - operation idempotency、owner/account 绑定、并发 session/rate limit、临时文件
@@ -51,8 +56,8 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
 - provider-gated 本地文件 upload API、双 adapter session DTO、跨 owner session
   deny 和 `CONFLICTED` preview 重启后行明细恢复；IBKR preview 永远不误报
   `confirm_available`。
-- 本次复验的全部 `test_jrn013_*.py` 共 107 项测试通过；完整统一
-  gate 在 PostgreSQL 16.14 上通过 648 个后端测试、165 个前端测试、OpenAPI、
+- 本次复验的全部 `test_jrn013_*.py` 共 114 项测试通过；完整统一
+  gate 在 PostgreSQL 16.14 上通过 655 个后端测试、165 个前端测试、OpenAPI、
   release contract、typecheck、lint 和 production build。
 
 ## 尚未实现或未满足
@@ -69,7 +74,7 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
 - JRN-014 的 source-bound canonical confirm、coverage acceptance/frontier
   推进与“只应用新增 execution”尚未实现。
 - JRN-015 的人工 correction/cancel-bust resolution 与 versioned replay 尚未实现。
-- `3ddbb0d` 已通过当前工作树完整统一 gate 与真实 PostgreSQL migration gate；
+- `450ced4` 已通过当前工作树完整统一 gate 与真实 PostgreSQL migration gate；
   尚未取得远端 CI 和绑定该 SHA 的独立 review，因此仍只能视为进度 checkpoint。
 
 ## 设计必要性评估
