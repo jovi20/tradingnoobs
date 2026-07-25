@@ -15,8 +15,10 @@ from services.ibkr_flex_parser import (
     MAX_CURRENCY_LENGTH,
     MAX_EXECUTIONS,
     MAX_EXECUTION_STATUS_LENGTH,
+    MAX_EXCHANGE_CODE_LENGTH,
     MAX_EXTERNAL_ACCOUNT_ID_LENGTH,
     MAX_SOURCE_EVENT_ID_LENGTH,
+    MAX_SYMBOL_LENGTH,
     MAX_TRANSACTION_ID_LENGTH,
     MAX_XML_NODES,
     parse_ibkr_flex_xml,
@@ -85,11 +87,13 @@ def trade(
     transaction_id: str = "101",
     account_id: str = "U1234567",
     date_time: str = "20260725;100000",
+    symbol: str = "AAPL",
+    exchange: str = "NASDAQ",
 ) -> str:
     return (
         '<Trade accountId="{account_id}" ibExecID="{execution_id}" '
         'transactionID="{transaction_id}" assetCategory="STK" '
-        'conid="265598" symbol="AAPL" listingExchange="NASDAQ" '
+        'conid="265598" symbol="{symbol}" listingExchange="{exchange}" '
         'currency="USD" buySell="BUY" quantity="2" tradePrice="200" '
         'dateTime="{date_time}" openCloseIndicator="OPEN" '
         'tradeStatus="EXECUTED" ibCommission="-1.25" '
@@ -99,6 +103,8 @@ def trade(
         execution_id=execution_id,
         transaction_id=transaction_id,
         date_time=date_time,
+        symbol=symbol,
+        exchange=exchange,
     )
 
 
@@ -597,6 +603,26 @@ def test_persisted_source_field_widths_fail_before_database_writes(
     assert exact.events[0].external_source_event_id == exact_event_id
     assert len(exact.events[0].source_order_key) == 511
 
+    exact_identity = parse_ibkr_flex_xml(
+        write_xml(
+            tmp_path,
+            document(
+                trade(
+                    symbol="S" * MAX_SYMBOL_LENGTH,
+                    exchange="E" * MAX_EXCHANGE_CODE_LENGTH,
+                )
+            ),
+            "persisted-identity-width-exact.xml",
+        ),
+        source_timezone="UTC",
+        provider_contract=provider_contract,
+    )
+    assert len(exact_identity.events[0].symbol) == MAX_SYMBOL_LENGTH
+    assert (
+        len(exact_identity.events[0].exchange)
+        == MAX_EXCHANGE_CODE_LENGTH
+    )
+
     long_account = "U" * (MAX_EXTERNAL_ACCOUNT_ID_LENGTH + 1)
     long_target = "T" * (MAX_SOURCE_EVENT_ID_LENGTH + 1)
     correction = (
@@ -626,6 +652,10 @@ def test_persisted_source_field_widths_fail_before_database_writes(
         document(trade()).replace(
             'tradeStatus="EXECUTED"',
             f'tradeStatus="{"X" * (MAX_EXECUTION_STATUS_LENGTH + 1)}"',
+        ),
+        document(trade(symbol="S" * (MAX_SYMBOL_LENGTH + 1))),
+        document(
+            trade(exchange="E" * (MAX_EXCHANGE_CODE_LENGTH + 1))
         ),
         document(
             trade(account_id=long_account),

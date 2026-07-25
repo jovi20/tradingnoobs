@@ -36,6 +36,8 @@ MAX_SOURCE_EVENT_ID_LENGTH = 255
 MAX_TRANSACTION_ID_LENGTH = 255
 MAX_SOURCE_ORDER_KEY_LENGTH = 512
 MAX_CONID_LENGTH = 100
+MAX_SYMBOL_LENGTH = 50
+MAX_EXCHANGE_CODE_LENGTH = 32
 MAX_CURRENCY_LENGTH = 10
 MAX_EXECUTION_STATUS_LENGTH = 100
 SOURCE_FINGERPRINT_VERSION = 1
@@ -615,8 +617,16 @@ def parse_ibkr_flex_xml(
             field_name=fields.conid_field,
             max_length=MAX_CONID_LENGTH,
         )
-        symbol = _required_attribute(element, fields.symbol_field).upper()
-        exchange = _required_attribute(element, fields.exchange_field).upper()
+        symbol = _require_max_length(
+            _required_attribute(element, fields.symbol_field).upper(),
+            field_name=fields.symbol_field,
+            max_length=MAX_SYMBOL_LENGTH,
+        )
+        exchange = _require_max_length(
+            _required_attribute(element, fields.exchange_field).upper(),
+            field_name=fields.exchange_field,
+            max_length=MAX_EXCHANGE_CODE_LENGTH,
+        )
         currency = _require_max_length(
             _required_attribute(
                 element,
