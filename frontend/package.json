@@ -2,11 +2,17 @@
     "name": "tradingnoobs-frontend",
     "version": "1.0.0",
     "private": true,
+    "packageManager": "npm@11.16.0",
+    "engines": {
+        "node": "24.18.0",
+        "npm": "11.16.0"
+    },
     "scripts": {
         "dev": "next dev",
         "build": "next build",
         "start": "next start",
         "lint": "eslint .",
+        "typecheck": "tsc --noEmit",
         "test": "node --test tests/*.test.mts",
         "test:browser": "playwright test",
         "generate:release-contract": "node scripts/generate-release-contract.mjs",

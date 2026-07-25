@@ -70,6 +70,7 @@ htmlcov/
 .mypy_cache/
 playwright-report/
 test-results/
+.artifacts/
 
 # Codex visual companion temp files
 .superpowers/

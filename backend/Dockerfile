@@ -1,11 +1,12 @@
 # Backend Dockerfile
-FROM python:3.11-slim
+FROM python:3.13.5-slim
 
 WORKDIR /app
 
 # Install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.lock.txt .
+RUN python -m pip install --no-cache-dir --upgrade pip==26.1.2 \
+    && python -m pip install --no-cache-dir --require-hashes -r requirements.lock.txt
 
 # Copy application
 COPY . .

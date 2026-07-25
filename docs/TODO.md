@@ -1,6 +1,6 @@
 # Trading Noobs 当前任务清单
 
-更新时间：2026-07-17
+更新时间：2026-07-25
 当前执行分支：`dev`
 当前状态：`TRADING_JOURNAL_HARDENING_ACTIVE / NOT_READY_FOR_PRODUCTION`
 
@@ -13,6 +13,7 @@
 - 当前仍是 `NOT_READY_FOR_PRODUCTION`，不得直接部署真实用户环境。
 - `JRN-000` 与 `JRN-001` 已完成。JRN-001 的最终 implementation checkpoint `1c382ce` 已通过精确归档全量、双视口浏览器、真实 PostgreSQL 16 验证，并取得同一 SHA 两路全新独立 `APPROVE`；六个更早 checkpoint 均已 supersede，完整历史见 checkpoint record。
 - `JRN-001` 不新增 Alembic revision，migration head 继续是 `9cad10111213`；其最终证据必须绑定稳定 scoped checkpoint。
+- `JRN-002` 实现候选已在按 hash lock 新建的干净 Python 环境通过统一本地 gate；当前仍等待 scoped checkpoint、远端 workflow 运行和评审，因此尚不标记 `COMPLETE`。
 - IBKR 文件的重复、重叠、增量导入与 correction replay 只在 `JRN-013` 至 `JRN-015` 实现，当前合同冻结不代表功能已落地。
 - 本轮不自动 merge 到 `main`、不创建 PR、不打 tag；这些属于后续显式操作。
 - 旧 P0-P19 阶段计划已归档到 [superpowers/plans/archive/](./superpowers/plans/archive/)。
@@ -23,7 +24,7 @@
 |--------|------|------|------|------|
 | P0 | `COMPLETE` | `JRN-000` WIP、migration chain 与 checkpoint | 已有逐路径 disposition 和 checkpoint；四个 migration 已进入 `9cad10111213` baseline；optional runtime 默认不可达。 | Active plan Step 0 |
 | P0 | `COMPLETE` | `JRN-001` release contract 与 capability ceiling | `1c382ce` 已通过完整验证、真实浏览器门禁与同 SHA 双路独立评审；合同及禁用边界已冻结。 | Active plan M0 |
-| P0 | `READY_PARALLEL` | `JRN-002` 可复现基线与 PostgreSQL CI | 干净环境、本地/CI 同命令、PostgreSQL 空库 migration 与 integration 可重跑。 | Active plan M0 |
+| P0 | `IMPLEMENTED_LOCAL_GATE_PASS / CHECKPOINT_REVIEW_PENDING` | `JRN-002` 可复现基线与 PostgreSQL CI | 干净环境、本地/CI 同命令、PostgreSQL 空库 migration 与 integration 可重跑；待稳定 checkpoint、远端 CI 和评审关闭。 | Active plan M0 |
 | P0 | `READY_PARALLEL` | `JRN-003` invite-only auth 与 release secret | 一次性邀请码、限流、弱密钥 fail-fast；普通 setting 无明文 Broker/Market/LLM secret。 | Active plan M0 |
 | P0 | `PENDING_JRN_002_003` | `JRN-004` tenant/owner 边界封闭 | 当前 account/strategy/position/event/ledger/note/idempotency 两用户矩阵无越权；legacy import 已 owner-guard 或关闭；future resource harness 冻结。 | Active plan M0 |
 
@@ -40,18 +41,17 @@ JRN-000/001 已完成；当前可并行执行 JRN-002/003，JRN-004 等两者基
 
 ## 验证门
 
-任何进入提交或部署前的整理至少跑：
+JRN-002 之后，任何进入提交或部署前的整理优先运行统一 gate：
+
+```bash
+backend/venv/bin/python scripts/run_journal_baseline_gate.py
+```
+
+快速静态检查仍保留：
 
 ```bash
 git diff --check
 bash -n start.sh
-```
-
-涉及后端行为时跑：
-
-```bash
-cd backend
-venv/bin/python -m pytest -q
 ```
 
 涉及前端行为时跑：

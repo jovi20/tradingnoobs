@@ -1,6 +1,7 @@
 import os
 import sqlite3
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,7 +10,6 @@ from pathlib import Path
 class AlembicChainTests(unittest.TestCase):
     def test_alembic_upgrade_head_creates_expected_tables(self):
         repo_root = Path(__file__).resolve().parents[2]
-        alembic_bin = repo_root / "backend" / "venv" / "bin" / "alembic"
 
         fd, db_path = tempfile.mkstemp(suffix=".db")
         os.close(fd)
@@ -20,7 +20,15 @@ class AlembicChainTests(unittest.TestCase):
             env["PYTHONPATH"] = str(repo_root / "backend")
 
             result = subprocess.run(
-                [str(alembic_bin), "-c", "backend/alembic.ini", "upgrade", "head"],
+                [
+                    sys.executable,
+                    "-m",
+                    "alembic",
+                    "-c",
+                    "backend/alembic.ini",
+                    "upgrade",
+                    "head",
+                ],
                 cwd=repo_root,
                 env=env,
                 capture_output=True,

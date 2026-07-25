@@ -51,7 +51,8 @@ Trading Noobs 是一个交易记录、复盘和分析系统。当前 `dev` 分�
 cd backend
 python -m venv venv
 source venv/bin/activate
-pip install -r requirements-dev.txt
+python -m pip install --upgrade pip==26.1.2
+python -m pip install --require-hashes -r requirements-ci.lock.txt
 alembic -c alembic.ini upgrade head
 uvicorn main:app --reload --no-access-log
 ```
@@ -60,7 +61,7 @@ uvicorn main:app --reload --no-access-log
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
@@ -74,19 +75,16 @@ npm run dev
 
 ## 验证命令
 
-后端：
+完整本地门禁与 CI 使用同一入口；未提供 `JRN002_POSTGRES_URL` 时会启动临时 PostgreSQL 16：
 
 ```bash
-cd backend
-python -m pytest -q
+backend/venv/bin/python scripts/run_journal_baseline_gate.py
 ```
 
-前端：
+聚焦后端：
 
 ```bash
-cd frontend
-npm run lint
-npx tsc --noEmit
+PYTHONPATH=backend backend/venv/bin/python -m pytest backend/tests -q
 ```
 
 ## 维护约定

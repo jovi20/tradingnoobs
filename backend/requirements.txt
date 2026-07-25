@@ -1,5 +1,5 @@
 # Trading Noobs Backend - Python Dependencies
-# Python 3.10+ required
+# Python 3.13.5; deploy and CI install the generated requirements.lock.txt.
 
 # ============== Core Framework ==============
 fastapi>=0.109.0

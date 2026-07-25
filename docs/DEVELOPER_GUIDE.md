@@ -206,9 +206,9 @@ legacy 代码不会在 replacement、migration 和 rollback 明确前直接删�
 
 ### 8.1 前置要求
 
-- Python 3.10+
-- Node.js 20+ 更稳妥；前端依赖使用 Next 16 / React 19
-- npm
+- Python 3.13.5（见 `.python-version`）
+- Node.js 24.18.0 与 npm 11.16.0（见 `.node-version` 和 `frontend/package.json`）
+- PostgreSQL 16；完整 JRN-002 gate 未提供连接串时会启动本机临时 PostgreSQL
 - 可选：Docker / Docker Compose
 
 ### 8.2 后端
@@ -217,7 +217,8 @@ legacy 代码不会在 replacement、migration 和 rollback 明确前直接删�
 cd backend
 python -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+python -m pip install --upgrade pip==26.1.2
+python -m pip install --require-hashes -r requirements-ci.lock.txt
 uvicorn main:app --reload --no-access-log
 ```
 
@@ -229,7 +230,7 @@ uvicorn main:app --reload --no-access-log
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
@@ -253,42 +254,36 @@ Broker、Market 和 LLM provider 的历史环境变量仍可能被代码识别�
 
 ## 9. 常用验证命令
 
-后端测试：
+JRN-002 本地与 CI 使用同一个完整 gate。若未设置 `JRN002_POSTGRES_URL`，本地必须提供 PostgreSQL 16 的 `initdb` 和 `pg_ctl`：
 
 ```bash
-cd backend
-../.venv313/bin/python -m unittest discover -s tests
+backend/venv/bin/python scripts/run_journal_baseline_gate.py
 ```
 
-前端测试：
+结果摘要写入忽略目录 `.artifacts/jrn002/gate-summary.json`，包含 commit、工作树状态、Python/Node/npm/PostgreSQL 版本及逐项结果。
+
+只运行后端测试：
+
+```bash
+PYTHONPATH=backend backend/venv/bin/python -m pytest backend/tests
+```
+
+只运行前端门禁：
 
 ```bash
 cd frontend
-node --experimental-strip-types --test tests/*.test.mts
-```
-
-前端类型检查：
-
-```bash
-cd frontend
-./node_modules/.bin/tsc --noEmit --pretty false
-```
-
-前端 lint：
-
-```bash
-cd frontend
+npm run check:release-contract
+npm test
+npm run typecheck
 npm run lint
-```
-
-前端生产构建：
-
-```bash
-cd frontend
 npm run build
 ```
 
-注意：Next 16 / Turbopack 在受限沙箱里可能因为创建进程或绑定端口失败；如果失败原因是沙箱限制，需要按当前权限流程请求提升后重跑。
+OpenAPI 发生有意变更时，重新生成并审阅基线快照：
+
+```bash
+backend/venv/bin/python backend/scripts/generate_openapi_snapshot.py
+```
 
 ---
 

@@ -36,7 +36,8 @@ FastAPI 后端，负责认证、账户、交易 truth model、Timeline read mode
 cd backend
 python -m venv venv
 source venv/bin/activate
-pip install -r requirements-dev.txt
+python -m pip install --upgrade pip==26.1.2
+python -m pip install --require-hashes -r requirements-ci.lock.txt
 cp .env.example .env
 alembic -c alembic.ini upgrade head
 uvicorn main:app --reload --no-access-log
@@ -81,17 +82,24 @@ alembic -c backend/alembic.ini upgrade head
 
 ## 测试
 
+从仓库根目录运行与 CI 相同的完整门禁：
+
 ```bash
-cd backend
-python -m pytest -q
+backend/venv/bin/python scripts/run_journal_baseline_gate.py
+```
+
+只运行后端测试：
+
+```bash
+PYTHONPATH=backend backend/venv/bin/python -m pytest backend/tests -q
 ```
 
 常用聚焦测试示例：
 
 ```bash
-python -m pytest tests/test_alembic_chain.py -q
-python -m pytest tests/test_openapi_contracts.py -q
-python -m pytest tests/test_trading_position_lifecycle_router.py -q
+PYTHONPATH=backend backend/venv/bin/python -m pytest backend/tests/test_alembic_chain.py -q
+PYTHONPATH=backend backend/venv/bin/python -m pytest backend/tests/test_openapi_contracts.py -q
+PYTHONPATH=backend backend/venv/bin/python -m pytest backend/tests/test_trading_position_lifecycle_router.py -q
 ```
 
 ## 维护注意

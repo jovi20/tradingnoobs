@@ -4,6 +4,7 @@ import importlib.util
 import os
 import sqlite3
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -28,7 +29,6 @@ class MarketDataAlembicAdoptionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.repo_root = Path(__file__).resolve().parents[2]
-        cls.alembic_bin = cls.repo_root / "backend" / "venv" / "bin" / "alembic"
 
     def _new_database(self) -> Path:
         fd, raw_path = tempfile.mkstemp(suffix=".db")
@@ -43,7 +43,9 @@ class MarketDataAlembicAdoptionTests(unittest.TestCase):
         env["PYTHONPATH"] = str(self.repo_root / "backend")
         return subprocess.run(
             [
-                str(self.alembic_bin),
+                sys.executable,
+                "-m",
+                "alembic",
                 "-c",
                 "backend/alembic.ini",
                 *arguments,
