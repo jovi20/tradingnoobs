@@ -22,7 +22,7 @@
 - `JRN-010` 已完成。implementation checkpoint `5cdf55e` 已通过 514 个后端测试、162 个前端测试、完整本地统一 gate 与 GitHub Actions run `30159669100`、job `89682822970`、artifact `8619959551`；migration head 为 `f6a7b8c9d0e1`。
 - `JRN-011` 已完成。implementation checkpoint `c235e03` 已通过 531 个后端测试、164 个前端测试、真实 CSV 双视口浏览器验收、完整本地统一 gate 与 GitHub Actions run `30162055891`、job `89688870542`、artifact `8620551325`；migration head 为 `a7b8c9d0e1f2`，generic confirm 仍严格关闭。
 - `JRN-012` 已完成。implementation checkpoint `b7907b4` 已通过 539 个后端测试、165 个前端测试、真实三行 CSV 双视口 confirm 验收、完整本地统一 gate 与 GitHub Actions run `30164943748`、job `89696243794`、artifact `8621327988`；migration head 为 `b8c9d0e1f2a3`，generic bootstrap confirm 已按一次性账户资格合同开放。
-- `JRN-013` 最新实现 checkpoint 为 `7743919`：source schema、安全 parser、preview、上传编排、持久 conflict read、真实 fixture 脱敏工具和只读 evidence readiness CLI 已实现；官方 evidence 必须绑定留存 artifact/hash/locator/逐字引用。默认 manifest 仍为 `UNVERIFIED`，readiness gate 精确报告 10 个 blocker，route 在 staging 前返回 `404 FEATURE_DISABLED`，前端不展示入口，任务不能关闭。重复、重叠文件的 canonical 增量确认与 correction replay 仍分别属于 `JRN-014/015`。
+- `JRN-013` 最新实现 checkpoint 为 `4db098c`：source schema、安全 parser、preview、上传编排、持久 conflict read、真实 fixture 脱敏工具和只读 evidence readiness CLI 已实现。用户提供的一份真实 Flex XML 已确认普通成交使用 `Trade transactionType="ExchTrade"`、`BUY/SELL`、`O/C`、signed-by-side quantity、嵌套 `AccountInformation@dateOpened` 和逐 `OpenPosition@reportDate`；对应 parser/contract 修正已通过 157 项 JRN-013 测试和包含 698 项后端、165 项前端测试的完整本地统一 gate。该文件只能候选支持基础 execution、transaction/open-close、commission 和 flat boundary，不能证明 generation overlap、coverage 两端或 correction/cancel target；且含当前合同不支持的 CASH execution。默认 manifest 仍为 `UNVERIFIED`，route 继续在 staging 前返回 `404 FEATURE_DISABLED`，前端不展示入口，任务不能关闭。重复、重叠文件的 canonical 增量确认与 correction replay 仍分别属于 `JRN-014/015`。
 - 本轮不自动 merge 到 `main`、不创建 PR、不打 tag；这些属于后续显式操作。
 - 旧 P0-P19 阶段计划已归档到 [superpowers/plans/archive/](./superpowers/plans/archive/)。
 
@@ -44,7 +44,7 @@
 | P0 | `COMPLETE` | `JRN-011` 持久化通用 Import upload/preview session | `c235e03` 已交付 owner-bound 持久 session/row、永久上传幂等、CSV/XLSX 预览、TTL/清理、账户归档语义和响应式 UI，并由远端 run `30162055891` 闭环。 | Active plan M1 |
 | P0 | `COMPLETE` | `JRN-012` 通用 bootstrap Import confirm 与 canonical replay | `b7907b4` 已交付账户锁内 eligibility 复验、永久 confirm 幂等、稳定分组 lifecycle replay、单事务 canonical/ledger 写入、原子回滚和响应式选择确认 UI，并由远端 run `30164943748` 闭环。 | Active plan M1 |
 
-JRN-000 至 JRN-012 已完成。当前开发任务仍为 JRN-013：运行 `backend/scripts/verify_ibkr_flex_evidence.py --pretty` 可取得当前精确 blocker；下一步必须取得冻结 Flex Query 模板、官方逐语义合同和同模板脱敏真实 fixtures，补全 provider evidence，再跑完整 checkpoint/CI/独立评审；详见 [JRN-013 进度与设计评审](./superpowers/plans/2026-07-26-jrn-013-progress-review.md)。证据不足时不得开放 adapter 或进入 JRN-014。产品整体仍为 `NOT_READY_FOR_PRODUCTION`；不得提前做新页面、模型拆分、在线 Broker Sync、Market、AI 或量化功能。
+JRN-000 至 JRN-012 已完成。当前开发任务仍为 JRN-013：运行 `backend/scripts/verify_ibkr_flex_evidence.py --pretty` 可取得当前精确 blocker；下一步必须冻结 Flex Query 模板、取得同模板的跨 generation overlap 与 correction/cancel 样本、补齐 coverage 两端和官方逐语义合同，并决定用模板排除 CASH execution 还是另建 cash-event authority。补全 provider evidence 后再跑完整 checkpoint/CI/独立评审；详见 [JRN-013 进度与设计评审](./superpowers/plans/2026-07-26-jrn-013-progress-review.md)。证据不足时不得开放 adapter 或进入 JRN-014。产品整体仍为 `NOT_READY_FOR_PRODUCTION`；不得提前做新页面、模型拆分、在线 Broker Sync、Market、AI 或量化功能。
 
 ## 暂不做
 

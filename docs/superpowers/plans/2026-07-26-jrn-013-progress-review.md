@@ -15,10 +15,58 @@ active plan 中 `JRN-013` 至 `JRN-015` 的 IBKR Flex 文件导入设计。
 `UNVERIFIED`，因此稳定返回 `404 FEATURE_DISABLED` 且不创建临时文件或数据库
 记录。前端没有该入口，`IBKR_FLEX_XML_V1` 继续保持 fail-closed。
 
+用户已提供一份真实 IBKR Activity Flex XML。它显著减少了普通成交 wire shape
+的不确定性，但只是一份报表，不是完整 provider contract，也不满足 JRN-013 的
+全部 evidence exit gate。原文件和脱敏候选只保存在 Git 忽略的私有目录，不能
+提交；下文只记录结构和语义结论，不记录账户、身份、标的、成交号或金额。
+
 这不是“每月必须新建账户”的产品决定。目标语义仍是：同一 IBKR external
 account 绑定同一内部账户；后续可上传完全重复、区间重叠或纯增量的文件；系统按
 稳定 execution identity 只应用新增事实。该用户流程要到 JRN-014 canonical
 confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution。
+
+## 真实报表字段评估
+
+该文件包含一个 `FlexStatement`、95 条 execution 级 `Trade` 和 23 条
+`OpenPosition`。安全结构检查确认：
+
+- 普通成交使用 `Trade transactionType="ExchTrade"`；方向为 `BUY/SELL`，
+  开平为 `O/C`，没有此前 synthetic contract 假设的 `tradeStatus`。
+- 95 条成交都有非空且在文件内唯一的 `ibExecID` 和数值 `transactionID`。
+  12 条成交共享 timestamp，因此不能只按时间排序；数值 transaction ID 对同时间
+  顺序是必要字段。
+- quantity 是 provider signed representation：BUY 为正、SELL 为负。parser
+  必须按 side 校验符号后规范为正 magnitude，不能继续要求所有原始 quantity
+  为正。
+- 账户起始日期位于嵌套的 `AccountInformation@dateOpened`，不是
+  `FlexStatement` 属性；当前持仓日期位于每条
+  `OpenPosition@reportDate`，不是 `OpenPositions` container 属性。
+- 本文件的 OpenPositions 是报告期末非零当前仓位，只能作为期末快照，不能证明
+  fromDate 空仓；本文件可由 `fromDate <= dateOpened` 提供首次 flat-boundary
+  候选证据。
+- 79 条 STK/OPT execution 具有日志生命周期所需的 exchange、open/close、
+  commission 和 commission currency；其中非零 commission 的符号与交易币种
+  关系一致，足以形成脱敏真实候选证据。
+- 另有 16 条 `CASH` execution 缺少 listing exchange/open-close，且 commission
+  currency 与 trade currency 的含义不同。V1 不能静默忽略这些行，也不能将其
+  当作 STK/OPT trade；在另行冻结 authority 与映射前，含这类行的整份报表必须
+  fail-closed。
+
+据此，这一份报表可支持 `BASIC_EXECUTION_FIELDS`、
+`TRANSACTION_AND_OPEN_CLOSE`、`COMMISSION_SIGN_CURRENCY` 和
+`FLAT_BOUNDARY` 的真实 fixture 候选。它不能证明：
+
+- `GENERATION_ORDERING`：只有一次 report generation，没有跨 generation
+  overlap 或相同 marker tie 样本。
+- `COVERAGE_INCLUSIVITY_TIMEZONE`：没有恰好位于 fromDate 和 toDate 两端本地
+  日期的 execution。
+- `CORRECTION_CANCEL_TARGETS`：只有 `ExchTrade`，correction/cancel 相关字段
+  为空，不能确定 event kind、source identity 和 target identity 的真实关系。
+
+脱敏候选保留 95 条 Trade 和 23 条 OpenPosition，文件权限为 `0600`。二次检查
+确认输出属性均在草案 allowlist 内，不含 PII 属性名，不含原账户、标的、conid、
+execution/transaction ID 值；报告仍固定标记为
+`NOT_PROVIDER_VERIFICATION / human_review_required`。
 
 ## 已实现
 
@@ -59,6 +107,13 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
   `IBKR_COMMISSION_SIGN_UNSUPPORTED`，只有符合合同的费用才规范为正 magnitude。
   evidence fixture 必须提供 finite non-zero commission、正确 sign 和相同 currency，
   不能再用两个字段存在冒充 `COMMISSION_SIGN_CURRENCY`。
+- field contract 现已显式冻结 quantity 是正 magnitude 还是按 side 带符号；
+  parser 验证 wire sign 后统一输出正 magnitude。真实 Flex 单节点 85 个属性，
+  安全属性上限由 80 调整为 128，同时保持总节点、总属性、字段长度与文件大小门。
+- account inception 可从声明的嵌套 element 属性读取，并核对其 account 与
+  statement account 一致；OpenPositions snapshot date 可来自 container 或每条
+  position，逐 position 日期缺失或不一致均拒绝。report-end 非零仓位允许作为
+  观测，但不被误判为 opening flat boundary。
 - `FLAT_BOUNDARY` fixture gate 已对齐 parser：inception 仅在
   `fromDate <= accountInceptionDate` 时有效；否则必须恰好有一个 snapshotDate 等于
   fromDate 的 OpenPositions，子元素类型/账户必须一致且每个 quantity 都是 finite
@@ -124,16 +179,22 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
   manifest、模板 artifact、官方 artifact/hash/quote/exact wire token 和逐语义
   fixture 运行与 route 相同的机器 gate，输出稳定 JSON 和精确 blocker，不输出
   Query Template ID、不修改 manifest，也不能自行升级 `UNVERIFIED`。
-- `7743919` 的全部 `test_jrn013_*.py` 共 155 项通过；精确 SHA 完整统一 gate 在
-  PostgreSQL 16.14 上通过 696 个后端测试、165 个前端测试、OpenAPI、
-  release contract、typecheck、lint 和 production build。
+- `4db098c` 对齐真实 Flex wire shape；全部 `test_jrn013_*.py` 共 157 项通过。
+  当前 worktree 完整统一 gate 在 PostgreSQL 16.14 上通过 698 个后端测试、
+  165 个前端测试、OpenAPI、release contract、typecheck、lint 和 production
+  build。远端精确 SHA CI 尚待推送后验证。
 
 ## 尚未实现或未满足
 
 - 没有已冻结的真实 Flex Query 模板及其 hash。
-- 没有同时来自该模板的脱敏真实 statement pairs，无法证明跨 generation
-  overlap、flat boundary、correction/cancel target、commission 与 coverage
-  语义。
+- 已有一份真实 statement 和私有脱敏候选，但没有冻结 Query 模板配置/hash，也
+  没有来自同一模板的 statement pairs。该文件只能候选证明普通 STK/OPT execution、
+  transaction/open-close、commission 和 account inception flat boundary，不能
+  证明跨 generation overlap、correction/cancel target 或 coverage 端点语义。
+- 同一文件含 16 条 `CASH` execution，当前 STK/OPT lifecycle contract 无法完整
+  消费。产品策略必须选择并用 provider evidence 冻结：V1 明确只接受不含 CASH
+  execution 的专用 Query 模板，或新增独立的 cash-event authority/mapping；在此
+  之前不得过滤后继续导入其余行。
 - 已保留的官方 Trades Flex Reference 能证明基础字段的存在和含义；Flex Web
   Service 文档还能证明报告由 Client Portal 中预配置模板生成。但当前仍没有足以
   证明 `ibExecID` 唯一稳定性、generation 严格顺序/tie、数值 transaction order、
@@ -157,9 +218,9 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
 - JRN-014 的 source-bound canonical confirm、coverage acceptance/frontier
   推进与“只应用新增 execution”尚未实现。
 - JRN-015 的人工 correction/cancel-bust resolution 与 versioned replay 尚未实现。
-- `7743919` 已通过完整统一 gate 与真实 PostgreSQL migration gate；尚未取得
-  远端 CI、真实 provider evidence 和绑定该 SHA 的独立 review，因此仍只能视为
-  进度 checkpoint。
+- `4db098c` 已通过本地完整统一 gate 与真实 PostgreSQL migration gate；尚未
+  取得远端 CI、完整 provider evidence 和绑定最终 SHA 的独立 review，因此仍只能
+  视为进度 checkpoint。
 
 ## 设计必要性评估
 
@@ -189,28 +250,34 @@ confirm 完成后才成立，JRN-015 再处理 correction/cancel-bust resolution
 
 ## 后续开发计划
 
-1. 由真实 IBKR 账户在 Client Portal 冻结专用 Flex Query 模板，导出模板配置并
-   记录 hash；不要提交 Token、Query ID secret 或未脱敏账户信息。
-2. 从同一模板取得最小脱敏 fixture 集：基础成交、两个有重叠区间且 generation
-   不同的 statement、账户 inception 或完整空 OpenPositions、correction/cancel
-   样本、commission/currency 和无成交 coverage 样本。先用
+1. 在 Client Portal 保存专用 Activity Flex Query，记录非 secret 的字段/section
+   配置并计算 hash；模板应只输出 adapter 承诺支持的资产/事件。不要提交 Token、
+   Query ID、账户信息或原始报表。
+2. 用同一模板再导出至少一份与当前报表日期区间重叠、generation 更晚的 statement，
+   并取得包含 coverage 首尾本地日期成交的样本；如模板可排除 CASH execution，
+   同时验证排除规则真实生效。
+3. 从同一模板取得 correction 与 cancel/bust 真实样本，或从 IBKR 正式支持渠道
+   取得 raw XML event kind、source event ID 和 target execution ID 的书面确认。
+   不应为了造证据故意进行真实交易；可以使用历史上确有更正/撤单的报表或 paper
+   account 可验证样本。
+4. 将这些样本与当前普通成交样本组成最小脱敏 fixture 集。先用
    `backend/scripts/redact_ibkr_flex_evidence.py` 生成候选，再按开发者指南逐文件
    人工检查；工具报告不等于 provider verification。
-3. 为每项必需语义保留 IBKR 官方字段合同的 URL、取得日期、UTF-8 artifact、
+5. 为每项必需语义保留 IBKR 官方字段合同的 URL、取得日期、UTF-8 artifact、
    SHA-256、locator 与逐字引用，并把 parser 实际消费的 element/attribute 名和
    枚举值绑定为 exact `wire_tokens`；重点先冻结 correction/cancel 的真实元素/
    discriminator、source identity、target identity、`openCloseIndicator` 值和
    status 字段。公开材料无法证明的语义必须通过正式支持渠道确认，不能只用 fixture
    或第三方 parser 猜合同。
-4. 填充 evidence manifest，运行 artifact/hash/semantic gate、全部 JRN-013 测试、
+6. 填充 evidence manifest，运行 artifact/hash/semantic gate、全部 JRN-013 测试、
    真实 PostgreSQL migration gate和统一 gate；readiness gate 的标准命令为
    `backend/venv/bin/python backend/scripts/verify_ibkr_flex_evidence.py
    --pretty`。再取得同一 SHA 独立评审。
-5. 只有第 4 步通过才允许 evidence-first route 进入 owner-bound upload/preview，
+7. 只有第 6 步通过才允许 evidence-first route 进入 owner-bound upload/preview，
    并在前端开放入口、关闭 JRN-013。
-6. 按 JRN-014 实现同 binding 的重复、重叠、增量 canonical confirm；验证同一
+8. 按 JRN-014 实现同 binding 的重复、重叠、增量 canonical confirm；验证同一
    账户按月导入不会重复记账，也不需要新建内部账户。
-7. 按 JRN-015 实现 correction/cancel-bust resolution；完成前相关文件继续
+9. 按 JRN-015 实现 correction/cancel-bust resolution；完成前相关文件继续
    fail-closed，不做近似映射。
 
 ## 评审判定
