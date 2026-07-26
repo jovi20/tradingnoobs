@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -46,6 +48,7 @@ def provider_contract() -> VerifiedIbkrFlexProviderContract:
             "currency_field": "currency",
             "side_field": "buySell",
             "quantity_field": "quantity",
+            "quantity_sign_semantics": "POSITIVE_MAGNITUDE",
             "price_field": "tradePrice",
             "trade_time_field": "dateTime",
             "open_close_field": "openCloseIndicator",
@@ -76,9 +79,11 @@ def provider_contract() -> VerifiedIbkrFlexProviderContract:
             "change_identity_semantics": "DISTINCT_EVENT_AND_TARGET",
             "change_event_id_field": "sourceEventID",
             "affected_execution_id_field": "affectedIBExecID",
+            "account_inception_source": "STATEMENT_ATTRIBUTE",
             "account_inception_date_field": "accountInceptionDate",
             "open_positions_element": "OpenPositions",
             "open_position_element": "OpenPosition",
+            "open_positions_snapshot_date_source": "CONTAINER_ATTRIBUTE",
             "open_positions_snapshot_date_field": "snapshotDate",
             "open_position_quantity_field": "position",
         }
@@ -171,6 +176,152 @@ def test_parses_one_statement_and_stable_execution_identity(
     assert event.transaction_id == "101"
     assert str(event.normalized_fee) == "1.25"
     assert event.occurred_at_utc.isoformat() == "2026-07-25T14:00:00+00:00"
+
+
+def test_real_flex_wire_shape_normalizes_signed_quantity_and_nested_dates(
+    tmp_path,
+    provider_contract,
+):
+    payload = provider_contract.field_contract.model_dump()
+    payload.update(
+        {
+            "quantity_sign_semantics": "SIGNED_BY_SIDE",
+            "open_value": "O",
+            "close_value": "C",
+            "execution_status_source": "EVENT_KIND",
+            "execution_status_field": None,
+            "event_kind_source": "ATTRIBUTE_VALUE",
+            "event_kind_field": "transactionType",
+            "ordinary_trade_kind_value": "ExchTrade",
+            "correction_kind_value": "TradeCorrect",
+            "cancel_bust_kind_value": "TradeCancel",
+            "correction_element": None,
+            "cancel_bust_element": None,
+            "account_inception_source": "ELEMENT_ATTRIBUTE",
+            "account_inception_element": "AccountInformation",
+            "account_inception_date_field": "dateOpened",
+            "open_positions_snapshot_date_source": "POSITION_ATTRIBUTE",
+            "open_positions_snapshot_date_field": "reportDate",
+        }
+    )
+    real_shape_contract = VerifiedIbkrFlexProviderContract(
+        query_template_id="REDACTED_REAL_SHAPE_TEST",
+        query_template_sha256=f"sha256:{'b' * 64}",
+        field_contract=IbkrFlexFieldContract.model_validate(payload),
+        official_sources=(),
+        fixtures=(),
+    )
+    filler_attributes = " ".join(
+        f'extra{index}=""' for index in range(70)
+    )
+    real_shape = f"""\
+<FlexQueryResponse>
+  <FlexStatements count="1">
+    <FlexStatement accountId="U1234567" fromDate="20260701"
+      toDate="20260731" whenGenerated="20260801;010000">
+      <AccountInformation accountId="U1234567" dateOpened="20260701"
+        name="PRIVATE" primaryEmail="PRIVATE@example.com" />
+      <Trades>
+        <Trade accountId="U1234567" ibExecID="EXEC-BUY"
+          transactionID="100" assetCategory="STK" conid="1"
+          symbol="AAA" listingExchange="NYSE" currency="USD"
+          buySell="BUY" quantity="2" tradePrice="10"
+          dateTime="20260701;093000" openCloseIndicator="O"
+          transactionType="ExchTrade" ibCommission="-1"
+          ibCommissionCurrency="USD" {filler_attributes} />
+        <Trade accountId="U1234567" ibExecID="EXEC-SELL"
+          transactionID="101" assetCategory="STK" conid="1"
+          symbol="AAA" listingExchange="NYSE" currency="USD"
+          buySell="SELL" quantity="-2" tradePrice="11"
+          dateTime="20260731;160000" openCloseIndicator="C"
+          transactionType="ExchTrade" ibCommission="-1"
+          ibCommissionCurrency="USD" />
+      </Trades>
+      <OpenPositions>
+        <OpenPosition accountId="U1234567" reportDate="20260731"
+          position="3" />
+      </OpenPositions>
+    </FlexStatement>
+  </FlexStatements>
+</FlexQueryResponse>
+"""
+
+    parsed = parse_ibkr_flex_xml(
+        write_xml(tmp_path, real_shape, "real-shape.xml"),
+        source_timezone="America/New_York",
+        provider_contract=real_shape_contract,
+    )
+
+    assert [event.quantity for event in parsed.events] == [
+        Decimal("2"),
+        Decimal("2"),
+    ]
+    assert [event.raw_side for event in parsed.events] == ["BUY", "SELL"]
+    assert [event.raw_open_close for event in parsed.events] == [
+        "OPEN",
+        "CLOSE",
+    ]
+    assert parsed.account_inception_date == date(2026, 7, 1)
+    assert parsed.open_positions_snapshot_date == date(2026, 7, 31)
+    assert parsed.open_positions_nonzero_count == 1
+    assert parsed.flat_boundary_evidence == "ACCOUNT_INCEPTION"
+
+    wrong_sign = real_shape.replace(
+        'buySell="SELL" quantity="-2"',
+        'buySell="SELL" quantity="2"',
+    )
+    with pytest.raises(
+        IbkrFlexParseError,
+        match="quantity sign",
+    ) as sign_failure:
+        parse_ibkr_flex_xml(
+            write_xml(tmp_path, wrong_sign, "wrong-sign.xml"),
+            source_timezone="America/New_York",
+            provider_contract=real_shape_contract,
+        )
+    assert sign_failure.value.code == "IBKR_QUANTITY_SIGN_UNSUPPORTED"
+
+    mismatched_account = real_shape.replace(
+        '<AccountInformation accountId="U1234567"',
+        '<AccountInformation accountId="U7654321"',
+    )
+    with pytest.raises(IbkrFlexParseError) as account_failure:
+        parse_ibkr_flex_xml(
+            write_xml(
+                tmp_path,
+                mismatched_account,
+                "mismatched-inception-account.xml",
+            ),
+            source_timezone="America/New_York",
+            provider_contract=real_shape_contract,
+        )
+    assert account_failure.value.code == "IBKR_MULTIPLE_ACCOUNTS"
+
+    inconsistent_snapshot_dates = real_shape.replace(
+        """        <OpenPosition accountId="U1234567" reportDate="20260731"
+          position="3" />""",
+        """        <OpenPosition accountId="U1234567" reportDate="20260731"
+          position="3" />
+        <OpenPosition accountId="U1234567" reportDate="20260730"
+          position="1" />""",
+    )
+    with pytest.raises(
+        IbkrFlexParseError,
+        match="inconsistent snapshot dates",
+    ) as snapshot_failure:
+        parse_ibkr_flex_xml(
+            write_xml(
+                tmp_path,
+                inconsistent_snapshot_dates,
+                "inconsistent-snapshot-dates.xml",
+            ),
+            source_timezone="America/New_York",
+            provider_contract=real_shape_contract,
+        )
+    assert (
+        snapshot_failure.value.code
+        == "IBKR_OPEN_POSITIONS_SNAPSHOT_INVALID"
+    )
 
 
 def test_attribute_event_discriminator_and_wire_enums_are_contract_driven(

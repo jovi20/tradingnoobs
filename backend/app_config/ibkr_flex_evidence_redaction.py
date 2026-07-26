@@ -157,6 +157,8 @@ def _configured_element_names(
         names.add(contract.correction_element)
     if contract.cancel_bust_element:
         names.add(contract.cancel_bust_element)
+    if contract.account_inception_element:
+        names.add(contract.account_inception_element)
     return names
 
 

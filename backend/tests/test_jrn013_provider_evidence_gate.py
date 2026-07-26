@@ -35,6 +35,7 @@ def field_contract() -> dict:
         "currency_field": "currency",
         "side_field": "buySell",
         "quantity_field": "quantity",
+        "quantity_sign_semantics": "POSITIVE_MAGNITUDE",
         "price_field": "tradePrice",
         "trade_time_field": "dateTime",
         "open_close_field": "openCloseIndicator",
@@ -63,9 +64,11 @@ def field_contract() -> dict:
         "change_identity_semantics": "DISTINCT_EVENT_AND_TARGET",
         "change_event_id_field": "sourceEventID",
         "affected_execution_id_field": "affectedIBExecID",
+        "account_inception_source": "STATEMENT_ATTRIBUTE",
         "account_inception_date_field": "accountInceptionDate",
         "open_positions_element": "OpenPositions",
         "open_position_element": "OpenPosition",
+        "open_positions_snapshot_date_source": "CONTAINER_ATTRIBUTE",
         "open_positions_snapshot_date_field": "snapshotDate",
         "open_position_quantity_field": "position",
     }
@@ -285,6 +288,20 @@ def test_optional_status_and_same_id_target_remove_unconsumed_wire_tokens():
     assert "tradeStatus" not in tokens
     assert "affectedIBExecID" not in tokens
     assert "sourceEventID" in tokens
+
+
+def test_account_inception_source_contract_is_unambiguous():
+    payload = field_contract()
+    payload["account_inception_source"] = "ELEMENT_ATTRIBUTE"
+
+    with pytest.raises(ValueError, match="requires an element name"):
+        IbkrFlexFieldContract.model_validate(payload)
+
+    payload = field_contract()
+    payload["account_inception_element"] = "AccountInformation"
+
+    with pytest.raises(ValueError, match="cannot declare an element"):
+        IbkrFlexFieldContract.model_validate(payload)
 
 
 def test_complete_official_and_real_fixture_evidence_can_verify(tmp_path):

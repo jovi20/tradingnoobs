@@ -29,7 +29,7 @@ MAX_EXECUTIONS = (
     JOURNAL_BETA_CONTRACT.imports.common_limits.max_rows_or_executions
 )
 MAX_XML_NODES = 20_000
-MAX_ATTRIBUTES_PER_NODE = 80
+MAX_ATTRIBUTES_PER_NODE = 128
 MAX_XML_DEPTH = 16
 MAX_FIELD_LENGTH = 2_048
 MAX_EXTERNAL_ACCOUNT_ID_LENGTH = 255
@@ -217,6 +217,40 @@ def _parse_finite_decimal(value: str, *, field_name: str) -> Decimal:
             f"IBKR field must be finite: {field_name}",
         )
     return parsed
+
+
+def _parse_quantity(
+    value: str,
+    *,
+    field_name: str,
+    side: Literal["BUY", "SELL"],
+    sign_semantics: Literal[
+        "POSITIVE_MAGNITUDE",
+        "SIGNED_BY_SIDE",
+    ],
+) -> Decimal:
+    parsed = _parse_finite_decimal(value, field_name=field_name)
+    if parsed == 0:
+        raise IbkrFlexParseError(
+            "IBKR_INVALID_DECIMAL",
+            f"IBKR field must be non-zero: {field_name}",
+        )
+    if sign_semantics == "POSITIVE_MAGNITUDE":
+        if parsed < 0:
+            raise IbkrFlexParseError(
+                "IBKR_QUANTITY_SIGN_UNSUPPORTED",
+                "IBKR quantity sign does not match the frozen provider "
+                "contract",
+            )
+    elif (
+        (side == "BUY" and parsed < 0)
+        or (side == "SELL" and parsed > 0)
+    ):
+        raise IbkrFlexParseError(
+            "IBKR_QUANTITY_SIGN_UNSUPPORTED",
+            "IBKR quantity sign does not match the frozen provider contract",
+        )
+    return abs(parsed)
 
 
 def _parse_local_time(
@@ -433,10 +467,44 @@ def parse_ibkr_flex_xml(
             "IBKR_STATEMENT_COVERAGE_INVALID",
             "IBKR statement coverage must be a non-empty interval",
         )
-    raw_inception_date = _optional_attribute(
-        statement,
-        fields.account_inception_date_field,
-    )
+    if fields.account_inception_source == "STATEMENT_ATTRIBUTE":
+        raw_inception_date = _optional_attribute(
+            statement,
+            fields.account_inception_date_field,
+        )
+    else:
+        assert fields.account_inception_element is not None
+        inception_elements = [
+            item
+            for item in statement.iter()
+            if _local_name(item) == fields.account_inception_element
+        ]
+        if len(inception_elements) > 1:
+            raise IbkrFlexParseError(
+                "IBKR_ACCOUNT_INCEPTION_INVALID",
+                "IBKR statement contains multiple account inception records",
+            )
+        if inception_elements:
+            inception_account = _optional_attribute(
+                inception_elements[0],
+                fields.account_field,
+            )
+            if (
+                inception_account is not None
+                and inception_account.upper() != account_ref
+            ):
+                raise IbkrFlexParseError(
+                    "IBKR_MULTIPLE_ACCOUNTS",
+                    "IBKR XML must contain exactly one external account",
+                )
+        raw_inception_date = (
+            _optional_attribute(
+                inception_elements[0],
+                fields.account_inception_date_field,
+            )
+            if inception_elements
+            else None
+        )
     account_inception_date = (
         _parse_statement_date(
             raw_inception_date,
@@ -461,22 +529,8 @@ def parse_ibkr_flex_xml(
     open_positions_nonzero_count: int | None = None
     if open_positions_containers:
         container = open_positions_containers[0]
-        raw_snapshot_date = _required_attribute(
-            container,
-            fields.open_positions_snapshot_date_field,
-            code="IBKR_OPEN_POSITIONS_SNAPSHOT_INVALID",
-        )
-        open_positions_snapshot_date = _parse_statement_date(
-            raw_snapshot_date,
-            format_string=fields.statement_date_format,
-            field_name=fields.open_positions_snapshot_date_field,
-        )
-        if open_positions_snapshot_date != coverage_start:
-            raise IbkrFlexParseError(
-                "IBKR_OPEN_POSITIONS_SNAPSHOT_INVALID",
-                "IBKR OpenPositions snapshot must be at statement fromDate",
-            )
         open_positions_nonzero_count = 0
+        position_snapshot_dates: set[date] = set()
         for position in container:
             if not isinstance(position.tag, str):
                 continue
@@ -507,6 +561,52 @@ def parse_ibkr_flex_xml(
             )
             if position_quantity != 0:
                 open_positions_nonzero_count += 1
+            if (
+                fields.open_positions_snapshot_date_source
+                == "POSITION_ATTRIBUTE"
+            ):
+                position_snapshot_dates.add(
+                    _parse_statement_date(
+                        _required_attribute(
+                            position,
+                            fields.open_positions_snapshot_date_field,
+                            code=(
+                                "IBKR_OPEN_POSITIONS_SNAPSHOT_INVALID"
+                            ),
+                        ),
+                        format_string=fields.statement_date_format,
+                        field_name=(
+                            fields.open_positions_snapshot_date_field
+                        ),
+                    )
+                )
+        if (
+            fields.open_positions_snapshot_date_source
+            == "CONTAINER_ATTRIBUTE"
+        ):
+            open_positions_snapshot_date = _parse_statement_date(
+                _required_attribute(
+                    container,
+                    fields.open_positions_snapshot_date_field,
+                    code="IBKR_OPEN_POSITIONS_SNAPSHOT_INVALID",
+                ),
+                format_string=fields.statement_date_format,
+                field_name=fields.open_positions_snapshot_date_field,
+            )
+            if open_positions_snapshot_date != coverage_start:
+                raise IbkrFlexParseError(
+                    "IBKR_OPEN_POSITIONS_SNAPSHOT_INVALID",
+                    "IBKR opening snapshot must be at statement fromDate",
+                )
+        elif len(position_snapshot_dates) > 1:
+            raise IbkrFlexParseError(
+                "IBKR_OPEN_POSITIONS_SNAPSHOT_INVALID",
+                "IBKR OpenPosition rows use inconsistent snapshot dates",
+            )
+        elif position_snapshot_dates:
+            open_positions_snapshot_date = next(
+                iter(position_snapshot_dates)
+            )
 
     if (
         account_inception_date is not None
@@ -670,9 +770,11 @@ def parse_ibkr_flex_xml(
                 "Unsupported IBKR open/close indicator: "
                 f"{provider_open_close}",
             )
-        quantity = _parse_positive_decimal(
+        quantity = _parse_quantity(
             _required_attribute(element, fields.quantity_field),
             field_name=fields.quantity_field,
+            side=side,
+            sign_semantics=fields.quantity_sign_semantics,
         )
         price = _parse_positive_decimal(
             _required_attribute(element, fields.price_field),

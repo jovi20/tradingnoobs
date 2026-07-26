@@ -61,6 +61,10 @@ class IbkrFlexFieldContract(_EvidenceModel):
     currency_field: str
     side_field: str
     quantity_field: str
+    quantity_sign_semantics: Literal[
+        "POSITIVE_MAGNITUDE",
+        "SIGNED_BY_SIDE",
+    ]
     price_field: str
     trade_time_field: str
     open_close_field: str
@@ -100,9 +104,18 @@ class IbkrFlexFieldContract(_EvidenceModel):
     ]
     change_event_id_field: str
     affected_execution_id_field: str | None
+    account_inception_source: Literal[
+        "STATEMENT_ATTRIBUTE",
+        "ELEMENT_ATTRIBUTE",
+    ]
+    account_inception_element: str | None = None
     account_inception_date_field: str
     open_positions_element: str
     open_position_element: str
+    open_positions_snapshot_date_source: Literal[
+        "CONTAINER_ATTRIBUTE",
+        "POSITION_ATTRIBUTE",
+    ]
     open_positions_snapshot_date_field: str
     open_position_quantity_field: str
 
@@ -189,6 +202,15 @@ class IbkrFlexFieldContract(_EvidenceModel):
         elif self.affected_execution_id_field is not None:
             raise ValueError(
                 "Same-ID change identity cannot declare a target field"
+            )
+        if self.account_inception_source == "ELEMENT_ATTRIBUTE":
+            if not self.account_inception_element:
+                raise ValueError(
+                    "Element account inception requires an element name"
+                )
+        elif self.account_inception_element is not None:
+            raise ValueError(
+                "Statement account inception cannot declare an element"
             )
         return self
 
@@ -340,6 +362,85 @@ def _proves_commission_semantics(
     return sign_matches and commission_currency == trade_currency
 
 
+def _proves_quantity_semantics(
+    trade: etree._Element,
+    contract: IbkrFlexFieldContract,
+) -> bool:
+    raw_quantity = (
+        trade.attrib.get(contract.quantity_field) or ""
+    ).strip()
+    provider_side = (
+        trade.attrib.get(contract.side_field) or ""
+    ).strip()
+    try:
+        quantity = Decimal(raw_quantity)
+    except InvalidOperation:
+        return False
+    if not quantity.is_finite() or quantity == 0:
+        return False
+    if contract.quantity_sign_semantics == "POSITIVE_MAGNITUDE":
+        return quantity > 0
+    return (
+        provider_side == contract.side_buy_value
+        and quantity > 0
+    ) or (
+        provider_side == contract.side_sell_value
+        and quantity < 0
+    )
+
+
+def _account_inception_raw_value(
+    statement: etree._Element,
+    contract: IbkrFlexFieldContract,
+) -> str:
+    if contract.account_inception_source == "STATEMENT_ATTRIBUTE":
+        return (
+            statement.attrib.get(contract.account_inception_date_field) or ""
+        ).strip()
+    assert contract.account_inception_element is not None
+    elements = _elements(statement, contract.account_inception_element)
+    if len(elements) != 1:
+        return ""
+    account_value = (
+        elements[0].attrib.get(contract.account_field) or ""
+    ).strip()
+    statement_account = (
+        statement.attrib.get(contract.account_field) or ""
+    ).strip()
+    if account_value and account_value != statement_account:
+        return ""
+    return (
+        elements[0].attrib.get(contract.account_inception_date_field) or ""
+    ).strip()
+
+
+def _snapshot_raw_date(
+    snapshot: etree._Element,
+    contract: IbkrFlexFieldContract,
+) -> str:
+    if (
+        contract.open_positions_snapshot_date_source
+        == "CONTAINER_ATTRIBUTE"
+    ):
+        return (
+            snapshot.attrib.get(
+                contract.open_positions_snapshot_date_field
+            )
+            or ""
+        ).strip()
+    raw_dates = {
+        (position.attrib.get(
+            contract.open_positions_snapshot_date_field
+        ) or "").strip()
+        for position in snapshot
+        if isinstance(position.tag, str)
+        and _local_name(position) == contract.open_position_element
+    }
+    if len(raw_dates) != 1:
+        return ""
+    return next(iter(raw_dates))
+
+
 def _proves_flat_boundary(
     statement: etree._Element,
     root: etree._Element,
@@ -348,9 +449,7 @@ def _proves_flat_boundary(
 ) -> bool:
     if coverage_start is None:
         return False
-    raw_inception = (
-        statement.attrib.get(contract.account_inception_date_field) or ""
-    ).strip()
+    raw_inception = _account_inception_raw_value(statement, contract)
     if raw_inception:
         try:
             inception = datetime.strptime(
@@ -369,12 +468,10 @@ def _proves_flat_boundary(
     snapshot = snapshots[0]
     try:
         snapshot_date = datetime.strptime(
-            snapshot.attrib[
-                contract.open_positions_snapshot_date_field
-            ],
+            _snapshot_raw_date(snapshot, contract),
             contract.statement_date_format,
         ).date()
-    except (KeyError, ValueError):
+    except ValueError:
         return False
     if snapshot_date != coverage_start:
         return False
@@ -538,6 +635,7 @@ def _validate_fixture_semantics(
             in {contract.side_buy_value, contract.side_sell_value}
             and trade.attrib[contract.open_close_field]
             in {contract.open_value, contract.close_value}
+            and _proves_quantity_semantics(trade, contract)
             for trade in trades
         ):
             reasons.append(
@@ -819,6 +917,8 @@ def required_provider_wire_tokens(
             ),
         )
     )
+    if contract.account_inception_element is not None:
+        tokens.add(contract.account_inception_element)
     if contract.execution_status_source == "ATTRIBUTE_VALUE":
         assert contract.execution_status_field is not None
         tokens.add(contract.execution_status_field)
