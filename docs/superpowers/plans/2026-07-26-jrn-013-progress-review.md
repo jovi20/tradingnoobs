@@ -182,7 +182,8 @@ execution/transaction ID 值；报告仍固定标记为
 - `4db098c` 对齐真实 Flex wire shape；全部 `test_jrn013_*.py` 共 157 项通过。
   当前 worktree 完整统一 gate 在 PostgreSQL 16.14 上通过 698 个后端测试、
   165 个前端测试、OpenAPI、release contract、typecheck、lint 和 production
-  build。远端精确 SHA CI 尚待推送后验证。
+  build。包含实现与本评审的 `5f7f02f` 已由 GitHub Actions run
+  `30188490363`、job `89757262465` 通过相同 Journal Baseline。
 
 ## 尚未实现或未满足
 
@@ -218,9 +219,9 @@ execution/transaction ID 值；报告仍固定标记为
 - JRN-014 的 source-bound canonical confirm、coverage acceptance/frontier
   推进与“只应用新增 execution”尚未实现。
 - JRN-015 的人工 correction/cancel-bust resolution 与 versioned replay 尚未实现。
-- `4db098c` 已通过本地完整统一 gate 与真实 PostgreSQL migration gate；尚未
-  取得远端 CI、完整 provider evidence 和绑定最终 SHA 的独立 review，因此仍只能
-  视为进度 checkpoint。
+- `4db098c` 已通过本地完整统一 gate 与真实 PostgreSQL migration gate，并由
+  `5f7f02f` 的远端 CI 覆盖；尚未取得完整 provider evidence 和绑定最终 SHA 的
+  独立 review，因此仍只能视为进度 checkpoint。
 
 ## 设计必要性评估
 
