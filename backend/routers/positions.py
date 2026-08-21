@@ -2,32 +2,32 @@
 Trading Noobs Backend - Positions Router
 Handles Position CRUD and Batch operations
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
-from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc
 from typing import List, Optional
 from decimal import Decimal
 import csv
 import io
-from datetime import datetime
+import asyncio
+from datetime import datetime, timedelta, timezone
 
 from database import get_db
-from routers.auth import get_current_user
+from services.auth_service import get_current_user
 from models import (
     User, Position, TradeBatch, TradingAccount, AssetMetadata,
-    PositionStatus, PositionDirection, BatchType
+    PositionStatus, PositionDirection, BatchType,
+    AssetCoreType, AssetMarket, AssetRiskLevel
 )
 from schemas import (
     PositionCreate, PositionUpdate, PositionResponse, PositionListResponse,
     TradeBatchCreate, TradeBatchUpdate, TradeBatchResponse,
-    PositionStatusEnum, BatchTypeEnum, AssetMetadataUpdate,
-    ImportPreviewResponse, ImportConfirmRequest
+    PositionStatusEnum, BatchTypeEnum, ImportPreviewResponse, ImportConfirmRequest
 )
-from models import AssetCoreType, AssetMarket, AssetRiskLevel, AssetCurrency
 from services.market_data_service import MarketDataService
-import asyncio
+from services.import_service import ImportService
 
 router = APIRouter(prefix="/api/positions", tags=["positions"])
 
@@ -85,7 +85,6 @@ def recalculate_position(position: Position, db: Session):
     # Auto-close if quantity is <= 0
     if position.total_quantity <= 0:
         position.status = PositionStatus.CLOSED
-        from datetime import datetime, timezone
         position.closed_at = datetime.now(timezone.utc)
     else:
         position.status = PositionStatus.OPEN
@@ -150,6 +149,44 @@ def calculate_drift(position: Position) -> dict:
     return drift
 
 
+def serialize_position(position: Position) -> dict:
+    """Full position payload (incl. batches, metadata and drift analysis)."""
+    return {
+        "id": position.id,
+        "user_id": position.user_id,
+        "account_id": position.account_id,
+        "strategy_id": position.strategy_id,
+        "symbol": position.symbol,
+        "exchange": position.exchange,
+        "asset_type": position.asset_type,
+        "direction": position.direction.value,
+        "status": position.status.value,
+        "total_quantity": position.total_quantity,
+        "average_entry_price": position.average_entry_price,
+        "realized_pnl": position.realized_pnl,
+        "current_price": getattr(position, 'current_price', None),
+        "unrealized_pnl": getattr(position, 'unrealized_pnl', None),
+        "opened_at": position.opened_at,
+        "closed_at": position.closed_at,
+        "trade_review": position.trade_review,
+        "screenshots": position.screenshots or [],
+        "lessons": position.lessons or [],
+        "rating": position.rating,
+        "created_at": position.created_at,
+        "updated_at": position.updated_at,
+        "asset_metadata": position.asset_metadata,
+        "batches": position.batches,
+        "planned_entry_price": position.planned_entry_price,
+        "planned_stop_loss": position.planned_stop_loss,
+        "planned_take_profit": position.planned_take_profit,
+        "checklist_responses": position.checklist_responses,
+        "checklist_completed_at": position.checklist_completed_at,
+        "drift_analysis": calculate_drift(position),
+        "max_price_during_hold": position.max_price_during_hold,
+        "min_price_during_hold": position.min_price_during_hold,
+    }
+
+
 @router.get("")
 async def list_positions(
     status: Optional[PositionStatusEnum] = None,
@@ -163,7 +200,6 @@ async def list_positions(
     db: Session = Depends(get_db)
 ):
     """List all positions for the current user"""
-    from sqlalchemy.orm import joinedload
     query = db.query(Position).outerjoin(AssetMetadata).options(
         joinedload(Position.batches),
         joinedload(Position.asset_metadata)
@@ -194,7 +230,6 @@ async def list_positions(
     # Batch fetch quotes for open positions (PARALLEL FETCH)
     open_positions = [p for p in positions if p.status == PositionStatus.OPEN]
     quote_results = {}
-    quote_results = {}
     if open_positions:
         # Use metadata hints for more accurate quote
         quote_tasks = []
@@ -218,7 +253,6 @@ async def list_positions(
     result = []
     for pos in positions:
         pos_dict = {
-
             'id': pos.id,
             'account_id': pos.account_id,
             'symbol': pos.symbol,
@@ -231,8 +265,6 @@ async def list_positions(
             'realized_pnl': pos.realized_pnl,
             'opened_at': pos.opened_at,
             'closed_at': pos.closed_at,
-            'created_at': pos.created_at,
-            'current_price': None,
             'created_at': pos.created_at,
             'current_price': None,
             'unrealized_pnl': None,
@@ -249,7 +281,6 @@ async def list_positions(
                 'market': meta.market,
                 'currency': meta.currency,
                 'sector': meta.sector,
-                'risk_level': meta.risk_level,
                 'risk_level': meta.risk_level,
                 'instrument': meta.instrument
             }
@@ -297,10 +328,7 @@ async def list_positions(
                         pos_dict['current_price'] = weighted_exit_price
         
         result.append(pos_dict)
-        
 
-        
-        
     return JSONResponse(content=jsonable_encoder(result))
 
 
@@ -311,7 +339,6 @@ async def get_position(
     db: Session = Depends(get_db)
 ):
     """Get a single position with all batches"""
-    from sqlalchemy.orm import joinedload
     position = db.query(Position).options(
         joinedload(Position.batches),
         joinedload(Position.asset_metadata)
@@ -352,48 +379,7 @@ async def get_position(
             # Continue without real-time price
             pass
     
-    # Phase 1: Calculate drift analysis
-    drift_analysis = calculate_drift(position)
-    
-    # Convert to response dict manually to include drift_analysis
-    response = {
-        "id": position.id,
-        "user_id": position.user_id,
-        "account_id": position.account_id,
-        "strategy_id": position.strategy_id,
-        "symbol": position.symbol,
-        "exchange": position.exchange,
-        "asset_type": position.asset_type,
-        "direction": position.direction.value,
-        "status": position.status.value,
-        "total_quantity": position.total_quantity,
-        "average_entry_price": position.average_entry_price,
-        "realized_pnl": position.realized_pnl,
-        "current_price": getattr(position, 'current_price', None),
-        "unrealized_pnl": getattr(position, 'unrealized_pnl', None),
-        "opened_at": position.opened_at,
-        "closed_at": position.closed_at,
-        "trade_review": position.trade_review,
-        "screenshots": position.screenshots or [],
-        "lessons": position.lessons or [],
-        "rating": position.rating,
-        "created_at": position.created_at,
-        "updated_at": position.updated_at,
-        "asset_metadata": position.asset_metadata,
-        "batches": position.batches,
-        # Phase 1 fields
-        "planned_entry_price": position.planned_entry_price,
-        "planned_stop_loss": position.planned_stop_loss,
-        "planned_take_profit": position.planned_take_profit,
-        "checklist_responses": position.checklist_responses,
-        "checklist_responses": position.checklist_responses,
-        "checklist_completed_at": position.checklist_completed_at,
-        "drift_analysis": drift_analysis,
-        "max_price_during_hold": position.max_price_during_hold,
-        "min_price_during_hold": position.min_price_during_hold
-    }
-    
-    return JSONResponse(content=jsonable_encoder(response))
+    return JSONResponse(content=jsonable_encoder(serialize_position(position)))
 
 
 @router.post("", response_model=PositionResponse, status_code=status.HTTP_201_CREATED)
@@ -709,9 +695,6 @@ async def check_open_position(
     return position
 
 
-    return position
-
-
 @router.post("/{position_id}/analyze", response_model=PositionResponse)
 async def analyze_position(
     position_id: int,
@@ -762,48 +745,44 @@ async def analyze_position(
     else:
         print(f"No history found for {position.symbol}")
         
-    # Construct Response (Similar to get_position)
-    drift_analysis = calculate_drift(position)
-    
-    response = {
-        "id": position.id,
-        "user_id": position.user_id,
-        "account_id": position.account_id,
-        "strategy_id": position.strategy_id,
-        "symbol": position.symbol,
-        "exchange": position.exchange,
-        "asset_type": position.asset_type,
-        "direction": position.direction.value,
-        "status": position.status.value,
-        "total_quantity": position.total_quantity,
-        "average_entry_price": position.average_entry_price,
-        "realized_pnl": position.realized_pnl,
-        "current_price": getattr(position, 'current_price', None),
-        "unrealized_pnl": getattr(position, 'unrealized_pnl', None),
-        "opened_at": position.opened_at,
-        "closed_at": position.closed_at,
-        "trade_review": position.trade_review,
-        "screenshots": position.screenshots or [],
-        "lessons": position.lessons or [],
-        "rating": position.rating,
-        "created_at": position.created_at,
-        "updated_at": position.updated_at,
-        "asset_metadata": position.asset_metadata,
-        "batches": position.batches,
-        "planned_entry_price": position.planned_entry_price,
-        "planned_stop_loss": position.planned_stop_loss,
-        "planned_take_profit": position.planned_take_profit,
-        "checklist_responses": position.checklist_responses,
-        "checklist_completed_at": position.checklist_completed_at,
-        "drift_analysis": drift_analysis,
-        "max_price_during_hold": position.max_price_during_hold,
-        "min_price_during_hold": position.min_price_during_hold
-    }
-    
-    return JSONResponse(content=jsonable_encoder(response))
+    return JSONResponse(content=jsonable_encoder(serialize_position(position)))
 
 
 # ============== Export Endpoints ==============
+
+def _csv_enum(val) -> str:
+    """CSV cell for an enum-ish value."""
+    if val is None:
+        return ''
+    return val.value if hasattr(val, 'value') else str(val)
+
+
+def _csv_attr(obj, attr: str, default: str = '') -> str:
+    """CSV cell for an attribute on a possibly-missing related object."""
+    if obj is None:
+        return default
+    return getattr(obj, attr, default)
+
+
+def _csv_float(val) -> float:
+    """CSV cell for a numeric value, falling back to 0."""
+    try:
+        if val is not None:
+            return float(val)
+    except (TypeError, ValueError):
+        pass
+    return 0
+
+
+def _csv_date(val) -> str:
+    """CSV cell for a datetime, falling back to an empty cell."""
+    try:
+        if val:
+            return val.isoformat()
+    except AttributeError:
+        pass
+    return ''
+
 
 @router.get("/export/csv")
 async def export_positions_csv(
@@ -812,7 +791,6 @@ async def export_positions_csv(
 ):
     """Export all positions and batches to CSV with comprehensive metadata"""
     # Query with all relationships
-    from sqlalchemy.orm import joinedload
     positions = db.query(Position).options(
         joinedload(Position.batches),
         joinedload(Position.asset_metadata),
@@ -839,117 +817,66 @@ async def export_positions_csv(
     
     # Data rows
     for pos in positions:
-        # Prepare position-level fields
         lessons_str = ', '.join(pos.lessons) if pos.lessons else ''
-        
-        # Helper for safe attribute access
-        def get_enum_value(val):
-            if val is None:
-                return ''
-            if hasattr(val, 'value'):
-                return val.value
-            return str(val)
-
-        def get_attr(obj, attr, default=''):
-            if obj is None:
-                return default
-            return getattr(obj, attr, default)
-
-        # Helper for basic formatting
-        def fmt_float(val):
-            try:
-                if val is not None:
-                    return float(val)
-            except:
-                pass
-            return 0
-            
-        def fmt_date(val):
-            try:
-                if val:
-                    return val.isoformat()
-            except:
-                pass
-            return ''
 
         try:
             # Asset Metadata fields - Use safe access
             meta = pos.asset_metadata
-            asset_name = get_attr(meta, 'name')
-            asset_core_type = get_enum_value(get_attr(meta, 'core_type', None))
-            asset_market = get_enum_value(get_attr(meta, 'market', None))
-            asset_sector = get_attr(meta, 'sector')
+            asset_name = _csv_attr(meta, 'name')
+            asset_core_type = _csv_enum(_csv_attr(meta, 'core_type', None))
+            asset_market = _csv_enum(_csv_attr(meta, 'market', None))
+            asset_sector = _csv_attr(meta, 'sector')
             
             # Account fields
             account = pos.trading_account
-            account_name = get_attr(account, 'name')
-            account_type = get_attr(account, 'account_type')
+            account_name = _csv_attr(account, 'name')
+            account_type = _csv_attr(account, 'account_type')
             
             # Position Enum fields
-            direction = get_enum_value(pos.direction)
-            status = get_enum_value(pos.status)
+            direction = _csv_enum(pos.direction)
+            status = _csv_enum(pos.status)
 
-            # Export position with each batch
+            # Position-level columns, shared by every row this position emits
+            position_cells = [
+                pos.id,
+                pos.symbol,
+                asset_name,
+                asset_core_type,
+                _csv_attr(pos, 'asset_type'),  # Granular Asset Type
+                asset_market,
+                asset_sector,
+                _csv_attr(pos, 'exchange'),
+                account_name,
+                account_type,
+                direction,
+                status,
+                _csv_float(pos.total_quantity),
+                _csv_float(pos.average_entry_price),
+                _csv_float(pos.realized_pnl),
+                _csv_date(pos.opened_at),
+                _csv_date(pos.closed_at),
+                _csv_attr(pos, 'trade_review'),
+                lessons_str,
+                _csv_float(pos.planned_entry_price),
+                _csv_float(pos.planned_stop_loss),
+            ]
+
             if pos.batches:
                 for batch in pos.batches:
-                    writer.writerow([
-                        pos.id,
-                        pos.symbol,
-                        asset_name,
-                        asset_core_type,
-                        get_attr(pos, 'asset_type'), # Granular Asset Type
-                        asset_market,
-                        asset_sector,
-                        get_attr(pos, 'exchange'),
-                        account_name,
-                        account_type,
-                        direction,
-                        status,
-                        fmt_float(pos.total_quantity),
-                        fmt_float(pos.average_entry_price),
-                        fmt_float(pos.realized_pnl),
-                        fmt_date(pos.opened_at),
-                        fmt_date(pos.closed_at),
-                        get_attr(pos, 'trade_review'),
-                        lessons_str,
-                        fmt_float(pos.planned_entry_price),
-                        fmt_float(pos.planned_stop_loss),
+                    writer.writerow(position_cells + [
                         batch.id,
-                        get_enum_value(batch.type),
-                        fmt_float(batch.price),
-                        fmt_float(batch.quantity),
-                        fmt_date(batch.time),
-                        fmt_float(batch.pnl),
-                        get_attr(batch, 'reason'),
-                        get_attr(batch, 'emotion'),
-                        get_attr(batch, 'confidence')
+                        _csv_enum(batch.type),
+                        _csv_float(batch.price),
+                        _csv_float(batch.quantity),
+                        _csv_date(batch.time),
+                        _csv_float(batch.pnl),
+                        _csv_attr(batch, 'reason'),
+                        _csv_attr(batch, 'emotion'),
+                        _csv_attr(batch, 'confidence')
                     ])
             else:
-                # Position without batches
-                writer.writerow([
-                    pos.id,
-                    pos.symbol,
-                    asset_name,
-                    asset_core_type,
-                    asset_market,
-                    asset_sector,
-                    get_attr(pos, 'exchange'),
-                    account_name,
-                    account_type,
-                    direction,
-                    status,
-                    fmt_float(pos.total_quantity),
-                    fmt_float(pos.average_entry_price),
-                    fmt_float(pos.realized_pnl),
-                    fmt_date(pos.opened_at),
-                    fmt_date(pos.closed_at),
-                    get_attr(pos, 'trade_review'),
-                    get_attr(pos, 'trade_review'),
-                    lessons_str,
-                    fmt_float(pos.planned_entry_price),
-                    fmt_float(pos.planned_stop_loss),
-                    '', '', '', '', '', '', '', '', ''
-                ])
+                # Position without batches: leave the batch columns empty
+                writer.writerow(position_cells + [''] * 9)
         except Exception as e:
             # Log error but skip row to allow partial export
             print(f"Error exporting position {pos.id}: {str(e)}")
@@ -979,7 +906,6 @@ async def upload_import_file(
     db: Session = Depends(get_db)
 ):
     """Upload and parse CSV/Excel file for import preview"""
-    from services.import_service import ImportService
     service = ImportService(db)
     
     token, preview_rows = await service.parse_file(file)
@@ -1002,7 +928,6 @@ async def confirm_import(
     db: Session = Depends(get_db)
 ):
     """Confirm and process imported data"""
-    from services.import_service import ImportService
     service = ImportService(db)
     
     if not request.account_id:

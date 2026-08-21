@@ -9,7 +9,7 @@ os.environ['no_proxy'] = '*'
 
 from typing import Dict, Any, List
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
@@ -171,8 +171,7 @@ def get_fund_quote(symbol: str) -> Dict[str, Any]:
                         'name': str(data_map.get('股票简称', symbol)),
                         'change_percent': 0.0 # 暂无
                     }
-        except Exception as e:
-            # logger.warning(f"Individual fund query failed for {symbol}: {e}")
+        except Exception:
             pass
 
     # 2. 优先尝试 单只场外基金净值 (针对 OTC)
@@ -191,8 +190,7 @@ def get_fund_quote(symbol: str) -> Dict[str, Any]:
                 'name': symbol, # 接口不含名称，但在 Context 中可能已有
                 'change_percent': float(latest['日增长率']) if '日增长率' in latest else 0
             }
-    except Exception as e:
-        # logger.warning(f"OTC fund query failed for {symbol}: {e}")
+    except Exception:
         pass
 
     # 3. 兜底：使用缓存的批量接口
@@ -338,7 +336,6 @@ def get_history_k_data(symbol: str, start_date: str, end_date: str, adjust: str 
             
             # 尝试 akshare_one (如果我们有这个文件且它支持)
             try:
-                import akshare_one
                 # Assuming akshare_one has get_hk_hist based on previous context, 
                 # but let's stick to standard AKShare first if possible to reduce dependencies 
                 # unless standard is broken. 
@@ -418,14 +415,8 @@ def get_forex_quote(symbol: str) -> Dict[str, Any]:
         # 判断是否涉及人民币 (CNY)
         if 'CNY' in symbol_upper:
             df = ak.fx_spot_quote()
-            # 标准化搜索格式: USD/CNY
             # 该接口返回的列名通常包含：'货币对', '买报价', '卖报价'
-            # '货币对' 可能是 '美元/人民币' 或 'USD/CNY'
-            search_regex = f"{symbol_upper[:3]}.*{symbol_upper[3:]}"
-            # 兼容中文名匹配
-            cn_map = {'USD': '美元', 'CNY': '人民币', 'EUR': '欧元', 'JPY': '日元', 'GBP': '英镑', 'AUD': '澳元', 'HKD': '港币'}
-            cn_name = f"{cn_map.get(symbol_upper[:3], symbol_upper[:3])}/{cn_map.get(symbol_upper[3:], symbol_upper[3:])}"
-            
+            # '货币对' 可能是 '美元/人民币' 或 'USD/CNY'，因此按两侧币种代码分别做包含匹配
             row = df[df['货币对'].str.contains(symbol_upper[:3], case=False) & df['货币对'].str.contains(symbol_upper[3:], case=False)]
             if not row.empty:
                 row = row.iloc[0]

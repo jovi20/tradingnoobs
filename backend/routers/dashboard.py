@@ -9,10 +9,10 @@ from datetime import date, timedelta
 
 from database import get_db
 from models import User, Position, PositionStatus, TradingAccount, TradeBatch, BatchType, UserSettings
-from schemas import DashboardStats, AssetAllocation, PositionMover, AccountAllocation, PortfolioFlow, SankeyNode, SankeyLink
+from schemas import DashboardStats, AssetAllocation, PositionMover, AccountAllocation
 from services.auth_service import get_current_user
 from services.market_data_service import MarketDataService
-from services.exchange_rate_service import get_exchange_rate, get_rates_batch
+from services.exchange_rate_service import get_rates_batch
 import asyncio
 from models import DailySnapshot
 from services.metrics_service import MetricsService
@@ -67,7 +67,6 @@ async def get_dashboard_stats(
     # Position counts for context
     pos_stats = db.query(
         func.count(Position.id).label("total_trades"),
-        func.sum(Position.realized_pnl).label("total_pnl"),
         func.count(Position.id).filter(Position.status == PositionStatus.CLOSED).label("closed_trades"),
         func.count(Position.id).filter(Position.status == PositionStatus.OPEN).label("open_positions")
     ).filter(Position.user_id == current_user.id)
@@ -80,7 +79,6 @@ async def get_dashboard_stats(
     ps = pos_stats.one()
     
     total_trades = ps.total_trades or 0
-    total_pnl = float(ps.total_pnl or 0)
     closed_trades_count = ps.closed_trades or 0
     open_positions_count = ps.open_positions or 0
     
@@ -312,10 +310,7 @@ async def get_dashboard_stats(
             sankey_nodes.append({"name": name})
         return node_indices[name]
 
-    # Names
-    SRC_EQUITY = "Net Equity" # Unused now but kept for ref
-    SRC_LIABS = "Liabilities"
-    CENTER_NODE = "Total Assets" # Gross
+    CENTER_NODE = "Total Assets"  # Gross total-assets hub node
 
     # Containers
     flows_l0 = {} # Sources -> Accounts
@@ -490,18 +485,11 @@ async def get_dashboard_stats(
                 DailySnapshot.date == today
             ).first()
             
-            # Calculate metrics for snapshot
-            # Total Assets = total_gross (calculated in PASS 1)
-            # Total Liabilities = sum(liabs in acc_calc_data)
-            # Total Equity = Total Assets - Total Liabilities (or total_portfolio_value)
-            
-            calc_equity = sum(d.get('equity', 0) for d in acc_calc_data.values())
+            # Equity for the snapshot is total_portfolio_value (NAV);
+            # assets/liabilities come from the PASS 1 per-account breakdown.
             calc_liabs = sum(d.get('liabs', 0) for d in acc_calc_data.values())
             calc_assets = sum(d.get('gross', 0) for d in acc_calc_data.values())
-            
-            # Fallback if calc logic differs slightly from total_portfolio_value
-            # Ideally total_portfolio_value (NAV) is the Equity
-            
+
             if not existing:
                 snapshot = DailySnapshot(
                     user_id=current_user.id,

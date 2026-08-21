@@ -1,4 +1,4 @@
-import { positionsAPI, accountsAPI, Position, TradingAccount } from '@/lib/api'
+import { positionsAPI, accountsAPI } from '@/lib/api'
 import { useQuery } from '@tanstack/react-query'
 
 interface UsePositionsDataProps {
@@ -18,8 +18,6 @@ export function usePositionsData({
 }: UsePositionsDataProps) {
 
     // 1. Fetch Positions with Filters
-    console.log('usePositionsData hook called', { token: !!token, statusFilter, accountFilter, dimension, categoryFilter })
-
     const positionsQuery = useQuery({
         queryKey: ['positions', token, statusFilter, accountFilter, dimension, categoryFilter],
         queryFn: async () => {

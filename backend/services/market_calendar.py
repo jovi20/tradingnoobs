@@ -5,8 +5,6 @@ Market Calendar Service - 股市交易日历
 import os
 from datetime import date, datetime
 from typing import Dict, List, Optional, Any
-from functools import lru_cache
-import json
 
 # 禁用代理
 os.environ['NO_PROXY'] = '*'

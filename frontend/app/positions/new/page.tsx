@@ -13,11 +13,10 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import {
     positionsAPI, accountsAPI, strategiesAPI, marketAPI,
-    TradingAccount, Strategy, Position, PositionCreate, BatchCreate, SymbolValidation, ChecklistItem
+    TradingAccount, Strategy, Position, PositionCreate, BatchCreate, SymbolValidation
 } from '@/lib/api'
 import {
     detectSymbolType, getAssetTypeColor, getAssetTypeLabel, SymbolDetection,
-    getCoreTypeLabel, getMarketLabel, getRiskLevelInfo,
     AssetCoreType, AssetMarket, AssetCurrency, AssetRiskLevel
 } from '@/lib/symbolUtils'
 import DateTimePicker from '@/components/DateTimePicker'
@@ -42,7 +41,7 @@ export default function NewPositionPage() {
 
     // Symbol validation
     const [symbolValidation, setSymbolValidation] = useState<SymbolValidation | null>(null)
-    const [isValidating, setIsValidating] = useState(false)
+    const [, setIsValidating] = useState(false)
     const [symbolDetection, setSymbolDetection] = useState<SymbolDetection | null>(null)
 
     // Form state

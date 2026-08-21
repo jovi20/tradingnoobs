@@ -2,7 +2,6 @@
 Binance Provider - 加密货币行情数据
 """
 from binance.spot import Spot
-from binance.spot import Spot
 from typing import Dict, Any, List
 from datetime import datetime
 

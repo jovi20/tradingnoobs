@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import User, SystemSetting
 from schemas import SystemSettingResponse, SystemSettingUpdate
-from routers.auth import get_current_user
+from services.auth_service import get_current_user
 import httpx
 
 router = APIRouter(

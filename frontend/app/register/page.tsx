@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useTheme } from 'next-themes'
 import Link from 'next/link'
-import { TrendingUp, Mail, Lock, AlertCircle, Gift } from 'lucide-react'
+import { Mail, Lock, AlertCircle, Gift } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
 export default function RegisterPage() {

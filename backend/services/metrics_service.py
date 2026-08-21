@@ -6,7 +6,6 @@ Calculates risk-adjusted return metrics: Sharpe, Sortino, Calmar
 import statistics
 import math
 from typing import List, Optional
-from datetime import date
 
 class MetricsService:
     @staticmethod

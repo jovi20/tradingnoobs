@@ -249,6 +249,21 @@ async function fetchAPI(
     return response.json()
 }
 
+/**
+ * Build a `?a=1&b=2` suffix from the defined, non-empty entries of `params`.
+ * Returns '' when nothing is set, so it can be appended to any path.
+ */
+function qs(params: Record<string, string | number | undefined | null>): string {
+    const search = new URLSearchParams()
+    for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined && value !== null && value !== '') {
+            search.append(key, String(value))
+        }
+    }
+    const query = search.toString()
+    return query ? `?${query}` : ''
+}
+
 // ============== Auth API ==============
 
 export const authAPI = {
@@ -652,16 +667,7 @@ export const positionsAPI = {
         risk_level?: string;
         asset_type?: string;
     }): Promise<Position[]> => {
-        const searchParams = new URLSearchParams()
-        if (params?.status) searchParams.append('status', params.status)
-        if (params?.symbol) searchParams.append('symbol', params.symbol)
-        if (params?.account_id) searchParams.append('account_id', params.account_id.toString())
-        if (params?.core_type) searchParams.append('core_type', params.core_type)
-        if (params?.market) searchParams.append('market', params.market)
-        if (params?.risk_level) searchParams.append('risk_level', params.risk_level)
-        if (params?.asset_type) searchParams.append('asset_type', params.asset_type)
-        const query = searchParams.toString()
-        return fetchAPI(`/api/positions${query ? `?${query}` : ''}`, {}, token)
+        return fetchAPI(`/api/positions${qs({ ...params })}`, {}, token)
     },
 
     get: async (token: string, id: number): Promise<Position> => {
@@ -791,23 +797,17 @@ export interface MarketCalendar {
 
 export const marketAPI = {
     validateSymbol: async (token: string, symbol: string, exchange?: string): Promise<SymbolValidation> => {
-        const params = new URLSearchParams()
-        if (exchange) params.append('exchange', exchange)
-        const query = params.toString()
-        return fetchAPI(`/api/market/validate/${symbol}${query ? `?${query}` : ''}`, {}, token)
+        return fetchAPI(`/api/market/validate/${symbol}${qs({ exchange })}`, {}, token)
     },
 
     getQuote: async (token: string, symbol: string, exchange?: string): Promise<any> => {
-        const params = new URLSearchParams()
-        if (exchange) params.append('exchange', exchange)
-        const query = params.toString()
-        return fetchAPI(`/api/market/quote/${symbol}${query ? `?${query}` : ''}`, {}, token)
+        return fetchAPI(`/api/market/quote/${symbol}${qs({ exchange })}`, {}, token)
     },
 
     calendar: async (token: string, market: string, year: number, month: number): Promise<MarketCalendar> => {
         try {
             // Try fetching from backend first
-            return await fetchAPI(`/api/market/calendar?market=${market}&year=${year}&month=${month}`, {}, token)
+            return await fetchAPI(`/api/market/calendar${qs({ market, year, month })}`, {}, token)
         } catch (err) {
             console.warn(`Failed to fetch calendar for ${market}, using local fallback`, err)
             // Fallback to local data

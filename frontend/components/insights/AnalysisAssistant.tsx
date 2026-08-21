@@ -10,7 +10,6 @@ import {
     Smile,
     CheckSquare,
     Target,
-    Calendar,
     ArrowRight
 } from 'lucide-react'
 import { insightsAPI, AnalysisType, AnalysisResponse } from '@/lib/api'
@@ -86,9 +85,6 @@ export default function AnalysisAssistant() {
 
     const renderChart = () => {
         if (!result || !result.raw_data) return null
-
-        // Safe check for stats
-        const stats = result.raw_data.stats || result.raw_data.checklist_completed || result.raw_data.checklist_ignored ? result.raw_data : null
 
         // 1. Holding Period / Emotion / Strategy (Grouped Stats)
         if (result.raw_data.stats) {

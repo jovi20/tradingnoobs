@@ -6,7 +6,7 @@ Routes requests to appropriate providers based on asset type:
 - Crypto → Binance
 """
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
 import finnhub
 from sqlalchemy.orm import Session
 from typing import Dict, Any, Optional, List
@@ -15,7 +15,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from models import SystemSetting, AssetMetadata, AssetCoreType, AssetMarket, AssetCurrency, AssetRiskLevel
 from services.providers import akshare_provider, binance_provider
-from services.llm_service import classify_asset, classify_asset_rich
+from services.llm_service import classify_asset_rich
 
 # Cache TTL in seconds (1 minute)
 CACHE_TTL_SECONDS = 60

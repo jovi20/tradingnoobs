@@ -1,13 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
 import {
     Plus,
     Layers,
     Edit2,
     Trash2,
-    TrendingUp,
     CheckCircle,
     PauseCircle,
     Archive,

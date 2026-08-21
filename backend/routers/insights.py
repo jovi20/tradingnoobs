@@ -7,7 +7,7 @@ from typing import List, Optional
 from datetime import date, timedelta
 
 from database import get_db
-from models import User, WeeklyReport, UserSettings, SystemSetting, AISummary, AIAnalysisResult
+from models import User, WeeklyReport, SystemSetting, AISummary, AIAnalysisResult
 from schemas import WeeklyReportCreate, WeeklyReportResponse, AISummaryResponse, AnalysisRequest, AnalysisResponse
 from services.auth_service import get_current_user
 from services.llm_service import generate_weekly_report, generate_journal_summary, get_analysis_insight
@@ -262,7 +262,6 @@ async def analyze_trading_data(
         data=raw_data
     )
     
-    from datetime import datetime
     
     # 3. Persist Analysis Result
     ai_result = AIAnalysisResult(

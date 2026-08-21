@@ -1,5 +1,5 @@
 import { Activity } from 'lucide-react'
-import { ResponsiveContainer, Sankey, Tooltip } from 'recharts'
+import { ResponsiveContainer, Sankey } from 'recharts'
 
 interface PortfolioSankeyProps {
     data: {

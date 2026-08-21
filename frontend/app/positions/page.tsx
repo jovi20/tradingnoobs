@@ -13,11 +13,10 @@ import {
     ArrowUpCircle,
     ArrowDownCircle,
     ArrowRight,
-    Filter,
     Upload
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { positionsAPI, Position, TradeBatch, accountsAPI, TradingAccount } from '@/lib/api'
+import { Position, TradeBatch } from '@/lib/api'
 import { useTrendColor } from '@/hooks/useTrendColor'
 import CustomSelect from '@/components/CustomSelect'
 import {
@@ -27,10 +26,10 @@ import {
     getCurrencySymbol
 } from '@/lib/symbolUtils'
 import { usePositionsData } from '@/hooks/usePositionsData'
+import { formatMoney, formatQuantity } from '@/lib/format'
 
 export default function PositionsPage() {
     const { token } = useAuth()
-    console.log('PositionsPage Rendered', { token: !!token })
     const trendColor = useTrendColor()
 
     // Filters
@@ -46,7 +45,6 @@ export default function PositionsPage() {
     const router = useRouter()
 
     useEffect(() => {
-        const type = searchParams.get('asset_type')
         const core = searchParams.get('core_type')
         const mkt = searchParams.get('market')
         const risk = searchParams.get('risk_level')
@@ -340,24 +338,18 @@ export default function PositionsPage() {
                                     <div className="text-center md:text-right flex-1 md:flex-none">
                                         <p className="text-xs text-slate-500">数量</p>
                                         <p className="font-medium text-sm md:text-base">
-                                            {(() => {
-                                                const qty = Number(position.total_quantity)
-                                                if (position.asset_type === 'CRYPTO' || position.asset_type === 'FOREX') {
-                                                    return qty.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })
-                                                }
-                                                return qty.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-                                            })()}
+                                            {formatQuantity(position.total_quantity, position.asset_type)}
                                         </p>
                                     </div>
                                     <div className="text-center md:text-right flex-1 md:flex-none">
                                         <p className="text-xs text-slate-500">均价</p>
-                                        <p className="font-medium text-sm md:text-base">{getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.average_entry_price || 0).toFixed(2)}</p>
+                                        <p className="font-medium text-sm md:text-base">{formatMoney(position.average_entry_price, position.asset_metadata?.currency)}</p>
                                     </div>
                                     <div className="text-center md:text-right flex-1 md:flex-none">
                                         <p className="text-xs text-slate-500">{position.status === 'OPEN' ? '现价' : '出场'}</p>
                                         <p className="font-medium text-sm md:text-base">
                                             {position.current_price
-                                                ? `${getCurrencySymbol(position.asset_metadata?.currency)}${Number(position.current_price).toFixed(2)}`
+                                                ? formatMoney(position.current_price, position.asset_metadata?.currency)
                                                 : '-'}
                                         </p>
                                     </div>
@@ -430,14 +422,8 @@ export default function PositionsPage() {
                                                         </span>
                                                     </div>
                                                     <div className="flex items-center gap-4 text-sm">
-                                                        <span className="font-mono">{getCurrencySymbol(position.asset_metadata?.currency)}{Number(batch.price).toFixed(2)}</span>
-                                                        <span className="text-slate-500">x {(() => {
-                                                            const bQty = Number(batch.quantity)
-                                                            if (position.asset_type === 'CRYPTO' || position.asset_type === 'FOREX') {
-                                                                return bQty.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })
-                                                            }
-                                                            return bQty.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-                                                        })()}</span>
+                                                        <span className="font-mono">{formatMoney(batch.price, position.asset_metadata?.currency)}</span>
+                                                        <span className="text-slate-500">x {formatQuantity(batch.quantity, position.asset_type)}</span>
                                                         {batch.pnl !== null && batch.pnl !== undefined && (
                                                             <span className={`font-medium ${Number(batch.pnl) >= 0 ? trendColor.upColor : trendColor.downColor}`}>
                                                                 {Number(batch.pnl) >= 0 ? '+' : ''}{Number(batch.pnl).toFixed(2)}
