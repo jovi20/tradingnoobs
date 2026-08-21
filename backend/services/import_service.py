@@ -2,13 +2,12 @@ import pandas as pd
 import io
 import uuid
 import logging
-from typing import List, Dict, Any, Tuple
-from datetime import datetime
+from typing import List, Dict, Tuple
 from sqlalchemy.orm import Session
 from fastapi import UploadFile, HTTPException
 
-from models import AssetCoreType, PositionDirection, BatchType, Position, TradeBatch, Strategy
-from schemas import PositionCreate, BatchTypeEnum, PositionDirectionEnum
+from models import Position, TradeBatch, Strategy
+from schemas import BatchTypeEnum, PositionDirectionEnum
 
 # In-memory cache for uploaded files preview (in production use Redis)
 # format: {token: {rows: [], df: DataFrame, meta: {}}}
@@ -47,17 +46,17 @@ class ImportService:
              # Try mapping common alternatives
             column_map = {
                 'code': 'symbol', 'ticker': 'symbol',
-                'time': 'date', 'datetime': 'date', 'date': 'date',
+                'time': 'date', 'datetime': 'date',
                 'time (yyyy-mm-dd hh:mm)': 'date',
-                'side': 'direction', 'type': 'direction',
+                'side': 'direction',
                 'operation': 'action',
                 'cost': 'price', 'avg_price': 'price',
                 'amount': 'quantity', 'qty': 'quantity',
                 'comm': 'commission', 'fee': 'commission',
-                'comm': 'commission', 'fee': 'commission',
                 'review': 'reason', 'note': 'reason',
                 'plan entry': 'planned_entry_price', 'planned entry': 'planned_entry_price',
                 'plan sl': 'planned_stop_loss', 'planned sl': 'planned_stop_loss', 'sl': 'planned_stop_loss',
+                # NOTE: a bare 'type' column maps to asset_type (use 'side' for direction).
                 'asset type': 'asset_type', 'type': 'asset_type'
             }
             df.rename(columns=column_map, inplace=True)

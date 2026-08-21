@@ -10,7 +10,7 @@ from models import TradingAccount, User
 from schemas import TradingAccountCreate, TradingAccountUpdate, TradingAccountResponse
 from services.auth_service import get_current_user
 from services.market_data_service import MarketDataService
-from models import TradingAccount, User, Position, PositionStatus
+from models import Position, PositionStatus
 import asyncio
 from decimal import Decimal
 

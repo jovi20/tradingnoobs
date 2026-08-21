@@ -5,10 +5,10 @@ import httpx
 import json
 import os
 from typing import Optional, List, Dict, Any
-from datetime import date, timedelta
+from datetime import date
 from sqlalchemy.orm import Session
 
-from models import UserSettings, WeeklyReport, SystemSetting, TradeBatch, Position, BatchType
+from models import WeeklyReport, SystemSetting, TradeBatch, Position, BatchType
 
 
 MUNGER_PROMPT = """你是一位投资分析师，精通查理·芒格的投资哲学。请根据以下一周的交易记录，生成交易洞察报告。
@@ -216,11 +216,7 @@ def format_trades_for_llm(batches: List[TradeBatch]) -> str:
         exchange = position.exchange if position else "Unknown"
         
         type_str = "建仓/加仓" if batch.type == BatchType.ENTRY else "平仓/减仓"
-        pnl_str = ""
-        if batch.pnl is not None:
-             val = float(batch.pnl)
-             pnl_str = f", 盈亏: {val:+.2f}"
-             
+
         lines.append(f"""
 交易 {i}:
 - 时间: {batch.time.strftime('%Y-%m-%d %H:%M')}

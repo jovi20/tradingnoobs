@@ -1,13 +1,10 @@
 
 from typing import List, Dict, Any, Optional
-from datetime import date, timedelta
-from sqlalchemy import func
+from datetime import date
 from sqlalchemy.orm import Session
 import pandas as pd
-import numpy as np
 
-from models import Position, PositionStatus, TradeBatch, BatchType
-from schemas import AnalysisType
+from models import Position, PositionStatus, BatchType
 
 class AnalyticsService:
     def __init__(self, db: Session):

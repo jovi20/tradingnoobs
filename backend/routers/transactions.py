@@ -1,8 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
-from typing import List, Optional
-from datetime import datetime
+from typing import List
 from database import get_db
 from models import Transaction, TradingAccount, TransactionType, User
 from schemas import TransactionCreate, TransactionResponse

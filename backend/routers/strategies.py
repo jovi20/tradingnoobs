@@ -1,7 +1,7 @@
 """
 Trading Noobs Backend - Strategies Router
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
