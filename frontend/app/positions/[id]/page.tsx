@@ -7,14 +7,12 @@ import {
     ArrowLeft,
     Loader2,
     TrendingUp,
-    TrendingDown,
     ArrowUpCircle,
     ArrowDownCircle,
     Plus,
     Trash2,
     Edit3,
     Calendar,
-    DollarSign,
     Target,
     MessageSquare,
     Award
@@ -31,11 +29,10 @@ import {
     AssetRiskLevel,
     ALL_ASSET_CORE_TYPES,
     ALL_ASSET_MARKETS,
-    ALL_ASSET_RISK_LEVELS,
-    getCurrencySymbol
+    ALL_ASSET_RISK_LEVELS
 } from '@/lib/symbolUtils'
-import CustomSelect from '@/components/CustomSelect'
 import DateTimePicker from '@/components/DateTimePicker'
+import { formatMoney } from '@/lib/format'
 
 export default function PositionDetailPage() {
     const { token } = useAuth()
@@ -62,7 +59,6 @@ export default function PositionDetailPage() {
     // Metadata Edit State
     const [editingMetadata, setEditingMetadata] = useState(false)
     const [isSavingMetadata, setIsSavingMetadata] = useState(false)
-    const [hasAttemptedSave, setHasAttemptedSave] = useState(false) // New: Fix potential infinite loop or double submission
     const [metadataForm, setMetadataForm] = useState({
         core_type: 'STOCK',
         market: 'US',
@@ -304,10 +300,10 @@ export default function PositionDetailPage() {
                     <div className="p-4 lg:p-6">
                         <p className="text-xs text-slate-500 mb-1 uppercase tracking-wider font-semibold">均价 / 当前价</p>
                         <p className="text-xl font-bold">
-                            {getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.average_entry_price || 0).toFixed(2)}
+                            {formatMoney(position.average_entry_price, position.asset_metadata?.currency)}
                             {position.current_price && (
                                 <span className="text-sm font-normal ml-2 text-slate-400">
-                                    → {getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.current_price).toFixed(2)}
+                                    → {formatMoney(position.current_price, position.asset_metadata?.currency)}
                                 </span>
                             )}
                         </p>
@@ -315,14 +311,14 @@ export default function PositionDetailPage() {
                     <div className="p-4 lg:p-6">
                         <p className="text-xs text-slate-500 mb-1 uppercase tracking-wider font-semibold">已实现盈亏</p>
                         <p className={`text-xl font-bold ${isPositive ? 'pnl-positive' : 'pnl-negative'}`}>
-                            {isPositive ? '+' : ''}{getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.realized_pnl).toFixed(2)}
+                            {isPositive ? '+' : ''}{formatMoney(position.realized_pnl, position.asset_metadata?.currency)}
                         </p>
                     </div>
                     {position.status === 'OPEN' && (
                         <div className="p-4 lg:p-6 bg-slate-50/50 dark:bg-slate-800/30">
                             <p className="text-xs text-slate-500 mb-1 uppercase tracking-wider font-semibold">未实现盈亏</p>
                             <p className={`text-xl font-bold ${(position.unrealized_pnl || 0) >= 0 ? 'pnl-positive' : 'pnl-negative'}`}>
-                                {(position.unrealized_pnl || 0) >= 0 ? '+' : ''}{getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.unrealized_pnl || 0).toFixed(2)}
+                                {(position.unrealized_pnl || 0) >= 0 ? '+' : ''}{formatMoney(position.unrealized_pnl, position.asset_metadata?.currency)}
                             </p>
                         </div>
                     )}
@@ -419,7 +415,7 @@ export default function PositionDetailPage() {
                         <p className="text-xs text-slate-500 mb-1">持仓期最高 (Max Price)</p>
                         <p className="font-semibold text-lg flex items-center">
                             {position.max_price_during_hold ? (
-                                <span>{getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.max_price_during_hold).toFixed(2)}</span>
+                                <span>{formatMoney(position.max_price_during_hold, position.asset_metadata?.currency)}</span>
                             ) : (
                                 <span className="text-slate-300">-</span>
                             )}
@@ -434,7 +430,7 @@ export default function PositionDetailPage() {
                         <p className="text-xs text-slate-500 mb-1">持仓期最低 (Min Price)</p>
                         <p className="font-semibold text-lg flex items-center">
                             {position.min_price_during_hold ? (
-                                <span>{getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.min_price_during_hold).toFixed(2)}</span>
+                                <span>{formatMoney(position.min_price_during_hold, position.asset_metadata?.currency)}</span>
                             ) : (
                                 <span className="text-slate-300">-</span>
                             )}
@@ -458,12 +454,12 @@ export default function PositionDetailPage() {
                         {/* Planned Entry */}
                         <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
                             <p className="text-xs text-slate-500 mb-1">计划入场价</p>
-                            <p className="font-semibold">{getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.planned_entry_price || 0).toFixed(2)}</p>
+                            <p className="font-semibold">{formatMoney(position.planned_entry_price, position.asset_metadata?.currency)}</p>
                         </div>
                         {/* Actual Entry */}
                         <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
                             <p className="text-xs text-slate-500 mb-1">实际入场价</p>
-                            <p className="font-semibold">{getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.average_entry_price || 0).toFixed(2)}</p>
+                            <p className="font-semibold">{formatMoney(position.average_entry_price, position.asset_metadata?.currency)}</p>
                         </div>
                         {/* Entry Drift */}
                         <div className={`p-3 rounded-lg ${position.drift_analysis.execution_quality === 'excellent' ? 'bg-emerald-50 dark:bg-emerald-900/20' :
@@ -501,7 +497,7 @@ export default function PositionDetailPage() {
                         <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700 flex items-center gap-4">
                             <div>
                                 <span className="text-xs text-slate-500">计划止损: </span>
-                                <span className="font-medium">{getCurrencySymbol(position.asset_metadata?.currency)}{Number(position.planned_stop_loss).toFixed(2)}</span>
+                                <span className="font-medium">{formatMoney(position.planned_stop_loss, position.asset_metadata?.currency)}</span>
                             </div>
                             {position.drift_analysis.stop_loss_risk_pct && (
                                 <div>
@@ -572,7 +568,7 @@ export default function PositionDetailPage() {
                                         <p className="font-medium">
                                             {batch.type === 'ENTRY' ? '加仓' : '平仓'}
                                             <span className="ml-2 text-slate-500">
-                                                {Number(batch.quantity).toLocaleString()} @ {getCurrencySymbol(position.asset_metadata?.currency)}{Number(batch.price).toFixed(2)}
+                                                {Number(batch.quantity).toLocaleString()} @ {formatMoney(batch.price, position.asset_metadata?.currency)}
                                             </span>
                                         </p>
                                         <p className="text-sm text-slate-500">
@@ -584,7 +580,7 @@ export default function PositionDetailPage() {
                                     <div className="hidden md:block">
                                         {batch.type === 'EXIT' && batch.pnl !== null && (
                                             <p className={`font-bold ${Number(batch.pnl) >= 0 ? 'pnl-positive' : 'pnl-negative'}`}>
-                                                {Number(batch.pnl) >= 0 ? '+' : ''}{getCurrencySymbol(position.asset_metadata?.currency)}{Number(batch.pnl).toFixed(2)}
+                                                {Number(batch.pnl) >= 0 ? '+' : ''}{formatMoney(batch.pnl, position.asset_metadata?.currency)}
                                             </p>
                                         )}
                                         {batch.confidence && (

@@ -1,25 +1,23 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Upload, FileText, Check, AlertCircle, Loader2, Download } from 'lucide-react'
 import { FileDropzone } from '@/components/import/FileDropzone'
 import { ImportPreviewTable } from '@/components/import/ImportPreviewTable'
-import { positionsAPI, accountsAPI, TradingAccount } from '@/lib/api'
+import { positionsAPI, accountsAPI } from '@/lib/api'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/AuthContext'
 import CustomSelect from '@/components/CustomSelect'
 
 export default function ImportPage() {
-    const router = useRouter()
     const { token } = useAuth()
 
     // Steps: 0 = Upload, 1 = Preview, 2 = Success
     const [step, setStep] = useState(0)
 
     // State
-    const [file, setFile] = useState<File | null>(null)
+    const [, setFile] = useState<File | null>(null)
     const [accountId, setAccountId] = useState<number | null>(null)
     const [isUploading, setIsUploading] = useState(false)
     const [error, setError] = useState<string | null>(null)

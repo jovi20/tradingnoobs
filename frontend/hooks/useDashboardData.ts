@@ -1,10 +1,7 @@
-import { dashboardAPI, positionsAPI, DashboardStats, Position } from '@/lib/api'
+import { dashboardAPI, positionsAPI } from '@/lib/api'
 import { useQuery } from '@tanstack/react-query'
-import { useEffect } from 'react'
 
 export function useDashboardData(token: string | null, historyDays: number = 7) {
-    console.log('useDashboardData hook called', { token: !!token, historyDays })
-
     // 1. Fetch Dashboard Stats
     const statsQuery = useQuery({
         queryKey: ['dashboard', 'stats', token],
@@ -59,23 +56,6 @@ export function useDashboardData(token: string | null, historyDays: number = 7) 
             allPositionsQuery.refetch()
         ])
     }
-
-    // Debug logging
-    useEffect(() => {
-        console.log('Dashboard Data Debug:', {
-            token: !!token,
-            stats: statsQuery.data,
-            history: historyQuery.data,
-            positions: positionsQuery.data,
-            errors: {
-                stats: statsQuery.error,
-                history: historyQuery.error,
-                positions: positionsQuery.error,
-                allPositions: allPositionsQuery.error
-            },
-            isLoading
-        })
-    }, [statsQuery.data, historyQuery.data, positionsQuery.data, statsQuery.error, historyQuery.error, positionsQuery.error, isLoading, token])
 
     return {
         stats: statsQuery.data,

@@ -4,12 +4,10 @@ import { useState, useEffect } from 'react'
 import { useTheme } from 'next-themes'
 import {
     Save,
-    Key,
     Moon,
     Sun,
     Monitor,
     Plus,
-    Trash2,
     Briefcase,
     Shield,
     CheckCircle2,
@@ -20,7 +18,6 @@ import {
     Loader2,
     LogOut,
     Download,
-    ChevronRight,
     Wallet
 } from 'lucide-react'
 import Link from 'next/link'
@@ -80,7 +77,7 @@ export default function SettingsPage() {
     // Accounts State
     const [accounts, setAccounts] = useState<TradingAccount[]>([])
     const [isAccountFormOpen, setIsAccountFormOpen] = useState(false)
-    const [editingAccount, setEditingAccount] = useState<TradingAccount | null>(null)
+    const [, setEditingAccount] = useState<TradingAccount | null>(null)
     const [accountForm, setAccountForm] = useState<TradingAccountCreate>({
         name: '',
         broker: '',
@@ -88,16 +85,6 @@ export default function SettingsPage() {
         currency: 'USD',
         description: ''
     })
-
-    const refreshAccounts = async () => {
-        if (!token) return
-        try {
-            const data = await accountsAPI.list(token)
-            setAccounts(data)
-        } catch (err) {
-            console.error('Failed to refresh accounts:', err)
-        }
-    }
 
     const isAdmin = user?.role === 'admin'
     const [isExporting, setIsExporting] = useState(false)
@@ -222,7 +209,7 @@ export default function SettingsPage() {
         setTestStatus('testing')
         setTestMessage('')
         try {
-            const result = await adminAPI.testLLM(token)
+            await adminAPI.testLLM(token)
             setTestStatus('success')
             setTestMessage('连接成功')
         } catch (err: any) {

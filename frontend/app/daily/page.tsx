@@ -11,14 +11,13 @@ import {
     Loader2,
     Ban,
     PenLine,
-    Plus,
     Trash2,
     Send
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { positionsAPI, marketAPI, journalAPI, Position, TradeBatch, MarketCalendar, MarketHoliday, JournalEntry } from '@/lib/api'
 import { useTrendColor } from '@/hooks/useTrendColor'
-import { getCurrencySymbol } from '@/lib/symbolUtils'
+import { formatMoney } from '@/lib/format'
 
 const weekDays = ['日', '一', '二', '三', '四', '五', '六']
 
@@ -139,7 +138,6 @@ export default function DailyPage() {
         // 创建节假日映射
         const holidayMap = new Map<string, MarketHoliday>()
         const tradingDaySet = new Set(calendar?.trading_days || [])
-        const nonTradingDaySet = new Set(calendar?.non_trading_days || [])
 
         calendar?.holidays?.forEach(h => {
             holidayMap.set(h.date, h)
@@ -298,15 +296,6 @@ export default function DailyPage() {
         } catch (err) {
             console.error('Failed to delete journal entry:', err)
         }
-    }
-
-    // 检查某个日期是否有随笔
-    const hasJournalForDate = (date: Date): boolean => {
-        // 这里简化处理，只检查当前选中日期
-        if (selectedDate && date.toDateString() === selectedDate.toDateString()) {
-            return journalEntries.length > 0
-        }
-        return false
     }
 
     if (isLoading) {
@@ -520,13 +509,13 @@ export default function DailyPage() {
                                                         <div>
                                                             <p className="font-medium">{position.symbol}</p>
                                                             <p className="text-xs text-slate-500">
-                                                                {batch.type === 'ENTRY' ? '建仓' : '平仓'} · {Number(batch.quantity).toFixed(2)} 股 @ {getCurrencySymbol(position.asset_metadata?.currency)}{Number(batch.price).toFixed(2)}
+                                                                {batch.type === 'ENTRY' ? '建仓' : '平仓'} · {Number(batch.quantity).toFixed(2)} 股 @ {formatMoney(batch.price, position.asset_metadata?.currency)}
                                                             </p>
                                                         </div>
                                                     </div>
                                                     {batch.type === 'EXIT' && (
                                                         <p className={`font-bold ${(Number(batch.pnl) || 0) >= 0 ? trendColor.upColor : trendColor.downColor}`}>
-                                                            {(Number(batch.pnl) || 0) >= 0 ? '+' : ''}{getCurrencySymbol(position.asset_metadata?.currency)}{Number(batch.pnl || 0).toFixed(2)}
+                                                            {(Number(batch.pnl) || 0) >= 0 ? '+' : ''}{formatMoney(batch.pnl, position.asset_metadata?.currency)}
                                                         </p>
                                                     )}
                                                 </div>

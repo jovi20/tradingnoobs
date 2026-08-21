@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Globe, Clock, Moon, Sun } from 'lucide-react'
+import { Globe } from 'lucide-react'
 
 // Market definitions
 type MarketStatusType = 'OPEN' | 'CLOSED' | 'PRE' | 'POST' | 'OVERNIGHT' | 'WEEKEND' | 'HOLIDAY'
@@ -167,7 +167,7 @@ export default function MarketStatus() {
     return (
         <div className="grid grid-cols-3 gap-2 bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm w-full">
             {MARKETS.map(market => {
-                const { status, label, color } = getMarketStatus(market, currentTime)
+                const { label, color } = getMarketStatus(market, currentTime)
 
                 // Get Local Display Time for that market (to show "What time is it there")
                 const localTimeStr = new Intl.DateTimeFormat('en-US', {

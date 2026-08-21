@@ -14,14 +14,11 @@ import {
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { useAuth } from '@/contexts/AuthContext'
-import { dashboardAPI, positionsAPI, Position, DashboardStats } from '@/lib/api'
 import { getCurrencySymbol } from '@/lib/symbolUtils'
 import MarketStatus from '@/components/MarketStatus'
 import PortfolioSankey from '@/components/PortfolioSankey'
 import { useTrendColor } from '@/hooks/useTrendColor'
 import { useDashboardData } from '@/hooks/useDashboardData'
-import { useRouter } from 'next/navigation'
-
 // Imported Components
 import StatCard from '@/components/dashboard/StatCard'
 import AllocationPieChart from '@/components/dashboard/AllocationPieChart'
@@ -31,9 +28,7 @@ import RiskMetricsCard from '@/components/dashboard/RiskMetricsCard'
 import { MaeMfeScatterPlot } from '@/components/dashboard/MaeMfeScatterPlot'
 
 export default function DashboardPage() {
-    const { token, user, settings } = useAuth()
-    const router = useRouter()
-    console.log('DashboardPage Rendered', { token: !!token })
+    const { token, settings } = useAuth()
     const trendColor = useTrendColor()
 
     // State for dashboard configuration

@@ -14,14 +14,12 @@ import {
     Smile,
     CheckSquare,
     Target,
-    ArrowRight,
     Calendar,
     Clock
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import ReactMarkdown from 'react-markdown'
 import { insightsAPI, WeeklyReport, AISummary, AnalysisType, AnalysisResponse } from '@/lib/api'
-import { useTrendColor } from '@/hooks/useTrendColor'
 import {
     BarChart,
     Bar,
@@ -44,7 +42,6 @@ const ANALYSIS_OPTIONS: { type: AnalysisType; label: string; icon: any; desc: st
 
 export default function InsightsPage() {
     const { token } = useAuth()
-    const trendColor = useTrendColor()
 
     // 周报状态
     const [reports, setReports] = useState<WeeklyReport[]>([])

@@ -4,9 +4,6 @@ import { useState, useEffect } from 'react'
 import { useTheme } from 'next-themes'
 import Link from 'next/link'
 import {
-    Plus,
-    PlusCircle,
-    TrendingUp,
     Mail,
     Lock,
     AlertCircle

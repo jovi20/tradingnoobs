@@ -2,7 +2,7 @@
 
 import { useCallback } from 'react'
 import { useDropzone } from 'react-dropzone'
-import { UploadCloud, FileSpreadsheet, AlertCircle } from 'lucide-react'
+import { UploadCloud, AlertCircle } from 'lucide-react'
 
 interface FileDropzoneProps {
     onFileSelect: (file: File) => void
